@@ -374,4 +374,25 @@ describe('session list loading/error tri-state', () => {
     expect(mockInvoke).toHaveBeenCalledTimes(1);
     expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['s1']);
   });
+
+  it('force refresh during an in-flight load queues a follow-up fetch', async () => {
+    let resolveFirst: (sessions: Session[]) => void = () => {};
+    mockInvoke.mockReturnValueOnce(
+      new Promise<Session[]>((resolve) => {
+        resolveFirst = resolve;
+      }),
+    );
+
+    const first = useStore.getState().loadSessions();
+    // 变更方（如归档/新建项目后）要求最新结果：不能复用变更前的 in-flight。
+    mockInvoke.mockResolvedValueOnce([session('s2')]);
+    const forced = useStore.getState().loadSessions(true);
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+
+    resolveFirst([session('s1')]);
+    await forced;
+    expect(mockInvoke).toHaveBeenCalledTimes(2);
+    expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['s2']);
+    await first;
+  });
 });

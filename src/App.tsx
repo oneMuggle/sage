@@ -20,6 +20,7 @@ import { Chat } from './pages/Chat';
 import { Welcome } from './pages/Welcome';
 import { markBootStageOnce } from './shared/lib/bootStages';
 import { OPEN_COMMAND_PALETTE_EVENT } from './shared/lib/commandPaletteEvents';
+import { isStartupSessionRestoreSuppressed } from './shared/lib/startupRestoreGuard';
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
@@ -135,8 +136,22 @@ function AppStartupRestore() {
         useStore.getState().setCurrentSessionId(id);
         // 冷启动首帧因 currentSessionId 为空会被 ChatRoute 重定向到
         // /welcome；恢复出上次会话后回跳 /chat，避免用户还要手点一次会话。
+        // 但恢复可能耗时数秒：用户若已明确新建会话（suppress 标志）或在
+        // 欢迎页输入框里打字（focus 在可编辑元素），尊重用户动作不回跳。
+        const activeElement =
+          typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+        const userTyping =
+          activeElement !== null &&
+          (activeElement.tagName === 'INPUT' ||
+            activeElement.tagName === 'TEXTAREA' ||
+            activeElement.isContentEditable);
         const { pathname, search } = locationRef.current;
-        if ((pathname === '/' || pathname === '/welcome') && !search) {
+        if (
+          (pathname === '/' || pathname === '/welcome') &&
+          !search &&
+          !userTyping &&
+          !isStartupSessionRestoreSuppressed()
+        ) {
           navigate('/chat', { replace: true });
         }
       }

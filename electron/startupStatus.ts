@@ -28,9 +28,10 @@ export interface StartupStatusSnapshot {
 export function fetchStartupStatus(
   url: string,
   timeoutMs = 1000,
+  headers: Record<string, string> = {},
 ): Promise<StartupStatusSnapshot | null> {
   return new Promise((resolve) => {
-    const req = http.get(url, (res) => {
+    const req = http.get(url, { headers }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (chunk: string) => {

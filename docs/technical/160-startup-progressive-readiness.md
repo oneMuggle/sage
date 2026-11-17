@@ -61,10 +61,12 @@ PR #2976 / #2981 / #2985 / #3002 把约 20 个非关键服务移出 lifespan 关
 
 ### 3.2 `GET /health/ready`
 
-- 加入 `backend/api/local_auth.py` 的 `_PUBLIC_PATHS`，与 `/health`、
-  `/health/proof` 同级（只读内存快照，不触碰 SQLite，保持 `/health`
-  的 P99 约束）。
-- Electron supervisor 以 1s 间隔轮询；渲染层不直接访问该端点。
+- **需要本地授权**（与其它 API 一致，Electron 轮询时注入
+  `X-Sage-Local-Authorization`）：快照的 `detail` 含逐模块错误原文
+  （命令路径、磁盘余量等），因此**不**加入 `_PUBLIC_PATHS`；
+  `/health`、`/health/proof` 仍保持公开的低开销探针。
+- 只读内存快照、不触碰 SQLite；Electron supervisor 以 1s 间隔轮询，
+  渲染层不直接访问该端点。
 
 ### 3.3 上报点
 
@@ -81,7 +83,12 @@ PR #2976 / #2981 / #2985 / #3002 把约 20 个非关键服务移出 lifespan 关
 deferred 后台任务（`yield` 之后）：scheduler / todo / review_queue /
 wake_scheduler / gateways / design_studio / multi_agent / arena 各自
 `warming → ready|degraded`；`_finalize_pending_modules()` 在 deferred
-结束时把仍未终态的模块标为 degraded，保证 L3 必定可达。
+结束时把仍未终态的模块标为 degraded，保证 L3 可达。**`mcp` 例外**：它由
+独立的后台观察协程负责（自身保证 90s 内终态），不被 finalize 提前改写。
+注册表同时拒绝"终态 → warming"回退，避免 phase 从 L3 倒退。
+
+首次安装**未配置 LLM** 是正常状态而非降级：`llm` 与 `design_studio`
+分别以 `ready + detail.configured=false` 上报，不产生"功能降级"假警报。
 
 ### 3.4 MCP 后台发现
 
@@ -113,9 +120,12 @@ wake_scheduler / gateways / design_studio / multi_agent / arena 各自
 
 ### 4.2 就绪状态轮询（`electron/startupStatus.ts`）
 
-- 后端 ready 后 1s 间隔 GET `/health/ready`，广播
+- 后端 ready 后 1s 间隔 GET `/health/ready`（带本地授权头），广播
   `backend:startup-status`；L3 后再保持 3s 收尾即停；120s 硬上限；
   后端自动重启重连后重新开始。
+- 轮询周期带 epoch：停止/重启后 in-flight 请求的过期结果会被丢弃；
+  L3 收尾定时器为模块级，重启不会残留旧定时器杀掉新周期。
+- 后端停止/重启/永久失败时立即停止轮询并清空快照。
 - `sage:backend-startup-status`（invoke）返回最近一次快照——与事件
   订阅互补，避免"事件先于订阅"竞态。
 
@@ -156,7 +166,10 @@ wake_scheduler / gateways / design_studio / multi_agent / arena 各自
 - `BackendStatusBanner` 先订阅事件、再查 `getBackendLifecycle()` 快照，
   冷启动不再丢失"后端服务正在启动…"。
 - `AppStartupRestore` 恢复上次会话后，若仍停留在 `/welcome` 则回跳
-  `/chat`（深链 `?session=` 行为不变）。
+  `/chat`（深链 `?session=` 行为不变）。恢复期间用户已明确"新建会话"
+  （`startupRestoreGuard.suppressStartupSessionRestore()`，由
+  `createSession` / Sidebar 新建入口触发）或在欢迎页输入框打字时，
+  尊重用户动作、不回跳。
 
 ## 6. 验证
 

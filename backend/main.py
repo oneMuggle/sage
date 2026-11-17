@@ -55,6 +55,7 @@ from backend.services.startup_status import (
     declare_all_modules,
     get_startup_status,
     mark_module,
+    reset_startup_status,
 )
 
 
@@ -457,6 +458,10 @@ async def _watch_mcp_discovery() -> None:
 
         pool = get_pool()
         pool.ensure_synced()
+        # 观察者同时确保首次发现已启动（幂等）：若 ChatService 装配被
+        # harness 裁剪或失败导致 register_mcp_tools 未执行，这里兜底推进，
+        # 避免记录停在 DISCOVERING 空转 90s 后误报"后台发现超时"。
+        pool.start_background_discovery()
         deadline = time.monotonic() + 90.0
         while True:
             report = pool.status_report()
@@ -494,12 +499,19 @@ async def _watch_mcp_discovery() -> None:
 
 
 def _finalize_pending_modules(reason: str) -> None:
-    """Deferred 兜底：仍未到终态的模块标记 degraded，保证 L3 可达。"""
+    """Deferred 兜底：仍未到终态的模块标记 degraded，保证 L3 可达。
+
+    ``mcp`` 例外：它由独立的后台观察协程（``_watch_mcp_discovery``）负责，
+    自身保证 90s 内必达终态；deferred 结束时它几乎必然还在途中，这里
+    强行标记反而会把 L3 提前拉起来又回退（且冻结 elapsed 计时）。
+    """
     try:
         snapshot = get_startup_status().snapshot()
     except Exception:  # noqa: BLE001
         return
     for name, entry in snapshot.get("modules", {}).items():
+        if name == "mcp":
+            continue
         if entry.get("state") not in (STATE_READY, STATE_DEGRADED, STATE_FAILED):
             mark_module(name, STATE_DEGRADED, {"detail": reason})
 
@@ -737,24 +749,32 @@ async def _deferred_startup_init(
             )
             _llm_client = build_llm_client_from_settings()
             if _llm_client is None:
-                logger.warning(
-                    "[deferred] DesignStudio: LLM client not configured, skipping"
+                # 首次安装尚未配置 LLM 是正常状态，不是"降级"：跳过装配，
+                # 模块按 ready（configured=False）上报，避免健康安装常驻
+                # "1 项功能降级"假警报。
+                logger.info(
+                    "[deferred] DesignStudio: LLM client not configured — skipped"
                 )
-                raise RuntimeError("LLM client not configured")
-            design_studio = DesignStudio(
-                repo=DesignRepo(get_database().get_connection()),
-                generator=DesignGenerator(llm_client=_llm_client),
-                systems=DesignSystemRegistry(_design_content_dir),
-                templates=DesignTemplateRegistry(_design_content_dir),
-                workspace_dir=_design_workspace,
-            )
-            app.state.design_studio = design_studio
-            from backend.design import init_design_studio
+                mark_module(
+                    "design_studio",
+                    STATE_READY,
+                    {"configured": False, "skipped": "llm-not-configured"},
+                )
+            else:
+                design_studio = DesignStudio(
+                    repo=DesignRepo(get_database().get_connection()),
+                    generator=DesignGenerator(llm_client=_llm_client),
+                    systems=DesignSystemRegistry(_design_content_dir),
+                    templates=DesignTemplateRegistry(_design_content_dir),
+                    workspace_dir=_design_workspace,
+                )
+                app.state.design_studio = design_studio
+                from backend.design import init_design_studio
 
-            init_design_studio(design_studio)
-            _startup_mark("design_studio")
-            logger.info("[deferred] DesignStudio 装配完成")
-            mark_module("design_studio", STATE_READY)
+                init_design_studio(design_studio)
+                _startup_mark("design_studio")
+                logger.info("[deferred] DesignStudio 装配完成")
+                mark_module("design_studio", STATE_READY)
         except Exception as exc:  # noqa: BLE001
             logger.exception("DesignStudio 装配失败（ignored）")
             mark_module("design_studio", STATE_DEGRADED, {"detail": str(exc)})
@@ -884,7 +904,9 @@ async def lifespan(app: FastAPI):
     initialize_local_auth_token()
 
     # Progressive readiness（2026-11-16）：声明全部已知模块为 pending，
-    # /health/ready 据此计算 L1/L2/L3 与 warmup 进度。
+    # /health/ready 据此计算 L1/L2/L3 与 warmup 进度。先重置：同一进程内
+    # 二次进入 lifespan（测试/进程内重启）不得继承上一轮的终态。
+    reset_startup_status()
     declare_all_modules()
     mark_module("database", STATE_WARMING)
 

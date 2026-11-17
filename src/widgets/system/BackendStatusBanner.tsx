@@ -153,7 +153,10 @@ export function evaluateBackendStatusBannerGovernanceAudit(
   if (input.bannerState === 'auth_failed') {
     issueCodes.push('BACKEND_BANNER_AUTH_FAILED');
   }
-  if (input.bannerState === 'reconnecting' && (input.reconnectAttempt <= 0 || input.reconnectAttempt > 10)) {
+  if (
+    input.bannerState === 'reconnecting' &&
+    (input.reconnectAttempt <= 0 || input.reconnectAttempt > 10)
+  ) {
     issueCodes.push('BACKEND_BANNER_RECONNECT_ATTEMPT_INVALID');
   }
   if (input.recoveredVisibleMs < 500 || input.recoveredVisibleMs > 10000) {

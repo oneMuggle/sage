@@ -94,6 +94,11 @@ class StartupStatusRegistry:
                     "detail": None,
                 }
                 self._modules[name] = entry
+            if entry["state"] in TERMINAL_STATES and state not in TERMINAL_STATES:
+                # 终态不可回退：迟到的 warming/pending 上报（例如独立后台
+                # 观察协程在兜底 finalize 之后才启动）不得把已完成的模块
+                # 拉回未完成，否则 phase 会从 L3 回退且 elapsed 计时被冻结。
+                return
             if entry["started_at"] is None:
                 entry["started_at"] = now
             entry["state"] = state
@@ -177,7 +182,17 @@ def mark_module(
         logger.debug("startup_status mark failed: %s=%s", name, state, exc_info=True)
 
 
-def reset_startup_status_for_tests() -> None:
+def reset_startup_status() -> None:
+    """Drop the process-wide registry (fresh singleton on next access).
+
+    Called at the top of the FastAPI lifespan: a second lifespan in the same
+    process (tests, in-process restart) must not inherit the previous run's
+    terminal states / timings.
+    """
     global _registry
     with _registry_lock:
         _registry = None
+
+
+def reset_startup_status_for_tests() -> None:
+    reset_startup_status()

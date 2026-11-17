@@ -601,6 +601,10 @@ let backendAuthToken: string | null = null;
 // Progressive readiness：最近一次 /health/ready 快照 + 轮询定时器。
 let lastStartupStatus: StartupStatusSnapshot | null = null;
 let startupStatusPollTimer: ReturnType<typeof setInterval> | null = null;
+// L3 收尾定时器提升为模块级：旧轮询周期遗留的收尾定时器不得杀掉新一轮。
+let startupStatusSettleTimer: ReturnType<typeof setTimeout> | null = null;
+// 轮询周期代号：每次启动/停止自增，in-flight 请求返回后据此丢弃过期结果。
+let startupStatusEpoch = 0;
 
 /**
  * PR #2976 让主窗口先于后端 ready 展示；窗口期（约 10s+）内渲染层的首屏
@@ -1045,6 +1049,8 @@ export function scheduleBackendRestart(): void {
   if (restartCount >= MAX_RESTART_ATTEMPTS) {
     logger.error('main: backend restart exhausted', { attempts: restartCount });
     backendReadyQueue.rejectAll(new BackendNotReadyError());
+    // 后端永久失败：停止就绪轮询并清空快照，避免进度条冻结在 warming。
+    stopStartupStatusPolling(true);
     mainWindow?.webContents.send('sage:event:backend:disconnected', { attempt: -1 });
     return;
   }
@@ -1107,33 +1113,50 @@ export function scheduleBackendRestart(): void {
  * 分层进度。有界：L3（全部模块终态）后再保持 3s 收尾即停；120s 硬上限。
  * 渲染层另有 getBackendStartupStatus() 快照查询，避免事件竞态。
  */
-function stopStartupStatusPolling(): void {
+function stopStartupStatusPolling(clearSnapshot = false): void {
+  // 自增周期代号：正在 await 的 tick 返回后会发现代号过期并丢弃结果，
+  // 不会把上一代后端的快照写回 lastStartupStatus。
+  startupStatusEpoch += 1;
   if (startupStatusPollTimer) {
     clearInterval(startupStatusPollTimer);
     startupStatusPollTimer = null;
   }
+  if (startupStatusSettleTimer) {
+    clearTimeout(startupStatusSettleTimer);
+    startupStatusSettleTimer = null;
+  }
+  if (clearSnapshot) lastStartupStatus = null;
 }
 
 function startStartupStatusPolling(): void {
-  stopStartupStatusPolling();
-  lastStartupStatus = null;
+  stopStartupStatusPolling(true);
+  const epoch = startupStatusEpoch;
   const deadline = Date.now() + STARTUP_STATUS_POLL_DEADLINE_MS;
-  let settleTimer: ReturnType<typeof setTimeout> | null = null;
   const tick = async () => {
     if (appIsQuitting || Date.now() > deadline) {
       stopStartupStatusPolling();
       return;
     }
-    const snapshot = await fetchStartupStatus(BACKEND_READY_STATUS);
+    const snapshot = await fetchStartupStatus(BACKEND_READY_STATUS, 1000, {
+      'X-Sage-Local-Authorization': `Bearer ${backendAuthToken ?? ''}`,
+    });
+    // 过期周期（期间发生过 stop/restart）→ 丢弃，避免回写旧后端快照。
+    if (epoch !== startupStatusEpoch) return;
     if (!snapshot) return;
     lastStartupStatus = snapshot;
     mainWindow?.webContents.send('sage:event:backend:startup-status', snapshot);
-    if (snapshot.phase === 'L3' && settleTimer === null) {
-      // L3 是稳定终态：给 UI 留一拍收尾动画，然后停止轮询。
-      settleTimer = setTimeout(() => {
-        settleTimer = null;
-        stopStartupStatusPolling();
-      }, 3000);
+    if (snapshot.phase === 'L3') {
+      if (startupStatusSettleTimer === null) {
+        // L3 是稳定终态：给 UI 留一拍收尾动画，然后停止轮询。
+        startupStatusSettleTimer = setTimeout(() => {
+          startupStatusSettleTimer = null;
+          stopStartupStatusPolling();
+        }, 3000);
+      }
+    } else if (startupStatusSettleTimer !== null) {
+      // 阶段回退（重启后的新后端重新 warmup）→ 取消遗留收尾定时器。
+      clearTimeout(startupStatusSettleTimer);
+      startupStatusSettleTimer = null;
     }
   };
   startupStatusPollTimer = setInterval(() => {
@@ -3195,6 +3218,9 @@ async function shutdownBackend(): Promise<void> {
     return;
   }
   backendLifecycle = 'stopping';
+  // 后端停止/重启中：就绪轮询针对的是上一代进程，立即停止并清空快照
+  // （重启成功后会重新开始新一轮）。
+  stopStartupStatusPolling(true);
   logger.info('main: killing backend subprocess', { pid: proc.pid });
   const exited = new Promise<void>((resolve) => {
     let settled = false;

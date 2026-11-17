@@ -29,9 +29,9 @@ _PUBLIC_PATHS = frozenset(
     {
         "/health",
         "/health/proof",
-        # Progressive readiness snapshot (memory-only, no IO) — polled by the
-        # Electron supervisor during cold start, same trust level as /health.
-        "/health/ready",
+        # /health/ready 刻意不在白名单：其 detail 含逐模块错误原文（命令路径、
+        # 磁盘余量等），必须与其它 API 一样带本地授权头（Electron 主进程轮询
+        # 时注入 X-Sage-Local-Authorization）。
         "/api/v1/scheduled/health",
         # Browser-extension I/O cannot carry the Electron-injected capability
         # (the extension lives in the user's daily browser).  These exact

@@ -501,6 +501,20 @@ class McpServerPool:
             except Exception as exc:  # noqa: BLE001 — fail-open
                 logger.debug("[MCP:%s] spec synthesis skipped: %s", name, exc)
 
+            # shutdown_all 可能在握手期间已置 _shutdown 并快照 records（彼时
+            # record.client 仍为 None，回收不到）。发现线程不能再接管新子进程，
+            # 自行回收后退出——否则该进程无人 stop，成为孤儿。
+            with self._lock:
+                shutting_down = self._shutdown
+            if shutting_down:
+                self._stop_discarded_client(client)
+                with self._lock:
+                    record.set_state(
+                        ServerState.FAILED, error="pool shut down during discovery"
+                    )
+                logger.info("[MCP:%s] discovery discarded — pool shut down", name)
+                return
+
             with self._lock:
                 record.client = client
                 record.tool_specs = tool_specs
@@ -781,6 +795,12 @@ class McpServerPool:
             for timer in self._rediscover_timers.values():
                 timer.cancel()
             self._rediscover_timers.clear()
+            discovery_thread = self._discovery_thread
+        # 有界等待后台首次发现线程：它可能正处在握手期（此时 record.client
+        # 还是 None，下面的回收扫描不到）。置 _shutdown 后它会自行丢弃 client。
+        if discovery_thread is not None and discovery_thread is not threading.current_thread():
+            discovery_thread.join(timeout=5.0)
+        with self._lock:
             records = list(self._records.values())
         for record in records:
             with self._lock:
