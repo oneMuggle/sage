@@ -350,7 +350,7 @@ def test_manager_evicts_render_pool_before_cap_error():
 
 - [x] `npx tsc --noEmit`
 - [x] `npx eslint` 改动文件（`npm run lint` 全量可留到 CI）
-- [ ] `npx vitest run src/pages/settings src/shared/api/__tests__`（至少覆盖改动域）；`npm run test -- --run` 全量如时间允许
+- [x] `npx vitest run src/pages/settings src/shared/api/__tests__`（479 passed）；全量 `npx vitest run`：1426 文件 / 7445 passed / 6 skipped
 - [x] py38 后端目标测试 + `ruff check backend/tools/browser_cdp.py backend/tools/browser_launcher.py backend/api/diagnostic_routes.py`
 - [x] `node scripts/architecture-check.mjs`（行数棘轮）
 - [ ] 本地手工验证（Electron dev，worktree 端口 8942/1597）：设置-网络列出浏览器、无 401、内置选项可选、高级区域可加载；点击登录不再报上限
