@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-161；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-162；本索引以目录中的实际文件为准。
 
 
 ## 章节目录
@@ -135,6 +135,7 @@
 | 159 | [PDF 页码引用与图表内联引用](./159-pdf-figure-citation.md) | 页标记文本（`--- page N ---`）+ 图表抽取/图注/清单缓存 + `<attached_figures>` 注入 + RAG 页码反查 + Markdown 图片白名单 + 工具结果 dataclass 序列化修复 |
 | 160 | [启动分层就绪与后台自检](./160-startup-progressive-readiness.md) | L0–L3 分层就绪（StartupRegistry + `/health/ready`）+ MCP 后台发现（不阻塞 lifespan）+ 会话三态/防闪烁骨架 + 启动状态指示条 + last-run 启动瀑布（backend_spawned/ready/sessions_loaded） |
 | 161 | [内网离线组件包（.sagepkg）](./161-offline-component-packs.md) | 签名组件包 + 安全解包 + 设置页/SageDoctor 双入口 + win7 全量安装包保持不变 |
+| 162 | [受控浏览器使用](./162-controlled-browser-use.md) | 纯 CDP 浏览器工具面（10 个 `browser_*` 工具）+ 无障碍树快照 v2 / ref 协议 + 可见窗口 / 步骤时间线 / 暂停·接管状态机 + 站点策略·敏感动作确认·一次性指纹·注入警告 + 视觉兜底（临时图像 / OCR） |
 ---
 
 ## 核心章节（基础架构）

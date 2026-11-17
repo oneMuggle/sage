@@ -40,6 +40,7 @@ from .browser_tool import (
     BrowserNavigateTool,
     BrowserScreenshotTool,
     BrowserSnapshotTool,
+    BrowserTabsTool,
 )
 from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, CheckpointRestoreTool
 from .codebase_search_tool import CodebaseSearchTool
@@ -368,6 +369,8 @@ def _install_browser(ctx: ToolInstallContext) -> None:
     ctx.registry.register(BrowserCloseTool(policy=policy))
     # 一键登录：打开可见浏览器 → 用户登录 → 自动保存 cookie（EXTERNAL，blocking）
     ctx.registry.register(BrowserLoginTool(policy=policy))
+    # 标签页管理：list / create / switch / close（WRITE_LOCAL，blocking）
+    ctx.registry.register(BrowserTabsTool(policy=policy))
 
 
 def _install_skill_save(ctx: ToolInstallContext) -> None:

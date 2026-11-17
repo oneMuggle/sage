@@ -102,7 +102,7 @@ def _render_pool_auto() -> bool:
     except Exception:  # noqa: BLE001 — 配置失败按非自动处理
         return False
 
-#: 渲染正文上限（字符，对齐 browser_tool.SNAPSHOT_TEXT_CAP）
+#: 渲染正文上限（字符，对齐 browser_observe.SNAPSHOT_TEXT_CAP）
 RENDER_TEXT_CAP = 30 * 1024
 
 #: 渲染后 outerHTML 抽取上限（字节）——喂给 html_extract 产出 links/tables（R1）
