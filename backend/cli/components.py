@@ -8,6 +8,7 @@ per line so the Electron main process can turn progress into IPC events.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -18,8 +19,20 @@ from backend.services.components.models import ComponentManifest, InstalledCompo
 from backend.services.components.service import ComponentService
 
 
+def _configure_encoding() -> None:
+    """Force UTF-8 on piped stdout/stderr (Win7 cp936/cp1252 consoles)."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream.isatty():
+            continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        with contextlib.suppress(AttributeError, ValueError):
+            reconfigure(encoding="utf-8", line_buffering=True)
+
+
 def _emit(payload: Dict[str, Any]) -> None:
-    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True), flush=True)
 
 
 def _progress_printer(as_json: bool) -> Callable[[str, str, int, int], None]:
@@ -159,6 +172,7 @@ def _make_service(as_json: bool) -> ComponentService:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: PLR0911 — one branch per action
+    _configure_encoding()
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else sys.argv[1:])
     if not args.action:

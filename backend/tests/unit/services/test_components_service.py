@@ -202,6 +202,46 @@ def test_component_dir_target(tmp_path: Path):
     assert not (tmp_path / "userdata" / "components" / "tool" / "1.0.0").exists()
 
 
+def test_component_dir_same_version_reimport_keeps_new_files(tmp_path: Path):
+    key, public_pem = _keypair()
+    service = _service(tmp_path, public_pem)
+    old_payload = {"bin/tool.bin": b"old"}
+    old_pack = _build_pack(
+        tmp_path / "old.sagepkg",
+        key,
+        _manifest(old_payload, component_id="tool", target="component_dir"),
+        old_payload,
+    )
+    service.install(old_pack)
+    new_payload = {"bin/tool.bin": b"new"}
+    new_pack = _build_pack(
+        tmp_path / "new.sagepkg",
+        key,
+        _manifest(new_payload, component_id="tool", target="component_dir"),
+        new_payload,
+    )
+    service.install(new_pack)
+    assert (
+        tmp_path / "userdata" / "components" / "tool" / "1.0.0" / "bin" / "tool.bin"
+    ).read_bytes() == b"new"
+
+
+def test_user_data_public_key_is_not_a_trust_anchor(tmp_path: Path):
+    from backend.services.components.crypto import resolve_public_key_pem
+
+    user_data = tmp_path / "userdata"
+    (user_data / "components").mkdir(parents=True)
+    (user_data / "components" / "public-key.pem").write_bytes(b"attacker-key")
+    assert (
+        resolve_public_key_pem(
+            environ={},
+            user_data_dir=user_data,
+            resources_dir=tmp_path,
+        )
+        is None
+    )
+
+
 def test_install_rejects_invalid_signature(tmp_path: Path):
     signing_key, _ = _keypair()
     _, trusted_public = _keypair()

@@ -151,6 +151,8 @@ export function runComponentCli(
     if (typeof value === 'string') env[key] = value;
   }
   Object.assign(env, plan.env);
+  if (!env.PYTHONIOENCODING) env.PYTHONIOENCODING = 'utf-8';
+  if (!env.PYTHONUTF8) env.PYTHONUTF8 = '1';
   if (snapshot.isPackaged && snapshot.resourcesPath) {
     env.SAGE_IS_PACKAGED = '1';
     env.SAGE_RESOURCES_DIR = snapshot.resourcesPath;

@@ -167,7 +167,6 @@ def component_specs(
 
 def _write_index(
     output_dir: Path,
-    private_key_path: Path,
     built: Sequence[Tuple[Dict[str, object], Path]],
 ) -> Path:
     entries = []
@@ -188,7 +187,6 @@ def _write_index(
     index = {
         "schemaVersion": 1,
         "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),  # noqa: UP017
-        "signingKey": _sha256_file(private_key_path),
         "packages": entries,
     }
     index_path = output_dir / "components-index.json"
@@ -263,7 +261,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"错误: {exc}")
         return 1
 
-    index_path = _write_index(output_dir, private_key_path, built)
+    index_path = _write_index(output_dir, built)
     print(f"✓ {index_path.name}")
     return 0
 

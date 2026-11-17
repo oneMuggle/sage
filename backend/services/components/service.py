@@ -19,6 +19,7 @@ from .archive import ProgressCallback, read_component_json, read_signature, stag
 from .crypto import require_public_key, verify_signature
 from .errors import ComponentError
 from .models import (
+    ComponentFile,
     ComponentManifest,
     InstalledComponent,
     PackageScanResult,
@@ -268,8 +269,6 @@ class ComponentService:
         for _attempt in range(2):
             try:
                 fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(fd, ("%d %s" % (os.getpid(), _now_iso())).encode("ascii"))
-                break
             except FileExistsError:
                 try:
                     age = time.time() - lock_path.stat().st_mtime
@@ -282,6 +281,15 @@ class ComponentService:
                 raise ComponentError(
                     "另一个组件安装正在进行，请稍后重试", code="install_locked"
                 )
+            try:
+                os.write(fd, ("%d %s" % (os.getpid(), _now_iso())).encode("ascii"))
+            except OSError:
+                with suppress(OSError):
+                    os.close(fd)
+                with suppress(OSError):
+                    lock_path.unlink()
+                raise
+            break
         if fd is None:
             raise ComponentError("无法获取组件安装锁", code="install_locked")
         try:
@@ -292,14 +300,20 @@ class ComponentService:
             with suppress(OSError):
                 lock_path.unlink()
 
-    def _files_match(self, installed: InstalledComponent) -> bool:
+    def _files_match(
+        self,
+        target: str,
+        component_id: str,
+        version: str,
+        files: Tuple[ComponentFile, ...],
+    ) -> bool:
         try:
             resolved = resolve_installed_paths(
                 self.user_data_dir,
-                installed.target,
-                installed.id,
-                installed.version,
-                installed.files,
+                target,
+                component_id,
+                version,
+                files,
             )
         except ValueError:
             return False
@@ -356,7 +370,12 @@ class ComponentService:
                     previous is not None
                     and previous.version == manifest.version
                     and previous.target == manifest.target
-                    and self._files_match(previous)
+                    and self._files_match(
+                        manifest.target,
+                        manifest.id,
+                        manifest.version,
+                        manifest.files,
+                    )
                 ):
                     return previous
                 return self._commit_install(
@@ -417,10 +436,15 @@ class ComponentService:
             raise
         if previous is not None:
             keep = {destination for _item, destination in resolved}
-            self._remove_old_files(previous, keep)
+            self._remove_old_files(previous, keep, manifest.version)
         return installed
 
-    def _remove_old_files(self, previous: InstalledComponent, keep: Set[Path]) -> None:
+    def _remove_old_files(
+        self,
+        previous: InstalledComponent,
+        keep: Set[Path],
+        current_version: str,
+    ) -> None:
         try:
             old_paths = resolve_installed_paths(
                 self.user_data_dir,
@@ -439,7 +463,7 @@ class ComponentService:
                     path.unlink()
             except OSError:
                 continue
-        if previous.target == "component_dir":
+        if previous.target == "component_dir" and previous.version != current_version:
             version_dir = self.user_data_dir / "components" / previous.id / previous.version
             shutil.rmtree(version_dir, ignore_errors=True)
 

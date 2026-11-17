@@ -49,8 +49,12 @@ def resolve_public_key_pem(
     if inline:
         return inline.encode("utf-8")
     candidates = []
-    if user_data_dir is not None:
-        candidates.append(user_data_dir / "components" / "public-key.pem")
+    # Machine-wide override for enterprise-managed keys. ``userData`` is
+    # deliberately NOT a trust anchor: it is user-writable, so accepting a key
+    # from there would let any local user bypass the administrator signature.
+    program_data = env.get("ProgramData")
+    if program_data:
+        candidates.append(Path(program_data) / "Sage" / "component-public-key.pem")
     if resources_dir is not None:
         candidates.append(resources_dir / "component-public-key.pem")
     for candidate in candidates:

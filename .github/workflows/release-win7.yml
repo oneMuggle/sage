@@ -142,8 +142,10 @@ jobs:
           Set-Content -Path $keyPath -Value $env:SAGE_COMPONENT_SIGNING_KEY -NoNewline
           python -m pip install "cryptography==47.0.0"
           python scripts/build-component-packs.py --all --key $keyPath --output release/components
-          python scripts/build-component-packs.py --print-public-key --key $keyPath |
-            Set-Content -Path resources/component-public-key.pem -Encoding ascii
+          if ($LASTEXITCODE -ne 0) { throw "component pack build failed" }
+          $publicKey = python scripts/build-component-packs.py --print-public-key --key $keyPath
+          if ($LASTEXITCODE -ne 0) { throw "component public key derivation failed" }
+          Set-Content -Path resources/component-public-key.pem -Value $publicKey -Encoding ascii
 
       - name: Upload component packs as artifact
         uses: actions/upload-artifact@v4
@@ -247,8 +249,9 @@ jobs:
           $keyPath = Join-Path $env:RUNNER_TEMP 'component-signing-key.pem'
           Set-Content -Path $keyPath -Value $env:SAGE_COMPONENT_SIGNING_KEY -NoNewline
           python -m pip install "cryptography==47.0.0"
-          python scripts/build-component-packs.py --print-public-key --key $keyPath |
-            Set-Content -Path resources/component-public-key.pem -Encoding ascii
+          $publicKey = python scripts/build-component-packs.py --print-public-key --key $keyPath
+          if ($LASTEXITCODE -ne 0) { throw "component public key derivation failed" }
+          Set-Content -Path resources/component-public-key.pem -Value $publicKey -Encoding ascii
 
       - name: Build Windows NSIS (Win7 LTS - Cython)
         # Override artifactName to add -cython suffix, distinguishing

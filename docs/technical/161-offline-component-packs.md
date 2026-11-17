@@ -69,10 +69,12 @@ payload/...         # 已构建好的文件
 
 公钥解析顺序：
 
-1. `SAGE_COMPONENT_PUBLIC_KEY_PATH`；
-2. `SAGE_COMPONENT_PUBLIC_KEY`（内联 PEM）；
-3. `<userData>/components/public-key.pem`；
-4. `<resources>/component-public-key.pem`（安装包内置）。
+1. `SAGE_COMPONENT_PUBLIC_KEY_PATH`（管理员显式路径）；
+2. `SAGE_COMPONENT_PUBLIC_KEY`（内联 PEM，管理员/测试）；
+3. `%ProgramData%\Sage\component-public-key.pem`（机器级管理员覆盖）；
+4. `<resources>/component-public-key.pem`（安装包内置，生产默认信任锚）。
+
+`<userData>` 目录**不作为**信任锚：它是普通用户可写目录，接受其中的公钥会让任何本地用户绕过管理员签名。管理员如需自定义密钥，应使用 `ProgramData` 或安装目录下的公钥文件，或通过显式环境变量下发。
 
 ## 4. 入口
 
