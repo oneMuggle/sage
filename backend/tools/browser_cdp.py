@@ -47,6 +47,7 @@ from .browser_launcher import (
     ChromeLauncher,
     FirefoxLauncher,
     discover_and_select,
+    headless_flag,
 )
 from .browser_ws import ws_close, ws_connect, ws_recv_text, ws_send_text
 
@@ -127,11 +128,17 @@ def _discover_embedded_env() -> Optional[Dict[str, Any]]:
 
 
 def _get_user_browser_path() -> Optional[str]:
-    """从设置中读取用户配置的浏览器路径。"""
+    """从设置中读取用户配置的浏览器路径。
+
+    `(embedded)` 是设置页「Sage 内置浏览器」选项的哨兵值，不是文件路径，
+    需要原样返回交由发现链解析。
+    """
     try:
         from backend.data.settings_repo import SettingsRepository
 
         path = SettingsRepository().get("browser_path")
+        if path == EMBEDDED_EXECUTABLE:
+            return EMBEDDED_EXECUTABLE
         if path and Path(path).is_file():
             return path
     except Exception as exc:  # noqa: BLE001 — 设置读取失败时回退到平台发现
@@ -140,19 +147,9 @@ def _get_user_browser_path() -> Optional[str]:
 
 
 def discover_browser_executable() -> Optional[str]:
-    """按 环境变量 → 用户设置 → 平台能力发现 顺序找 Chromium / Firefox 系浏览器。"""
-    if _discover_embedded_env():
-        return EMBEDDED_EXECUTABLE
-    env_override = os.environ.get("SAGE_BROWSER_PATH")
-    if env_override and Path(env_override).is_file():
-        return env_override
-    user_override = _get_user_browser_path()
-    if user_override:
-        return user_override
-    cap = discover_and_select()
-    if cap:
-        return cap.executable
-    return None
+    """按 环境变量 → 用户设置 → 内置兜底 → 平台能力发现 顺序找浏览器。"""
+    cap = discover_and_select(_get_user_browser_path())
+    return cap.executable if cap else None
 
 
 def _darwin_candidates() -> Optional[str]:
@@ -206,28 +203,73 @@ class BrowserSessionManager:
 
     def __init__(self) -> None:
         self._sessions: Dict[str, BrowserSession] = {}
+        # 上限判定是 check-then-act，登录任务线程与渲染池并发注册时需要串行化。
+        self._lock = threading.Lock()
+
+    def _counted_locked(self) -> int:
+        """按真实浏览器进程计的会话数。
+
+        EMBEDDED 与 Electron 共享同一个 Chromium 进程（见 ``_EmbeddedProcess``），
+        每开一个逻辑会话并不会多一个进程；EXTERNAL 是用户自己的标签页。
+        两者都不参与 ``MAX_BROWSER_SESSIONS`` 进程上限。
+        """
+        return sum(
+            1
+            for session in self._sessions.values()
+            if getattr(session, "browser_type", None)
+            not in (BrowserType.EMBEDDED, BrowserType.EXTERNAL)
+        )
 
     def register(self, session: BrowserSession) -> None:
-        old = self._sessions.pop(session.browser_id, None)
-        if old is not None and old is not session:
-            # 固定 id 的池并发重建时曾会静默覆盖旧会话对象（连带其临时目录
-            # 永久遗留）——改为显式回收旧实例并留痕。
-            logger.warning(
-                "browser_id 冲突（%s）：回收旧实例 pid=%s",
-                session.browser_id,
-                getattr(old.process, "pid", None),
-            )
-            _terminate_session(old)
-        # The user-shared external tab is one logical session and must remain
-        # usable even when Sage's own Chrome/render sessions fill the cap.
-        if (
-            session.browser_id != EXTENSION_BROWSER_ID
-            and len(self._sessions) >= MAX_BROWSER_SESSIONS
-        ):
-            raise BrowserCDPError(
-                f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}，请先用 browser_close 关闭"
-            )
-        self._sessions[session.browser_id] = session
+        evicted: List[BrowserSession] = []
+        try:
+            with self._lock:
+                old = self._sessions.pop(session.browser_id, None)
+                if old is not None and old is not session:
+                    # 固定 id 的池并发重建时曾会静默覆盖旧会话对象（连带其临时目录
+                    # 永久遗留）——改为显式回收旧实例并留痕。
+                    logger.warning(
+                        "browser_id 冲突（%s）：回收旧实例 pid=%s",
+                        session.browser_id,
+                        getattr(old.process, "pid", None),
+                    )
+                    evicted.append(old)
+                # 已退出实例（用户关窗/崩溃）不占名额：注册前先回收，
+                # 否则「关掉浏览器后仍报已达上限」。
+                for stale_id, stale in list(self._sessions.items()):
+                    if not stale.is_alive():
+                        self._sessions.pop(stale_id, None)
+                        evicted.append(stale)
+                # 用户共享标签页与内置浏览器不需要新进程，不占进程名额。
+                needs_slot = (
+                    session.browser_id != EXTENSION_BROWSER_ID
+                    and getattr(session, "browser_type", None) != BrowserType.EMBEDDED
+                )
+                if needs_slot and self._counted_locked() >= MAX_BROWSER_SESSIONS:
+                    # 渲染池是懒重建的后台实例：为前台会话让位，下次渲染按需重建。
+                    # 内置池会话共享 Electron 单进程，不能个别回收（会误关其它标签页）。
+                    for pool_id in [
+                        bid
+                        for bid, pooled in list(self._sessions.items())
+                        if (
+                            bid == RESERVED_BROWSER_ID
+                            or bid.startswith(RESERVED_BROWSER_ID + "-")
+                        )
+                        and getattr(pooled, "browser_type", None) != BrowserType.EMBEDDED
+                    ]:
+                        if self._counted_locked() < MAX_BROWSER_SESSIONS:
+                            break
+                        evicted.append(self._sessions.pop(pool_id))
+                if needs_slot and self._counted_locked() >= MAX_BROWSER_SESSIONS:
+                    raise BrowserCDPError(
+                        f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}：请关闭 Sage 打开的"
+                        "浏览器窗口后重试（对话中可调用 browser_close 关闭实例）"
+                    )
+                self._sessions[session.browser_id] = session
+        finally:
+            # 进程终止可能较慢，统一放到锁外执行；抛上限错误时也让位结果生效。
+            for stale in evicted:
+                _terminate_session(stale)
 
     def get(self, browser_id: Optional[str]) -> Optional[BrowserSession]:
         """按 id 取会话；None → 优先用户共享的日常浏览器，其次唯一实例。
@@ -543,8 +585,9 @@ def _build_launch_command(
         command.append(f"--proxy-server={proxy_flag}")
     command.append("about:blank")
     if headless:
-        # Chrome 109+（Win7 末代版本）起支持 new headless
-        command.insert(1, "--headless=new")
+        # Chrome 109+ 才支持 new headless；旧内核（Win7 的 Edge 100 /
+        # Chrome 107）由 headless_flag 降级为旧无头模式
+        command.insert(1, headless_flag(executable))
     return command
 
 
@@ -585,7 +628,8 @@ def launch_browser(
     Raises:
         BrowserCDPError: 找不到浏览器 / 启动超时 / 实例数超限。
     """
-    cap = discover_and_select()
+    # 设置页选择的浏览器优先于 Win7 内置兜底；显式环境变量仍最高（见 discover_and_select）
+    cap = discover_and_select(_get_user_browser_path())
     if not cap:
         raise BrowserCDPError(
             "未找到 Chrome/Edge/Firefox 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH / SAGE_FIREFOX_PATH 指定可执行文件路径"

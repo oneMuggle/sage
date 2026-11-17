@@ -194,7 +194,11 @@ def test_js_type_uses_native_setter_and_events():
 # ---------------------------------------------------------------------------
 
 
-def _fake_session(browser_id: str, alive: bool = True) -> BrowserSession:
+def _fake_session(
+    browser_id: str,
+    alive: bool = True,
+    browser_type: browser_cdp.BrowserType = browser_cdp.BrowserType.CHROME,
+) -> BrowserSession:
     process = SimpleNamespace(
         poll=lambda: None if alive else 1,
         terminate=lambda: None,
@@ -209,6 +213,7 @@ def _fake_session(browser_id: str, alive: bool = True) -> BrowserSession:
         process=process,
         port=1,
         ws_path="/devtools/browser/x",
+        browser_type=browser_type,
     )
 
 
@@ -237,6 +242,41 @@ def test_manager_cap():
         manager.register(_fake_session(f"b{index}"))
     with pytest.raises(browser_cdp.BrowserCDPError, match="上限"):
         manager.register(_fake_session("overflow"))
+
+
+def test_manager_prunes_dead_sessions_before_cap():
+    """用户关窗/崩溃后的死实例不再占名额（「关闭浏览器后仍报已达上限」根因）。"""
+    manager = BrowserSessionManager()
+    for index in range(browser_cdp.MAX_BROWSER_SESSIONS):
+        manager.register(_fake_session(f"dead{index}", alive=False))
+    fresh = _fake_session("fresh", alive=True)
+    manager.register(fresh)
+    assert manager.get("fresh") is fresh
+
+
+def test_manager_excludes_embedded_sessions_from_cap():
+    """内置浏览器共享 Electron 同一 Chromium 进程，逻辑会话不按进程上限计数。"""
+    manager = BrowserSessionManager()
+    for index in range(browser_cdp.MAX_BROWSER_SESSIONS + 1):
+        manager.register(
+            _fake_session(f"emb{index}", browser_type=browser_cdp.BrowserType.EMBEDDED)
+        )
+    manager.register(_fake_session("chrome", browser_type=browser_cdp.BrowserType.CHROME))
+    assert manager.get("chrome").browser_id == "chrome"
+
+
+def test_manager_evicts_render_pool_before_cap_error():
+    """渲染池是懒重建的后台实例；登录窗口需要名额时先让它让位。"""
+    manager = BrowserSessionManager()
+    pool_id = browser_cdp.RESERVED_BROWSER_ID
+    manager.register(_fake_session(pool_id))
+    for index in range(2, browser_cdp.MAX_BROWSER_SESSIONS + 1):
+        manager.register(_fake_session(f"{pool_id}-{index}"))
+
+    manager.register(_fake_session("login-default"))
+
+    assert manager.get("login-default") is not None
+    assert manager.count() <= browser_cdp.MAX_BROWSER_SESSIONS
 
 
 # ---------------------------------------------------------------------------
@@ -450,7 +490,8 @@ def test_unknown_browser_id_maps_to_error():
 
 def test_launch_tool_reports_discovery_failure(monkeypatch):
     monkeypatch.setattr(browser_cdp, "discover_browser_executable", lambda: None)
-    monkeypatch.setattr(browser_cdp, "discover_and_select", lambda: None)
+    # discover_and_select 自 2026-11 起接受可选 user_path（设置页选择优先）
+    monkeypatch.setattr(browser_cdp, "discover_and_select", lambda *_args, **_kwargs: None)
     result = _tool(BrowserLaunchTool).execute()
     assert result.success is False
     assert "SAGE_BROWSER_PATH" in result.error

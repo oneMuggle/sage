@@ -810,6 +810,8 @@ export const zhChatAndSider = {
   'settings.network.browser.loading': '正在扫描可用浏览器…',
   'settings.network.browser.none_found':
     '未发现可用浏览器。请安装 Chrome/Edge 或使用 SAGE_BROWSER_PATH 环境变量指定路径。',
+  'settings.network.browser.load_failed': '浏览器列表加载失败，请重试。',
+  'settings.network.browser.retry': '重试',
   'settings.network.browser.embedded': 'Sage 内置浏览器',
   'settings.network.browser.embedded_hint': 'Electron 自带的 Chromium 内核（部分站点可能不兼容）',
   'settings.network.browser.system_default': '系统默认',

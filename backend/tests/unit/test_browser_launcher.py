@@ -13,8 +13,77 @@ from backend.tools.browser_launcher import (
     ChromeLauncher,
     FirefoxLauncher,
     _infer_browser_type,
+    chromium_major_version,
     discover_and_select,
+    headless_flag,
 )
+
+
+def test_chromium_major_version_reads_version_dirs(tmp_path):
+    """Windows 无法用 --version 探测：读 exe 同级的版本目录名（Win7 场景同构）。"""
+    exe_dir = tmp_path / "Application"
+    exe_dir.mkdir()
+    (exe_dir / "100.0.4896.60").mkdir()
+    (exe_dir / "107.0.5304.87").mkdir()
+    exe = exe_dir / "msedge"
+    exe.write_text("")
+
+    assert chromium_major_version(str(exe)) == 107
+
+
+def test_headless_flag_falls_back_for_legacy_major(tmp_path):
+    """Chrome 109 前无 new headless：Edge 100 / Chrome 107 必须降级 --headless。"""
+    exe_dir = tmp_path / "Application"
+    exe_dir.mkdir()
+    (exe_dir / "100.0.4896.60").mkdir()
+    exe = exe_dir / "msedge"
+    exe.write_text("")
+
+    assert headless_flag(str(exe)) == "--headless"
+
+
+def test_headless_flag_uses_new_for_recent_or_unknown(tmp_path):
+    exe_dir = tmp_path / "Application"
+    exe_dir.mkdir()
+    (exe_dir / "138.0.7204.50").mkdir()
+    exe = exe_dir / "chrome"
+    exe.write_text("")
+    assert headless_flag(str(exe)) == "--headless=new"
+
+    # 版本未知时保持现行默认（不因探测失败改变既有行为）
+    assert headless_flag(str(tmp_path / "missing")) == "--headless=new"
+
+
+def test_discover_and_select_user_path_beats_embedded(monkeypatch, tmp_path):
+    """设置页选择真实浏览器后，优先于 Win7 内置兜底内核。"""
+    fake = tmp_path / "chrome.exe"
+    fake.write_text("bin")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER", "1")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_PORT", "9411")
+    monkeypatch.setenv("SAGE_EMBEDDED_BROWSER_TOKEN", "tok")
+    monkeypatch.delenv("SAGE_BROWSER_PATH", raising=False)
+    monkeypatch.delenv("SAGE_FIREFOX_PATH", raising=False)
+
+    cap = discover_and_select(str(fake))
+    assert cap is not None
+    assert cap.browser_type == BrowserType.CHROME
+    assert cap.executable == str(fake)
+
+    embedded = discover_and_select("(embedded)")
+    assert embedded is not None
+    assert embedded.browser_type == BrowserType.EMBEDDED
+
+
+def test_discover_and_select_env_path_beats_user_path(monkeypatch, tmp_path):
+    env_exe = tmp_path / "env-chrome"
+    env_exe.write_text("bin")
+    user_exe = tmp_path / "user-chrome"
+    user_exe.write_text("bin")
+    monkeypatch.setenv("SAGE_BROWSER_PATH", str(env_exe))
+    monkeypatch.delenv("SAGE_EMBEDDED_BROWSER", raising=False)
+
+    cap = discover_and_select(str(user_exe))
+    assert cap.executable == str(env_exe)
 
 
 def test_infer_browser_type():

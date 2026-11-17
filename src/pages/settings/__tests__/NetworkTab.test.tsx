@@ -509,4 +509,57 @@ describe('NetworkTab render events metrics (R25)', () => {
 
     // P3: 页内「复制快照/JSON」按钮已收敛到「审计导出」tab —— NetworkTab 不再渲染这两枚按钮。
   });
+
+  it('shows a retryable error state instead of the empty state when loading fails', async () => {
+    mocks.fetchBrowserList.mockRejectedValueOnce(new Error('Backend request failed: 401'));
+    renderTab();
+
+    await waitFor(() => expect(screen.getByTestId('browser-load-error')).toBeTruthy());
+    // 加载失败绝不能伪装成「未发现可用浏览器」
+    expect(screen.queryByText(/未发现可用浏览器/)).toBeNull();
+
+    mocks.fetchBrowserList.mockResolvedValueOnce({
+      browsers: [
+        {
+          name: 'Microsoft Edge',
+          path: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+          version: '100',
+          isDefault: true,
+        },
+      ],
+      userConfigured: null,
+      embeddedAvailable: false,
+    });
+    fireEvent.click(screen.getByTestId('browser-retry'));
+
+    await waitFor(() => expect(screen.getByText('Microsoft Edge')).toBeTruthy());
+    expect(screen.queryByTestId('browser-load-error')).toBeNull();
+  });
+
+  it('renders the empty state only when the backend reports no browsers and no embedded option', async () => {
+    mocks.fetchBrowserList.mockResolvedValue({
+      browsers: [],
+      userConfigured: null,
+      embeddedAvailable: false,
+    });
+    renderTab();
+
+    await waitFor(() => expect(screen.getByText(/未发现可用浏览器/)).toBeTruthy());
+  });
+
+  it('offers the embedded browser as an option and selects it', async () => {
+    mocks.fetchBrowserList.mockResolvedValue({
+      browsers: [],
+      userConfigured: null,
+      embeddedAvailable: true,
+    });
+    renderTab();
+
+    await waitFor(() => expect(screen.getByTestId('embedded-browser-option')).toBeTruthy());
+    // 有内置兜底时不再显示「未发现可用浏览器」
+    expect(screen.queryByText(/未发现可用浏览器/)).toBeNull();
+
+    fireEvent.click(screen.getByTestId('embedded-browser-option'));
+    await waitFor(() => expect(mocks.setBrowserPath).toHaveBeenCalledWith('(embedded)'));
+  });
 });
