@@ -301,6 +301,8 @@ class McpServerPool:
         self._registries: List[weakref.ReferenceType] = []
         self._initial_sync_done = False
         self._initial_discovery_done = False
+        #: Background first-discovery thread (see start_background_discovery).
+        self._discovery_thread: Optional[threading.Thread] = None
         self._rediscover_at: Dict[str, float] = {}
         self._rediscover_timers: Dict[str, threading.Timer] = {}
         #: Terminal shutdown flag — once set (under the lock, by
@@ -363,6 +365,36 @@ class McpServerPool:
             self._initial_discovery_done = True
         self.ensure_synced()
         self.discover_all()
+
+    def start_background_discovery(self) -> bool:
+        """Kick off first-time discovery on a daemon thread; return immediately.
+
+        Startup must not block on MCP handshakes: each server can burn up to
+        its configured timeout (30s by default). Servers that reach READY fan
+        their tools into tracked registries as they settle
+        (``_register_server_tools``), so tools appear asynchronously without
+        a restart. Returns True when a new discovery thread was started.
+        """
+        with self._lock:
+            if self._initial_discovery_done or self._discovery_thread is not None:
+                return False
+            thread = threading.Thread(
+                target=self._run_initial_discovery,
+                name="mcp-initial-discovery",
+                daemon=True,
+            )
+            self._discovery_thread = thread
+        thread.start()
+        return True
+
+    def _run_initial_discovery(self) -> None:
+        try:
+            self.ensure_discovered()
+        except Exception as exc:  # noqa: BLE001 — background discovery must not raise
+            logger.error("[MCP] background discovery failed: %s", exc)
+        finally:
+            with self._lock:
+                self._discovery_thread = None
 
     # ---- discovery ----------------------------------------------------------
 
@@ -468,6 +500,20 @@ class McpServerPool:
                 tool_specs = tool_specs + synthesize_extra_specs(client)
             except Exception as exc:  # noqa: BLE001 — fail-open
                 logger.debug("[MCP:%s] spec synthesis skipped: %s", name, exc)
+
+            # shutdown_all 可能在握手期间已置 _shutdown 并快照 records（彼时
+            # record.client 仍为 None，回收不到）。发现线程不能再接管新子进程，
+            # 自行回收后退出——否则该进程无人 stop，成为孤儿。
+            with self._lock:
+                shutting_down = self._shutdown
+            if shutting_down:
+                self._stop_discarded_client(client)
+                with self._lock:
+                    record.set_state(
+                        ServerState.FAILED, error="pool shut down during discovery"
+                    )
+                logger.info("[MCP:%s] discovery discarded — pool shut down", name)
+                return
 
             with self._lock:
                 record.client = client
@@ -749,6 +795,12 @@ class McpServerPool:
             for timer in self._rediscover_timers.values():
                 timer.cancel()
             self._rediscover_timers.clear()
+            discovery_thread = self._discovery_thread
+        # 有界等待后台首次发现线程：它可能正处在握手期（此时 record.client
+        # 还是 None，下面的回收扫描不到）。置 _shutdown 后它会自行丢弃 client。
+        if discovery_thread is not None and discovery_thread is not threading.current_thread():
+            discovery_thread.join(timeout=5.0)
+        with self._lock:
             records = list(self._records.values())
         for record in records:
             with self._lock:

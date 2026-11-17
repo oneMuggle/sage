@@ -70,7 +70,16 @@ interface ConversationsSectionProps {
   onLoadMoreSessions?: () => void;
   sessionsHasMore?: boolean;
   sessionsLoadingMore?: boolean;
+  /** 首屏会话列表加载中（区分「加载中」与「真正为空」） */
+  sessionsLoading?: boolean;
+  /** 首屏会话列表加载失败信息；非空时显示可重试错误态 */
+  sessionsError?: string | null;
+  /** 重试首屏加载 */
+  onRetrySessions?: () => void;
 }
+
+/** 防闪烁：加载持续超过该时长才展示骨架，快速返回时不闪一下。 */
+const SESSIONS_SKELETON_DELAY_MS = 160;
 
 /** F12: 消息搜索防抖间隔（ms）——输入停顿后才打后端 */
 const MESSAGE_SEARCH_DEBOUNCE_MS = 300;
@@ -90,8 +99,21 @@ export function ConversationsSection({
   onLoadMoreSessions,
   sessionsHasMore = false,
   sessionsLoadingMore = false,
+  sessionsLoading = false,
+  sessionsError = null,
+  onRetrySessions,
 }: ConversationsSectionProps) {
   const { t } = useI18n();
+  // 防闪烁：仅在加载持续超过阈值后才显示骨架，快速返回时不留闪烁。
+  const [showSessionsSkeleton, setShowSessionsSkeleton] = useState(false);
+  useEffect(() => {
+    if (!sessionsLoading) {
+      setShowSessionsSkeleton(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowSessionsSkeleton(true), SESSIONS_SKELETON_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [sessionsLoading]);
   // U4': 标题过滤——sessions 全量已在前端内存,纯前端 filter;只影响展示。
   const [searchQuery, setSearchQuery] = useState('');
   // F12: 消息内容命中计数（≥2 字符时防抖搜索,会话 id → 命中条数）
@@ -465,7 +487,34 @@ export function ConversationsSection({
               </button>
             </div>
           )}
-          {!showArchived && sessions.length === 0 ? (
+          {!showArchived && sessions.length === 0 && sessionsError ? (
+            <div
+              className="px-3 py-6 text-ui-sm text-text-muted text-center space-y-2"
+              data-testid="sessions-error"
+            >
+              <p>会话加载失败</p>
+              <button
+                type="button"
+                data-testid="sessions-error-retry"
+                onClick={onRetrySessions}
+                className="text-primary hover:underline"
+              >
+                重试
+              </button>
+            </div>
+          ) : !showArchived && sessions.length === 0 && sessionsLoading ? (
+            showSessionsSkeleton ? (
+              <div
+                className="px-3 py-2 space-y-2"
+                data-testid="sessions-loading"
+                aria-label="会话列表加载中"
+              >
+                {[0, 1, 2].map((index) => (
+                  <div key={index} className="h-7 rounded bg-bg-hover animate-pulse" />
+                ))}
+              </div>
+            ) : null
+          ) : !showArchived && sessions.length === 0 ? (
             <div
               className="px-3 py-6 text-ui-sm text-text-muted text-center space-y-2"
               data-testid="sessions-empty"

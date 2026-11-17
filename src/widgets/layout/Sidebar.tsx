@@ -48,6 +48,7 @@ import {
   useFeatureUnlock,
 } from '../../shared/lib/hooks/useFeatureUnlock';
 import { useI18n } from '../../shared/lib/i18n';
+import { suppressStartupSessionRestore } from '../../shared/lib/startupRestoreGuard';
 import { useStore } from '../../shared/lib/store';
 import { AttnBadge, BrandLogo, LiveDot, Tooltip, type LiveState } from '../../shared/ui';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
@@ -220,6 +221,8 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
     loadMoreSessions,
     sessionsHasMore,
     sessionsLoadingMore,
+    sessionsLoading,
+    sessionsError,
     updateSession,
   } = useStore();
   const { settings } = useSettings();
@@ -365,7 +368,9 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
   }, [chatEndpoint, settings.modelSelections.chatModel.modelId]);
 
   const handleNewSession = () => {
-    // Phase 7: 新建会话跳转到欢迎屏，由用户在欢迎屏输入后再创建 session
+    // Phase 7: 新建会话跳转到欢迎屏，由用户在欢迎屏输入后再创建 session。
+    // 用户已明确选择新对话：抑制启动期"恢复上次会话"回跳，避免被拽回旧会话。
+    suppressStartupSessionRestore();
     navigate('/welcome');
   };
 
@@ -407,7 +412,7 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
       if (archived) {
         updateSession(sessionId, { is_archived: true });
       } else {
-        await loadSessions();
+        await loadSessions(true);
       }
       toast.success(t(archived ? 'session.archived_toast' : 'session.unarchived_toast'));
     } catch (error) {
@@ -459,6 +464,9 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
             onLoadMoreSessions={() => void loadMoreSessions()}
             sessionsHasMore={sessionsHasMore}
             sessionsLoadingMore={sessionsLoadingMore}
+            sessionsLoading={sessionsLoading}
+            sessionsError={sessionsError}
+            onRetrySessions={() => void loadSessions()}
           />
         );
       case 'git':

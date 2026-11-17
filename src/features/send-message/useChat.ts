@@ -718,7 +718,7 @@ export function useChat() {
         useQuestionState.getState().resolve(sid);
         // 流结束后刷新侧栏会话列表（获取自动生成的标题 + S1 落库的运行态徽章）
         // hex 路径无 NDJSON session_updated 事件，此处兜底刷新
-        void useStore.getState().loadSessions();
+        void useStore.getState().loadSessions(true);
         // 2026-09: 标题转为后台生成 (DONE 先行) —— 首轮标题尚未就绪时
         // 延迟补刷两次, 覆盖 LLM 生成/重试的常见耗时区间。
         // 2026-11-05: 补刷前检查标题是否已被 session_updated 增量更新;
@@ -726,7 +726,7 @@ export function useChat() {
         if (lastDoneTitlePending) {
           const refreshIfUntitled = (): void => {
             const session = useStore.getState().sessions.find((s) => s.id === sid);
-            if (!session?.title) void useStore.getState().loadSessions();
+            if (!session?.title) void useStore.getState().loadSessions(true);
           };
           window.setTimeout(refreshIfUntitled, 8000);
           window.setTimeout(refreshIfUntitled, 16000);
@@ -771,7 +771,7 @@ export function useChat() {
                   useStore.getState().updateSession(sid, { title: evt.title });
                 } else {
                   // 其它 session_updated 子类型仍走全量刷新
-                  void useStore.getState().loadSessions();
+                  void useStore.getState().loadSessions(true);
                 }
                 return;
               }

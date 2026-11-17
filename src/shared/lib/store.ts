@@ -6,6 +6,9 @@ import type { GenerationStats, MessageDisplayMeta, MessageSource, RagCitation } 
 export type { MessageSource } from '../api/types';
 import { clientLogger } from '../log/client';
 
+import { markBootStageOnce } from './bootStages';
+import { suppressStartupSessionRestore } from './startupRestoreGuard';
+
 // Re-export API modules for convenience
 export { sessionApi, messageApi, chatApi, memoryApi } from '../api';
 
@@ -143,6 +146,13 @@ interface StoreState {
   // 加载状态
   isLoading: boolean;
 
+  // 会话列表首屏加载状态：区分「正在加载」/「加载失败」/「真正为空」。
+  // 初始为 true —— Sidebar 的 loadSessions 在 mount 后才触发，若初始为
+  // false，首帧会把空数组渲染成「尚无会话」，与数据未加载不可区分。
+  sessionsLoading: boolean;
+  /** 会话列表最近一次加载失败信息；非 null 时侧栏展示可重试错误态 */
+  sessionsError: string | null;
+
   // TM2 (DSH 对标 R11): 上下文水位（随 context_pressure 流事件更新；
   // 切换会话时清空——水位是 per-request 的临时量）
   contextPressure: {
@@ -161,7 +171,9 @@ interface StoreState {
   ) => void;
 
   // 操作方法
-  loadSessions: () => Promise<void>;
+  /** 加载会话列表。force=true：调用方刚做过变更（新建/归档/分叉等），
+   *  必须拿到变更后的结果 —— 若有 in-flight 请求则排队一次跟进刷新。 */
+  loadSessions: (force?: boolean) => Promise<void>;
   /** 会话列表是否还有下一页（侧栏滚动触底时追加加载） */
   sessionsHasMore: boolean;
   /** 正在追加加载下一页（单飞行锁） */
@@ -203,6 +215,13 @@ let latestMessageLoadToken = 0;
 
 /** 会话列表分页大小（与后端/Electron 默认 limit 对齐）。 */
 const SESSIONS_PAGE_SIZE = 100;
+
+// 会话列表首屏加载的单飞锁 —— Sidebar 挂载与 backend:ready 重放会并发
+// 触发 loadSessions，重复请求会互相覆盖结果并提前结束 loading 态。
+// 注意：单飞只合并"无变化的重复刷新"；force=true 的变更方会排队一次
+// 跟进刷新（见 loadSessions），否则 await 拿到的可能是变更前的旧结果。
+let sessionsLoadInflight: Promise<void> | null = null;
+let sessionsQueuedRefresh: Promise<void> | null = null;
 
 export function mergeLoadedMessages(
   loadedMessages: Message[],
@@ -256,22 +275,57 @@ export const useStore = create<StoreState>((set, _get) => ({
   contextPressure: null,
   setContextPressure: (cp) => set({ contextPressure: cp }),
   isLoading: false,
+  sessionsLoading: true,
+  sessionsError: null,
   sessionsHasMore: false,
   sessionsLoadingMore: false,
 
   // 加载会话列表（首页；已加载过多页时按已加载条数刷新，避免滚动位置被重置）
-  loadSessions: async () => {
-    try {
-      const limit = Math.max(SESSIONS_PAGE_SIZE, _get().sessions.length);
-      const sessions = await invoke<Session[]>('list_sessions', { limit, offset: 0 });
-      set({
-        sessions,
-        sessionsHasMore: sessions.length >= limit,
-        sessionsLoadingMore: false,
-      });
-    } catch (error) {
-      clientLogger.error('store.loadSessions failed', { error: String(error) });
+  loadSessions: (force = false) => {
+    const run = async (): Promise<void> => {
+      set({ sessionsLoading: true, sessionsError: null });
+      try {
+        const limit = Math.max(SESSIONS_PAGE_SIZE, _get().sessions.length);
+        const sessions = await invoke<Session[]>('list_sessions', { limit, offset: 0 });
+        set({
+          sessions,
+          sessionsHasMore: sessions.length >= limit,
+          sessionsLoadingMore: false,
+          sessionsLoading: false,
+        });
+        markBootStageOnce('sessions_loaded');
+      } catch (error) {
+        set({ sessionsLoading: false, sessionsError: String(error) });
+        clientLogger.error('store.loadSessions failed', { error: String(error) });
+      }
+    };
+
+    if (sessionsLoadInflight && !force) {
+      return sessionsLoadInflight;
     }
+    if (sessionsLoadInflight && force) {
+      // 变更方要求最新结果：在现有请求之后排队一次跟进刷新，并把它的
+      // promise 返回给调用方（await 语义即"看到变更后的列表"）。
+      if (!sessionsQueuedRefresh) {
+        sessionsQueuedRefresh = sessionsLoadInflight.then(() => {
+          const follow = run();
+          sessionsLoadInflight = follow;
+          void follow.finally(() => {
+            if (sessionsLoadInflight === follow) sessionsLoadInflight = null;
+            sessionsQueuedRefresh = null;
+          });
+          return follow;
+        });
+      }
+      return sessionsQueuedRefresh;
+    }
+
+    const flight = run();
+    sessionsLoadInflight = flight;
+    void flight.finally(() => {
+      if (sessionsLoadInflight === flight) sessionsLoadInflight = null;
+    });
+    return flight;
   },
 
   // 追加下一页（单飞行锁；按 id 去重，容忍并发变更导致的 offset 漂移）
@@ -316,6 +370,9 @@ export const useStore = create<StoreState>((set, _get) => ({
     skipBinding = false,
     options?: { participantIds?: string[]; conversationType?: 'dm' | 'group'; title?: string },
   ) => {
+    // 用户明确新建会话：尊重该动作，启动期的"恢复上次会话"不得再把
+    // 用户拽回旧会话。
+    suppressStartupSessionRestore();
     try {
       // 2026-10-29 (feat/workspace-optimization): 把 Electron 嗅探到的 cwd 项目根
       // 作为决策链的低优先级参考输入传给后端；后端统一走 DefaultWorkspaceResolver，
@@ -335,12 +392,8 @@ export const useStore = create<StoreState>((set, _get) => ({
         title: options?.title ?? '新对话',
         detectedRoot,
         skipWorkspaceBinding: skipBinding,
-        ...(options?.participantIds?.length
-          ? { participant_ids: options.participantIds }
-          : {}),
-        ...(options?.conversationType
-          ? { conversation_type: options.conversationType }
-          : {}),
+        ...(options?.participantIds?.length ? { participant_ids: options.participantIds } : {}),
+        ...(options?.conversationType ? { conversation_type: options.conversationType } : {}),
       });
       set((state) => ({
         sessions: [session, ...state.sessions],
@@ -399,6 +452,7 @@ export const useStore = create<StoreState>((set, _get) => ({
           isLoading: false,
         };
       });
+      markBootStageOnce('messages_loaded');
     } catch (error) {
       clientLogger.error('store.loadMessages failed', { error: String(error) });
       set(() => (requestToken === latestMessageLoadToken ? { isLoading: false } : {}));
