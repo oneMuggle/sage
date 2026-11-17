@@ -94,7 +94,7 @@
     "src/shared/api/types/chatAndEventTypes.ts": 977,
     "src/shared/api/types/domainEntityTypes.ts": 806,
     "src/shared/lib/i18n/locales/en/chatAndSider.ts": 826,
-    "src/shared/lib/i18n/locales/zh/chatAndSider.ts": 843,
+    "src/shared/lib/i18n/locales/zh/chatAndSider.ts": 844,
     "src/shared/types/electron-api.d.ts": 985,
     "src/widgets/chat/ChatInput.tsx": 988,
     "src/widgets/chat/Message.tsx": 936,
