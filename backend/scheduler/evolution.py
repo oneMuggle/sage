@@ -1405,7 +1405,9 @@ class MemoryReflectionTask(BaseEvolutionTask):
                 logger.debug(f"反思去重语义编码失败，退化为字面相似度: {exc}")
                 vectors = None
             if vectors and len(vectors) == len(rows):
-                by_id = {r["id"]: v for r, v in zip(rows, vectors)}
+                by_id = {
+                    rows[i]["id"]: vectors[i] for i in range(len(rows))
+                }
                 return (
                     lambda a, b: _cosine_similarity(by_id[a["id"]], by_id[b["id"]]),
                     self.SEMANTIC_DEDUPE_SIMILARITY,
