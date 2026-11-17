@@ -27,6 +27,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
 from backend.domain.risk import RiskClass
+from backend.services.browser_control import (
+    BrowserControlState,
+    get_browser_control,
+)
 
 from .base import BaseTool, ToolResult, ToolSchema
 from .browser_cdp import (
@@ -92,6 +96,26 @@ _KEY_CODES = {
 
 _VALID_TAB_ACTIONS = ("list", "create", "switch", "close")
 
+#: 控制门禁错误文案（前缀是前端/提示逻辑的契约，不可改名）
+_CONTROL_PAUSED_ERROR = (
+    "user_paused: 用户已暂停浏览器操作；请在用户恢复后继续（可先向用户确认）"
+)
+_CONTROL_TAKEOVER_ERROR = (
+    "user_takeover: 用户正在手动操作浏览器；请等待用户归还控制后重新 browser_snapshot"
+)
+
+#: 步骤缩略图开关的 settings key（缺省按开启）
+_SETTINGS_KEY_STEP_THUMBNAILS = "browser_step_thumbnails"
+
+#: 会截步骤缩略图的动作（snapshot/screenshot 不截：降开销、防递归）
+_THUMBNAIL_ACTIONS = ("navigate", "interact", "tabs")
+
+#: 受控浏览器每会话最近一次的页面信息（navigate/snapshot/interact/tabs 更新）
+_LAST_PAGE: Dict[str, Dict[str, str]] = {}
+
+#: 受控浏览器每会话最近一次快照的登录墙判断
+_LAST_LOGIN_WALL: Dict[str, bool] = {}
+
 
 def _error(exc: BrowserCDPError) -> ToolResult:
     return ToolResult(success=False, error=str(exc))
@@ -100,6 +124,139 @@ def _error(exc: BrowserCDPError) -> ToolResult:
 def _resolve_session(browser_id: Optional[str]) -> BrowserSession:
     """统一入口：解析会话并把 BrowserCDPError 归一为带提示的错误。"""
     return get_browser_manager().require(browser_id)
+
+
+# ---------------------------------------------------------------------------
+# 控制面门禁 + 步骤元数据（M3）
+# ---------------------------------------------------------------------------
+
+
+def _control_state(session: BrowserSession) -> BrowserControlState:
+    """读取会话控制状态（未知会话默认 agent）。"""
+    return get_browser_control().get_state(session.browser_id)
+
+
+def _blocked_by_control(
+    session: BrowserSession, tool_name: str
+) -> Optional[ToolResult]:
+    """控制门禁：paused / user_takeover 时返回拦截结果；agent 放行。"""
+    state = _control_state(session)
+    if state is BrowserControlState.PAUSED:
+        logger.info(
+            "%s 被控制门禁拦截: session=%s state=paused", tool_name, session.browser_id
+        )
+        return ToolResult(success=False, error=_CONTROL_PAUSED_ERROR)
+    if state is BrowserControlState.USER_TAKEOVER:
+        logger.info(
+            "%s 被控制门禁拦截: session=%s state=user_takeover",
+            tool_name,
+            session.browser_id,
+        )
+        return ToolResult(success=False, error=_CONTROL_TAKEOVER_ERROR)
+    return None
+
+
+def _remember_page(session: BrowserSession, url: str, title: str) -> None:
+    """记录会话最近一次页面信息（供失败结果 / 后续动作兜底）。"""
+    if not session.browser_id or not (url or title):
+        return
+    _LAST_PAGE[session.browser_id] = {"url": url or "", "title": title or ""}
+
+
+def _cached_page(session: BrowserSession) -> Tuple[str, str]:
+    cached = _LAST_PAGE.get(session.browser_id) or {}
+    return str(cached.get("url") or ""), str(cached.get("title") or "")
+
+
+def _detect_login_wall(elements: Any) -> bool:
+    """快照元素里存在角色 textbox 且类型 password 的输入框 → 疑似登录墙。"""
+    if not isinstance(elements, list):
+        return False
+    return any(
+        isinstance(item, dict)
+        and item.get("role") == "textbox"
+        and item.get("type") == "password"
+        for item in elements
+    )
+
+
+def _browser_meta(
+    session: BrowserSession,
+    action: str,
+    url: str = "",
+    title: str = "",
+    target_ref: str = "",
+    target_name: str = "",
+    screenshot_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """构造工具结果上的 ``browser_meta``（前端时间线 / Electron 面板消费）。"""
+    cached_url, cached_title = _cached_page(session)
+    return {
+        "session_id": session.browser_id,
+        "action": action,
+        "url": url or cached_url,
+        "title": title or cached_title,
+        "target_ref": target_ref,
+        "target_name": target_name,
+        "login_wall": bool(_LAST_LOGIN_WALL.get(session.browser_id, False)),
+        "screenshot_path": screenshot_path,
+    }
+
+
+def _with_meta(content: Any, session: BrowserSession, action: str, **fields: Any) -> Dict[str, Any]:
+    """给 content 附 browser_meta；content 非 dict 时包成 ``{"result": ...}``。"""
+    meta = _browser_meta(session, action, **fields)
+    if isinstance(content, dict):
+        merged = dict(content)
+        merged["browser_meta"] = meta
+        return merged
+    return {"result": content, "browser_meta": meta}
+
+
+def _meta_result(result: ToolResult, session: BrowserSession, action: str, **fields: Any) -> ToolResult:
+    """复制 ToolResult 并附 browser_meta（不改动 output 语义）。"""
+    return ToolResult(
+        success=result.success,
+        content=_with_meta(result.content, session, action, **fields),
+        error=result.error,
+        output=result.output,
+    )
+
+
+def _step_thumbnails_enabled() -> bool:
+    """步骤缩略图开关；读取失败 / 缺省一律按开启处理。"""
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get(_SETTINGS_KEY_STEP_THUMBNAILS)
+    except Exception:  # noqa: BLE001 — 设置读取失败不阻断浏览器动作
+        return True
+    if raw is None:
+        return True
+    return str(raw).strip().lower() not in ("0", "false", "off", "no")
+
+
+def _capture_step_thumbnail(session: BrowserSession) -> Optional[str]:
+    """截当前页步骤缩略图到数据目录；任何失败静默返回 None。"""
+    if not _step_thumbnails_enabled():
+        return None
+    try:
+        result = cdp_command(session, "Page.captureScreenshot", {"format": "png"})
+        data = result.get("data")
+        if not data:
+            return None
+        png_bytes = base64.b64decode(data)
+        # 数据目录，绝不写工作区（避免污染 artifact/用户工程）
+        folder = browser_downloads_root().parent / "browser_steps" / session.browser_id
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / f"{int(time.time() * 1000)}.png"
+        target.write_bytes(png_bytes)
+        return str(target.resolve())
+    except Exception:  # noqa: BLE001 — 缩略图失败不影响工具结果
+        logger.debug(
+            "browser step thumbnail 失败: session=%s", session.browser_id, exc_info=True
+        )
+        return None
 
 
 def validate_url(url: str) -> Optional[str]:
@@ -436,6 +593,15 @@ def _validate_interact_args(
     return None if error is None else ToolResult(success=False, error=error)
 
 
+def _expression_with_page_info(expression: str) -> str:
+    """把交互 JS 结果补上当前 url/title（保留原有 ok/info 字段）。"""
+    return (
+        "(function(){var __sage=(" + expression + ");"
+        "try{__sage.url=location.href;__sage.title=document.title;}catch(e){}"
+        "return __sage;})()"
+    )
+
+
 def _build_interact_expression(
     action: str,
     selector: str,
@@ -447,15 +613,16 @@ def _build_interact_expression(
 ) -> str:
     """按定位优先级构造交互 JS（ref > selector > text，scroll 无定位）。"""
     if action == "click":
-        return (
+        expression = (
             build_ref_expression(_js_click_element(), ref)
             if ref
             else _js_click(selector=selector, text=text)
         )
+        return _expression_with_page_info(expression)
     if action == "scroll":
-        return _js_scroll(int(value))
+        return _expression_with_page_info(_js_scroll(int(value)))
     if action == "press" and not ref and not selector:
-        return _js_press(key)
+        return _expression_with_page_info(_js_press(key))
 
     if action == "type":
         snippet = _js_type_element(value, bool(clear))
@@ -471,8 +638,8 @@ def _build_interact_expression(
         snippet = _js_press_element(key)
 
     if ref:
-        return build_ref_expression(snippet, ref)
-    return _js_on_selector(selector, snippet)
+        return _expression_with_page_info(build_ref_expression(snippet, ref))
+    return _expression_with_page_info(_js_on_selector(selector, snippet))
 
 
 def _wait_page_settled(
@@ -663,12 +830,20 @@ class BrowserNavigateTool(BaseTool):
                 return ToolResult(success=False, error=network_rejection)
         try:
             session = _resolve_session(browser_id or None)
+            blocked = _blocked_by_control(session, "browser_navigate")
+            if blocked is not None:
+                return blocked
             if new_tab:
                 created = cdp_command(session, "Target.createTarget", {"url": url.strip()}).get(
                     "targetId"
                 )
                 if not created:
-                    return ToolResult(success=False, error="新标签页创建失败")
+                    return _meta_result(
+                        ToolResult(success=False, error="新标签页创建失败"),
+                        session,
+                        "navigate",
+                        url=url,
+                    )
                 _wait_page_settled(session, created, wait_for)
                 info = _evaluate_json(
                     session,
@@ -678,7 +853,12 @@ class BrowserNavigateTool(BaseTool):
             else:
                 result = cdp_command(session, "Page.navigate", {"url": url.strip()})
                 if result.get("errorText"):
-                    return ToolResult(success=False, error=f"导航失败: {result['errorText']}")
+                    return _meta_result(
+                        ToolResult(success=False, error=f"导航失败: {result['errorText']}"),
+                        session,
+                        "navigate",
+                        url=url,
+                    )
                 _wait_page_settled(session, None, wait_for)
                 info = _evaluate_json(
                     session,
@@ -688,9 +868,20 @@ class BrowserNavigateTool(BaseTool):
             page = json.loads(info) if isinstance(info, str) else {}
         except BrowserCDPError as exc:
             return _error(exc)
-        return ToolResult(
-            success=True,
-            content={"url": page.get("url", url), "title": page.get("title", "")},
+        page_url = str(page.get("url") or url)
+        page_title = str(page.get("title") or "")
+        _remember_page(session, page_url, page_title)
+        thumbnail = _capture_step_thumbnail(session)
+        return _meta_result(
+            ToolResult(
+                success=True,
+                content={"url": page.get("url", url), "title": page.get("title", "")},
+            ),
+            session,
+            "navigate",
+            url=page_url,
+            title=page_title,
+            screenshot_path=thumbnail,
         )
 
 
@@ -762,6 +953,9 @@ class BrowserSnapshotTool(BaseTool):
             )
         try:
             session = _resolve_session(browser_id or None)
+            blocked = _blocked_by_control(session, "browser_snapshot")
+            if blocked is not None:
+                return blocked
             expression = build_snapshot_expression(
                 mode=mode,
                 max_collect=SNAPSHOT_HARD_COLLECT_CAP,
@@ -778,8 +972,22 @@ class BrowserSnapshotTool(BaseTool):
             include_offscreen=bool(include_offscreen),
         )
         if content.get("error"):
-            return ToolResult(success=False, error=str(content["error"]))
-        return ToolResult(success=True, content=content)
+            return _meta_result(
+                ToolResult(success=False, error=str(content["error"])), session, "snapshot"
+            )
+        page_url = str(content.get("url") or "")
+        page_title = str(content.get("title") or "")
+        _remember_page(session, page_url, page_title)
+        # mode=text 不带元素列表 —— 保留上一次快照的登录墙判定，不误清
+        if "elements" in content:
+            _LAST_LOGIN_WALL[session.browser_id] = _detect_login_wall(content.get("elements"))
+        return _meta_result(
+            ToolResult(success=True, content=content),
+            session,
+            "snapshot",
+            url=page_url,
+            title=page_title,
+        )
 
 
 class BrowserInteractTool(BaseTool):
@@ -842,7 +1050,7 @@ class BrowserInteractTool(BaseTool):
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911 — 每个校验/门禁路径独立 return，扁平更直读
         self,
         action: str = "",
         selector: str = "",
@@ -863,20 +1071,56 @@ class BrowserInteractTool(BaseTool):
         )
         try:
             session = _resolve_session(browser_id or None)
+            blocked = _blocked_by_control(session, "browser_interact")
+            if blocked is not None:
+                return blocked
             outcome = _evaluate_json(session, expression, None)
         except BrowserCDPError as exc:
             return _error(exc)
+        target_fields = {"target_ref": ref or selector, "target_name": text}
         if not isinstance(outcome, dict):
-            return ToolResult(success=False, error="交互结果异常（非 JSON）")
+            return _meta_result(
+                ToolResult(success=False, error="交互结果异常（非 JSON）"),
+                session,
+                "interact",
+                **target_fields,
+            )
+        page_url = str(outcome.get("url") or "")
+        page_title = str(outcome.get("title") or "")
+        if page_url or page_title:
+            _remember_page(session, page_url, page_title)
         info = outcome.get("info", "")
         if info == STALE_REF_INFO:
-            return ToolResult(success=False, error=STALE_REF_ERROR)
-        if not outcome.get("ok"):
-            return ToolResult(
-                success=False,
-                error=f"交互未生效: {info or 'unknown'}（可用 browser_snapshot 查看页面结构）",
+            return _meta_result(
+                ToolResult(success=False, error=STALE_REF_ERROR),
+                session,
+                "interact",
+                url=page_url,
+                title=page_title,
+                **target_fields,
             )
-        return ToolResult(success=True, content={"action": action, "info": info})
+        if not outcome.get("ok"):
+            return _meta_result(
+                ToolResult(
+                    success=False,
+                    error=f"交互未生效: {info or 'unknown'}（可用 browser_snapshot 查看页面结构）",
+                ),
+                session,
+                "interact",
+                url=page_url,
+                title=page_title,
+                **target_fields,
+            )
+        thumbnail = _capture_step_thumbnail(session)
+        return _meta_result(
+            ToolResult(success=True, content={"action": action, "info": info}),
+            session,
+            "interact",
+            url=page_url,
+            title=page_title,
+            screenshot_path=thumbnail,
+            **target_fields,
+        )
 
 
 class BrowserScreenshotTool(BaseTool):
@@ -903,7 +1147,7 @@ class BrowserScreenshotTool(BaseTool):
             },
         )
 
-    def execute(self, path: str = "", browser_id: str = "", **kwargs: Any) -> ToolResult:
+    def execute(self, path: str = "", browser_id: str = "", **kwargs: Any) -> ToolResult:  # noqa: PLR0911
         if kwargs:
             return ToolResult(
                 success=False,
@@ -924,6 +1168,9 @@ class BrowserScreenshotTool(BaseTool):
 
         try:
             session = _resolve_session(browser_id or None)
+            blocked = _blocked_by_control(session, "browser_screenshot")
+            if blocked is not None:
+                return blocked
             result = cdp_command(session, "Page.captureScreenshot", {"format": "png"})
             png_bytes = base64.b64decode(result.get("data") or "")
         except BrowserCDPError as exc:
@@ -932,14 +1179,19 @@ class BrowserScreenshotTool(BaseTool):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(png_bytes)
         except OSError as exc:
-            return ToolResult(success=False, error=f"截图写入失败: {exc}")
+            return _meta_result(
+                ToolResult(success=False, error=f"截图写入失败: {exc}"), session, "screenshot"
+            )
         try:
             _record_artifact_safely(str(target), len(png_bytes))
         except Exception:  # noqa: BLE001 — artifact 记录失败不影响截图
             logger.warning("browser_screenshot artifact 记录失败", exc_info=True)
-        return ToolResult(
-            success=True,
-            content={"path": str(target.resolve()), "bytes": len(png_bytes)},
+        resolved = str(target.resolve())
+        return _meta_result(
+            ToolResult(success=True, content={"path": resolved, "bytes": len(png_bytes)}),
+            session,
+            "screenshot",
+            screenshot_path=resolved,
         )
 
 
@@ -990,6 +1242,8 @@ class BrowserCloseTool(BaseTool):
                 cdp_command(session, "Target.closeTarget", {"targetId": target_id})
             except BrowserCDPError as exc:
                 return _error(exc)
+            # browser_close 成功即复位控制面（paused/takeover 不残留）
+            get_browser_control().reset(session.browser_id)
             return ToolResult(success=True, content={"closed": "target", "target_id": target_id})
 
         if getattr(session, "browser_type", None) == "external":
@@ -1002,6 +1256,10 @@ class BrowserCloseTool(BaseTool):
 
         manager.remove(session.browser_id)
         _terminate_session(session)
+        # 控制面复位：关闭后不残留 paused/takeover，元数据缓存一并清理
+        get_browser_control().reset(session.browser_id)
+        _LAST_PAGE.pop(session.browser_id, None)
+        _LAST_LOGIN_WALL.pop(session.browser_id, None)
         return ToolResult(
             success=True,
             content={"closed": "browser", "browser_id": session.browser_id},
@@ -1096,18 +1354,35 @@ class BrowserTabsTool(BaseTool):
 
         try:
             session = _resolve_session(browser_id or None)
+            blocked = _blocked_by_control(session, "browser_tabs")
+            if blocked is not None:
+                return blocked
             if action == "list":
-                return self._list_tabs(session)
+                return _meta_result(self._list_tabs(session), session, "tabs")
             if action == "create":
                 created = cdp_command(
                     session, "Target.createTarget", {"url": target_url}
                 ).get("targetId")
                 if not created:
-                    return ToolResult(success=False, error="新标签页创建失败")
+                    return _meta_result(
+                        ToolResult(success=False, error="新标签页创建失败"),
+                        session,
+                        "tabs",
+                        url=target_url,
+                    )
                 session.active_target_id = created
-                return ToolResult(
-                    success=True,
-                    content={"tab_id": created, "url": target_url, "active": True},
+                _remember_page(session, target_url, "")
+                thumbnail = _capture_step_thumbnail(session)
+                return _meta_result(
+                    ToolResult(
+                        success=True,
+                        content={"tab_id": created, "url": target_url, "active": True},
+                    ),
+                    session,
+                    "tabs",
+                    url=target_url,
+                    title="",
+                    screenshot_path=thumbnail,
                 )
 
             pages = _list_page_targets(session)
@@ -1121,28 +1396,49 @@ class BrowserTabsTool(BaseTool):
                     target,
                 )
                 if not isinstance(page_info, str):
-                    return ToolResult(success=False, error="页面信息返回异常（非 JSON）")
+                    return _meta_result(
+                        ToolResult(success=False, error="页面信息返回异常（非 JSON）"),
+                        session,
+                        "tabs",
+                    )
                 page = json.loads(page_info)
-                return ToolResult(
-                    success=True,
-                    content={
-                        "tab_id": target,
-                        "url": page.get("url", ""),
-                        "title": page.get("title", ""),
-                    },
+                page_url = str(page.get("url") or "")
+                page_title = str(page.get("title") or "")
+                _remember_page(session, page_url, page_title)
+                thumbnail = _capture_step_thumbnail(session)
+                return _meta_result(
+                    ToolResult(
+                        success=True,
+                        content={
+                            "tab_id": target,
+                            "url": page.get("url", ""),
+                            "title": page.get("title", ""),
+                        },
+                    ),
+                    session,
+                    "tabs",
+                    url=page_url,
+                    title=page_title,
+                    screenshot_path=thumbnail,
                 )
 
             cdp_command(session, "Target.closeTarget", {"targetId": target})
             was_active = session.active_target_id == target
             if was_active:
                 session.active_target_id = None
-            return ToolResult(
-                success=True,
-                content={
-                    "closed": target,
-                    "was_active": was_active,
-                    "remaining": max(len(pages) - 1, 0),
-                },
+            thumbnail = _capture_step_thumbnail(session)
+            return _meta_result(
+                ToolResult(
+                    success=True,
+                    content={
+                        "closed": target,
+                        "was_active": was_active,
+                        "remaining": max(len(pages) - 1, 0),
+                    },
+                ),
+                session,
+                "tabs",
+                screenshot_path=thumbnail,
             )
         except BrowserCDPError as exc:
             return _error(exc)
@@ -1228,6 +1524,9 @@ class BrowserDownloadsTool(BaseTool):
             )
         try:
             session = _resolve_session(browser_id or None)
+            blocked = _blocked_by_control(session, "browser_downloads")
+            if blocked is not None:
+                return blocked
         except BrowserCDPError as exc:
             return _error(exc)
         try:
@@ -1252,19 +1551,27 @@ class BrowserDownloadsTool(BaseTool):
                     items = list_download_dir(download_dir)
                     if not any(i["state"] == "inProgress" for i in items):
                         break
-            return ToolResult(
-                success=True,
-                content={
-                    "browser_id": session.browser_id,
-                    "download_dir": download_dir,
-                    "tracking": False,
-                    "downloads": items,
-                    "note": (
-                        "下载事件通道不可用"
-                        + (f"（{tracker.error}）" if tracker is not None and tracker.error else "")
-                        + "，以上为下载目录列举（.crdownload = 进行中）。"
-                    ),
-                },
+            return _meta_result(
+                ToolResult(
+                    success=True,
+                    content={
+                        "browser_id": session.browser_id,
+                        "download_dir": download_dir,
+                        "tracking": False,
+                        "downloads": items,
+                        "note": (
+                            "下载事件通道不可用"
+                            + (
+                                f"（{tracker.error}）"
+                                if tracker is not None and tracker.error
+                                else ""
+                            )
+                            + "，以上为下载目录列举（.crdownload = 进行中）。"
+                        ),
+                    },
+                ),
+                session,
+                "downloads",
             )
 
         completed_all = True
@@ -1298,7 +1605,9 @@ class BrowserDownloadsTool(BaseTool):
                 "尚未观察到下载：先用 browser_interact 点击下载按钮 / 链接；"
                 "若链接是直接的文件 URL，也可改用 http_download。"
             )
-        return ToolResult(success=True, content=content)
+        return _meta_result(
+            ToolResult(success=True, content=content), session, "downloads"
+        )
 
 
 class BrowserCookiesTool(BaseTool):
@@ -1378,6 +1687,17 @@ class BrowserCookiesTool(BaseTool):
             return ToolResult(
                 success=False, error=f"action 必须是 {', '.join(self._VALID_ACTIONS)}"
             )
+
+        # 控制门禁：能解析到会话时与其它浏览器工具同口径；纯凭据管理
+        # （无浏览器在跑）不因控制面受限。
+        try:
+            gate_session = _resolve_session(browser_id or None)
+        except BrowserCDPError:
+            gate_session = None
+        if gate_session is not None:
+            blocked = _blocked_by_control(gate_session, "browser_cookies")
+            if blocked is not None:
+                return blocked
 
         if action == "set_header":
             from .credential_vault import save_header_credential

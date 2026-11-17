@@ -17,6 +17,7 @@ import json
 import socket
 import struct
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
@@ -24,6 +25,11 @@ import pytest
 
 from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
+from backend.services.browser_control import (
+    BrowserControlState,
+    get_browser_control,
+    reset_browser_control_for_tests,
+)
 from backend.tools import browser_cdp, browser_observe, browser_tool, web_render
 from backend.tools.browser_cdp import BrowserSession, BrowserSessionManager
 from backend.tools.browser_tool import (
@@ -257,6 +263,12 @@ def stubbed(monkeypatch):
     manager = BrowserSessionManager()
     manager.register(session)
     monkeypatch.setattr(browser_cdp, "_manager", manager)
+    # M3：控制状态/页面缓存是进程级单例，逐测重置避免串扰
+    reset_browser_control_for_tests()
+    browser_tool._LAST_PAGE.clear()
+    browser_tool._LAST_LOGIN_WALL.clear()
+    # 缩略图默认关闭：避免 Page.captureScreenshot 抢占队列里的假 CDP 结果
+    monkeypatch.setattr(browser_tool, "_step_thumbnails_enabled", lambda: False)
     calls: List[Dict[str, Any]] = []
 
     def _fake_cdp(session_, method, params=None, target_id=None):
@@ -367,7 +379,11 @@ def test_snapshot_text_mode_caps_text_and_keeps_legacy_shape(stubbed, monkeypatc
     )
     result = _tool(BrowserSnapshotTool).execute(mode="text", browser_id="b1")
     assert result.success is True
-    assert result.content == {"url": "u", "title": "t", "text": "x", "truncated": False}
+    assert result.content["url"] == "u"
+    assert result.content["title"] == "t"
+    assert result.content["text"] == "x"
+    assert result.content["truncated"] is False
+    assert result.content["browser_meta"]["action"] == "snapshot"
     # 截断发生在页面侧（JS slice）—— 锁定表达式包含上限，且 text 模式不注入 ref
     expression = stubbed.calls[0]["params"]["expression"]
     assert "slice(0,8)" in expression.replace(" ", "")
@@ -470,7 +486,10 @@ def test_interact_ref_click_expression_carries_stale_guards(stubbed):
     stubbed.results.append({"result": {"value": {"ok": True, "info": "clicked BUTTON Go"}}})
     result = _tool(BrowserInteractTool).execute(action="click", ref="e1", browser_id="b1")
     assert result.success is True
-    assert result.content == {"action": "click", "info": "clicked BUTTON Go"}
+    assert result.content["action"] == "click"
+    assert result.content["info"] == "clicked BUTTON Go"
+    assert result.content["browser_meta"]["target_ref"] == "e1"
+    assert result.content["browser_meta"]["action"] == "interact"
     expression = stubbed.calls[0]["params"]["expression"]
     assert "window.__SAGE_REFS__" in expression
     assert "isConnected" in expression
@@ -580,10 +599,13 @@ def test_screenshot_rejects_path_outside_workspace(stubbed, tmp_path):
 
 def test_close_target_vs_browser(stubbed, monkeypatch):
     tool = _tool(BrowserCloseTool)
+    # browser_close 豁免门禁，且成功后复位控制面状态
+    get_browser_control().set_state("b1", BrowserControlState.PAUSED)
     stubbed.results.append({})
     result = tool.execute(browser_id="b1", target_id="t9")
     assert result.success is True
     assert result.content["closed"] == "target"
+    assert get_browser_control().get_state("b1") is BrowserControlState.AGENT
 
     removed = {}
     monkeypatch.setattr(
@@ -664,7 +686,11 @@ def test_tabs_switch_by_tab_id_and_ensure_prefers_active(stubbed, monkeypatch):
 
     result = _tool(BrowserTabsTool).execute(action="switch", tab_id="t2", browser_id="b1")
     assert result.success is True
-    assert result.content == {"tab_id": "t2", "url": "https://b/", "title": "B"}
+    assert result.content["tab_id"] == "t2"
+    assert result.content["url"] == "https://b/"
+    assert result.content["title"] == "B"
+    assert result.content["browser_meta"]["action"] == "tabs"
+    assert result.content["browser_meta"]["url"] == "https://b/"
     assert stubbed.session.active_target_id == "t2"
     # 后续无 target_id 的调用（snapshot/interact）落到新 active
     assert browser_cdp.ensure_page_target(stubbed.session, None) == "t2"
@@ -697,7 +723,10 @@ def test_tabs_close_active_clears_tracking(stubbed, monkeypatch):
 
     result = _tool(BrowserTabsTool).execute(action="close", tab_id="t2", browser_id="b1")
     assert result.success is True
-    assert result.content == {"closed": "t2", "was_active": True, "remaining": 1}
+    assert result.content["closed"] == "t2"
+    assert result.content["was_active"] is True
+    assert result.content["remaining"] == 1
+    assert result.content["browser_meta"]["action"] == "tabs"
     assert stubbed.calls[0]["method"] == "Target.closeTarget"
     assert stubbed.calls[0]["params"] == {"targetId": "t2"}
     assert stubbed.session.active_target_id is None
@@ -1200,4 +1229,168 @@ def test_browser_login_export_uses_storage_get_cookies(monkeypatch):
     assert summary["total_cookies"] == 3
     assert summary["domain_count"] == 3
     assert summary["auth_candidates"] == 2  # _token + _sid
+
+
+# ---------------------------------------------------------------------------
+# M3：控制面门禁 + 步骤元数据
+# ---------------------------------------------------------------------------
+
+_NAV_RESULTS = [
+    {},  # Page.navigate
+    {"result": {"value": "complete"}},
+    {"result": {"value": 0}},
+    {"result": {"value": 0}},
+    {"result": {"value": 0}},
+    {"result": {"value": json.dumps({"url": "https://x/", "title": "X"})}},
+]
+
+
+def test_paused_blocks_gated_tools_but_close_still_works(stubbed, monkeypatch):
+    get_browser_control().set_state("b1", BrowserControlState.PAUSED)
+
+    navigate = _tool(BrowserNavigateTool).execute(url="https://x/", browser_id="b1")
+    assert navigate.success is False
+    assert navigate.error.startswith("user_paused: ")
+
+    snapshot = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+    assert snapshot.success is False
+    assert snapshot.error.startswith("user_paused: ")
+
+    interact = _tool(BrowserInteractTool).execute(
+        action="click", text="登录", browser_id="b1"
+    )
+    assert interact.success is False
+    assert interact.error.startswith("user_paused: ")
+    # 门禁在 CDP 之前拦截
+    assert stubbed.calls == []
+
+    monkeypatch.setattr(browser_cdp, "_terminate_session", lambda s: None)
+    closed = _tool(BrowserCloseTool).execute(browser_id="b1")
+    assert closed.success is True
+    # 关闭成功 → 控制状态复位
+    assert get_browser_control().get_state("b1") is BrowserControlState.AGENT
+
+
+def test_user_takeover_prefix_and_resume_unblocks(stubbed):
+    get_browser_control().set_state("b1", BrowserControlState.USER_TAKEOVER)
+    blocked = _tool(BrowserNavigateTool).execute(url="https://x/", browser_id="b1")
+    assert blocked.success is False
+    assert blocked.error.startswith("user_takeover: ")
+
+    get_browser_control().set_state("b1", BrowserControlState.AGENT)
+    stubbed.results.extend(_NAV_RESULTS)
+    assert _tool(BrowserNavigateTool).execute(url="https://x/", browser_id="b1").success is True
+
+
+def test_browser_meta_on_success_and_failure(stubbed):
+    # navigate 成功：url/title 来自结果
+    stubbed.results.extend(_NAV_RESULTS)
+    navigate = _tool(BrowserNavigateTool).execute(url="https://x/", browser_id="b1")
+    meta = navigate.content["browser_meta"]
+    assert meta == {
+        "session_id": "b1",
+        "action": "navigate",
+        "url": "https://x/",
+        "title": "X",
+        "target_ref": "",
+        "target_name": "",
+        "login_wall": False,
+        "screenshot_path": None,
+    }
+
+    # snapshot 含 password 输入框 → login_wall=True
+    stubbed.results.append(
+        {
+            "result": {
+                "value": _snapshot_payload(
+                    [
+                        {
+                            "ref": "e1",
+                            "role": "textbox",
+                            "name": "Password",
+                            "type": "password",
+                            "disabled": False,
+                            "in_viewport": True,
+                        }
+                    ]
+                )
+            }
+        }
+    )
+    snapshot = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+    assert snapshot.content["browser_meta"]["login_wall"] is True
+
+    # interact 成功：target_ref/target_name + url/title（JS 结果扩展）
+    stubbed.results.append(
+        {
+            "result": {
+                "value": {
+                    "ok": True,
+                    "info": "clicked BUTTON Go",
+                    "url": "https://x/",
+                    "title": "X",
+                }
+            }
+        }
+    )
+    interact = _tool(BrowserInteractTool).execute(
+        action="click", ref="e7", text="Go", browser_id="b1"
+    )
+    meta = interact.content["browser_meta"]
+    assert meta["action"] == "interact"
+    assert meta["target_ref"] == "e7"
+    assert meta["target_name"] == "Go"
+    assert meta["url"] == "https://x/"
+    assert meta["login_wall"] is True  # 沿用最近一次快照判定
+
+    # 失败结果同样带 meta（content 非 dict 时包 result）
+    stubbed.results.append({"errorText": "ERR_NAME_NOT_RESOLVED"})
+    failed = _tool(BrowserNavigateTool).execute(url="https://nope.example", browser_id="b1")
+    assert failed.success is False
+    assert failed.content["result"] is None
+    assert failed.content["browser_meta"]["action"] == "navigate"
+    assert failed.content["browser_meta"]["url"] == "https://nope.example"
+
+
+def test_step_thumbnails_off_means_no_capture(stubbed):
+    stubbed.results.extend(_NAV_RESULTS)
+    result = _tool(BrowserNavigateTool).execute(url="https://x/", browser_id="b1")
+    assert result.success is True
+    methods = [call["method"] for call in stubbed.calls]
+    assert "Page.captureScreenshot" not in methods
+    assert result.content["browser_meta"]["screenshot_path"] is None
+
+
+def test_step_thumbnail_written_outside_workspace(stubbed, monkeypatch, tmp_path):
+    monkeypatch.setattr(browser_tool, "_step_thumbnails_enabled", lambda: True)
+    monkeypatch.setattr(
+        browser_tool, "browser_downloads_root", lambda: tmp_path / "downloads"
+    )
+    png = base64.b64encode(b"\x89PNG thumb").decode()
+    stubbed.results.extend(_NAV_RESULTS)
+    # _NAV_RESULTS 的最后一项是页面信息；缩略图在 navigate 成功后触发
+    stubbed.results.append({"data": png})
+
+    result = _tool(BrowserNavigateTool).execute(url="https://x/", browser_id="b1")
+    assert result.success is True
+    thumb_path = result.content["browser_meta"]["screenshot_path"]
+    assert thumb_path is not None
+    written = Path(thumb_path)
+    assert written.parent == (tmp_path / "browser_steps" / "b1").resolve()
+    assert written.read_bytes() == b"\x89PNG thumb"
+    assert "Page.captureScreenshot" in [call["method"] for call in stubbed.calls]
+
+
+def test_close_browser_clears_meta_caches(stubbed, monkeypatch):
+    browse_tool = _tool(BrowserNavigateTool)
+    stubbed.results.extend(_NAV_RESULTS)
+    assert browse_tool.execute(url="https://x/", browser_id="b1").success is True
+    assert browser_tool._LAST_PAGE.get("b1")
+
+    monkeypatch.setattr(browser_cdp, "_terminate_session", lambda s: None)
+    get_browser_control().set_state("b1", BrowserControlState.PAUSED)
+    assert _tool(BrowserCloseTool).execute(browser_id="b1").success is True
+    assert "b1" not in browser_tool._LAST_PAGE
+    assert "b1" not in browser_tool._LAST_LOGIN_WALL
+    assert get_browser_control().get_state("b1") is BrowserControlState.AGENT
 

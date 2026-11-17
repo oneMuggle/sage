@@ -134,6 +134,9 @@ class SettingsRepository:
             # 浏览器路径配置（用户手动指定 Chrome/Edge 路径，空 = 自动发现）。
             # 读取口径见 backend/tools/browser_cdp.py:discover_browser_executable
             "browser_path",
+            # 受控浏览器步骤缩略图开关（"1" 开 / "0" 关，缺省按开启）。
+            # 读取口径见 backend/tools/browser_tool.py:_step_thumbnails_enabled
+            "browser_step_thumbnails",
         }
     )
 

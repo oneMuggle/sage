@@ -86,6 +86,7 @@ from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.artifact_routes import router as artifact_router
 from backend.api.browser_extension_routes import router as browser_extension_router
+from backend.api.browser_use_routes import router as browser_use_router
 from backend.api.chat_attachment_routes import router as chat_attachment_router
 from backend.api.chat_stream_registry import StreamRegistry
 
@@ -1578,6 +1579,8 @@ app.include_router(rules_import_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
 app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")
+# M3 受控浏览器控制面: /api/v1/browser/control[/{session_id}]
+app.include_router(browser_use_router, prefix="/api/v1")
 # 外部日常浏览器扩展桥: /api/v1/web-access/{extension,browser-extension}/*
 app.include_router(browser_extension_router, prefix="/api/v1")
 # M6 生态扩展 Phase 1: /api/v1/hooks/builtins 内置钩子元数据 (设置页"推荐 Hook")

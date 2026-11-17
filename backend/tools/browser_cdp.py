@@ -209,28 +209,35 @@ class BrowserSessionManager:
 
     def __init__(self) -> None:
         self._sessions: Dict[str, BrowserSession] = {}
+        self._lock = threading.RLock()
 
     def register(self, session: BrowserSession) -> None:
-        old = self._sessions.pop(session.browser_id, None)
-        if old is not None and old is not session:
+        old: Optional[BrowserSession] = None
+        with self._lock:
+            current = self._sessions.get(session.browser_id)
+            if current is not session:
+                old = current
+            effective = len(self._sessions) - (1 if old is not None else 0)
+            # The user-shared external tab is one logical session and must
+            # remain usable even when Sage's own Chrome/render sessions fill
+            # the cap.
+            if (
+                session.browser_id != EXTENSION_BROWSER_ID
+                and effective >= MAX_BROWSER_SESSIONS
+            ):
+                raise BrowserCDPError(
+                    f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}，请先用 browser_close 关闭"
+                )
+            self._sessions[session.browser_id] = session
+        if old is not None:
             # 固定 id 的池并发重建时曾会静默覆盖旧会话对象（连带其临时目录
-            # 永久遗留）——改为显式回收旧实例并留痕。
+            # 永久遗留）——改为显式回收旧实例并留痕（锁外终止进程树）。
             logger.warning(
                 "browser_id 冲突（%s）：回收旧实例 pid=%s",
                 session.browser_id,
                 getattr(old.process, "pid", None),
             )
             _terminate_session(old)
-        # The user-shared external tab is one logical session and must remain
-        # usable even when Sage's own Chrome/render sessions fill the cap.
-        if (
-            session.browser_id != EXTENSION_BROWSER_ID
-            and len(self._sessions) >= MAX_BROWSER_SESSIONS
-        ):
-            raise BrowserCDPError(
-                f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}，请先用 browser_close 关闭"
-            )
-        self._sessions[session.browser_id] = session
 
     def get(self, browser_id: Optional[str]) -> Optional[BrowserSession]:
         """按 id 取会话；None → 优先用户共享的日常浏览器，其次唯一实例。
@@ -243,16 +250,18 @@ class BrowserSessionManager:
         便利解析（R24）。
         """
         if browser_id:
-            return self._sessions.get(browser_id)
-        external = self._sessions.get(EXTENSION_BROWSER_ID)
-        if external is not None:
-            return external
-        user_sessions = [
-            session
-            for session_id, session in self._sessions.items()
-            if session_id != RESERVED_BROWSER_ID
-            and not session_id.startswith(RESERVED_BROWSER_ID + "-")
-        ]
+            with self._lock:
+                return self._sessions.get(browser_id)
+        with self._lock:
+            external = self._sessions.get(EXTENSION_BROWSER_ID)
+            if external is not None:
+                return external
+            user_sessions = [
+                session
+                for session_id, session in self._sessions.items()
+                if session_id != RESERVED_BROWSER_ID
+                and not session_id.startswith(RESERVED_BROWSER_ID + "-")
+            ]
         if len(user_sessions) == 1:
             return user_sessions[0]
         return None
@@ -266,7 +275,8 @@ class BrowserSessionManager:
                 "没有运行中的浏览器实例（可多实例时必须传 browser_id）——先调用 browser_launch"
             )
         if not session.is_alive():
-            self._sessions.pop(session.browser_id, None)
+            with self._lock:
+                self._sessions.pop(session.browser_id, None)
             # 进程已自行退出（崩溃/用户关窗）：terminate 部分幂等跳过，
             # 重点是回收其一次性目录，否则永久遗留。
             _terminate_session(session)
@@ -274,19 +284,26 @@ class BrowserSessionManager:
         return session
 
     def remove(self, browser_id: str) -> Optional[BrowserSession]:
-        return self._sessions.pop(browser_id, None)
+        with self._lock:
+            return self._sessions.pop(browser_id, None)
 
     def count(self) -> int:
-        return len(self._sessions)
+        with self._lock:
+            return len(self._sessions)
+
+    def all_sessions(self) -> List[BrowserSession]:
+        """返回全部会话的副本列表（控制面列举用，遍历期间持锁）。"""
+        with self._lock:
+            return list(self._sessions.values())
 
     def close_all(self) -> int:
         """关闭全部实例（后端退出钩子）；返回关闭数。"""
-        count = 0
-        for browser_id in list(self._sessions):
-            session = self._sessions.pop(browser_id)
+        with self._lock:
+            sessions = list(self._sessions.values())
+            self._sessions.clear()
+        for session in sessions:
             _terminate_session(session)
-            count += 1
-        return count
+        return len(sessions)
 
 
 def _terminate_session(session: BrowserSession) -> None:
