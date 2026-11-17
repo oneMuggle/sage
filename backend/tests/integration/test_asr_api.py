@@ -24,17 +24,16 @@ def _audio_b64() -> str:
 
 
 def test_transcribe_returns_text(client: TestClient):
-    # Py3.8 兼容：不用括号多上下文 with（3.10+ 语法）。
-    with patch.object(ASRCapability, "load_config", return_value=object()):
-        with patch.object(
-            ASRCapability,
-            "execute",
-            new=AsyncMock(return_value={"text": "明天下午三点开会"}),
-        ):
-            resp = client.post(
-                "/api/v1/asr/transcribe",
-                json={"audio_base64": _audio_b64(), "format": "webm"},
-            )
+    # 不用括号多上下文 with（3.10+ 语法）；单 with + 逗号在 py38 可用。
+    with patch.object(ASRCapability, "load_config", return_value=object()), patch.object(
+        ASRCapability,
+        "execute",
+        new=AsyncMock(return_value={"text": "明天下午三点开会"}),
+    ):
+        resp = client.post(
+            "/api/v1/asr/transcribe",
+            json={"audio_base64": _audio_b64(), "format": "webm"},
+        )
 
     assert resp.status_code == 200
     assert resp.json() == {"text": "明天下午三点开会"}
@@ -66,14 +65,13 @@ def test_transcribe_rejects_unknown_format(client: TestClient):
 
 
 def test_transcribe_maps_upstream_failure_to_502(client: TestClient):
-    with patch.object(ASRCapability, "load_config", return_value=object()):
-        with patch.object(
-            ASRCapability,
-            "execute",
-            new=AsyncMock(side_effect=RuntimeError("upstream down")),
-        ):
-            resp = client.post(
-                "/api/v1/asr/transcribe", json={"audio_base64": _audio_b64()}
-            )
+    with patch.object(ASRCapability, "load_config", return_value=object()), patch.object(
+        ASRCapability,
+        "execute",
+        new=AsyncMock(side_effect=RuntimeError("upstream down")),
+    ):
+        resp = client.post(
+            "/api/v1/asr/transcribe", json={"audio_base64": _audio_b64()}
+        )
 
     assert resp.status_code == 502
