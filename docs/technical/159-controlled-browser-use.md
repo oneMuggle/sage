@@ -87,16 +87,38 @@
 
 **交互路径（`browser_interact`）**
 
-1. 参数校验（upload 额外校验工作区边界与文件存在性）
+1. 参数校验（upload 额外校验工作区边界与文件存在性——先于确认创建，确认描述
+   因此可以带上解析后的文件名）
 2. 控制状态门禁（`user_paused: ` / `user_takeover: `）
-3. 读取目标元素元数据
-4. 敏感动作分级（`hard_blocked: ` / `needs_confirmation: `）
-5. 执行 CDP 动作（ref 失效时返回 stale-ref 提示）
-6. 步骤缩略图（失败静默）
-7. 审计写入（失败静默，不影响主流程）
+3. 当前页面站点复核（页面域名被持久策略 `block` → `site_blocked: `，不执行动作）
+4. 读取目标元素元数据
+5. 敏感动作分级（`hard_blocked: ` / `needs_confirmation: `；用户拒绝后会话暂停）
+6. 执行 CDP 动作（ref 失效时返回 stale-ref 提示）
+7. 若交互把页面带到**不同域名**（点击链接 / JS 跳转），按最终 URL 重跑站点门禁
+   （block → `site_blocked: `；confirm → 站点确认 + paused）
+8. 步骤缩略图（失败静默）
+9. 审计写入（失败静默，不影响主流程）
 
-> 站点策略、URL 协议、网络模式与重定向复核只作用于**导航**路径；交互的目标页面已在导航阶段
-> 通过站点门禁，交互本身不重复做站点检查。
+> 站点策略同时覆盖其他会产生导航的入口：`browser_tabs(action=create)` 在
+> `Target.createTarget` 之前走与 `browser_navigate` 相同的站点门禁；
+> `browser_login` 只应用策略的 **block** 部分（blocked 拒绝；未知站点保持允许，
+> 因为它是用户主动登录，不应被首次站点确认打断）。`browser_snapshot` 与
+> `browser_interact` 在动作前都会复核当前页面域名，策略中途改为 block 或用户拒绝
+> 后（会话暂停）不会继续读取被禁止的页面。
+
+### 面板数据源与失败恢复
+
+- **时间线数据源**：持久化消息里的 `tool_calls`（step_done 已逐条写入 assistant
+  消息）与实时 `streamingToolCalls` 按 `id` 去重合并。`finalizeStep` /
+  `finishStream` 清空实时切片后，历史步骤仍在，面板不会「闪一下就没」。
+- **会话记忆**：浏览器 `session_id` 按对话 id 记在独立 zustand store
+  （`browserSessionStore`），跨 step / stream 生命周期保留；面板始终轮询该会话。
+- **无 meta 恢复**：拿不到 `browser_meta.session_id` 时，面板回退到
+  `GET /browser/control`（唯一存活会话）与无过滤的 `/browser/confirmations`，
+  首个确认不会因会话 id 推导失败而永久卡死。
+- **失败结果信封**：失败工具结果若带结构化 `content`（例如 `browser_meta`），
+  agent 序列化为 `{"success": false, "error": ..., "content": {...}}`；模型与
+  持久化的 `tool_calls[].result` 都能读到 `content.browser_meta`。
 
 ## 工具清单与参数
 
@@ -110,10 +132,10 @@
 | `browser_interact` | WRITE_LOCAL | `action`(必填，9 种)、`ref`、`selector`、`text`、`value`、`path`、`key`、`clear`、`browser_id` | 定位优先级 `ref > selector > text`。action：click / type / press / scroll / select / hover / check / uncheck / upload。press 支持组合键；upload 仅限工作区内文件且目标必须是 `input[type=file]` |
 | `browser_screenshot` | READ | `path`、`return_image`(默认 false)、`full_page`(默认 false)、`browser_id` | PNG 存工作区；`return_image=true` 附带 ≤1.5MB / 宽 ≤1568px 的 data URL 供视觉模型 |
 | `browser_close` | WRITE_LOCAL | `browser_id`、`target_id` | 只传 `target_id` 关单个标签页；否则关闭实例并清理临时目录（受控工具门禁对 close 豁免，保证用户接管时仍能收尾） |
-| `browser_tabs` | WRITE_LOCAL | `action`(list/create/switch/close)、`url`、`tab_id`、`index`(1-based)、`browser_id` | create/switch 后活动标签页改变，后续工具作用于活动页 |
+| `browser_tabs` | WRITE_LOCAL | `action`(list/create/switch/close)、`url`、`tab_id`、`index`(1-based)、`browser_id` | create/switch 后活动标签页改变，后续工具作用于活动页；create 在创建前走站点门禁 |
 | `browser_downloads` | READ | `browser_id`、`wait_for_complete`、`timeout`(默认 60s) | 查看下载：url/文件名/状态/字节数/最终路径；路径可直接交给 `read_file` / office 工具 |
 | `browser_cookies` | WRITE_LOCAL | `action`(export/list/delete/set_header)、`domain`、`header_name`、`header_value`、`ttl_seconds`、`browser_id` | 导出登录态到加密凭据档案，供 `web_fetch` / `http_download` 以 `credential_domain` 引用；`set_header` 保存头部型凭据，值不回显 |
-| `browser_login` | EXTERNAL | `url`(必填)、`timeout_seconds`(默认 300) | 打开**可见**窗口让用户手动登录，完成后自动保存 cookie 到加密档案 |
+| `browser_login` | EXTERNAL | `url`(必填)、`timeout_seconds`(默认 300) | 打开**可见**窗口让用户手动登录，完成后自动保存 cookie 到加密档案；仅应用站点策略的 block 部分 |
 
 ### 观察层 v2 细节
 
@@ -163,13 +185,25 @@
 ### 3. 确认注册表（一次性指纹）
 
 - 待确认 TTL 600s，批准后可复用窗口 120s，拒绝备忘 300s。
-- 每条确认绑定 `sha256(tool|action|domain|ref 或 selector|target_name)` 的指纹（定位参数为
-  ref / selector 二选一，**不含** session_id）；
-  `consume_approval(fingerprint)` 在批准窗口内**一次性**消费，同样的动作第二次仍需再次确认。
-- 前端通过 `POST /api/v1/browser/confirmations/{id}` 提交决定；`approve` 后控制状态回到 `agent`，
+- 每条确认绑定
+  `sha256(tool|action|domain|ref 或 selector|target_name|session_id|scope)` 的指纹：
+  - `session_id` 把批准/拒绝绑定到具体浏览器会话（跨会话不可复用）；
+  - `scope` 承载动作参数：`upload` 为解析后的文件绝对路径，`select` 为目标值，
+    因此「批准上传 A 文件」不能被重放为上传 B 文件；
+  - 定位参数为 ref / selector 二选一。
+- `consume_approval(fingerprint, session_id)` / `is_denied(fingerprint, session_id)`
+  在批准/拒绝窗口内**一次性**消费，并二次校验指纹所属会话；同样的动作第二次仍需
+  再次确认。
+- 前端通过 `POST /api/v1/browser/confirmations/{id}` 提交决定；`approve` 后仅当
+  会话处于 `paused` 才恢复为 `agent`（迟到的裁决不会夺回 `user_takeover`），
   被阻塞的工具在下一轮重试时可消费批准并执行（审计 `approval=approved`）。
-- 确认项公开字段不含指纹：`id / session_id / kind / code / domain / description / options /
-  screenshot_path / created_at`。
+- 确认项公开字段不含指纹：`id / session_id / kind / code / domain / description /
+  options / screenshot_path / thumbnail_data_url / thumbnail_unavailable / created_at`。
+  截图位于数据目录（不在 `sage-file://` 白名单内），因此后端把截图压成 ≤100KB 的
+  内联 data URL（Pillow 可用时降采样到最长边 320px，PNG→JPEG 质量阶梯；Pillow
+  不可用时仅当原文件 ≤100KB 才直接 base64）；无法生成时标记
+  `thumbnail_unavailable: true`，前端回退展示路径。
+- `upload` 的确认描述包含解析后的文件名（不只是元素名），用户能确认「传的是哪个文件」。
 
 ### 4. 控制状态机
 
@@ -265,7 +299,7 @@
 | 无前进/后退/刷新工具 | 工具面无 back/forward/reload 参数；用户可在右栏手动工具栏操作，AI 可通过重新 navigate 达成 |
 | 右栏不内嵌页面 | AI 侧边栏只显示状态徽章 + 步骤时间线；受控浏览器是桥接管理的**独立可见窗口**，不是面板内的 `BrowserView` |
 | 活动标签页模拟 | Chromium 106 缺 `Target.activateTarget`，「切换标签页」只改后端活动目标 id，桌面窗口焦点未必同步切换 |
-| 时间线无缩略图预览 | 时间线仅显示缩略图文件名（相机图标）；确认条才渲染实际截图预览（带路径回退） |
+| 时间线缩略图 | 时间线仅显示缩略图文件名（相机图标）；确认条内联 ≤100KB 的 data URL 缩略图，无法生成时回退显示截图路径 |
 | 对话框不自动处理 | `alert/confirm/prompt` 不自动接受/取消，需用户接管 |
 | 无 diff 快照 | 快照不与上一版做差异对比，模型需自行比较 |
 | 无跨域 iframe 定向 | 不能对跨域子框架内的元素直接定位，只能操作主框架 |

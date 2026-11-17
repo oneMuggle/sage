@@ -1,6 +1,6 @@
 # 受控浏览器（Browser Use）能力优化方案
 
-> 状态：待评审
+> 状态：已实现（M1–M6 完成；最终整分支审查修复波已完成，待合并）
 > 日期：2026-11-17
 > 分支：release/win7（main 同步时按 py3.10/pydantic2 适配）
 > 关联代码：`backend/tools/browser_*.py`、`electron/agentBrowserBridge.ts`、`src/features/browser/BrowserPanel.tsx`
@@ -322,6 +322,24 @@ Sage **并非没有**浏览器工具：`browser_*` 工具组（CDP 驱动，含 
 - [ ] cherry-pick main（pydantic v1/v2 适配）—— 不属于本分支范围
 - [x] 技术/用户文档与 i18n（技术 §159 / 用户手册 §52，zh/en 均补齐）
 - [ ] 指标埋点与基线 —— 未实现（未接入 `web_metrics`）
+
+### 最终整分支审查修复波（2026-11-17，已完成）
+- [x] C1 失败结果保留 `browser_meta`：agent 失败分支对 dict content 输出
+  `{"success": false, "error": ..., "content": {...}}` 信封；前端 plain-string
+  result 按错误前缀着色；无 meta 时用 `GET /browser/control` 唯一存活会话 +
+  无过滤 `/browser/confirmations` 恢复，首个确认不再死锁。
+- [x] C2 面板时间线改为「持久化消息 `tool_calls` + 实时切片」按 id 合并；新增
+  `browserSessionStore` 按对话记忆浏览器 session，跨 `finalizeStep`/stream 结束保留。
+- [x] I1 站点策略补漏：`browser_tabs(create)`、`browser_interact` 跳转后的最终
+  URL、`browser_snapshot`/`interact` 当前页面、`browser_login`（仅 block）。
+- [x] I2 指纹绑定 `session_id` 与动作 `scope`（upload 路径 / select 值）；upload
+  确认描述带解析后的文件名，路径校验先于确认创建。
+- [x] I3 目标元数据的 body/documentElement 守卫覆盖全部路径，宽泛容器不取
+  `innerText`（只取直接文本节点 / aria-label / title）。
+- [x] I4 确认条改由后端内联 ≤100KB 缩略图 data URL（Pillow 可选），无法生成时
+  `thumbnail_unavailable` + 前端路径回退。
+- [x] 小项：upload 显式空值守卫；tabs switch 的 `json.loads` 捕获 `ValueError`；
+  确认裁决仅在 `paused` 时恢复 `agent`（不夺回 active `user_takeover`）。
 
 ## 7. 风险评估与依赖
 
