@@ -294,18 +294,41 @@ def classify_interact(  # noqa: PLR0911 — 每个分类分支独立返回，扁
     target: Optional[Dict[str, Any]],
     value: str = "",
     selector: str = "",
+    key: str = "",
+    metadata_unavailable: bool = False,
 ) -> SafetyVerdict:
     """把交互动作分类为 ok / confirm / hard_block。
 
     ``hard_block`` 仅覆盖明确的高危动作（密码、敏感凭据、支付、注册/
     注销账号）；其余敏感动作一律降级为 ``confirm``，由用户确认放行。
+
+    ``press`` 仅 Enter/Return 会触发焦点元素的默认提交/点击语义，按
+    ``click`` 同口径分类；其他按键放行。``metadata_unavailable`` 表示
+    调用方提供了定位但读不到目标元数据且无 text 名称 —— 对可产生副作用
+    的动作 fail-closed 为 ``confirm``（``safety_unknown``），避免只读 JS
+    失败时密码框/支付按钮被误判为 ok。
     """
     normalized_action = str(action or "").strip().lower()
     label = _target_label(target)
     target_type = _target_type(target)
 
+    if normalized_action == "press":
+        if str(key or "").strip().lower() not in ("enter", "return"):
+            return _verdict("ok", "", "")
+        # Enter/Return 触发焦点元素默认动作 → 与 click 同一分类路径
+        normalized_action = "click"
+
     if normalized_action == "upload":
         return _verdict("confirm", "file_upload", "上传文件需用户确认")
+
+    if metadata_unavailable and not label and normalized_action in (
+        "type",
+        "click",
+        "select",
+        "check",
+        "uncheck",
+    ):
+        return _verdict("confirm", "safety_unknown", "无法确认目标元素，请确认后执行")
 
     if normalized_action == "type":
         if _PASSWORD_TYPE.match(target_type):

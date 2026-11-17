@@ -273,7 +273,11 @@ def stubbed(monkeypatch):
     browser_tool._LAST_LOGIN_WALL.clear()
     # M4 安全层薄包装默认放行：避免站点确认/元素元数据/审计抢占假 CDP 队列
     monkeypatch.setattr(browser_tool, "_safety_check_site", lambda session_id, url: "allow")
-    monkeypatch.setattr(browser_tool, "_read_target_metadata", lambda *a, **k: None)
+    monkeypatch.setattr(
+        browser_tool,
+        "_read_target_metadata",
+        lambda *a, **k: {"tag": "div", "role": "", "name": "", "type": "", "placeholder": ""},
+    )
     monkeypatch.setattr(browser_tool, "_record_browser_audit", lambda *a, **k: None)
     # 缩略图默认关闭：避免 Page.captureScreenshot 抢占队列里的假 CDP 结果
     monkeypatch.setattr(browser_tool, "_step_thumbnails_enabled", lambda: False)
@@ -1485,7 +1489,11 @@ def autolaunch(monkeypatch):
     browser_tool._LAST_LOGIN_WALL.clear()
     # M4 安全层薄包装默认放行（同 stubbed 口径）
     monkeypatch.setattr(browser_tool, "_safety_check_site", lambda session_id, url: "allow")
-    monkeypatch.setattr(browser_tool, "_read_target_metadata", lambda *a, **k: None)
+    monkeypatch.setattr(
+        browser_tool,
+        "_read_target_metadata",
+        lambda *a, **k: {"tag": "div", "role": "", "name": "", "type": "", "placeholder": ""},
+    )
     monkeypatch.setattr(browser_tool, "_record_browser_audit", lambda *a, **k: None)
     monkeypatch.setattr(browser_tool, "_step_thumbnails_enabled", lambda: False)
     calls: List[Dict[str, Any]] = []
@@ -1625,6 +1633,26 @@ def _password_meta(*_args, **_kwargs):
 
 def _submit_meta(*_args, **_kwargs):
     return {"tag": "button", "role": "button", "name": "提交订单", "type": "submit", "placeholder": ""}
+
+
+def _payment_meta(*_args, **_kwargs):
+    return {"tag": "button", "role": "button", "name": "立即支付", "type": "button", "placeholder": ""}
+
+
+def _plain_input_meta(*_args, **_kwargs):
+    return {"tag": "input", "role": "textbox", "name": "搜索", "type": "text", "placeholder": ""}
+
+
+def _nav_results_for(final_url: str, final_title: str = "Final") -> List[Dict[str, Any]]:
+    """Page.navigate → 就绪/稳定等待 → 最终页面 URL（模拟重定向落地）。"""
+    return [
+        {},
+        {"result": {"value": "complete"}},
+        {"result": {"value": 0}},
+        {"result": {"value": 0}},
+        {"result": {"value": 0}},
+        {"result": {"value": json.dumps({"url": final_url, "title": final_title})}},
+    ]
 
 
 def test_navigate_unknown_site_requires_confirmation_and_pauses(stubbed, monkeypatch):
@@ -1825,3 +1853,139 @@ def test_interact_hard_block_writes_audit_record(stubbed, monkeypatch):
     assert records[-1][0] == "browser_interact"
     assert records[-1][2] == "blocked"
     assert records[-1][3]["approval"] == "none"
+
+
+# ---------------------------------------------------------------------------
+# M4 修复：重定向复检 / press Enter 分类 / 元数据不可得 fail-closed
+# ---------------------------------------------------------------------------
+
+
+def test_navigate_redirect_to_blocked_site_is_stopped(stubbed, monkeypatch):
+    """允许域名 302 到禁止域名：导航后必须复检并返回 site_blocked。"""
+    monkeypatch.setattr(
+        browser_tool,
+        "_safety_check_site",
+        lambda sid, url: "block" if "blocked.example" in url else "allow",
+    )
+    stubbed.results.extend(_nav_results_for("https://blocked.example/landing"))
+
+    result = _tool(BrowserNavigateTool).execute(url="https://allow.example/", browser_id="b1")
+
+    assert result.success is False
+    assert result.error.startswith("site_blocked: ")
+    assert "blocked.example" in result.error
+    assert result.content["browser_meta"]["action"] == "navigate"
+    # 导航已发生（Page.navigate 在拦截前执行），但不得当作成功返回
+    assert "Page.navigate" in [call["method"] for call in stubbed.calls]
+    assert get_browser_control().get_state("b1") is BrowserControlState.AGENT
+
+
+def test_navigate_redirect_to_unknown_site_requires_confirmation(stubbed, monkeypatch):
+    monkeypatch.setattr(
+        browser_tool,
+        "_safety_check_site",
+        lambda sid, url: "confirm" if "unknown.example" in url else "allow",
+    )
+    stubbed.results.extend(_nav_results_for("https://unknown.example/home"))
+
+    result = _tool(BrowserNavigateTool).execute(url="https://allow.example/", browser_id="b1")
+
+    assert result.success is False
+    assert result.error.startswith("needs_confirmation: ")
+    assert "unknown.example" in result.error
+    assert get_browser_control().get_state("b1") is BrowserControlState.PAUSED
+    pending = browser_safety.get_confirmation_registry().list("b1")
+    assert len(pending) == 1
+    assert pending[0].kind == "site_access"
+    assert pending[0].domain == "unknown.example"
+
+
+def test_navigate_same_domain_redirect_does_not_recheck(stubbed, monkeypatch):
+    """同域重定向不重复弹确认（避免正常跳转被误伤）。"""
+    calls: List[str] = []
+
+    def _check(sid, url):
+        calls.append(url)
+        return "allow"
+
+    monkeypatch.setattr(browser_tool, "_safety_check_site", _check)
+    stubbed.results.extend(_nav_results_for("https://x/next"))
+
+    result = _tool(BrowserNavigateTool).execute(url="https://x/", browser_id="b1")
+
+    assert result.success is True
+    assert calls == ["https://x/"]
+
+
+def test_press_enter_on_payment_button_is_hard_blocked(stubbed, monkeypatch):
+    monkeypatch.setattr(browser_tool, "_read_target_metadata", _payment_meta)
+
+    result = _tool(BrowserInteractTool).execute(
+        action="press", ref="e9", key="Enter", browser_id="b1"
+    )
+
+    assert result.success is False
+    assert result.error.startswith("hard_blocked: ")
+    assert "支付" in result.error
+    assert stubbed.calls == []
+    assert get_browser_control().get_state("b1") is BrowserControlState.AGENT
+
+
+def test_press_enter_on_submit_button_requires_confirmation(stubbed, monkeypatch):
+    monkeypatch.setattr(browser_tool, "_read_target_metadata", _submit_meta)
+
+    result = _tool(BrowserInteractTool).execute(
+        action="press", ref="e9", key="Return", browser_id="b1"
+    )
+
+    assert result.success is False
+    assert result.error.startswith("needs_confirmation: ")
+    assert stubbed.calls == []
+    assert get_browser_control().get_state("b1") is BrowserControlState.PAUSED
+    pending = browser_safety.get_confirmation_registry().list("b1")
+    assert len(pending) == 1
+    assert pending[0].code == "sensitive_submit"
+
+
+def test_press_enter_on_plain_input_is_ok(stubbed, monkeypatch):
+    monkeypatch.setattr(browser_tool, "_read_target_metadata", _plain_input_meta)
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "pressed Enter"}}})
+
+    result = _tool(BrowserInteractTool).execute(
+        action="press", ref="e2", key="Enter", browser_id="b1"
+    )
+
+    assert result.success is True
+    assert browser_safety.get_confirmation_registry().list("b1") == []
+
+
+def test_interact_metadata_unavailable_fails_closed(stubbed, monkeypatch):
+    """只读 JS 失败 + 无 text 名称：不得退化为 ok，须待确认。"""
+    monkeypatch.setattr(browser_tool, "_read_target_metadata", lambda *a, **k: None)
+
+    result = _tool(BrowserInteractTool).execute(
+        action="type", ref="e1", value="hunter2", browser_id="b1"
+    )
+
+    assert result.success is False
+    assert result.error.startswith("needs_confirmation: ")
+    assert stubbed.calls == []
+    pending = browser_safety.get_confirmation_registry().list("b1")
+    assert len(pending) == 1
+    assert pending[0].code == "safety_unknown"
+    assert "无法确认目标元素" in pending[0].description
+
+
+def test_interact_metadata_missing_click_with_text_still_classified(stubbed, monkeypatch):
+    """有 text 名称时按名称正常分类（不是一律 safety_unknown）。"""
+    monkeypatch.setattr(browser_tool, "_read_target_metadata", lambda *a, **k: None)
+
+    result = _tool(BrowserInteractTool).execute(
+        action="click", text="提交", browser_id="b1"
+    )
+
+    assert result.success is False
+    assert result.error.startswith("needs_confirmation: ")
+    pending = browser_safety.get_confirmation_registry().list("b1")
+    assert len(pending) == 1
+    assert pending[0].code == "sensitive_submit"

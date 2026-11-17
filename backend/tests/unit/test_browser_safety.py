@@ -211,6 +211,74 @@ class TestClassifyInteract:
         assert len(verdict.description) <= browser_safety._MAX_DESCRIPTION
 
 
+class TestClassifyPressAndFailClosed:
+    """press Enter 与 click 同口径分类；元数据不可得时 fail-closed。"""
+
+    @pytest.mark.parametrize("key", ["Enter", "Return", "enter"])
+    def test_press_enter_on_payment_button_hard_blocked(self, key):
+        verdict = browser_safety.classify_interact(
+            "press", target=_click_meta("立即支付"), key=key
+        )
+        assert verdict.kind == "hard_block"
+        assert verdict.code == "payment"
+
+    def test_press_enter_on_submit_button_needs_confirmation(self):
+        verdict = browser_safety.classify_interact(
+            "press", target=_click_meta("提交订单"), key="Enter"
+        )
+        assert verdict.kind == "confirm"
+        assert verdict.code == "sensitive_submit"
+
+    def test_press_enter_on_plain_input_is_ok(self):
+        verdict = browser_safety.classify_interact(
+            "press", target={"tag": "input", "type": "text", "name": "搜索"}, key="Enter"
+        )
+        assert verdict.kind == "ok"
+
+    def test_press_other_keys_stay_ok(self):
+        verdict = browser_safety.classify_interact(
+            "press", target=_click_meta("立即支付"), key="Escape"
+        )
+        assert verdict.kind == "ok"
+
+    @pytest.mark.parametrize("action", ["type", "click", "select", "check", "uncheck"])
+    def test_metadata_unavailable_fails_closed(self, action):
+        verdict = browser_safety.classify_interact(
+            action, target=None, metadata_unavailable=True
+        )
+        assert verdict.kind == "confirm"
+        assert verdict.code == "safety_unknown"
+        assert "无法确认目标元素" in verdict.description
+
+    def test_metadata_unavailable_press_enter_fails_closed(self):
+        verdict = browser_safety.classify_interact(
+            "press", target=None, key="Enter", metadata_unavailable=True
+        )
+        assert verdict.kind == "confirm"
+        assert verdict.code == "safety_unknown"
+
+    def test_metadata_unavailable_press_other_key_stays_ok(self):
+        verdict = browser_safety.classify_interact(
+            "press", target=None, key="Tab", metadata_unavailable=True
+        )
+        assert verdict.kind == "ok"
+
+    def test_metadata_unavailable_upload_still_reports_file_upload(self):
+        verdict = browser_safety.classify_interact(
+            "upload", target=None, metadata_unavailable=True
+        )
+        assert verdict.kind == "confirm"
+        assert verdict.code == "file_upload"
+
+    def test_known_label_wins_over_fail_closed_flag(self):
+        """有明确名称时按名称分类（tool 层 text 兜底走这条路）。"""
+        verdict = browser_safety.classify_interact(
+            "click", target=_click_meta("立即支付"), metadata_unavailable=True
+        )
+        assert verdict.kind == "hard_block"
+        assert verdict.code == "payment"
+
+
 # ---------------------------------------------------------------------------
 # 注入告警
 # ---------------------------------------------------------------------------

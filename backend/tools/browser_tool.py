@@ -325,21 +325,113 @@ def _safety_check_site(session_id: str, url: str) -> str:
     return browser_safety.check_site(session_id, url)
 
 
+def _site_access_gate(
+    session: BrowserSession, url: str, domain: str, started: float
+) -> Optional[ToolResult]:
+    """M4 站点授权门禁：拒绝指纹 → 持久/会话策略 → block / confirm。
+
+    返回拦截结果（已写审计）或 None（放行）。导航落地域名与请求域名
+    不同（重定向/短链）时调用方用最终 URL 再调一次，避免 302 绕过。
+    """
+    if not domain:
+        return None
+    site_fingerprint = browser_safety.action_fingerprint(
+        "browser_navigate", "site_access", domain
+    )
+    registry = browser_safety.get_confirmation_registry()
+    if registry.is_denied(site_fingerprint):
+        _record_browser_audit(
+            session,
+            "browser_navigate",
+            "navigate",
+            "blocked",
+            approval="denied",
+            domain=domain,
+            duration_ms=_elapsed_ms(started),
+        )
+        return _meta_result(
+            ToolResult(
+                success=False,
+                error="denied_by_user: 用户拒绝了访问该站点，请换一种方式或询问用户",
+            ),
+            session,
+            "navigate",
+            url=url,
+        )
+    verdict = _safety_check_site(session.browser_id, url)
+    if verdict == "block":
+        _record_browser_audit(
+            session,
+            "browser_navigate",
+            "navigate",
+            "blocked",
+            approval="none",
+            domain=domain,
+            duration_ms=_elapsed_ms(started),
+        )
+        return _meta_result(
+            ToolResult(success=False, error=f"site_blocked: 用户已禁止该站点 {domain}"),
+            session,
+            "navigate",
+            url=url,
+        )
+    if verdict == "confirm":
+        pending = registry.create(
+            session.browser_id,
+            "site_access",
+            code="site_access",
+            domain=domain,
+            description=f"访问站点 {domain}：{url}",
+            options=list(browser_safety.SITE_ACCESS_OPTIONS),
+            screenshot_path=_capture_step_thumbnail(session) or "",
+            fingerprint=site_fingerprint,
+        )
+        get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
+        _record_browser_audit(
+            session,
+            "browser_navigate",
+            "navigate",
+            "confirm_required",
+            approval="none",
+            domain=domain,
+            duration_ms=_elapsed_ms(started),
+        )
+        return _meta_result(
+            ToolResult(
+                success=False,
+                error=(
+                    f"needs_confirmation: {pending.id} 访问站点 {domain}"
+                    "（请在右栏浏览器面板确认）"
+                ),
+            ),
+            session,
+            "navigate",
+            url=url,
+        )
+    return None
+
+
 def _read_target_metadata(
-    session: BrowserSession, ref: str = "", selector: str = ""
+    session: BrowserSession,
+    ref: str = "",
+    selector: str = "",
+    *,
+    use_focused: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """只读读取交互目标元数据（tag/role/name/type/placeholder）。
 
-    ref 优先、selector 回退；失败或元素不存在返回 None（调用方用 text
-    参数兜底），不抛错、不产生页面副作用。
+    ref 优先、selector 回退；无定位且 ``use_focused``（press）时读取
+    当前焦点元素。失败或元素不存在返回 None（调用方用 text 参数兜底，
+    否则按 fail-closed 分类），不抛错、不产生页面副作用。
     """
-    if not ref and not selector:
+    if not ref and not selector and not use_focused:
         return None
-    locator = (
-        f"(window.__SAGE_REFS__||{{}})[{json.dumps(str(ref))}]"
-        if ref
-        else f"document.querySelector({json.dumps(str(selector))})"
-    )
+    if ref:
+        locator = f"(window.__SAGE_REFS__||{{}})[{json.dumps(str(ref))}]"
+    elif selector:
+        locator = f"document.querySelector({json.dumps(str(selector))})"
+    else:
+        locator = "(document.activeElement||document.body)"
     expression = (
         "(function(){var el=" + locator + ";if(!el)return null;"
         "var name=(el.getAttribute&&(el.getAttribute('aria-label')||''))||'';"
@@ -1009,79 +1101,9 @@ class BrowserNavigateTool(BaseTool):
             # M4 站点授权：拒绝指纹优先（避免同一站点反复弹确认），
             # 其次持久/会话策略；未知站点 → 待用户确认。
             domain = browser_safety.domain_of(url)
-            site_fingerprint = browser_safety.action_fingerprint(
-                "browser_navigate", "site_access", domain
-            )
-            registry = browser_safety.get_confirmation_registry()
-            if registry.is_denied(site_fingerprint):
-                _record_browser_audit(
-                    session,
-                    "browser_navigate",
-                    "navigate",
-                    "blocked",
-                    approval="denied",
-                    domain=domain,
-                    duration_ms=_elapsed_ms(started),
-                )
-                return _meta_result(
-                    ToolResult(
-                        success=False,
-                        error="denied_by_user: 用户拒绝了访问该站点，请换一种方式或询问用户",
-                    ),
-                    session,
-                    "navigate",
-                    url=url,
-                )
-            site_verdict = _safety_check_site(session.browser_id, url)
-            if site_verdict == "block":
-                _record_browser_audit(
-                    session,
-                    "browser_navigate",
-                    "navigate",
-                    "blocked",
-                    approval="none",
-                    domain=domain,
-                    duration_ms=_elapsed_ms(started),
-                )
-                return _meta_result(
-                    ToolResult(success=False, error=f"site_blocked: 用户已禁止该站点 {domain}"),
-                    session,
-                    "navigate",
-                    url=url,
-                )
-            if site_verdict == "confirm":
-                pending = registry.create(
-                    session.browser_id,
-                    "site_access",
-                    code="site_access",
-                    domain=domain,
-                    description=f"访问站点 {domain}：{url}",
-                    options=list(browser_safety.SITE_ACCESS_OPTIONS),
-                    screenshot_path=_capture_step_thumbnail(session) or "",
-                    fingerprint=site_fingerprint,
-                )
-                get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
-                _record_browser_audit(
-                    session,
-                    "browser_navigate",
-                    "navigate",
-                    "confirm_required",
-                    approval="none",
-                    domain=domain,
-                    duration_ms=_elapsed_ms(started),
-                )
-                return _meta_result(
-                    ToolResult(
-                        success=False,
-                        error=(
-                            f"needs_confirmation: {pending.id} 访问站点 {domain}"
-                            "（请在右栏浏览器面板确认）"
-                        ),
-                    ),
-                    session,
-                    "navigate",
-                    url=url,
-                )
+            gate = _site_access_gate(session, url, domain, started)
+            if gate is not None:
+                return gate
             if new_tab:
                 created = cdp_command(session, "Target.createTarget", {"url": url.strip()}).get(
                     "targetId"
@@ -1123,6 +1145,14 @@ class BrowserNavigateTool(BaseTool):
         page_url = str(page.get("url") or url)
         page_title = str(page.get("title") or "")
         _remember_page(session, page_url, page_title)
+        # 302/短链/JS 跳转可能落到与请求不同的域名：对最终落地域名重跑
+        # 站点授权（block → site_blocked；confirm → 站点确认 + paused），
+        # 否则允许域名重定向到禁止域名即可绕过策略。
+        final_domain = browser_safety.domain_of(page_url)
+        if final_domain and final_domain != domain:
+            redirect_gate = _site_access_gate(session, page_url, final_domain, started)
+            if redirect_gate is not None:
+                return redirect_gate
         thumbnail = _capture_step_thumbnail(session)
         _record_browser_audit(
             session,
@@ -1354,11 +1384,20 @@ class BrowserInteractTool(BaseTool):
                 return blocked
             target_fields = {"target_ref": ref or selector, "target_name": text}
             # M4 敏感动作：先取目标元数据再分类；hard_block 不允许用户放行。
-            target_meta = _read_target_metadata(session, ref=ref, selector=selector)
+            # press 无定位时作用于焦点元素，元数据也按 activeElement 读取。
+            target_meta = _read_target_metadata(
+                session, ref=ref, selector=selector, use_focused=action == "press"
+            )
+            metadata_unavailable = target_meta is None and not text
             if not target_meta and text:
                 target_meta = {"name": text}
             verdict = browser_safety.classify_interact(
-                action, target=target_meta, value=value, selector=selector
+                action,
+                target=target_meta,
+                value=value,
+                selector=selector,
+                key=key,
+                metadata_unavailable=metadata_unavailable,
             )
             cached_url, cached_title = _cached_page(session)
             domain = browser_safety.domain_of(cached_url)
