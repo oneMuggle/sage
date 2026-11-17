@@ -1,5 +1,14 @@
 # 2026-11-11 Word 高保真预览修复：静态导入替代动态导入
 
+> **⚠️ 2026-11-17 修正：本计划对根因的判断不完整，问题并未由此修复。**
+> 打包版 Word 高保真不可用的真正原因是生产构建注入的 CSP：
+> `vite.config.ts` 的 `cspInjectionPlugin`（2026-09-10 引入）`connect-src`
+> 不含 `data:`，而 `renderDocxDataUrl` 用 `fetch(dataUrl)` 解码 docx
+> base64 数据（2026-10-29 引入）——打包版被 Chromium 拦截（dev 不注入
+> CSP，因此开发模式表现正常）。静态导入改动与此无因果关系。
+> 修复见 `fix/office-csp-docx-fidelity`：改为本地解码 data URL，并给
+> CSP `frame-src` 补 `blob:`（Excel/PPT 高保真 PDF iframe 同因被拦）。
+
 ## 背景与目标
 
 **问题**：Win7 安装包中文档工作台的 Word 高保真预览不可用，但开发模式正常。

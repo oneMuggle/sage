@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 import { officeApi } from '../../shared/api/officeApi';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { dataUrlToBlob } from './officePreviewBlobUrl';
 import { annotateParagraphIndexes } from './sidebar/selectionAnchor';
 
 // eslint-disable-next-line react-refresh/only-export-components -- 消毒器与组件同文件便于内聚
@@ -47,8 +48,12 @@ export interface DocxNativePreviewProps {
    * and part of the late-response guard below.
    */
   revision?: string | null;
-  /** Optional callback when docx-preview fails. Used by parent to fall back to structured view. */
-  onError?: () => void;
+  /**
+   * Optional callback when docx-preview fails. Used by parent to fall back
+   * to structured view; receives the failure detail so the parent can
+   * surface it (packaged builds have no devtools to read console.error).
+   */
+  onError?: (detail?: string) => void;
 }
 
 /**
@@ -57,11 +62,15 @@ export interface DocxNativePreviewProps {
  * ``/office`` 页与聊天产物面板复用同一条渲染+消毒链路：docx-preview
  * 解析二进制，DOMPurify + ``sanitizeRenderedDocx`` 白名单清理后上屏。
  * 失败直接抛出，由调用方决定回退结构化视图。
+ *
+ * The data URL is decoded locally (not via ``fetch``): the packaged build
+ * injects a CSP without ``data:`` in ``connect-src`` (vite.config.ts
+ * ``cspInjectionPlugin``), which makes ``fetch('data:…')`` fail only in
+ * production — dev has no CSP, so the bug was invisible there.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- 与消毒器同文件便于内聚
 export async function renderDocxDataUrl(container: HTMLElement, dataUrl: string): Promise<void> {
-  const response = await fetch(dataUrl);
-  const blob = await response.blob();
+  const blob = dataUrlToBlob(dataUrl);
   container.innerHTML = '';
   await renderAsync(blob, container, undefined, {
     inWrapper: false,
@@ -144,14 +153,15 @@ export function DocxNativePreview({
         await renderDocxDataUrl(container, res.data_url);
         if (!cancelled) setState('ok');
       } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
         console.error('[DocxNativePreview] render failed:', {
-          error: err instanceof Error ? err.message : String(err),
+          error: detail,
           workspacePath,
           managedPath,
         });
         if (!cancelled) {
           setState('error');
-          onError?.();
+          onError?.(detail);
         }
       }
     })();

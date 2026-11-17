@@ -45,7 +45,10 @@ function cspInjectionPlugin(): Plugin {
         "connect-src 'self' file: ws://localhost:* ws://127.0.0.1:* http://127.0.0.1:* http://localhost:*",
         // 2026-11-04: HTML 预览独立源（sage-preview://）走 iframe 加载，
         // 必须在渲染层 CSP 显式放行，否则被 default-src 'self' 默认规则拦截。
-        "frame-src 'self' file: sage-preview:",
+        // 2026-11-17: blob: 用于 Office 高保真 PDF iframe（office→pdf 转换
+        // 结果与 PDF 原文预览都以 blob URL 喂给 Chromium viewer）。缺省时
+        // 打包版 iframe 空白；blob URL 与创建方同源，风险等同自身内容。
+        "frame-src 'self' file: sage-preview: blob:",
         "object-src 'none'",
         "base-uri 'none'",
         "form-action 'none'",
