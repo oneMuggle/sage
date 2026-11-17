@@ -118,12 +118,17 @@ class TestReadonlyWhitelist:
             "browser_navigate",
             "browser_snapshot",
             "browser_interact",
+            # 2026-11-17 (M1 收尾): 截图取证 + 下载观察（均 READ）
+            "browser_screenshot",
+            "browser_downloads",
             "browser_cookies",
             "browser_close",
         }
         # Never granted to sub-agents.
         for dangerous in ("terminal", "write_file", "memory_save", "agent", "office_read"):
             assert registry.get(dangerous) is None
+        # 多标签统筹归主对话/researcher —— 子代理最小权限, 不下放 browser_tabs。
+        assert registry.get("browser_tabs") is None
 
 
     def test_subagent_file_tools_reject_outside_traversal_and_symlink(self, tmp_path):

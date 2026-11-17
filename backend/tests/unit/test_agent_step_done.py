@@ -13,7 +13,8 @@ agent.run_loop() STEP_DONE 事件验证 (2026-09 step-by-step)
 
 from __future__ import annotations
 
-from typing import List
+import json
+from typing import List, Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -255,3 +256,58 @@ async def test_step_done_carries_agent_id():
     step_dones = _step_done_events(events)
     assert len(step_dones) == 1
     assert step_dones[0].agent_id == "planner-1"
+
+
+# =============================================================================
+# 7. 失败工具结果若带结构化 content（browser_meta），必须保留进 tool 消息
+# =============================================================================
+
+
+@pytest.mark.asyncio()
+async def test_failed_tool_dict_content_keeps_browser_meta_in_envelope():
+    """C1：失败结果的 content 含 browser_meta 时用 JSON 信封保留。
+
+    持久化层把 ``tool_result.content`` 原样写入 ``tool_calls[].result``；
+    信封必须同时包含 success/error/content，前端与模型才能拿到
+    ``content.browser_meta``（首个浏览器确认不再死锁）。
+    """
+    tool_call = _make_tool_call("call_browser", name="browser_navigate")
+    agent = SageAgent()
+    # 浏览器 navigate 属 EXECUTE：绕过权限审批闸口，直达工具结果序列化路径
+    from backend.tools.permissions import PermissionDecision
+
+    agent._check_permission = MagicMock(
+        return_value=PermissionDecision(allowed=True, needs_approval=False, reason="test")
+    )
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=[
+            _make_response(content="", tool_calls=[tool_call]),
+            _make_response(content="已暂停等待确认"),
+        ]
+    )
+    _patch_tool_registry(
+        agent,
+        success=False,
+        content={
+            "result": None,
+            "browser_meta": {
+                "session_id": "b1",
+                "action": "navigate",
+                "url": "https://example.com/",
+            },
+        },
+        error="needs_confirmation: c1 访问站点 example.com",
+    )
+
+    events = await _collect_events(agent, [{"role": "user", "content": "打开网页"}])
+
+    observing = [e for e in events if e.state == AgentState.OBSERVING]
+    assert observing, [e.state for e in events]
+    result = observing[0].tool_result
+    assert result.is_error is True
+    payload = json.loads(result.content)
+    assert payload["success"] is False
+    assert payload["error"].startswith("needs_confirmation: ")
+    assert payload["content"]["browser_meta"]["session_id"] == "b1"
+    assert payload["content"]["browser_meta"]["action"] == "navigate"
