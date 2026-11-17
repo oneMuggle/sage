@@ -453,9 +453,11 @@ def _encode_thumbnail(data: bytes) -> str:
                 thumb = buf.getvalue()
                 mime = "image/png"
                 if len(thumb) > THUMBNAIL_MAX_BYTES:
+                    # JPEG 不支持 alpha；先转 RGB（PNG 阶段保留透明度）。
+                    jpeg_img = img if img.mode == "RGB" else img.convert("RGB")
                     for quality in (70, 55, 40):
                         buf = io.BytesIO()
-                        img.save(buf, format="JPEG", quality=quality, optimize=True)
+                        jpeg_img.save(buf, format="JPEG", quality=quality, optimize=True)
                         thumb = buf.getvalue()
                         mime = "image/jpeg"
                         if len(thumb) <= THUMBNAIL_MAX_BYTES:
