@@ -8,12 +8,13 @@ import {
   RotateCw,
   ScanEye,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
   fetchBrowserAudit,
   fetchBrowserControl,
+  fetchBrowserControlSessions,
   fetchPendingConfirmations,
   resolveConfirmation,
   setBrowserControl,
@@ -24,7 +25,13 @@ import {
 } from '../../shared/api/browserControlClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { buildLocalImageSrc } from '../../shared/lib/localImageSrc';
-import type { ToolCall } from '../../shared/lib/store';
+import { useStore, type ToolCall } from '../../shared/lib/store';
+import {
+  collectPersistedBrowserCalls,
+  latestBrowserSessionId,
+  mergeBrowserToolCalls,
+} from './browserSteps';
+import { rememberBrowserSession, useBrowserSessionStore } from './browserSessionStore';
 import {
   isBrowserPanelAutoOpenEnabled,
   setBrowserPanelAutoOpenEnabled,
@@ -164,7 +171,10 @@ function parseEnvelope(call: ToolCall): StepEnvelope {
       error: typeof parsed.error === 'string' ? parsed.error : '',
     };
   } catch {
-    return EMPTY_ENVELOPE;
+    // 纯字符串错误（旧行为 / 工具层直接写 result）没有 browser_meta，
+    // 但仍可能是 user_paused / needs_confirmation 等前缀状态：交给
+    // stepStatus 按 error 前缀着色，而不是退化成「等待中」。
+    return { meta: null, success: false, error: call.result };
   }
 }
 
@@ -212,12 +222,19 @@ function StepIcon({ action }: { action: string }): JSX.Element {
  * 按钮，以及最近 browser_* 工具调用步骤时间线（数据来自 toolCalls 的
  * ``browser_meta``）。手动浏览工具栏与原 BrowserView 占位保持不变。
  */
-export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}): JSX.Element {
+export function BrowserPanel({
+  toolCalls = [],
+  sessionId: conversationId = null,
+}: { toolCalls?: ToolCall[]; sessionId?: string | null } = {}): JSX.Element {
   const { t } = useI18n();
   const api = panelApi();
   const contentRef = useRef<HTMLDivElement | null>(null);
   const stepsRef = useRef<HTMLDivElement | null>(null);
   const inputFocused = useRef(false);
+  const messages = useStore((s) => s.messages);
+  const rememberedSessionId = useBrowserSessionStore((s) =>
+    conversationId ? (s.byConversation[conversationId] ?? null) : null,
+  );
   const [address, setAddress] = useState('');
   const [canBack, setCanBack] = useState(false);
   const [canForward, setCanForward] = useState(false);
@@ -231,6 +248,8 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditEntries, setAuditEntries] = useState<BrowserAuditEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  /** 无 browser_meta 时从存活会话 / 无过滤确认项发现到的会话 id（C1c）。 */
+  const [discoveredSessionId, setDiscoveredSessionId] = useState<string | null>(null);
 
   const reportBounds = useCallback(() => {
     const apiRef = panelApi();
@@ -270,17 +289,31 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
     };
   }, [reportBounds]);
 
-  // AI 步骤只取浏览器工具调用；会话 id 取最近一条带 browser_meta.session_id 的。
-  const browserCalls = toolCalls.filter((call) => call.name.startsWith('browser_'));
+  // C2：时间线数据源 = 持久化消息里的 tool_calls + 实时流式切片（去重、按序）。
+  // step_done（finalizeStep）与 DONE（resetToolCalls）清空切片后，持久化
+  // 消息里的浏览器步骤仍在，面板不会「闪一下就没」。
+  const browserCalls = useMemo(() => {
+    const persisted = collectPersistedBrowserCalls(messages, conversationId);
+    const live = toolCalls.filter((call) => call.name.startsWith('browser_'));
+    return mergeBrowserToolCalls(persisted, live);
+  }, [messages, conversationId, toolCalls]);
   const recentCalls = browserCalls.slice(-MAX_STEPS);
-  let sessionId: string | null = null;
-  for (let i = browserCalls.length - 1; i >= 0; i -= 1) {
-    const meta = parseEnvelope(browserCalls[i]).meta;
-    if (meta?.session_id) {
-      sessionId = meta.session_id;
-      break;
-    }
-  }
+  const toolSessionId = useMemo(() => latestBrowserSessionId(browserCalls), [browserCalls]);
+  // 会话恢复：工具结果 → 本对话记忆 → 存活会话发现 → 待确认项自带 session。
+  const sessionId =
+    toolSessionId ?? rememberedSessionId ?? discoveredSessionId ?? pending?.session_id ?? null;
+
+  // 切对话：清掉上一对话的瞬时发现态 / 旧确认条（会话记忆按对话键保留）。
+  useEffect(() => {
+    setDiscoveredSessionId(null);
+    setPending(null);
+    setControlState('agent');
+  }, [conversationId]);
+
+  // 首次拿到会话 id 即写入跨 stream 记忆，DONE 后仍能继续轮询。
+  useEffect(() => {
+    if (conversationId && sessionId) rememberBrowserSession(conversationId, sessionId);
+  }, [conversationId, sessionId]);
 
   // 步骤追加时自动滚到底部（时间线固定高、可回溯）。
   useEffect(() => {
@@ -292,13 +325,30 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
   // （后端未就绪/会话已回收都不该刷 toast）。
   useEffect(() => {
     const target = sessionId;
-    if (!target) {
-      setControlState('agent');
-      setPending(null);
-      return;
-    }
     let cancelled = false;
     const load = (): void => {
+      if (!target) {
+        // C1c：还没有任何 browser_meta 时也要能发现会话/待确认项 ——
+        // 取唯一存活会话，并轮询无过滤确认项，避免首次确认永久卡死。
+        void fetchBrowserControlSessions()
+          .then((sessions) => {
+            if (cancelled) return;
+            const alive = sessions.filter((item) => item.alive);
+            if (alive.length === 1) setDiscoveredSessionId(alive[0].session_id);
+          })
+          .catch(() => undefined);
+        void fetchPendingConfirmations()
+          .then((items) => {
+            if (cancelled) return;
+            const first = items[0] ?? null;
+            setPending(first);
+            if (first?.session_id) {
+              setDiscoveredSessionId((prev) => prev ?? first.session_id);
+            }
+          })
+          .catch(() => undefined);
+        return;
+      }
       void fetchBrowserControl(target)
         .then((state) => {
           if (!cancelled && state?.state) setControlState(state.state);
@@ -306,7 +356,18 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
         .catch(() => undefined);
       void fetchPendingConfirmations(target)
         .then((items) => {
-          if (!cancelled) setPending(items[0] ?? null);
+          if (cancelled) return;
+          if (items[0]) {
+            setPending(items[0]);
+            return;
+          }
+          // 会话过滤 0 条时回退到无过滤列表：session_id 推导错误时
+          // pending 仍必须浮出（多会话场景也以实际待确认为准）。
+          void fetchPendingConfirmations()
+            .then((all) => {
+              if (!cancelled) setPending(all[0] ?? null);
+            })
+            .catch(() => undefined);
         })
         .catch(() => undefined);
     };
@@ -395,18 +456,19 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
   /** 提交确认裁决；成功后立即刷新控制状态与剩余待确认项。 */
   const handleResolve = useCallback(
     async (decision: ConfirmationDecision): Promise<void> => {
-      if (!pending || !sessionId) return;
+      const target = pending?.session_id || sessionId;
+      if (!pending || !target) return;
       setConfirmBusy(true);
       try {
         const result = await resolveConfirmation(pending.id, decision);
         if (result?.control_state) setControlState(result.control_state);
         setPending(null);
-        void fetchBrowserControl(sessionId)
+        void fetchBrowserControl(target)
           .then((state) => {
             if (state?.state) setControlState(state.state);
           })
           .catch(() => undefined);
-        void fetchPendingConfirmations(sessionId)
+        void fetchPendingConfirmations(target)
           .then((items) => setPending(items[0] ?? null))
           .catch(() => undefined);
       } catch {
@@ -520,8 +582,16 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
             {pending.description && pending.kind === 'site_access' && (
               <p className="mt-0.5 text-ui-2xs text-text-secondary">{pending.description}</p>
             )}
-            {pending.screenshot_path &&
-              (shotFailed ? (
+            {pending.thumbnail_data_url ? (
+              // I4：后端内联的有界缩略图（数据目录不在 sage-file 白名单内）
+              <img
+                data-testid="browser-confirm-shot"
+                src={pending.thumbnail_data_url}
+                alt={t('browser.panel.confirm.screenshot_alt')}
+                className="mt-1 max-h-24 rounded-radius-sm border border-border object-contain"
+              />
+            ) : pending.screenshot_path ? (
+              shotFailed ? (
                 <p
                   data-testid="browser-confirm-shot-path"
                   className="mt-0.5 truncate font-mono text-ui-2xs text-muted"
@@ -537,7 +607,8 @@ export function BrowserPanel({ toolCalls = [] }: { toolCalls?: ToolCall[] } = {}
                   onError={() => setShotFailed(true)}
                   className="mt-1 max-h-24 rounded-radius-sm border border-border object-contain"
                 />
-              ))}
+              )
+            ) : null}
             <div className="mt-1 flex flex-wrap gap-1">
               {pending.options.map((option) => (
                 <button

@@ -1,13 +1,20 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import type { ToolCall } from '../../../shared/lib/store';
+import { useStore, type Message, type ToolCall } from '../../../shared/lib/store';
+import {
+  emptySessionSlots,
+  selectSessionSlots,
+  useChatStreamStore,
+} from '../../send-message/chatStreamStore';
 import { BrowserPanel } from '../BrowserPanel';
+import { useBrowserSessionStore } from '../browserSessionStore';
 
 const controlMocks = vi.hoisted(() => ({
   fetchBrowserControl: vi.fn(),
+  fetchBrowserControlSessions: vi.fn(),
   setBrowserControl: vi.fn(),
   fetchPendingConfirmations: vi.fn(),
   resolveConfirmation: vi.fn(),
@@ -16,6 +23,7 @@ const controlMocks = vi.hoisted(() => ({
 
 vi.mock('../../../shared/api/browserControlClient', () => ({
   fetchBrowserControl: controlMocks.fetchBrowserControl,
+  fetchBrowserControlSessions: controlMocks.fetchBrowserControlSessions,
   setBrowserControl: controlMocks.setBrowserControl,
   fetchPendingConfirmations: controlMocks.fetchPendingConfirmations,
   resolveConfirmation: controlMocks.resolveConfirmation,
@@ -50,10 +58,29 @@ function installElectronApi(value: typeof panel | undefined): void {
     value === undefined ? undefined : { browserPanel: value, invoke };
 }
 
-function renderPanel(toolCalls: ToolCall[] = []): ReturnType<typeof render> {
+function renderPanel(
+  toolCalls: ToolCall[] = [],
+  sessionId: string | null = null,
+): ReturnType<typeof render> {
   return render(
     <I18nProvider>
-      <BrowserPanel toolCalls={toolCalls} />
+      <BrowserPanel toolCalls={toolCalls} sessionId={sessionId} />
+    </I18nProvider>,
+  );
+}
+
+/** C2 回归：面板从 store 读实时切片（与 Chat.tsx 的生产接线一致）。 */
+function PanelHarness({ conversationId }: { conversationId: string }): JSX.Element {
+  const streamingToolCalls = useChatStreamStore(
+    (state) => selectSessionSlots(state, conversationId).streamingToolCalls,
+  );
+  return <BrowserPanel toolCalls={streamingToolCalls} sessionId={conversationId} />;
+}
+
+function renderHarness(conversationId: string): ReturnType<typeof render> {
+  return render(
+    <I18nProvider>
+      <PanelHarness conversationId={conversationId} />
     </I18nProvider>,
   );
 }
@@ -116,6 +143,8 @@ beforeEach(() => {
     state: 'agent',
     known: true,
   });
+  controlMocks.fetchBrowserControlSessions.mockReset();
+  controlMocks.fetchBrowserControlSessions.mockResolvedValue([]);
   controlMocks.setBrowserControl.mockReset();
   controlMocks.setBrowserControl.mockImplementation(async (id: string, action: string) => ({
     session_id: id,
@@ -138,6 +167,9 @@ beforeEach(() => {
     canGoBack: true,
     canGoForward: false,
   }));
+  useStore.setState({ messages: [] });
+  useChatStreamStore.setState({ sessions: {} });
+  useBrowserSessionStore.getState().reset();
 });
 
 afterEach(() => {
@@ -334,5 +366,89 @@ describe('BrowserPanel M4 安全确认', () => {
     expect(screen.getByText('等待确认')).toBeTruthy();
     expect(screen.getByText('已拦截（需接管）')).toBeTruthy();
     expect(screen.getByText('用户已拒绝')).toBeTruthy();
+  });
+});
+
+describe('BrowserPanel 最终修复波（C1b/C1c/C2）', () => {
+  it('纯字符串失败结果按前缀显示徽章，并通过存活会话恢复控制按钮', async () => {
+    controlMocks.fetchBrowserControlSessions.mockResolvedValue([
+      { session_id: 's1', state: 'agent', alive: true, browser_type: 'chrome', headless: false },
+    ]);
+    installElectronApi(panel);
+    renderPanel([
+      {
+        id: 'plain-1',
+        name: 'browser_navigate',
+        args: { url: 'https://example.com/' },
+        result: 'needs_confirmation: c1 访问站点 example.com（请在右栏浏览器面板确认）',
+      },
+    ]);
+
+    expect(screen.getByText('等待确认')).toBeTruthy();
+    await waitFor(() =>
+      expect((screen.getByTestId('browser-ai-pause') as HTMLButtonElement).disabled).toBe(false),
+    );
+  });
+
+  it('finalizeStep + resetToolCalls 后时间线与待确认项仍保留', async () => {
+    controlMocks.fetchPendingConfirmations.mockResolvedValue([pendingConfirmation()]);
+    installElectronApi(panel);
+    const persistedCall = browserToolCall(
+      'browser_navigate',
+      {},
+      { action: 'navigate', url: 'https://example.com/' },
+      'persisted-1',
+    );
+    const persistedMessage: Message = {
+      id: 'm1',
+      session_id: 'conv1',
+      role: 'assistant',
+      content: '',
+      created_at: 1,
+      tool_calls: [persistedCall],
+    };
+    const liveCall = browserToolCall(
+      'browser_interact',
+      { text: '搜索' },
+      { action: 'interact', target_name: '搜索' },
+      'live-1',
+    );
+    useStore.setState({ messages: [persistedMessage] });
+    useChatStreamStore.setState({
+      sessions: {
+        conv1: {
+          ...emptySessionSlots(),
+          streaming: {
+            messageId: 'm1',
+            content: '',
+            reasoning: '',
+            state: 'thinking',
+            currentAgentId: null,
+            iteration: 0,
+          },
+          streamingToolCalls: [liveCall],
+        },
+      },
+    });
+
+    renderHarness('conv1');
+
+    expect(screen.getByText('打开 https://example.com/')).toBeTruthy();
+    expect(screen.getByText('点击「搜索」')).toBeTruthy();
+    expect(await screen.findByTestId('browser-confirm-bar')).toBeTruthy();
+    expect((screen.getByTestId('browser-ai-pause') as HTMLButtonElement).disabled).toBe(false);
+
+    act(() => {
+      useChatStreamStore.getState().finalizeStep('conv1', 'm1', 'm2');
+      useChatStreamStore.getState().resetToolCalls('conv1');
+    });
+
+    await waitFor(() =>
+      expect(useChatStreamStore.getState().sessions.conv1?.streamingToolCalls).toHaveLength(0),
+    );
+    // 实时切片已清空：持久化步骤仍在，确认条与轮询会话也仍在
+    expect(screen.getByText('打开 https://example.com/')).toBeTruthy();
+    expect(screen.getByTestId('browser-confirm-bar')).toBeTruthy();
+    expect((screen.getByTestId('browser-ai-pause') as HTMLButtonElement).disabled).toBe(false);
   });
 });

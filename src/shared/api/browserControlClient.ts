@@ -41,6 +41,10 @@ export interface BrowserPendingConfirmation {
   description: string;
   options: Array<'session' | 'always' | 'approve' | 'deny'>;
   screenshot_path: string;
+  /** 后端内联的有界缩略图（data URL）；截图不可内联时缺省。 */
+  thumbnail_data_url?: string;
+  /** 有截图路径但无法生成缩略图（超出大小上限 / 解码失败）。 */
+  thumbnail_unavailable?: boolean;
   created_at: number;
 }
 

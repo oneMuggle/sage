@@ -552,7 +552,9 @@ function RightPanelInner({
         }
       >
         {tab === 'browser' ? (
-          <BrowserPanel toolCalls={toolCalls} />
+          // C2：面板需要对话 id 才能从持久化消息里恢复完整浏览器时间线；
+          // toolCalls 仍传实时切片，两者在面板内按 id 合并。
+          <BrowserPanel toolCalls={toolCalls} sessionId={sessionId} />
         ) : selectedFilePath && sessionId ? (
           <Suspense fallback={<div className="p-3 text-sm text-muted">加载中...</div>}>
             <FilePreviewPanel
