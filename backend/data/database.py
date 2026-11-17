@@ -2406,6 +2406,7 @@ class Database:
                 completed_at TEXT,
                 project_tag TEXT,
                 project_id TEXT,
+                tags TEXT,
                 is_recurring INTEGER DEFAULT 0,
                 recurrence_rule TEXT,
                 parent_id INTEGER,
@@ -2430,6 +2431,14 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_todos_parent_id ON todos(parent_id)")
 
         conn.commit()
+
+        # Phase 1 (2026-11-17): todos.tags —— 多标签（JSON 数组字符串）。
+        # 旧库幂等补列；新库由上方 CREATE TABLE 直接带上。
+        cursor.execute("PRAGMA table_info(todos)")
+        _todo_cols = {row[1] for row in cursor.fetchall()}
+        if "tags" not in _todo_cols:
+            cursor.execute("ALTER TABLE todos ADD COLUMN tags TEXT")
+            conn.commit()
 
         # 待办全文搜索 FTS5（独立存内容表 + jieba 分词；行数不一致时幂等回填）
         ensure_todos_fts_schema(conn)
