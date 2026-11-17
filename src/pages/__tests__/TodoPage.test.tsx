@@ -27,6 +27,9 @@ const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
   loadSummary: vi.fn(),
   setParams: vi.fn(),
+  batchComplete: vi.fn(),
+  batchDelete: vi.fn(),
+  exportTodos: vi.fn(),
   state: {
     todos: [] as Todo[],
     loading: false,
@@ -34,6 +37,10 @@ const mocks = vi.hoisted(() => ({
     summary: null,
     params: {} as Record<string, unknown>,
   },
+}));
+
+vi.mock('../../shared/api/todoClient', () => ({
+  todoClient: { exportTodos: mocks.exportTodos },
 }));
 
 // Mock the zustand store hook so callers receive our controlled `state`.
@@ -52,6 +59,8 @@ vi.mock('../../entities/todo/todoStore', () => ({
       cancel: mocks.cancel,
       loadSummary: mocks.loadSummary,
       setParams: mocks.setParams,
+      batchComplete: mocks.batchComplete,
+      batchDelete: mocks.batchDelete,
     };
     return selector(merged);
   },
@@ -71,6 +80,21 @@ beforeEach(() => {
   mocks.cancel.mockResolvedValue({} as Todo);
   mocks.loadSummary.mockResolvedValue(undefined);
   mocks.setParams.mockResolvedValue(undefined);
+  mocks.batchComplete.mockResolvedValue({ completed: 1, missing: [] });
+  mocks.batchDelete.mockResolvedValue(1);
+  mocks.exportTodos.mockResolvedValue({
+    filename: 'sage-todos.md',
+    format: 'md',
+    content: '- [ ] 示例',
+  });
+  Object.defineProperty(URL, 'createObjectURL', {
+    writable: true,
+    value: vi.fn(() => 'blob:mock'),
+  });
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    writable: true,
+    value: vi.fn(),
+  });
 });
 
 afterEach(() => {
@@ -121,9 +145,7 @@ describe('TodoPage', () => {
     fireEvent.change(input, { target: { value: '测试新待办' } });
     fireEvent.click(screen.getByRole('button', { name: /添加|新建|创建/ }));
     await waitFor(() => {
-      expect(mocks.create).toHaveBeenCalledWith(
-        expect.objectContaining({ title: '测试新待办' }),
-      );
+      expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ title: '测试新待办' }));
     });
   });
 
@@ -131,6 +153,53 @@ describe('TodoPage', () => {
     mocks.state.loading = true;
     renderPage();
     expect(screen.getByText(/加载|loading/i)).toBeInTheDocument();
+  });
+
+  it('debounces search input into a backend q param', async () => {
+    renderPage();
+    fireEvent.change(screen.getByPlaceholderText('搜索待办...'), {
+      target: { value: '周报' },
+    });
+    await waitFor(
+      () => {
+        expect(mocks.setParams).toHaveBeenCalledWith(expect.objectContaining({ q: '周报' }));
+      },
+      { timeout: 1500 },
+    );
+  });
+
+  it('batch complete uses the batch endpoint via the store', async () => {
+    mocks.state.todos = [makeTodo({ id: 11, title: '批量任务' })];
+    renderPage();
+    fireEvent.click(screen.getByLabelText('选择 批量任务'));
+    fireEvent.click(screen.getByRole('button', { name: '批量完成' }));
+    await waitFor(() => {
+      expect(mocks.batchComplete).toHaveBeenCalledWith([11]);
+    });
+  });
+
+  it('export button downloads via todoClient.exportTodos', async () => {
+    mocks.state.todos = [makeTodo({ id: 1, title: '导出任务' })];
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: '导出 Markdown' }));
+    await waitFor(() => {
+      expect(mocks.exportTodos).toHaveBeenCalledWith('md', true);
+    });
+  });
+
+  it('creates a subtask from a top-level row inline input', async () => {
+    mocks.state.todos = [makeTodo({ id: 1, title: '父任务' })];
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: '为 父任务 添加子任务' }));
+    const input = screen.getByTestId('todo-subtask-input');
+    fireEvent.change(input, { target: { value: '子任务' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => {
+      expect(mocks.create).toHaveBeenCalledWith({
+        title: '子任务',
+        parent_id: 1,
+      });
+    });
   });
 });
 

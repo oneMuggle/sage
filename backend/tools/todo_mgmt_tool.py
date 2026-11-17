@@ -105,6 +105,10 @@ class AddTodoTool(_TodoServiceMixin, BaseTool):
                         "type": "string",
                         "description": "5 字段 cron 表达式（可选）",
                     },
+                    "parent_id": {
+                        "type": "integer",
+                        "description": "父待办 ID（创建子任务时提供，最多两级）",
+                    },
                 },
                 "required": ["title"],
             },
@@ -122,6 +126,7 @@ class AddTodoTool(_TodoServiceMixin, BaseTool):
                 priority=kwargs.get("priority", "medium"),
                 project_tag=kwargs.get("project_tag"),
                 recurrence_rule=kwargs.get("recurrence_rule"),
+                parent_id=kwargs.get("parent_id"),
             )
             return ToolResult(
                 success=True,
@@ -285,6 +290,10 @@ class UpdateTodoTool(_TodoServiceMixin, BaseTool):
                         "type": "string",
                         "enum": ["pending", "in_progress", "cancelled"],
                         "description": "状态",
+                    },
+                    "parent_id": {
+                        "type": "integer",
+                        "description": "父待办 ID（挂为子任务；最多两级）",
                     },
                 },
                 "required": ["todo_id"],

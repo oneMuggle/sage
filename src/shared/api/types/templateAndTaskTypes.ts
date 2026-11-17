@@ -412,6 +412,7 @@ export interface CreateTodoInput {
   priority?: TodoPriority;
   project_tag?: string;
   recurrence_rule?: string;
+  parent_id?: number;
 }
 
 export interface UpdateTodoInput {
@@ -422,6 +423,7 @@ export interface UpdateTodoInput {
   project_tag?: string;
   status?: 'pending' | 'in_progress' | 'cancelled';
   recurrence_rule?: string;
+  parent_id?: number | null;
 }
 
 export interface TodoSummary {
@@ -458,6 +460,23 @@ export interface TodoListParams {
   sort_order?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
+  /** 全文搜索关键词（后端 FTS5，LIKE 降级） */
+  q?: string;
+}
+
+export interface TodoBatchCompleteResult {
+  completed: number;
+  missing: number[];
+}
+
+export interface TodoBatchDeleteResult {
+  deleted: number;
+}
+
+export interface TodoExportResult {
+  filename: string;
+  format: 'json' | 'md';
+  content: string;
 }
 
 export function auditTemplateAndTaskTypesGovernance(
@@ -473,9 +492,7 @@ export function auditTemplateAndTaskTypesGovernance(
   healthy: boolean;
 } {
   const todoPriority: TodoPriority =
-    state.todoPriority === 'high' || state.todoPriority === 'low'
-      ? state.todoPriority
-      : 'medium';
+    state.todoPriority === 'high' || state.todoPriority === 'low' ? state.todoPriority : 'medium';
   const todoStatus: TodoItemStatus =
     state.todoStatus === 'pending' ||
     state.todoStatus === 'in_progress' ||

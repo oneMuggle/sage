@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
+
+from backend.services import todo_export, todo_fts, todo_recurrence
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,7 @@ _UPDATABLE_FIELDS = frozenset(
         "project_tag",
         "status",
         "recurrence_rule",
+        "parent_id",
     }
 )
 
@@ -111,11 +114,22 @@ class TodoService:
         due_at: Optional[str] = None,
         priority: str = "medium",
         project_tag: Optional[str] = None,
-        recurrence_rule: Optional[str] = None
+        recurrence_rule: Optional[str] = None,
+        parent_id: Optional[int] = None,
     ) -> Todo:
-        """Create a new todo and return the persisted row."""
+        """Create a new todo and return the persisted row.
+
+        ``parent_id`` 将新行挂到父待办下（最多两级）：父行必须存在且本身是顶层。
+        """
         now = datetime.now().isoformat()
         is_recurring = 1 if recurrence_rule else 0
+
+        if parent_id is not None:
+            parent = self.get_todo(parent_id)
+            if parent is None:
+                raise ValueError(f"parent todo {parent_id} not found")
+            if parent.parent_id is not None:
+                raise ValueError("subtask depth exceeds 2 levels")
 
         # Auto-link project
         project_id = self._auto_link_project(project_tag) if project_tag else None
@@ -128,10 +142,10 @@ class TodoService:
         cursor = conn.execute(
             """INSERT INTO todos
                (title, description, due_at, priority, project_tag, project_id,
-                is_recurring, recurrence_rule, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                is_recurring, recurrence_rule, parent_id, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (title, description, due_at, priority, project_tag, project_id,
-             is_recurring, recurrence_rule, now, now)
+             is_recurring, recurrence_rule, parent_id, now, now)
         )
         todo_id = cursor.lastrowid
         conn.commit()
@@ -139,6 +153,9 @@ class TodoService:
         created = self.get_todo(todo_id)
         if created is None:
             raise RuntimeError(f"todo {todo_id} vanished immediately after insert")
+        todo_fts.upsert_todo_fts(
+            self.db, created.id, created.title, created.description
+        )
         return created
 
     def get_todo(self, todo_id: int) -> Optional[Todo]:
@@ -163,9 +180,12 @@ class TodoService:
         limit: int = 50,
         offset: int = 0,
         sort_by: str = "due_at",
-        sort_order: str = "asc"
+        sort_order: str = "asc",
+        q: Optional[str] = None,
     ) -> List[Todo]:
         """List todos with optional filters.
+
+        ``q`` 为全文搜索关键词（标题/描述），FTS5 优先、LIKE 降级。
 
         ``sort_by`` is a dict-key lookup into ``_SORT_EXPRS`` — no caller-
         supplied string reaches SQL as an identifier.  An unsupported key
@@ -177,7 +197,7 @@ class TodoService:
         Sorting happens **before** ``LIMIT``/``OFFSET``.
         """
         query = "SELECT * FROM todos WHERE 1=1"
-        params = []
+        params: List[Any] = []
 
         if status and status != "all":
             query += " AND status = ?"
@@ -192,6 +212,8 @@ class TodoService:
         if priority:
             query += " AND priority = ?"
             params.append(priority)
+
+        query, params = todo_fts.apply_search_filter(self.db, query, params, q)
 
         sort_expr = _SORT_EXPRS[sort_by]
         direction = "DESC" if sort_order == "desc" else "ASC"
@@ -210,6 +232,7 @@ class TodoService:
         project_tag: Optional[str] = None,
         priority: Optional[str] = None,
         include_completed: bool = False,
+        q: Optional[str] = None,
     ) -> int:
         """Count todos matching the same filters list_todos applies.
 
@@ -234,6 +257,8 @@ class TodoService:
             query += " AND priority = ?"
             params.append(priority)
 
+        query, params = todo_fts.apply_search_filter(self.db, query, params, q)
+
         conn = self.db.get_connection()
         return int(conn.execute(query, params).fetchone()[0])
 
@@ -255,6 +280,24 @@ class TodoService:
         # ``IntegrityError`` from deep in the stack.
         if updates.get("title") is None and "title" in updates:
             raise ValueError("title is NOT NULL and cannot be cleared")
+
+        # parent_id 变更校验：禁止自引用、只允许挂在顶层行下、有子任务的行
+        # 不能变成子任务（否则形成三级层级）。显式 None 允许清除父子关系。
+        if "parent_id" in updates and updates["parent_id"] is not None:
+            new_parent_id = updates["parent_id"]
+            if new_parent_id == todo_id:
+                raise ValueError("a todo cannot be its own parent")
+            parent = self.get_todo(new_parent_id)
+            if parent is None:
+                raise ValueError(f"parent todo {new_parent_id} not found")
+            if parent.parent_id is not None:
+                raise ValueError("subtask depth exceeds 2 levels")
+            conn = self.db.get_connection()
+            has_children = conn.execute(
+                "SELECT 1 FROM todos WHERE parent_id = ? LIMIT 1", (todo_id,)
+            ).fetchone()
+            if has_children is not None:
+                raise ValueError("a todo with subtasks cannot become a subtask")
 
         if not updates:
             return self.get_todo(todo_id)
@@ -289,7 +332,12 @@ class TodoService:
         )
         conn.commit()
 
-        return self.get_todo(todo_id)
+        updated = self.get_todo(todo_id)
+        if updated is not None and ("title" in updates or "description" in updates):
+            todo_fts.upsert_todo_fts(
+                self.db, updated.id, updated.title, updated.description
+            )
+        return updated
 
     def delete_todo(self, todo_id: int) -> bool:
         """Delete todo by ID. Returns True if a row was removed."""
@@ -299,6 +347,8 @@ class TodoService:
         )
         deleted = cursor.rowcount > 0
         conn.commit()
+        if deleted:
+            todo_fts.delete_todo_fts(self.db, todo_id)
         return deleted
 
     # --- state changes ---
@@ -310,19 +360,24 @@ class TodoService:
         ``updated_at`` to the current local time. Returns the refreshed
         :class:`Todo`, or ``None`` if ``todo_id`` does not exist (mirrors
         :meth:`update_todo` semantics).
+
+        循环待办（``recurrence_rule`` 为 5 字段 cron）在完成时自动创建下一
+        实例；cron 非法不影响本次完成（fail-open，仅告警）。
         """
         existing = self.get_todo(todo_id)
         if existing is None:
             return None
 
-        now = datetime.now().isoformat()
+        now = datetime.now()
+        now_iso = now.isoformat()
         conn = self.db.get_connection()
         conn.execute(
             "UPDATE todos SET status = 'completed', completed_at = ?, "
             "updated_at = ? WHERE id = ?",
-            (now, now, todo_id),
+            (now_iso, now_iso, todo_id),
         )
         conn.commit()
+        todo_recurrence.spawn_next_recurrence(self.create_todo, existing, now)
         return self.get_todo(todo_id)
 
     def cancel_todo(self, todo_id: int) -> bool:
@@ -642,6 +697,40 @@ class TodoService:
             "completed_today": completed_today,
         }
 
+
+    # --- batch operations ---
+
+    def complete_many(self, ids: List[int]) -> Dict[str, Any]:
+        """批量完成。返回 ``{completed, missing}``；缺失 id 不影响其余行。"""
+        completed = 0
+        missing: List[int] = []
+        for todo_id in ids:
+            if self.complete_todo(todo_id) is None:
+                missing.append(todo_id)
+            else:
+                completed += 1
+        return {"completed": completed, "missing": missing}
+
+    def delete_many(self, ids: List[int]) -> int:
+        """批量删除，返回实际删除行数。"""
+        deleted = 0
+        for todo_id in ids:
+            if self.delete_todo(todo_id):
+                deleted += 1
+        return deleted
+
+    # --- export ---
+
+    def export_todos(self, include_completed: bool, fmt: str) -> Dict[str, str]:
+        """导出为 JSON / Markdown。返回 ``{filename, format, content}``。"""
+        todos = self.list_todos(
+            status="all" if include_completed else None,
+            include_completed=include_completed,
+            limit=1000000,
+            sort_by="due_at",
+            sort_order="asc",
+        )
+        return todo_export.build_export(todos, fmt)
 
     def _auto_link_project(self, project_tag: str) -> Optional[str]:
         """Auto-link project_tag to a ``projects`` row, returning its TEXT id."""
