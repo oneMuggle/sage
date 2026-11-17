@@ -55,3 +55,23 @@ async def test_browser_health_not_found(client, monkeypatch):
     data = resp.json()
     assert data["browserFound"] is False
     assert "未发现" in data["warning"]
+
+
+async def test_set_browser_path_accepts_embedded_sentinel(client):
+    """Win7 兜底内核可被显式选择：`(embedded)` 哨兵不按文件路径校验。"""
+    resp = await client.put("/api/v1/diagnostic/browser/path", json={"path": "(embedded)"})
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    # 还原自动发现，避免污染后续用例的默认浏览器判定。
+    await client.put("/api/v1/diagnostic/browser/path", json={"path": ""})
+
+
+async def test_set_browser_path_rejects_missing_file(client, tmp_path):
+    resp = await client.put(
+        "/api/v1/diagnostic/browser/path",
+        json={"path": str(tmp_path / "missing.exe")},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is False
+    assert "不存在" in body["error"]

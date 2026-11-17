@@ -42,9 +42,13 @@ export function webAccessApiUrl(path: string): string {
   return path;
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * Electron：走主进程中继（注入本地 bearer token、解析真实后端端口）。
+ * 渲染层裸 fetch 到受保护路径一定会被 LocalAuthMiddleware 401，新接入
+ * 本机后端接口的客户端必须复用本函数，不要直接 fetch。
+ */
+export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? 'GET') as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  // Electron：走主进程中继（注入本地 bearer token、解析真实后端端口）
   const bridge = typeof window !== 'undefined' ? window.electronAPI?.backendRequest : undefined;
   if (bridge) {
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
@@ -55,9 +59,12 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   });
-  const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
+  const payload = (await response.json().catch(() => ({}))) as T & {
+    error?: string;
+    detail?: string;
+  };
   if (!response.ok) {
-    throw new Error(payload?.error || `HTTP ${response.status}`);
+    throw new Error(payload?.error || payload?.detail || `HTTP ${response.status}`);
   }
   return payload;
 }

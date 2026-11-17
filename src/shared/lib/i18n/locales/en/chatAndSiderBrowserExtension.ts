@@ -45,6 +45,8 @@ export const enChatAndSiderBrowserExtension = {
   'settings.network.browser.loading': 'Scanning available browsers…',
   'settings.network.browser.none_found':
     'No browser found. Install Chrome/Edge or set SAGE_BROWSER_PATH environment variable.',
+  'settings.network.browser.load_failed': 'Failed to load the browser list. Please retry.',
+  'settings.network.browser.retry': 'Retry',
   'settings.network.browser.embedded': 'Sage Embedded Browser',
   'settings.network.browser.embedded_hint':
     'Chromium bundled with Electron (some sites may be incompatible)',

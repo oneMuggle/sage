@@ -254,7 +254,6 @@ def _discover_all_browsers() -> List[DiscoveredBrowser]:
     """扫描系统中所有可用的 Chromium 系浏览器。"""
     import os
     import shutil
-    import subprocess
     from pathlib import Path
 
     from backend.tools.browser_cdp import (
@@ -266,24 +265,11 @@ def _discover_all_browsers() -> List[DiscoveredBrowser]:
     seen_paths: set = set()
 
     def _get_version(exe_path: str) -> Optional[str]:
-        """通过 --version 命令获取浏览器版本。"""
-        try:
-            result = subprocess.run(
-                [exe_path, "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5, check=False,
-            )
-            output = result.stdout.strip()
-            # 提取版本号（如 "Google Chrome 120.0.6099.109" -> "120"）
-            import re
+        """读取大版本号：版本目录扫描（Windows 上 --version 不输出且会拉起窗口）。"""
+        from backend.tools.browser_cdp import chromium_major_version
 
-            match = re.search(r"(\d+)\.\d+\.\d+\.\d+", output)
-            if match:
-                return match.group(1)
-        except (OSError, subprocess.SubprocessError) as exc:
-            logger.debug("读取浏览器版本失败 %s: %s", exe_path, exc)
-        return None
+        major = chromium_major_version(exe_path)
+        return str(major) if major is not None else None
 
     def _add_browser(path: str, name: str) -> None:
         if path in seen_paths:
@@ -376,11 +362,12 @@ def set_browser_path(req: SetBrowserPathRequest) -> dict:
     from pathlib import Path
 
     from backend.data.settings_repo import SettingsRepository
+    from backend.tools.browser_cdp import EMBEDDED_EXECUTABLE
 
     path = req.path.strip()
 
-    # 验证路径（如果非空）
-    if path and not Path(path).is_file():
+    # 验证路径（如果非空）；`(embedded)` 是内置浏览器哨兵，不按文件校验
+    if path and path != EMBEDDED_EXECUTABLE and not Path(path).is_file():
         return {"success": False, "error": f"文件不存在: {path}"}
 
     repo = SettingsRepository()

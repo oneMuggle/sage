@@ -24,6 +24,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -130,11 +131,17 @@ def _windows_candidates() -> List[Path]:
 
 
 def _get_user_browser_path() -> Optional[str]:
-    """从设置中读取用户配置的浏览器路径。"""
+    """从设置中读取用户配置的浏览器路径。
+
+    `(embedded)` 是设置页「Sage 内置浏览器」选项的哨兵值，不是文件路径，
+    需要原样返回交由发现链解析。
+    """
     try:
         from backend.data.settings_repo import SettingsRepository
 
         path = SettingsRepository().get("browser_path")
+        if path == EMBEDDED_EXECUTABLE:
+            return EMBEDDED_EXECUTABLE
         if path and Path(path).is_file():
             return path
     except Exception as exc:  # noqa: BLE001 — 设置读取失败时回退到平台发现
@@ -143,17 +150,20 @@ def _get_user_browser_path() -> Optional[str]:
 
 
 def discover_browser_executable() -> Optional[str]:  # noqa: PLR0911 — 浏览器发现逻辑需要多级 fallback
-    """按 环境变量 → 用户设置 → 平台路径 → PATH 顺序找 Chromium 系浏览器。"""
-    if _discover_embedded_env():
-        return EMBEDDED_EXECUTABLE
-    # 环境变量覆盖
+    """按 环境变量 → 用户设置 → 内置兜底 → 平台路径/PATH 顺序找 Chromium 系浏览器。"""
+    # 环境变量覆盖（运维/CI/排障）
     env_override = os.environ.get("SAGE_BROWSER_PATH")
     if env_override and Path(env_override).is_file():
         return env_override
-    # 用户设置覆盖
+    # 用户设置覆盖（设置页显式选择；"(embedded)" 哨兵 → 内置内核）
     user_override = _get_user_browser_path()
+    if user_override == EMBEDDED_EXECUTABLE:
+        user_override = EMBEDDED_EXECUTABLE if _discover_embedded_env() else None
     if user_override:
         return user_override
+    # 内置兜底（仅 Win7 / 强制开关时注入）
+    if _discover_embedded_env():
+        return EMBEDDED_EXECUTABLE
     # Windows 平台路径
     if os.name == "nt":
         for candidate in _windows_candidates():
@@ -179,6 +189,64 @@ def _darwin_candidates() -> Optional[str]:
         if candidate.is_file():
             return str(candidate)
     return None
+
+
+#: Chromium 在 exe 同级保留的版本目录名（如 107.0.5304.87）
+_VERSION_DIR_RE = re.compile(r"(\d+)\.\d+\.\d+\.\d+")
+
+#: --headless=new 自 Chrome 109 起提供；更老内核（Win7 的 Edge 100 /
+#: Chrome 107）只能使用旧无头模式。
+NEW_HEADLESS_MIN_MAJOR = 109
+
+
+def _major_from_version_dirs(executable: str) -> Optional[int]:
+    """exe 同级 ``X.Y.Z.W/`` 版本目录的最大大版本号；无则 None（不 spawn 进程）。"""
+    try:
+        exe_dir = os.path.dirname(executable)
+        versions = [
+            int(match.group(1))
+            for name in os.listdir(exe_dir)
+            for match in [_VERSION_DIR_RE.fullmatch(name)]
+            if match and os.path.isdir(os.path.join(exe_dir, name))
+        ]
+        if versions:
+            return max(versions)
+    except OSError:
+        pass
+    return None
+
+
+def chromium_major_version(executable: str) -> Optional[int]:
+    """探测 Chromium 系浏览器大版本（版本目录优先；Windows 不执行 --version）。"""
+    major = _major_from_version_dirs(executable)
+    if major is not None:
+        return major
+    if os.name == "nt":
+        return None
+    try:
+        completed = subprocess.run(  # noqa: S603 — 可执行路径来自受控发现逻辑
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = _VERSION_DIR_RE.search(completed.stdout or "")
+    return int(match.group(1)) if match else None
+
+
+def headless_flag(executable: str) -> str:
+    """按内核版本选择无头开关：旧内核（< 109）回退旧无头模式。
+
+    每次启动命令构造都会调用，因此只做目录扫描（不 spawn 子进程）；
+    版本未知时保持现行默认新无头。
+    """
+    major = _major_from_version_dirs(executable)
+    if major is not None and major < NEW_HEADLESS_MIN_MAJOR:
+        return "--headless"
+    return "--headless=new"
 
 
 # ---------------------------------------------------------------------------
@@ -219,28 +287,73 @@ class BrowserSessionManager:
 
     def __init__(self) -> None:
         self._sessions: Dict[str, BrowserSession] = {}
+        # 上限判定是 check-then-act，登录任务线程与渲染池并发注册时需要串行化。
+        self._lock = threading.Lock()
+
+    def _counted_locked(self) -> int:
+        """按真实浏览器进程计的会话数。
+
+        EMBEDDED 与 Electron 共享同一个 Chromium 进程（见 ``_EmbeddedProcess``），
+        每开一个逻辑会话并不会多一个进程；EXTERNAL 是用户自己的标签页。
+        两者都不参与 ``MAX_BROWSER_SESSIONS`` 进程上限。
+        """
+        return sum(
+            1
+            for session in self._sessions.values()
+            if getattr(session, "browser_type", None)
+            not in (BrowserType.EMBEDDED, BrowserType.EXTERNAL)
+        )
 
     def register(self, session: BrowserSession) -> None:
-        old = self._sessions.pop(session.browser_id, None)
-        if old is not None and old is not session:
-            # 固定 id 的池并发重建时曾会静默覆盖旧会话对象（连带其临时目录
-            # 永久遗留）——改为显式回收旧实例并留痕。
-            logger.warning(
-                "browser_id 冲突（%s）：回收旧实例 pid=%s",
-                session.browser_id,
-                getattr(old.process, "pid", None),
-            )
-            _terminate_session(old)
-        # The user-shared external tab is one logical session and must remain
-        # usable even when Sage's own Chrome/render sessions fill the cap.
-        if (
-            session.browser_id != EXTENSION_BROWSER_ID
-            and len(self._sessions) >= MAX_BROWSER_SESSIONS
-        ):
-            raise BrowserCDPError(
-                f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}，请先用 browser_close 关闭"
-            )
-        self._sessions[session.browser_id] = session
+        evicted: List[BrowserSession] = []
+        try:
+            with self._lock:
+                old = self._sessions.pop(session.browser_id, None)
+                if old is not None and old is not session:
+                    # 固定 id 的池并发重建时曾会静默覆盖旧会话对象（连带其临时目录
+                    # 永久遗留）——改为显式回收旧实例并留痕。
+                    logger.warning(
+                        "browser_id 冲突（%s）：回收旧实例 pid=%s",
+                        session.browser_id,
+                        getattr(old.process, "pid", None),
+                    )
+                    evicted.append(old)
+                # 已退出实例（用户关窗/崩溃）不占名额：注册前先回收，
+                # 否则「关掉浏览器后仍报已达上限」。
+                for stale_id, stale in list(self._sessions.items()):
+                    if not stale.is_alive():
+                        self._sessions.pop(stale_id, None)
+                        evicted.append(stale)
+                # 用户共享标签页与内置浏览器不需要新进程，不占进程名额。
+                needs_slot = (
+                    session.browser_id != EXTENSION_BROWSER_ID
+                    and getattr(session, "browser_type", None) != BrowserType.EMBEDDED
+                )
+                if needs_slot and self._counted_locked() >= MAX_BROWSER_SESSIONS:
+                    # 渲染池是懒重建的后台实例：为前台会话让位，下次渲染按需重建。
+                    # 内置池会话共享 Electron 单进程，不能个别回收（会误关其它标签页）。
+                    for pool_id in [
+                        bid
+                        for bid, pooled in list(self._sessions.items())
+                        if (
+                            bid == RESERVED_BROWSER_ID
+                            or bid.startswith(RESERVED_BROWSER_ID + "-")
+                        )
+                        and getattr(pooled, "browser_type", None) != BrowserType.EMBEDDED
+                    ]:
+                        if self._counted_locked() < MAX_BROWSER_SESSIONS:
+                            break
+                        evicted.append(self._sessions.pop(pool_id))
+                if needs_slot and self._counted_locked() >= MAX_BROWSER_SESSIONS:
+                    raise BrowserCDPError(
+                        f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}：请关闭 Sage 打开的"
+                        "浏览器窗口后重试（对话中可调用 browser_close 关闭实例）"
+                    )
+                self._sessions[session.browser_id] = session
+        finally:
+            # 进程终止可能较慢，统一放到锁外执行；抛上限错误时也让位结果生效。
+            for stale in evicted:
+                _terminate_session(stale)
 
     def get(self, browser_id: Optional[str]) -> Optional[BrowserSession]:
         """按 id 取会话；None → 优先用户共享的日常浏览器，其次唯一实例。
@@ -556,8 +669,9 @@ def _build_launch_command(
         command.append(f"--proxy-server={proxy_flag}")
     command.append("about:blank")
     if headless:
-        # Chrome 109+（Win7 末代版本）起支持 new headless
-        command.insert(1, "--headless=new")
+        # Chrome 109+ 才支持 new headless；旧内核（Win7 的 Edge 100 /
+        # Chrome 107）由 headless_flag 降级为旧无头模式
+        command.insert(1, headless_flag(executable))
     return command
 
 
@@ -599,7 +713,12 @@ def launch_browser(
         BrowserCDPError: 找不到浏览器 / 启动超时 / 实例数超限。
     """
     embedded = _discover_embedded_env()
-    if embedded:
+    env_override = os.environ.get("SAGE_BROWSER_PATH", "")
+    env_path_ok = bool(env_override) and Path(env_override).is_file()
+    user_choice = _get_user_browser_path()
+    # 优先级与 discover_browser_executable 保持一致：显式环境变量 / 用户选择
+    # 的真实浏览器优先于 Win7 内置兜底内核；仅未选择或显式选择内置时用内置。
+    if embedded and not env_path_ok and user_choice in (None, EMBEDDED_EXECUTABLE):
         session_id = browser_id or uuid.uuid4().hex[:12]
         bridge_token = str(embedded["token"])
         bridge_query = (
