@@ -109,6 +109,11 @@ class AddTodoTool(_TodoServiceMixin, BaseTool):
                         "type": "integer",
                         "description": "父待办 ID（创建子任务时提供，最多两级）",
                     },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": '多标签（如 ["工作","论文"]，最多 10 个）',
+                    },
                 },
                 "required": ["title"],
             },
@@ -127,6 +132,7 @@ class AddTodoTool(_TodoServiceMixin, BaseTool):
                 project_tag=kwargs.get("project_tag"),
                 recurrence_rule=kwargs.get("recurrence_rule"),
                 parent_id=kwargs.get("parent_id"),
+                tags=kwargs.get("tags"),
             )
             return ToolResult(
                 success=True,
@@ -294,6 +300,11 @@ class UpdateTodoTool(_TodoServiceMixin, BaseTool):
                     "parent_id": {
                         "type": "integer",
                         "description": "父待办 ID（挂为子任务；最多两级）",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "多标签（覆盖原值；空数组清空）",
                     },
                 },
                 "required": ["todo_id"],

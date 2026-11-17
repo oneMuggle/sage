@@ -5,9 +5,16 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from backend.services import todo_export, todo_fts, todo_recurrence
+from backend.services import (
+    todo_export,
+    todo_filters,
+    todo_fts,
+    todo_recurrence,
+    todo_stats,
+    todo_tags,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +50,7 @@ _TODO_MODEL_FIELDS = (
     "completed_at",
     "project_tag",
     "project_id",
+    "tags",
     "is_recurring",
     "recurrence_rule",
     "parent_id",
@@ -63,6 +71,7 @@ _UPDATABLE_FIELDS = frozenset(
         "status",
         "recurrence_rule",
         "parent_id",
+        "tags",
     }
 )
 
@@ -94,6 +103,7 @@ class Todo(BaseModel):
     completed_at: Optional[str] = None
     project_tag: Optional[str] = None
     project_id: Optional[str] = None  # TEXT — projects.id is a hex/uuid string
+    tags: List[str] = Field(default_factory=list)
     is_recurring: bool = False
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
@@ -116,10 +126,12 @@ class TodoService:
         project_tag: Optional[str] = None,
         recurrence_rule: Optional[str] = None,
         parent_id: Optional[int] = None,
+        tags: Optional[List[str]] = None,
     ) -> Todo:
         """Create a new todo and return the persisted row.
 
         ``parent_id`` 将新行挂到父待办下（最多两级）：父行必须存在且本身是顶层。
+        ``tags`` 为多标签（去重、上限 10 个、单标签 ≤32 字符）。
         """
         now = datetime.now().isoformat()
         is_recurring = 1 if recurrence_rule else 0
@@ -142,10 +154,10 @@ class TodoService:
         cursor = conn.execute(
             """INSERT INTO todos
                (title, description, due_at, priority, project_tag, project_id,
-                is_recurring, recurrence_rule, parent_id, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                tags, is_recurring, recurrence_rule, parent_id, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (title, description, due_at, priority, project_tag, project_id,
-             is_recurring, recurrence_rule, parent_id, now, now)
+             todo_tags.dump_tags(tags), is_recurring, recurrence_rule, parent_id, now, now)
         )
         todo_id = cursor.lastrowid
         conn.commit()
@@ -182,10 +194,13 @@ class TodoService:
         sort_by: str = "due_at",
         sort_order: str = "asc",
         q: Optional[str] = None,
+        tag: Optional[str] = None,
+        view: Optional[str] = None,
     ) -> List[Todo]:
         """List todos with optional filters.
 
         ``q`` 为全文搜索关键词（标题/描述），FTS5 优先、LIKE 降级。
+        ``tag`` 为多标签精确过滤；``view`` 为智能视图（all/today/week/completed）。
 
         ``sort_by`` is a dict-key lookup into ``_SORT_EXPRS`` — no caller-
         supplied string reaches SQL as an identifier.  An unsupported key
@@ -199,19 +214,16 @@ class TodoService:
         query = "SELECT * FROM todos WHERE 1=1"
         params: List[Any] = []
 
-        if status and status != "all":
-            query += " AND status = ?"
-            params.append(status)
-        elif not (include_completed or status == "all"):
-            query += " AND status IN ('pending', 'in_progress')"
-
-        if project_tag:
-            query += " AND project_tag = ?"
-            params.append(project_tag)
-
-        if priority:
-            query += " AND priority = ?"
-            params.append(priority)
+        query, params = todo_filters.apply_common_filters(
+            query,
+            params,
+            status=status,
+            project_tag=project_tag,
+            priority=priority,
+            include_completed=include_completed,
+            tag=tag,
+            view=view,
+        )
 
         query, params = todo_fts.apply_search_filter(self.db, query, params, q)
 
@@ -233,34 +245,41 @@ class TodoService:
         priority: Optional[str] = None,
         include_completed: bool = False,
         q: Optional[str] = None,
+        tag: Optional[str] = None,
+        view: Optional[str] = None,
     ) -> int:
         """Count todos matching the same filters list_todos applies.
 
-        The filter block below is deliberately byte-for-byte parallel to
-        :meth:`list_todos`. If the two drift, ``total`` stops being the match
-        count and clients render wrong pagination.
+        Both share :meth:`_apply_common_filters` — if they ever diverged,
+        ``total`` would stop being the match count and clients would render
+        wrong pagination.
         """
         query = "SELECT COUNT(*) FROM todos WHERE 1=1"
         params: List[Any] = []
 
-        if status and status != "all":
-            query += " AND status = ?"
-            params.append(status)
-        elif not (include_completed or status == "all"):
-            query += " AND status IN ('pending', 'in_progress')"
-
-        if project_tag:
-            query += " AND project_tag = ?"
-            params.append(project_tag)
-
-        if priority:
-            query += " AND priority = ?"
-            params.append(priority)
+        query, params = todo_filters.apply_common_filters(
+            query,
+            params,
+            status=status,
+            project_tag=project_tag,
+            priority=priority,
+            include_completed=include_completed,
+            tag=tag,
+            view=view,
+        )
 
         query, params = todo_fts.apply_search_filter(self.db, query, params, q)
 
         conn = self.db.get_connection()
         return int(conn.execute(query, params).fetchone()[0])
+
+    def list_tags(self) -> List[Dict[str, Any]]:
+        """聚合全部待办的多标签及使用次数（按次数降序、名称升序）。"""
+        conn = self.db.get_connection()
+        rows = conn.execute(
+            "SELECT tags FROM todos WHERE tags IS NOT NULL"
+        ).fetchall()
+        return todo_tags.aggregate_tag_counts(rows)
 
     def update_todo(self, todo_id: int, **fields) -> Optional[Todo]:
         """Update todo fields.
@@ -308,6 +327,10 @@ class TodoService:
             updates["project_id"] = (
                 self._auto_link_project(project_tag) if project_tag else None
             )
+
+        # 多标签：清洗后序列化；显式 None / 空列表都清空为 NULL。
+        if "tags" in updates:
+            updates["tags"] = todo_tags.dump_tags(updates["tags"])
 
         # Normalize due_at: naive pass-through, tz-aware → naive local
         if updates.get("due_at") is not None:
@@ -549,154 +572,12 @@ class TodoService:
         conn.commit()
 
     def get_startup_summary(self) -> dict:
-        """Aggregate counts for the startup dashboard notification.
-
-        Keys:
-        - ``overdue`` — pending/in_progress, ``due_at < now``
-        - ``today`` — pending/in_progress, ``now <= due_at <= end_of_today``
-        - ``upcoming`` — pending/in_progress, ``end_of_today < due_at <= now + 7d``
-        - ``high_priority`` — pending/in_progress, ``priority = 'high'``
-        - ``total_pending`` — count of pending/in_progress
-        - ``total_completed_today`` — completed where
-          ``DATE(completed_at) = DATE(now)``
-        """
-        now = datetime.now()
-        today_end = now.replace(hour=23, minute=59, second=59)
-        week_end = now + timedelta(days=7)
-        now_iso = now.isoformat()
-        today_end_iso = today_end.isoformat()
-        week_end_iso = week_end.isoformat()
-
-        conn = self.db.get_connection()
-
-        cursor = conn.execute(
-            "SELECT * FROM todos "
-            "WHERE status IN ('pending', 'in_progress') "
-            "AND due_at IS NOT NULL AND due_at < ? "
-            "ORDER BY due_at ASC",
-            (now_iso,),
-        )
-        overdue = [self._row_to_todo(r) for r in cursor.fetchall()]
-
-        cursor = conn.execute(
-            "SELECT * FROM todos "
-            "WHERE status IN ('pending', 'in_progress') "
-            "AND due_at IS NOT NULL "
-            "AND due_at >= ? AND due_at <= ? "
-            "ORDER BY due_at ASC",
-            (now_iso, today_end_iso),
-        )
-        today = [self._row_to_todo(r) for r in cursor.fetchall()]
-
-        cursor = conn.execute(
-            "SELECT * FROM todos "
-            "WHERE status IN ('pending', 'in_progress') "
-            "AND due_at IS NOT NULL "
-            "AND due_at > ? AND due_at <= ? "
-            "ORDER BY due_at ASC",
-            (today_end_iso, week_end_iso),
-        )
-        upcoming = [self._row_to_todo(r) for r in cursor.fetchall()]
-
-        cursor = conn.execute(
-            "SELECT * FROM todos "
-            "WHERE status IN ('pending', 'in_progress') "
-            "AND priority = 'high' "
-            "ORDER BY due_at ASC"
-        )
-        high_priority = [self._row_to_todo(r) for r in cursor.fetchall()]
-
-        cursor = conn.execute(
-            "SELECT COUNT(*) FROM todos "
-            "WHERE status IN ('pending', 'in_progress')"
-        )
-        total_pending = cursor.fetchone()[0]
-
-        cursor = conn.execute(
-            "SELECT COUNT(*) FROM todos "
-            "WHERE status = 'completed' AND DATE(completed_at) = DATE(?)",
-            (now_iso,),
-        )
-        total_completed_today = cursor.fetchone()[0]
-
-        return {
-            "overdue": overdue,
-            "today": today,
-            "upcoming": upcoming,
-            "high_priority": high_priority,
-            "total_pending": total_pending,
-            "total_completed_today": total_completed_today,
-        }
+        """启动摘要（逾期/今日/未来 7 天/高优先级/计数）。口径见 todo_stats。"""
+        return todo_stats.startup_summary(self.db, self._row_to_todo)
 
     def get_todo_stats(self) -> dict:
-        """Aggregate counts for the statistics endpoint.
-
-        Keys:
-        - ``total`` — all rows regardless of status
-        - ``by_status`` — ``{status: count}``, only statuses that occur
-        - ``by_priority`` — ``{priority: count}`` over all rows, only
-          priorities that occur.  ``sum(by_priority.values()) == total``
-          always holds.
-        - ``overdue`` — pending/in_progress with ``due_at < now``
-        - ``due_today`` — pending/in_progress with ``now <= due_at <= end of today``
-        - ``completed_today`` — completed where ``DATE(completed_at) = DATE(now)``
-
-        Time semantics and SQL predicates are reused verbatim from
-        :meth:`get_startup_summary` — naive local timestamps throughout.
-        """
-        now = datetime.now()
-        today_end = now.replace(hour=23, minute=59, second=59)
-        now_iso = now.isoformat()
-        today_end_iso = today_end.isoformat()
-
-        conn = self.db.get_connection()
-
-        cursor = conn.execute("SELECT COUNT(*) FROM todos")
-        total = cursor.fetchone()[0]
-
-        cursor = conn.execute(
-            "SELECT status, COUNT(*) AS n FROM todos GROUP BY status"
-        )
-        by_status = {row["status"]: row["n"] for row in cursor.fetchall()}
-
-        cursor = conn.execute(
-            "SELECT priority, COUNT(*) AS n FROM todos GROUP BY priority"
-        )
-        by_priority = {row["priority"]: row["n"] for row in cursor.fetchall()}
-
-        cursor = conn.execute(
-            "SELECT COUNT(*) FROM todos "
-            "WHERE status IN ('pending', 'in_progress') "
-            "AND due_at IS NOT NULL AND due_at < ?",
-            (now_iso,),
-        )
-        overdue = cursor.fetchone()[0]
-
-        cursor = conn.execute(
-            "SELECT COUNT(*) FROM todos "
-            "WHERE status IN ('pending', 'in_progress') "
-            "AND due_at IS NOT NULL "
-            "AND due_at >= ? AND due_at <= ?",
-            (now_iso, today_end_iso),
-        )
-        due_today = cursor.fetchone()[0]
-
-        cursor = conn.execute(
-            "SELECT COUNT(*) FROM todos "
-            "WHERE status = 'completed' AND DATE(completed_at) = DATE(?)",
-            (now_iso,),
-        )
-        completed_today = cursor.fetchone()[0]
-
-        return {
-            "total": total,
-            "by_status": by_status,
-            "by_priority": by_priority,
-            "overdue": overdue,
-            "due_today": due_today,
-            "completed_today": completed_today,
-        }
-
+        """统计端点（总数/状态分布/优先级分布/逾期/今日到期/今日完成）。"""
+        return todo_stats.todo_stats(self.db)
 
     # --- batch operations ---
 
@@ -762,10 +643,12 @@ class TodoService:
         """Convert a ``todos`` row to a Todo model.
 
         Maps by column *name* rather than position, so adding a column to the
-        table cannot silently shift the model's fields.
+        table cannot silently shift the model's fields. ``tags`` 存 JSON 数组
+        字符串，坏数据降级为空列表（不阻塞列表渲染）。
         """
         data = {name: row[name] for name in _TODO_MODEL_FIELDS}
         data["is_recurring"] = bool(data["is_recurring"])
+        data["tags"] = todo_tags.parse_tags(data.get("tags"))
 
         return Todo(**data)
 

@@ -86,6 +86,14 @@ export const actionCommands: ActionCommand[] = [
     description: '打开或关闭右侧面板（进度/产物/变更）',
     icon: PanelRight,
   },
+  // 待办阶段 1（2026-11-17）：自然语言快速录入入口（/todos?quickadd=1）
+  {
+    type: 'action',
+    id: 'add-todo',
+    label: '快速添加待办',
+    description: '用自然语言快速记录一条待办（明天下午3点 … !高 #标签）',
+    icon: ListChecks,
+  },
 ];
 
 export interface CommandItemsAuditInput {

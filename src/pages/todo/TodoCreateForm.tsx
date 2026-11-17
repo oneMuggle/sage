@@ -35,6 +35,7 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
   const [priority, setPriority] = useState<TodoPriority>('medium');
   const [dueAtLocal, setDueAtLocal] = useState('');
   const [projectTag, setProjectTag] = useState('');
+  const [tagsText, setTagsText] = useState('');
 
   const canSubmit = title.trim().length > 0 && !busy;
 
@@ -47,6 +48,12 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
     if (priority !== 'medium') input.priority = priority;
     if (dueAtLocal) input.due_at = toIsoString(dueAtLocal);
     if (projectTag.trim()) input.project_tag = projectTag.trim();
+    // 标签以逗号/空白分隔，去空后交给后端清洗（去重/上限）。
+    const tags = tagsText
+      .split(/[,，\s]+/)
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+    if (tags.length > 0) input.tags = tags;
 
     await onCreate(input);
 
@@ -56,6 +63,7 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
     setPriority('medium');
     setDueAtLocal('');
     setProjectTag('');
+    setTagsText('');
   };
 
   return (
@@ -173,6 +181,22 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
                 className="w-full px-2.5 py-1.5 text-xs border border-border rounded-radius-sm bg-background focus:outline-none focus:border-primary placeholder:text-text-muted"
               />
             </div>
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="flex items-center gap-1 text-ui-xs text-text-muted mb-1">
+              <Tag className="w-3 h-3" />
+              标签
+            </label>
+            <input
+              type="text"
+              value={tagsText}
+              onChange={(e) => setTagsText(e.target.value)}
+              placeholder="逗号或空格分隔，如：工作 论文"
+              data-testid="todo-create-tags"
+              className="w-full px-2.5 py-1.5 text-xs border border-border rounded-radius-sm bg-background focus:outline-none focus:border-primary placeholder:text-text-muted"
+            />
           </div>
         </div>
       )}

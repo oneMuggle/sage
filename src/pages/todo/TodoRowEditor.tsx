@@ -414,6 +414,25 @@ export function TodoRowEditor({
             </span>
           )}
 
+          {/* Tags（最多 3 个 + 溢出计数） */}
+          {(todo.tags ?? []).slice(0, 3).map((tag) => (
+            <span
+              key={tag}
+              className="px-1.5 py-0.5 text-ui-xs rounded-full bg-bg-muted text-text-muted flex-shrink-0"
+              title={`标签：${tag}`}
+            >
+              #{tag}
+            </span>
+          ))}
+          {(todo.tags?.length ?? 0) > 3 && (
+            <span
+              className="text-ui-xs text-text-muted flex-shrink-0"
+              title={(todo.tags ?? []).join(', ')}
+            >
+              +{(todo.tags?.length ?? 0) - 3}
+            </span>
+          )}
+
           {/* Add subtask (top-level rows only) */}
           {onAddSubtask && !isInactive && (
             <button

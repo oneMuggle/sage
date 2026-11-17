@@ -8,12 +8,14 @@
  * - Hierarchical subtask rendering with progress bars (+ inline subtask add)
  * - Batch operations (select all, batch complete, batch delete via batch API)
  * - Export to JSON / Markdown
+ * - Quick add with local natural-language parsing (N / 命令面板 / ?quickadd=1)
  *
  * State flows through zustand `entities/todo/todoStore`, IPC through
  * `shared/api/todoClient`. All CRUD delegated to store.
  */
-import { Check, Download, Loader2, Trash2 } from 'lucide-react';
+import { Check, Download, Loader2, Trash2, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { useTodoStore } from '../entities/todo/todoStore';
 import { todoClient } from '../shared/api/todoClient';
@@ -22,6 +24,7 @@ import { useI18n } from '../shared/lib/i18n';
 import { PageHeader } from '../shared/ui';
 
 import { TodoCreateForm } from './todo/TodoCreateForm';
+import { TodoQuickAdd } from './todo/TodoQuickAdd';
 import { TodoRowEditor } from './todo/TodoRowEditor';
 import { TodoSubtaskTree } from './todo/TodoSubtaskTree';
 import { TodoToolbar } from './todo/TodoToolbar';
@@ -31,6 +34,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 
 export function TodoPage() {
   const { t } = useI18n();
+  const [searchParams, setSearchParams] = useSearchParams();
   const todos = useTodoStore((s) => s.todos);
   const loading = useTodoStore((s) => s.loading);
   const error = useTodoStore((s) => s.error);
@@ -48,11 +52,37 @@ export function TodoPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [createBusy, setCreateBusy] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const lastSentQuery = useRef<string | undefined>(params.q);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 命令面板入口：/todos?quickadd=1 → 打开快速录入并清掉参数（避免刷新重开）。
+  useEffect(() => {
+    if (searchParams.get('quickadd') !== '1') return;
+    setQuickAddOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('quickadd');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  // 应用内快捷键：非输入状态下按 n 打开快速录入。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'n' && e.key !== 'N') return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      const target = e.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') return;
+      if (target?.isContentEditable) return;
+      e.preventDefault();
+      setQuickAddOpen(true);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // 搜索走后端 FTS：防抖后把 q 合入过滤参数。
   useEffect(() => {
@@ -83,6 +113,7 @@ export function TodoPage() {
       priority?: 'high' | 'medium' | 'low';
       due_at?: string;
       project_tag?: string;
+      tags?: string[];
     }) => {
       setCreateBusy(true);
       try {
@@ -221,6 +252,16 @@ export function TodoPage() {
             )}
             <button
               type="button"
+              onClick={() => setQuickAddOpen(true)}
+              title="快速添加（快捷键 N）"
+              aria-label="快速添加"
+              className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
+            >
+              <Zap className="w-3 h-3" />
+              快速添加
+            </button>
+            <button
+              type="button"
               onClick={() => void handleExport('md')}
               title="导出 Markdown"
               aria-label="导出 Markdown"
@@ -336,6 +377,14 @@ export function TodoPage() {
           </>
         )}
       </div>
+
+      <TodoQuickAdd
+        isOpen={quickAddOpen}
+        onClose={() => setQuickAddOpen(false)}
+        onSubmit={async (input) => {
+          await create(input);
+        }}
+      />
     </div>
   );
 }
