@@ -306,7 +306,10 @@ class ComponentService:
         for item, destination in resolved:
             if not destination.is_file() or destination.stat().st_size != item.size:
                 return False
-            if _sha256_file(destination) != item.sha256:
+            try:
+                if _sha256_file(destination) != item.sha256:
+                    return False
+            except OSError:
                 return False
         return True
 

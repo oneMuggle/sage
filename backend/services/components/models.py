@@ -44,6 +44,8 @@ class ComponentFile:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> ComponentFile:
+        if not isinstance(data, dict):
+            raise ValueError("组件文件条目必须是对象")
         path = safe_relative_path(data.get("path"), "文件路径")
         size = data.get("size")
         sha = str(data.get("sha256", "")).lower()
