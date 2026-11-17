@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
 import subprocess
 import time
@@ -35,9 +36,59 @@ CHROME_POLL_INTERVAL = 0.2
 #: Firefox HTTP 接口轮询间隔
 FIREFOX_POLL_INTERVAL = 0.5
 
+#: Chromium 在 exe 同级保留的版本目录名（如 107.0.5304.87）
+_VERSION_DIR_RE = re.compile(r"(\d+)\.\d+\.\d+\.\d+")
+
+#: --headless=new 自 Chrome 109 起提供；更老内核（Win7 的 Edge 100 /
+#: Chrome 107）只能使用旧无头模式。
+NEW_HEADLESS_MIN_MAJOR = 109
+
 
 #: 内置浏览器的占位可执行文件名（无真实文件；仅用于诊断/日志展示）
 EMBEDDED_EXECUTABLE = "(embedded)"
+
+
+def chromium_major_version(executable: str) -> Optional[int]:
+    """探测 Chromium 系浏览器大版本。
+
+    版本目录扫描优先（Chrome/Edge 在 exe 同级保留 ``X.Y.Z.W/`` 目录，
+    Windows 上 ``--version`` 不输出且会拉起浏览器窗口）；仅 POSIX 才回退
+    ``--version``。任何失败返回 None，由调用方决定默认行为。
+    """
+    try:
+        exe_dir = os.path.dirname(executable)
+        versions = [
+            int(match.group(1))
+            for name in os.listdir(exe_dir)
+            for match in [_VERSION_DIR_RE.fullmatch(name)]
+            if match and os.path.isdir(os.path.join(exe_dir, name))
+        ]
+        if versions:
+            return max(versions)
+    except OSError:
+        pass
+    if os.name == "nt":
+        return None
+    try:
+        completed = subprocess.run(  # noqa: S603 — 可执行路径来自受控发现逻辑
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = _VERSION_DIR_RE.search(completed.stdout or "")
+    return int(match.group(1)) if match else None
+
+
+def headless_flag(executable: str) -> str:
+    """按内核版本选择无头开关：旧内核（< 109）回退旧无头模式。"""
+    major = chromium_major_version(executable)
+    if major is not None and major < NEW_HEADLESS_MIN_MAJOR:
+        return "--headless"
+    return "--headless=new"
 
 
 class BrowserType(str, Enum):
@@ -114,7 +165,7 @@ class ChromeLauncher(BrowserLauncher):
             command.append(f"--proxy-server={proxy_flag}")
         command.append("about:blank")
         if headless:
-            command.insert(1, "--headless=new")
+            command.insert(1, headless_flag(executable))
         return command
 
     def wait_for_cdp(

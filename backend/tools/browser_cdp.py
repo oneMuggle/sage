@@ -47,6 +47,7 @@ from .browser_launcher import (
     ChromeLauncher,
     FirefoxLauncher,
     discover_and_select,
+    headless_flag,
 )
 from .browser_ws import ws_close, ws_connect, ws_recv_text, ws_send_text
 
@@ -539,8 +540,9 @@ def _build_launch_command(
         command.append(f"--proxy-server={proxy_flag}")
     command.append("about:blank")
     if headless:
-        # Chrome 109+（Win7 末代版本）起支持 new headless
-        command.insert(1, "--headless=new")
+        # Chrome 109+ 才支持 new headless；旧内核（Win7 的 Edge 100 /
+        # Chrome 107）由 headless_flag 降级为旧无头模式
+        command.insert(1, headless_flag(executable))
     return command
 
 
