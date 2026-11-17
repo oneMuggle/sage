@@ -6,7 +6,7 @@
  * multi-display clamping. Rewritten for Sage's single-window P0.
  */
 
-import { BrowserWindow, Menu, screen, type WebContents } from 'electron';
+import { BrowserWindow, Menu, screen, systemPreferences, type WebContents } from 'electron';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -47,28 +47,51 @@ const PANEL_MIN_WIDTH = 320;
 const PANEL_MAX_WIDTH = 480;
 const PANEL_GAP = 8;
 
+export interface CompatContext {
+  legacyWindows: boolean;
+  /**
+   * DWM/Aero desktop composition. Transparent windows need it on legacy
+   * Windows; without it the sprite lands on a black, opaque surface.
+   */
+  dwmComposition: boolean;
+}
+
+function hasDwmComposition(): boolean {
+  if (process.platform !== 'win32') return true;
+  try {
+    return systemPreferences.isAeroGlassEnabled();
+  } catch {
+    // Fail open: an unknown state must not force the opaque window.
+    return true;
+  }
+}
+
+export function resolveCompatContext(): CompatContext {
+  return { legacyWindows: isLegacyWindows(), dwmComposition: hasDwmComposition() };
+}
+
 /**
  * Whether to render the pet in an opaque "compatibility" window.
  *
- * Transparent Electron windows are unreliable on legacy Windows with the GPU
- * flags we force there (disable-gpu / disable-gpu-compositing / no Skia or Viz
- * compositor): the sprite renders into a black or invisible surface. So on
- * legacy Windows we always take the opaque path, even for an explicit `off` —
- * otherwise the pet silently disappears until compatibility is toggled back on.
+ * - `on` — always opaque.
+ * - `off` — transparent, except on legacy Windows without DWM composition
+ *   (no Aero / Basic theme / remote desktop), where per-pixel alpha is
+ *   physically unavailable and the pet would disappear.
+ * - `auto` — unchanged since the pet landed: opaque on legacy Windows.
  *
- * Exception: the SAGE_PET_TRANSPARENCY_EXPERIMENT=1 opt-in (see electron/main.ts)
- * drops the VizDisplayCompositor workaround so we can test on a real machine
- * whether the legacy window can composite alpha again. In that mode legacy
- * Windows honors the user's setting instead of forcing opaque.
+ * The GPU switches in electron/main.ts (incl. the
+ * SAGE_PET_TRANSPARENCY_EXPERIMENT escape hatch) no longer force `off`
+ * opaque; they only shape the compositor path.
  */
 export function compatibilityEnabled(
   config: PetConfig,
-  legacyWindows: boolean = isLegacyWindows(),
+  context: CompatContext = resolveCompatContext(),
 ): boolean {
   if (config.compatibilityMode === 'on') return true;
-  const transparencyExperiment = process.env.SAGE_PET_TRANSPARENCY_EXPERIMENT === '1';
-  if (legacyWindows && !transparencyExperiment) return true;
-  return false;
+  if (config.compatibilityMode === 'off') {
+    return context.legacyWindows && !context.dwmComposition;
+  }
+  return context.legacyWindows;
 }
 
 function readStoredPosition(file: string): StoredPosition | null {

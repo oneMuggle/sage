@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
 import type {
+  PetCompatStatusBridge,
   PetConfigBridge,
   PetInstanceBridge,
   PetPackManifestBridge,
@@ -68,7 +69,7 @@ function Select({
   ariaLabel,
 }: {
   value: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; disabled?: boolean }[];
   onChange: (value: string) => void;
   testId?: string;
   ariaLabel?: string;
@@ -82,7 +83,7 @@ function Select({
       className="rounded-md border border-line-strong bg-surface px-2 py-1 text-sm text-text"
     >
       {options.map((option) => (
-        <option key={option.value} value={option.value}>
+        <option key={option.value} value={option.value} disabled={option.disabled}>
           {option.label}
         </option>
       ))}
@@ -108,6 +109,7 @@ export function PetTab(): JSX.Element {
     enabled: false,
     port: null,
   });
+  const [compatStatus, setCompatStatus] = useState<PetCompatStatusBridge | null>(null);
 
   useEffect(() => {
     if (!bridge) return;
@@ -130,6 +132,12 @@ export function PetTab(): JSX.Element {
           if (alive) setError(err instanceof Error ? err.message : String(err));
         });
     }
+    bridge
+      .getCompatStatus()
+      .then((status) => {
+        if (alive) setCompatStatus(status);
+      })
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -511,12 +519,18 @@ export function PetTab(): JSX.Element {
               options={[
                 { value: 'auto', label: t('settings.pet.compat.auto') },
                 { value: 'on', label: t('settings.pet.compat.on') },
-                { value: 'off', label: t('settings.pet.compat.off') },
+                {
+                  value: 'off',
+                  label: t('settings.pet.compat.off'),
+                  disabled: compatStatus?.transparencyUnavailable === true,
+                },
               ]}
             />
             {typeof process !== 'undefined' && process.platform === 'win32' ? (
               <span className="text-xs text-amber-400">
-                {t('settings.pet.compatibility_win7_hint')}
+                {compatStatus?.transparencyUnavailable
+                  ? t('settings.pet.compatibility_no_dwm')
+                  : t('settings.pet.compatibility_win7_hint')}
               </span>
             ) : null}
           </div>

@@ -18,6 +18,7 @@ const PET_INVOKE_CHANNELS = [
   'pet:set-config',
   'pet:get-state',
   'pet:get-states',
+  'pet:get-compat-status',
   'pet:list-packs',
   'pet:api-info',
   'pet:import-pack',
@@ -108,6 +109,12 @@ export function registerPetIpc(controller: PetController): void {
   ipcMain.handle('pet:api-info', (evt) => {
     if (!controller.isMainSender(evt.sender)) throw new Error(UNAUTHORIZED);
     return controller.getApiInfo();
+  });
+
+  /** Settings page needs the effective transparency capability on legacy Windows. */
+  ipcMain.handle('pet:get-compat-status', (evt) => {
+    if (!controller.isMainSender(evt.sender)) throw new Error(UNAUTHORIZED);
+    return controller.getCompatStatus();
   });
 
   ipcMain.handle('pet:import-pack', async (evt) => {

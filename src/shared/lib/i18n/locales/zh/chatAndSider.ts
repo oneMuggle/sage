@@ -369,12 +369,15 @@ export const zhChatAndSider = {
   'settings.pet.sound_error': '工具出错提示音',
   'settings.pet.sound_done': '对话完成提示音',
   'settings.pet.compatibility': '兼容模式',
-  'settings.pet.compatibility_desc': 'Win7 无 Aero 或远程桌面下，使用不透明窗口并关闭点击穿透。',
+  'settings.pet.compatibility_desc':
+    '关闭时使用透明窗口（Win7 需系统开启 Aero/桌面合成）；开启时使用不透明窗口并关闭点击穿透。',
   'settings.pet.compat.auto': '自动',
   'settings.pet.compat.on': '开启',
   'settings.pet.compat.off': '关闭',
   'settings.pet.compatibility_win7_hint':
-    '提示：Windows 7 上透明窗口可能显示为黑色背景，建议开启兼容模式或使用应用内模式。',
+    '若桌面窗背景变黑或看不到桌宠，请改用「自动」或「开启」；透明背景需要系统开启 Aero/桌面合成。',
+  'settings.pet.compatibility_no_dwm':
+    '当前系统未开启桌面合成（Aero），透明窗口不可用，已按兼容模式显示。',
   'settings.pet.reset_position': '回到初始位置',
   'settings.pet.asset_notice': '素材来自 dsh-pet（MIT）；完整动画包随安装包分发。',
   'settings.search.placeholder': '搜索设置…',

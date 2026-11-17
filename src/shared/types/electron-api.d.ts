@@ -663,9 +663,18 @@ export interface PetApiInfoBridge {
   error?: string | null;
 }
 
+/** Effective transparency capability of the desktop pet window. */
+export interface PetCompatStatusBridge {
+  legacyWindows: boolean;
+  dwmComposition: boolean;
+  /** True when transparent windows cannot composite (legacy Windows + DWM off). */
+  transparencyUnavailable: boolean;
+}
+
 export interface PetElectronApiBridge {
   getConfig: () => Promise<PetConfigBridge>;
   setConfig: (patch: Partial<PetConfigBridge>) => Promise<PetConfigBridge>;
+  getCompatStatus: () => Promise<PetCompatStatusBridge>;
   getState: () => Promise<PetSnapshotBridge>;
   getStates: () => Promise<Record<string, PetSnapshotBridge>>;
   onStates: (handler: (states: Record<string, PetSnapshotBridge>) => void) => UnlistenFn;
