@@ -1,13 +1,15 @@
 /**
  * TodoToolbar — Filter / Sort controls for TodoPage.
  *
- * Notion-style toolbar: search + status filter + priority filter + sort dropdown.
- * Changes immediately dispatch to parent via onParamsChange callback.
+ * Notion-style toolbar: search + smart view segmented control + tag filter +
+ * priority filter + sort dropdown. Changes immediately dispatch to parent via
+ * onParamsChange callback.
  */
 import { Filter, Search, SortAsc, SortDesc } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import type { TodoListParams, TodoPriority } from '../../shared/api/types';
+import { todoClient } from '../../shared/api/todoClient';
+import type { TodoListParams, TodoPriority, TodoTagCount } from '../../shared/api/types';
 
 interface TodoToolbarProps {
   params: TodoListParams;
@@ -16,12 +18,13 @@ interface TodoToolbarProps {
   onSearchChange: (query: string) => void;
 }
 
-const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: '全部状态' },
-  { value: 'pending', label: '待办' },
-  { value: 'in_progress', label: '进行中' },
+type TodoView = NonNullable<TodoListParams['view']>;
+
+const VIEW_OPTIONS: Array<{ value: TodoView; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: 'today', label: '今天' },
+  { value: 'week', label: '近7天' },
   { value: 'completed', label: '已完成' },
-  { value: 'cancelled', label: '已取消' },
 ];
 
 const PRIORITY_OPTIONS: Array<{ value: TodoPriority | ''; label: string }> = [
@@ -44,14 +47,25 @@ export function TodoToolbar({
   onSearchChange,
 }: TodoToolbarProps) {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(params.sort_order ?? 'asc');
+  const [tagOptions, setTagOptions] = useState<TodoTagCount[]>([]);
 
-  const handleStatusChange = (status: string) => {
-    const next: TodoListParams = { ...params, status: status || undefined };
-    if (status === 'completed') {
-      next.include_completed = true;
-    } else {
-      delete next.include_completed;
-    }
+  // 标签清单来自后端聚合（失败静默降级为不显示标签过滤）。
+  useEffect(() => {
+    todoClient
+      .listTags()
+      .then(setTagOptions)
+      .catch(() => setTagOptions([]));
+  }, []);
+
+  const handleViewChange = (view: TodoView) => {
+    const next: TodoListParams = { ...params, view };
+    delete next.status;
+    delete next.include_completed;
+    onParamsChange(next);
+  };
+
+  const handleTagChange = (tag: string) => {
+    const next: TodoListParams = { ...params, tag: tag || undefined };
     onParamsChange(next);
   };
 
@@ -77,7 +91,12 @@ export function TodoToolbar({
     }
   };
 
-  const hasFilters = Boolean(params.status) || Boolean(params.priority) || Boolean(params.sort_by);
+  const activeView: TodoView = params.view ?? 'all';
+  const hasFilters =
+    Boolean(params.priority) ||
+    Boolean(params.sort_by) ||
+    Boolean(params.tag) ||
+    params.view !== undefined;
 
   const clearFilters = () => {
     setSortOrder('asc');
@@ -100,19 +119,45 @@ export function TodoToolbar({
         />
       </div>
 
-      {/* Status filter */}
-      <select
-        value={params.status ?? ''}
-        onChange={(e) => handleStatusChange(e.target.value)}
-        aria-label="按状态过滤"
-        className="rounded-radius-sm border border-border bg-surface px-2 py-1.5 text-xs text-text focus:outline-none focus:border-primary"
+      {/* Smart views */}
+      <div
+        className="flex items-center rounded-radius-sm border border-border overflow-hidden"
+        role="group"
+        aria-label="智能视图"
       >
-        {STATUS_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
+        {VIEW_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => handleViewChange(opt.value)}
+            aria-pressed={activeView === opt.value}
+            className={`px-2 py-1.5 text-xs transition-colors ${
+              activeView === opt.value
+                ? 'bg-primary/10 text-primary'
+                : 'text-text-muted hover:text-text hover:bg-bg-hover/40'
+            }`}
+          >
             {opt.label}
-          </option>
+          </button>
         ))}
-      </select>
+      </div>
+
+      {/* Tag filter（无标签时不显示） */}
+      {tagOptions.length > 0 && (
+        <select
+          value={params.tag ?? ''}
+          onChange={(e) => handleTagChange(e.target.value)}
+          aria-label="按标签过滤"
+          className="rounded-radius-sm border border-border bg-surface px-2 py-1.5 text-xs text-text focus:outline-none focus:border-primary"
+        >
+          <option value="">全部标签</option>
+          {tagOptions.map((opt) => (
+            <option key={opt.tag} value={opt.tag}>
+              #{opt.tag}（{opt.count}）
+            </option>
+          ))}
+        </select>
+      )}
 
       {/* Priority filter */}
       <select

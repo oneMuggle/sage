@@ -248,6 +248,12 @@ export const settingsRoutes: Record<string, CommandRoute> = {
       if (a?.q !== undefined && a?.q !== null && String(a.q) !== '') {
         params.set('q', String(a.q));
       }
+      if (a?.tag !== undefined && a?.tag !== null && String(a.tag) !== '') {
+        params.set('tag', String(a.tag));
+      }
+      if (a?.view !== undefined && a?.view !== null) {
+        params.set('view', String(a.view));
+      }
       if (a?.sort_by !== undefined && a?.sort_by !== null) {
         params.set('sort_by', String(a.sort_by));
       }
@@ -302,6 +308,10 @@ export const settingsRoutes: Record<string, CommandRoute> = {
   todo_stats: {
     method: 'GET',
     path: () => '/api/v1/todos/stats',
+  },
+  todo_tags: {
+    method: 'GET',
+    path: () => '/api/v1/todos/tags',
   },
   todo_batch_complete: {
     method: 'POST',

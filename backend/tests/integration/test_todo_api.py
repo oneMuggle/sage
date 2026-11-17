@@ -453,3 +453,61 @@ def test_put_absent_key_leaves_field_unchanged(client: TestClient):
     assert resp.status_code == 200
     assert resp.json()["title"] == "Renamed"
     assert resp.json()["description"] == "keep me"
+
+
+# --- 阶段 1：多标签 + 智能视图 ---
+
+
+def test_create_todo_with_tags(client: TestClient):
+    resp = client.post(
+        "/api/v1/todos", json={"title": "带标签", "tags": ["工作", "论文"]}
+    )
+    assert resp.status_code == 201
+    assert resp.json()["tags"] == ["工作", "论文"]
+
+
+def test_update_todo_tags(client: TestClient):
+    todo_id = client.post("/api/v1/todos", json={"title": "改标签"}).json()["id"]
+
+    resp = client.put(
+        f"/api/v1/todos/{todo_id}", json={"tags": ["新标签"]}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["tags"] == ["新标签"]
+
+
+def test_list_todos_filters_by_tag(client: TestClient):
+    client.post("/api/v1/todos", json={"title": "标签命中", "tags": ["工作API"]})
+    client.post("/api/v1/todos", json={"title": "标签不相关", "tags": ["生活"]})
+
+    resp = client.get("/api/v1/todos", params={"tag": "工作API"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert [item["title"] for item in body["items"]] == ["标签命中"]
+    assert body["total"] == 1
+
+
+def test_list_tags_endpoint(client: TestClient):
+    client.post("/api/v1/todos", json={"title": "A", "tags": ["聚合标签"]})
+
+    resp = client.get("/api/v1/todos/tags")
+    assert resp.status_code == 200
+    entries = {item["tag"]: item["count"] for item in resp.json()}
+    assert entries.get("聚合标签") == 1
+
+
+def test_list_todos_view_validation(client: TestClient):
+    resp = client.get("/api/v1/todos", params={"view": "bogus"})
+    assert resp.status_code == 422
+
+
+def test_list_todos_view_completed(client: TestClient):
+    done = client.post("/api/v1/todos", json={"title": "已完成视图"}).json()
+    client.post(f"/api/v1/todos/{done['id']}/complete")
+    client.post("/api/v1/todos", json={"title": "未完成视图"})
+
+    resp = client.get("/api/v1/todos", params={"view": "completed"})
+    assert resp.status_code == 200
+    titles = [item["title"] for item in resp.json()["items"]]
+    assert "已完成视图" in titles
+    assert "未完成视图" not in titles

@@ -298,8 +298,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       else if (id === 'toggle-theme') handleToggleTheme();
       else if (id === 'add-project') void handleAddProject();
       else if (id === 'toggle-right-panel') handleToggleRightPanel();
+      else if (id === 'add-todo') handleNav('/todos?quickadd=1');
     },
-    [handleAddProject, handleNewChat, handleToggleTheme, handleToggleRightPanel],
+    [handleAddProject, handleNewChat, handleToggleTheme, handleToggleRightPanel, handleNav],
   );
 
   // 最近会话（按时间排序，取前 8 个）

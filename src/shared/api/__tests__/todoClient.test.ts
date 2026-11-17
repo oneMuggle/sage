@@ -82,6 +82,13 @@ describe('todoClient', () => {
       { format: 'md', include_completed: true },
     ]);
   });
+
+  it('listTags() maps to todo_tags', async () => {
+    invokeMock.mockResolvedValueOnce([{ tag: '工作', count: 2 }]);
+    const tags = await todoClient.listTags();
+    expect(invokeMock).toHaveBeenCalledWith('todo_tags', {});
+    expect(tags).toEqual([{ tag: '工作', count: 2 }]);
+  });
 });
 
 describe('todoClient diagnostic formatters (Phase P113)', () => {
