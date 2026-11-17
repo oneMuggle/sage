@@ -3204,12 +3204,13 @@ class SageAgent:
                                                 # 对该载荷改用 JSON 信封（顶层 metadata 键，
                                                 # 见 useChat.ts 的 parsed.metadata 提取），
                                                 # 前端据此渲染拦截卡片。其余工具保持原样。
+                                                failure_content = getattr(
+                                                    result, "content", None
+                                                )
                                                 block_payload = (
-                                                    result.content
-                                                    if isinstance(
-                                                        getattr(result, "content", None), dict
-                                                    )
-                                                    and result.content.get("block_reason")
+                                                    failure_content
+                                                    if isinstance(failure_content, dict)
+                                                    and failure_content.get("block_reason")
                                                     else None
                                                 )
                                                 if block_payload is not None:
@@ -3227,6 +3228,22 @@ class SageAgent:
                                                                     "suggested_actions", []
                                                                 ),
                                                             },
+                                                        },
+                                                        ensure_ascii=False,
+                                                        default=str,
+                                                    )
+                                                elif isinstance(failure_content, dict):
+                                                    # C1：失败结果若带结构化 content
+                                                    # （典型：浏览器工具的 browser_meta），
+                                                    # 用 JSON 信封保留 content，模型与持久化
+                                                    # 的 tool_calls[].result 都能读到
+                                                    # content.browser_meta。
+                                                    result_content = json.dumps(
+                                                        {
+                                                            "success": False,
+                                                            "error": result.error
+                                                            or "工具执行失败",
+                                                            "content": failure_content,
                                                         },
                                                         ensure_ascii=False,
                                                         default=str,
