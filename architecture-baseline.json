@@ -23,7 +23,7 @@
     "backend/main.py": 1725,
     "backend/mcp/pool.py": 967,
     "backend/memory/episodic.py": 846,
-    "backend/memory/manager.py": 1425,
+    "backend/memory/manager.py": 1427,
     "backend/office/edit.py": 1297,
     "backend/office/excel.py": 1020,
     "backend/office/staging_quarantine.py": 1383,
