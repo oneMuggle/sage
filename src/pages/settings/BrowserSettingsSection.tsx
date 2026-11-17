@@ -9,6 +9,9 @@ import {
 } from '../../shared/api/browserSettingsClient';
 import { useI18n } from '../../shared/lib/i18n';
 
+/** 与后端 EMBEDDED_EXECUTABLE 一致：内置浏览器选项在 browser_path 中的哨兵值 */
+const EMBEDDED_PATH = '(embedded)';
+
 /**
  * 浏览器选择设置。
  *
@@ -22,15 +25,20 @@ export function BrowserSettingsSection() {
   const [embeddedAvailable, setEmbeddedAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
     try {
       const result = await fetchBrowserList();
       setBrowsers(result.browsers);
       setUserConfigured(result.userConfigured);
       setEmbeddedAvailable(result.embeddedAvailable);
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : String(cause));
+      // 加载失败 ≠ 未发现浏览器：空态只用于「后端明确返回空」。
+      setError(cause instanceof Error ? cause.message : String(cause));
+      toast.error(t('settings.network.browser.load_failed'));
     } finally {
       setLoading(false);
     }
@@ -62,6 +70,9 @@ export function BrowserSettingsSection() {
   };
 
   const isSelected = (path: string): boolean => {
+    if (path === EMBEDDED_PATH) {
+      return userConfigured === EMBEDDED_PATH || (!userConfigured && embeddedAvailable);
+    }
     if (userConfigured) return userConfigured === path;
     return browsers.find((b) => b.isDefault)?.path === path;
   };
@@ -87,7 +98,23 @@ export function BrowserSettingsSection() {
       </h3>
       <p className="text-xs text-muted mb-3">{t('settings.network.browser.hint')}</p>
 
-      {browsers.length === 0 && !embeddedAvailable ? (
+      {error ? (
+        <div
+          data-testid="browser-load-error"
+          className="px-3 py-4 text-xs bg-surface rounded-radius-sm"
+        >
+          <div className="text-text">{t('settings.network.browser.load_failed')}</div>
+          <div className="text-muted mt-1 break-all font-mono">{error}</div>
+          <button
+            type="button"
+            data-testid="browser-retry"
+            onClick={() => void load()}
+            className="mt-2 px-3 py-1 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary-hover transition-colors"
+          >
+            {t('settings.network.browser.retry')}
+          </button>
+        </div>
+      ) : browsers.length === 0 && !embeddedAvailable ? (
         <div className="px-3 py-4 text-xs text-muted bg-surface rounded-radius-sm">
           {t('settings.network.browser.none_found')}
         </div>
@@ -129,6 +156,36 @@ export function BrowserSettingsSection() {
               </button>
             );
           })}
+          {embeddedAvailable && (
+            <button
+              type="button"
+              data-testid="embedded-browser-option"
+              disabled={saving === EMBEDDED_PATH}
+              onClick={() => handleSelect(EMBEDDED_PATH)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-radius-sm border transition-colors text-left ${
+                isSelected(EMBEDDED_PATH)
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border bg-surface hover:border-primary/50'
+              } ${saving === EMBEDDED_PATH ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+            >
+              <Globe className="w-4 h-4 text-muted shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-text flex items-center gap-2">
+                  {t('settings.network.browser.embedded')}
+                  {!userConfigured && (
+                    <span className="text-xs text-primary">
+                      ({t('settings.network.browser.system_default')})
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-muted">{t('settings.network.browser.embedded_hint')}</div>
+              </div>
+              {isSelected(EMBEDDED_PATH) && <Check className="w-4 h-4 text-primary shrink-0" />}
+              {saving === EMBEDDED_PATH && (
+                <RefreshCw className="w-4 h-4 animate-spin text-muted shrink-0" />
+              )}
+            </button>
+          )}
         </div>
       )}
 

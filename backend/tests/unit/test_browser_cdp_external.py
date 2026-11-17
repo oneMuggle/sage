@@ -163,3 +163,27 @@ def test_external_session_accepts_embedded_style_annotations():
     assert isinstance(session, cdp.BrowserSession)
     assert session.external_device_id == "dev_abc"
     assert session.browser_type == cdp.BrowserType.EXTERNAL
+
+
+def test_get_user_browser_path_accepts_embedded_sentinel(monkeypatch):
+    """设置页可显式选择 Win7 内置内核：`(embedded)` 哨兵绕过文件校验。"""
+    from backend.data.settings_repo import SettingsRepository
+
+    monkeypatch.setattr(
+        SettingsRepository,
+        "get",
+        lambda self, key: "(embedded)" if key == "browser_path" else None,
+    )
+    assert cdp._get_user_browser_path() == "(embedded)"
+
+
+def test_get_user_browser_path_ignores_missing_file(monkeypatch, tmp_path):
+    from backend.data.settings_repo import SettingsRepository
+
+    missing = str(tmp_path / "gone.exe")
+    monkeypatch.setattr(
+        SettingsRepository,
+        "get",
+        lambda self, key: missing if key == "browser_path" else None,
+    )
+    assert cdp._get_user_browser_path() is None

@@ -1,10 +1,12 @@
 /**
  * 浏览器选择 API 客户端。
  *
- * 与 webAccessClient 同口径：dev 走 Vite 代理，Electron 走 electronAPI.backendRequest。
+ * 与 webAccessClient 同口径：Electron 走主进程 backendRequest 中继（注入
+ * 本地 bearer token；渲染层裸 fetch 会被 LocalAuthMiddleware 401），
+ * 浏览器 dev 回退 Vite 代理。
  */
 
-import { webAccessApiUrl } from './webAccessClient';
+import { requestJson } from './webAccessClient';
 
 export interface DiscoveredBrowser {
   name: string;
@@ -20,20 +22,12 @@ export interface BrowserListResponse {
 }
 
 export async function fetchBrowserList(): Promise<BrowserListResponse> {
-  const res = await fetch(webAccessApiUrl('/api/v1/diagnostic/browser/list'), {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return requestJson<BrowserListResponse>('/api/v1/diagnostic/browser/list');
 }
 
 export async function setBrowserPath(path: string): Promise<{ success: boolean; error?: string }> {
-  const res = await fetch(webAccessApiUrl('/api/v1/diagnostic/browser/path'), {
+  return requestJson('/api/v1/diagnostic/browser/path', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
 }

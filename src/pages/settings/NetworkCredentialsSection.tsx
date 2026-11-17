@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { settingsClient } from '../../shared/api/settingsClient';
+import { requestJson } from '../../shared/api/webAccessClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
@@ -37,14 +38,6 @@ const DEFAULT_WEB_ACCESS_CONFIG: WebAccessConfig = {
 };
 
 const RENDER_POOL_SIZE_OPTIONS = [1, 2, 3, 4];
-
-/** dev 走 Vite 代理；Electron 产物直连后端（与 mediaApi 同口径） */
-function webAccessApiUrl(path: string): string {
-  if (window.electronAPI) {
-    return `http://127.0.0.1:8765${path}`;
-  }
-  return path;
-}
 
 /** 与后端 GET /api/v1/diagnostic/browser 返回形态一致（Round 14） */
 interface BrowserHealth {
@@ -84,21 +77,18 @@ export function CredentialsSection() {
   const renderEvents = metrics?.render_events as unknown as RenderEventMetrics | undefined;
 
   const reload = (): void => {
-    fetch(webAccessApiUrl('/api/v1/web-access/credentials'))
-      .then((r) => (r.ok ? r.json() : { credentials: [] }))
-      .then((data: { credentials?: CredentialRecord[] }) => setCreds(data.credentials ?? []))
+    requestJson<{ credentials?: CredentialRecord[] }>('/api/v1/web-access/credentials')
+      .then((data) => setCreds(data.credentials ?? []))
       .catch(() => setCreds([]));
   };
 
   useEffect(() => {
     reload();
-    fetch(webAccessApiUrl('/api/v1/diagnostic/browser'))
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: BrowserHealth | null) => setBrowser(data))
+    requestJson<BrowserHealth>('/api/v1/diagnostic/browser')
+      .then((data) => setBrowser(data))
       .catch(() => setBrowser(null));
-    fetch(webAccessApiUrl('/api/v1/web-access/metrics'))
-      .then((r) => (r.ok ? r.json() : { metrics: {} }))
-      .then((data: { metrics?: HostMetrics }) => setMetrics(data.metrics ?? {}))
+    requestJson<{ metrics?: HostMetrics }>('/api/v1/web-access/metrics')
+      .then((data) => setMetrics(data.metrics ?? {}))
       .catch(() => setMetrics({}));
     void settingsClient.getPreference('web_access_config').then((raw) => {
       if (!raw) return;
@@ -117,22 +107,20 @@ export function CredentialsSection() {
   const saveConfig = (next: WebAccessConfig): void => {
     setConfig(next);
     void settingsClient.setPreference('web_access_config', JSON.stringify(next), 'network');
-    void fetch(webAccessApiUrl('/api/v1/web-access/config'), {
+    void requestJson('/api/v1/web-access/config', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(next),
     }).catch(() => undefined);
   };
 
   const refreshMetrics = (): void => {
-    fetch(webAccessApiUrl('/api/v1/web-access/metrics'))
-      .then((r) => (r.ok ? r.json() : { metrics: {} }))
-      .then((data: { metrics?: HostMetrics }) => setMetrics(data.metrics ?? {}))
+    requestJson<{ metrics?: HostMetrics }>('/api/v1/web-access/metrics')
+      .then((data) => setMetrics(data.metrics ?? {}))
       .catch(() => setMetrics({}));
   };
 
   const resetMetrics = (): void => {
-    void fetch(webAccessApiUrl('/api/v1/web-access/metrics/reset'), { method: 'PUT' })
+    void requestJson('/api/v1/web-access/metrics/reset', { method: 'PUT' })
       .then(() => setMetrics({}))
       .catch(() => undefined);
   };
@@ -144,7 +132,7 @@ export function CredentialsSection() {
       danger: true,
     });
     if (!ok) return;
-    void fetch(webAccessApiUrl(`/api/v1/web-access/credentials/${encodeURIComponent(domain)}`), {
+    void requestJson(`/api/v1/web-access/credentials/${encodeURIComponent(domain)}`, {
       method: 'DELETE',
     })
       .then(() => reload())
@@ -153,26 +141,21 @@ export function CredentialsSection() {
 
   const addHeaderCred = (): void => {
     if (!headerDomain.trim() || !headerName.trim() || !headerValue.trim()) return;
-    void fetch(webAccessApiUrl('/api/v1/web-access/credentials/header'), {
+    void requestJson('/api/v1/web-access/credentials/header', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         domain: headerDomain.trim(),
         header_name: headerName.trim(),
         value: headerValue,
       }),
     })
-      .then((r) => {
-        if (r.ok) {
-          setHeaderDomain('');
-          setHeaderName('');
-          setHeaderValue('');
-          reload();
-        } else {
-          toast.error(t('settings.network.creds.add_header.invalid'));
-        }
+      .then(() => {
+        setHeaderDomain('');
+        setHeaderName('');
+        setHeaderValue('');
+        reload();
       })
-      .catch(() => undefined);
+      .catch(() => toast.error(t('settings.network.creds.add_header.invalid')));
   };
 
   const addCookieCred = async (): Promise<void> => {
@@ -192,15 +175,10 @@ export function CredentialsSection() {
 
     setCookieSaving(true);
     try {
-      const response = await fetch(webAccessApiUrl('/api/v1/web-access/credentials/cookie'), {
+      await requestJson('/api/v1/web-access/credentials/cookie', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ domain: cookieDomain.trim(), cookies }),
       });
-      if (!response.ok) {
-        setCookieError('settings.network.creds.add_cookie.failed');
-        return;
-      }
       setCookieDomain('');
       setCookieValue('');
       reload();
