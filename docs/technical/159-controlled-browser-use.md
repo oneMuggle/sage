@@ -68,21 +68,35 @@
 | 渲染层 | `src/features/browser/BrowserPanel.tsx`、`src/pages/settings/BrowserUseSection.tsx` | 右栏面板、设置页区块 |
 | 提示词 | `backend/agents/profiles.py` | 含浏览器的系统提示词纪律；主专家/研究型专家的工具种子 |
 
-### 一次工具调用的门禁顺序
+### 门禁顺序
 
-`browser_navigate` / `browser_interact` 等写操作的执行路径按固定顺序串联门禁，任一环节拒绝即返回
-结构化前缀错误（AI 可据此决策，前端据此着色）：
+写操作的执行路径串联多道门禁，任一环节拒绝即返回结构化前缀错误（AI 可据此决策，前端据此着色）。
+两条路径的门禁集合不同：
+
+**导航路径（`browser_navigate`）**
 
 1. 参数校验（未知参数直接拒绝）
 2. URL 协议校验（`http` / `https` / `about` / `data`；`file://` 拒绝）
 3. 网络模式门禁（仅 `http/https` 出网受 `check_host` 约束，与 `web_fetch` 同口径）
 4. 控制状态门禁（`user_paused: ` / `user_takeover: `）
 5. 站点策略与站点授权（`site_blocked: ` / `denied_by_user: ` / `needs_confirmation: `）
-6. 元素元数据读取 → 敏感动作分级（`hard_blocked: ` / `needs_confirmation: `）
-7. 执行 CDP 命令
-8. 重定向后再次校验最终域名
-9. 步骤缩略图（失败静默）
-10. 审计写入（失败静默，不影响主流程）
+6. 执行导航并等待就绪（含 SPA 稳定）
+7. 重定向后按**最终域名**再次校验站点策略
+8. 步骤缩略图（失败静默）
+9. 审计写入（失败静默，不影响主流程）
+
+**交互路径（`browser_interact`）**
+
+1. 参数校验（upload 额外校验工作区边界与文件存在性）
+2. 控制状态门禁（`user_paused: ` / `user_takeover: `）
+3. 读取目标元素元数据
+4. 敏感动作分级（`hard_blocked: ` / `needs_confirmation: `）
+5. 执行 CDP 动作（ref 失效时返回 stale-ref 提示）
+6. 步骤缩略图（失败静默）
+7. 审计写入（失败静默，不影响主流程）
+
+> 站点策略、URL 协议、网络模式与重定向复核只作用于**导航**路径；交互的目标页面已在导航阶段
+> 通过站点门禁，交互本身不重复做站点检查。
 
 ## 工具清单与参数
 
@@ -98,8 +112,8 @@
 | `browser_close` | WRITE_LOCAL | `browser_id`、`target_id` | 只传 `target_id` 关单个标签页；否则关闭实例并清理临时目录（受控工具门禁对 close 豁免，保证用户接管时仍能收尾） |
 | `browser_tabs` | WRITE_LOCAL | `action`(list/create/switch/close)、`url`、`tab_id`、`index`(1-based)、`browser_id` | create/switch 后活动标签页改变，后续工具作用于活动页 |
 | `browser_downloads` | READ | `browser_id`、`wait_for_complete`、`timeout`(默认 60s) | 查看下载：url/文件名/状态/字节数/最终路径；路径可直接交给 `read_file` / office 工具 |
-| `browser_cookies` | EXEC | `action`(export/list/delete/set_header)、`domain`、`header_name`、`header_value`、`ttl_seconds`、`browser_id` | 导出登录态到加密凭据档案，供 `web_fetch` / `http_download` 以 `credential_domain` 引用；`set_header` 保存头部型凭据，值不回显 |
-| `browser_login` | INTERACTIVE | `url`(必填)、`timeout_seconds`(默认 300) | 打开**可见**窗口让用户手动登录，完成后自动保存 cookie 到加密档案 |
+| `browser_cookies` | WRITE_LOCAL | `action`(export/list/delete/set_header)、`domain`、`header_name`、`header_value`、`ttl_seconds`、`browser_id` | 导出登录态到加密凭据档案，供 `web_fetch` / `http_download` 以 `credential_domain` 引用；`set_header` 保存头部型凭据，值不回显 |
+| `browser_login` | EXTERNAL | `url`(必填)、`timeout_seconds`(默认 300) | 打开**可见**窗口让用户手动登录，完成后自动保存 cookie 到加密档案 |
 
 ### 观察层 v2 细节
 
@@ -126,8 +140,8 @@
 
 | 层级 | 存储 | 语义 |
 |---|---|---|
-| 持久站点策略 | 设置键 `browser_site_policies`（JSON） | `allow` 直接放行；`block` 直接拒绝并返回 `site_blocked: …` |
-| 会话级授权 | 确认注册表（内存） | 用户在选择「仅本次会话 / 始终允许 / 拒绝」后生效；`always` 同时写入持久策略 |
+| 持久站点策略 | 设置键 `browser_site_policies`（JSON 对象） | `allow` 直接放行；`block` 直接拒绝并返回 `site_blocked: …` |
+| 会话级授权 | 进程内会话授权表（`browser_safety._SESSION_GRANTS`，与确认注册表独立） | 用户在选择「仅本次会话 / 始终允许 / 拒绝」后生效；`always` 同时写入持久策略 |
 | 默认 | 无记录 | 首次访问新站点要求用户确认（`needs_confirmation:`） |
 
 域名归一化（小写、去首尾点、取 host）；优先级：持久 block > 持久 allow > 会话授权 > 需确认。
@@ -149,7 +163,8 @@
 ### 3. 确认注册表（一次性指纹）
 
 - 待确认 TTL 600s，批准后可复用窗口 120s，拒绝备忘 300s。
-- 每条确认绑定 `(session_id, domain, action, target_ref, 文本)` 的 SHA-256 指纹；
+- 每条确认绑定 `sha256(tool|action|domain|ref 或 selector|target_name)` 的指纹（定位参数为
+  ref / selector 二选一，**不含** session_id）；
   `consume_approval(fingerprint)` 在批准窗口内**一次性**消费，同样的动作第二次仍需再次确认。
 - 前端通过 `POST /api/v1/browser/confirmations/{id}` 提交决定；`approve` 后控制状态回到 `agent`，
   被阻塞的工具在下一轮重试时可消费批准并执行（审计 `approval=approved`）。
@@ -205,7 +220,7 @@
 | `POST /browser/control/{session_id}` | 体 `{action}` → 状态 | action 合法值 `pause` / `resume` / `takeover` / `return`；非法 400，未知会话 404 `session_not_found` |
 | `GET /browser/use-config` | → `{default_visible, step_thumbnails}` | 读取两个偏好 |
 | `PUT /browser/use-config` | 体部分字段 → 最新配置 | 布尔值以 `"1"` / `"0"` 落库 |
-| `GET /browser/site-policies` | → `[{domain, mode, updated_at}]` | 持久站点策略列表 |
+| `GET /browser/site-policies` | → `{policies:[{domain, mode, updated_at}]}` | 持久站点策略列表（对象包装） |
 | `PUT /browser/site-policies/{domain}` | 体 `{mode}` → 策略 | `allow` / `block` |
 | `DELETE /browser/site-policies/{domain}` | → 删除结果 | 移除策略 |
 | `GET /browser/confirmations?session_id=` | → 待确认项列表 | 面板 2 秒轮询；公开字段不含指纹 |
@@ -224,7 +239,7 @@
 |---|---|---|---|
 | `browser_use_default_visible` | 布尔 | 开 | 自动拉起浏览器时是否可见。后端只在字面值 `"0"` 时判为无头；缺失或异常按可见处理。注意它只影响 `browser_navigate` 自动拉起，`browser_launch` 自身默认仍 `headless=true` |
 | `browser_step_thumbnails` | 布尔 | 开 | 是否逐步截取缩略图。`0/false/off/no` 视为关闭，其余开启；缩略图失败静默 |
-| `browser_site_policies` | JSON | `[]` | 持久站点策略表（面板手工维护 allow/block） |
+| `browser_site_policies` | JSON 对象 | `{}` | 持久站点策略表：域名 → `{mode, updated_at}`；缺失时为 `{}` |
 
 前端读取时沿用「仅显式 `false` 才算关闭」的归一化（`normalizeConfig`），与后端缺省按开启一致。
 右栏面板的「自动打开」开关是渲染层本地偏好（`localStorage` 键 `sage.browser-panel-auto-open`），
