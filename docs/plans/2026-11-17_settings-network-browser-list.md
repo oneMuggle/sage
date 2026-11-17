@@ -67,9 +67,9 @@
 
 ## Task 0：基线记录
 
-- [ ] 前端基线：`npx vitest run src/pages/settings/__tests__/NetworkTab.test.tsx src/shared/api/__tests__/webAccessClient.test.ts`
-- [ ] 后端基线：`/home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest backend/tests/unit/test_browser_launcher.py backend/tests/unit/test_browser_tool.py backend/tests/unit/test_browser_cdp_external.py backend/tests/api/test_diagnostic_browser_health.py -q`
-- [ ] 记录通过数（Arena 系列已知 flaky，不纳入本次基线）
+- [x] 前端基线：`npx vitest run src/pages/settings/__tests__/NetworkTab.test.tsx src/shared/api/__tests__/webAccessClient.test.ts`
+- [x] 后端基线：`/home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest backend/tests/unit/test_browser_launcher.py backend/tests/unit/test_browser_tool.py backend/tests/unit/test_browser_cdp_external.py backend/tests/api/test_diagnostic_browser_health.py -q`
+- [x] 记录通过数（Arena 系列已知 flaky，不纳入本次基线）
 
 ## Task 1：前端鉴权桥（browserSettingsClient → requestJson）
 
@@ -78,7 +78,7 @@
 **Interfaces**：
 - Produces：`requestJson<T>(path: string, init?: RequestInit): Promise<T>`（从 webAccessClient 导出；Electron 走 `window.electronAPI.backendRequest`，浏览器 dev 走同源 fetch）
 
-- [ ] **Step 1：写失败测试** `src/shared/api/__tests__/browserSettingsClient.test.ts`
+- [x] **Step 1：写失败测试** `src/shared/api/__tests__/browserSettingsClient.test.ts`
 
 ```ts
 // @vitest-environment jsdom
@@ -140,8 +140,8 @@ describe('browserSettingsClient', () => {
 });
 ```
 
-- [ ] **Step 2：运行确认失败**：`npx vitest run src/shared/api/__tests__/browserSettingsClient.test.ts`
-- [ ] **Step 3：实现**
+- [x] **Step 2：运行确认失败**：`npx vitest run src/shared/api/__tests__/browserSettingsClient.test.ts`
+- [x] **Step 3：实现**
   - `webAccessClient.ts`：`async function requestJson` 前加 `export`；失败分支改为 `throw new Error(payload?.error || payload?.detail || \`HTTP ${response.status}\`)`。
   - `browserSettingsClient.ts` 重写为：
 
@@ -180,45 +180,45 @@ export async function setBrowserPath(path: string): Promise<{ success: boolean; 
 }
 ```
 
-- [ ] **Step 4：运行确认通过**（同上命令）
-- [ ] **Step 5：提交** `fix(settings): 浏览器列表客户端改走主进程鉴权中继`
+- [x] **Step 4：运行确认通过**（同上命令）
+- [x] **Step 5：提交** `fix(settings): 浏览器列表客户端改走主进程鉴权中继`
 
 ## Task 2：BrowserSettingsSection 错误态 / 空态分离 + 重试
 
 **Files**：`src/pages/settings/BrowserSettingsSection.tsx`、zh/en i18n、`src/pages/settings/__tests__/NetworkTab.test.tsx`
 
-- [ ] **Step 1：i18n 新增**
+- [x] **Step 1：i18n 新增**
   - `zh/chatAndSider.ts`（`settings.network.browser.none_found` 附近）：
     `'settings.network.browser.load_failed': '浏览器列表加载失败，请重试。'`、`'settings.network.browser.retry': '重试'`
   - `en/chatAndSiderBrowserExtension.ts`：
     `'settings.network.browser.load_failed': 'Failed to load the browser list. Please retry.'`、`'settings.network.browser.retry': 'Retry'`
-- [ ] **Step 2：写失败测试**（NetworkTab.test.tsx 新增两个 case）：
+- [x] **Step 2：写失败测试**（NetworkTab.test.tsx 新增两个 case）：
   1. `fetchBrowserList` reject → 渲染 `browser-load-error`、点击 `browser-retry` 后第二次 resolve → 列出浏览器，且全程不出现 `none_found` 文案。
   2. `fetchBrowserList` resolve `{browsers: [], embeddedAvailable: true}` → 不显示 `none_found`（空态仅在 `!embeddedAvailable` 时出现）。
-- [ ] **Step 3：实现**
+- [x] **Step 3：实现**
   - `BrowserSettingsSection` 增加 `const [error, setError] = useState<string | null>(null);`
   - `load()`：开头 `setLoading(true); setError(null);`；catch 中 `setError(message)` 并 `toast.error(t('settings.network.browser.load_failed'))`（不再 toast 裸 `HTTP 401`）。
   - 渲染顺序：`error ?` 错误块（`data-testid="browser-load-error"`，展示 `t('...load_failed')` + 详情 + `data-testid="browser-retry"` 按钮）`: browsers.length === 0 && !embeddedAvailable ? 空态 : 列表`。
-- [ ] **Step 4：运行** `npx vitest run src/pages/settings/__tests__/NetworkTab.test.tsx` 确认通过
-- [ ] **Step 5：提交** `fix(settings): 浏览器列表区分加载失败与未发现并支持重试`
+- [x] **Step 4：运行** `npx vitest run src/pages/settings/__tests__/NetworkTab.test.tsx` 确认通过
+- [x] **Step 5：提交** `fix(settings): 浏览器列表区分加载失败与未发现并支持重试`
 
 ## Task 3：CredentialsSection 迁移鉴权桥
 
 **Files**：`src/pages/settings/NetworkCredentialsSection.tsx`、`__tests__/NetworkCredentialsSection.p143.test.ts`（确认仍通过）
 
-- [ ] **Step 1：实现**（机械替换，行为保持：失败时沿用原 fallback 值）
+- [x] **Step 1：实现**（机械替换，行为保持：失败时沿用原 fallback 值）
   - 删除本地 `webAccessApiUrl`（含 8765 硬编码），`import { requestJson } from '../../shared/api/webAccessClient';`
   - `reload()`：`requestJson<{credentials?: CredentialRecord[]}>('/api/v1/web-access/credentials').then(...).catch(() => setCreds([]))`
   - 其余 7 处逐一同法替换（browser health / metrics / config PUT / metrics reset / delete / header POST / cookie POST）。header/cookie 的「响应 ok 判断」改为 `try { await requestJson(...); ... } catch { toast.error(...) }`（保持原语义）。
-- [ ] **Step 2：运行** `npx vitest run src/pages/settings/__tests__/NetworkCredentialsSection.p143.test.ts` 与 `npx tsc --noEmit`
-- [ ] **Step 3：提交** `fix(settings): 高级凭据区域改走主进程鉴权中继`
+- [x] **Step 2：运行** `npx vitest run src/pages/settings/__tests__/NetworkCredentialsSection.p143.test.ts` 与 `npx tsc --noEmit`
+- [x] **Step 3：提交** `fix(settings): 高级凭据区域改走主进程鉴权中继`
 
 ## Task 4：「Sage 内置浏览器」选项（前后端哨兵）
 
 **Interfaces**：
 - `EMBEDDED_EXECUTABLE = "(embedded)"`（已存在于 `browser_launcher.py`；作为 `browser_path` 哨兵值）
 
-- [ ] **Step 1：后端测试**（`backend/tests/unit/test_browser_cdp_external.py` 或新增用例）
+- [x] **Step 1：后端测试**（`backend/tests/unit/test_browser_cdp_external.py` 或新增用例）
   ```python
   def test_get_user_browser_path_accepts_embedded_sentinel(monkeypatch):
       from backend.tools import browser_cdp
@@ -233,23 +233,23 @@ export async function setBrowserPath(path: string): Promise<{ success: boolean; 
       ...
   ```
   第二个用例用 `await client.put("/api/v1/diagnostic/browser/path", json={"path": "(embedded)"})` 断言 `success is True`；不存在的路径仍返回 `success is False`。
-- [ ] **Step 2：实现后端**
+- [x] **Step 2：实现后端**
   - `browser_cdp._get_user_browser_path()`：`if stored == EMBEDDED_EXECUTABLE: return EMBEDDED_EXECUTABLE`（先于 `is_file` 检查）。
   - `diagnostic_routes.set_browser_path`：`if path and path != EMBEDDED_EXECUTABLE and not Path(path).is_file(): return {"success": False, ...}`。
-- [ ] **Step 3：前端**（`BrowserSettingsSection`）
+- [x] **Step 3：前端**（`BrowserSettingsSection`）
   - 常量 `const EMBEDDED_PATH = '(embedded)';`
   - `embeddedSelected = userConfigured === EMBEDDED_PATH || (!userConfigured && embeddedAvailable)`
   - 列表末尾渲染内置浏览器按钮（`data-testid="embedded-browser-option"`）：标题 `t('settings.network.browser.embedded')`，副文案 `t('settings.network.browser.embedded_hint')`；无用户配置时追显 `(t('settings.network.browser.system_default'))`；点击 `handleSelect(EMBEDDED_PATH)`。
   - `isSelected()` 对 `EMBEDDED_PATH` 返回 `embeddedSelected`。
-- [ ] **Step 4：测试**
+- [x] **Step 4：测试**
   - 后端两条用例通过；前端 NetworkTab 新增：`embeddedAvailable: true, browsers: []` → 显示内置选项并能选中（`setBrowserPath` 收到 `(embedded)`）。
-- [ ] **Step 5：提交** `feat(settings): 展示并支持选择 Sage 内置浏览器`
+- [x] **Step 5：提交** `feat(settings): 展示并支持选择 Sage 内置浏览器`
 
 ## Task 5：启动链路尊重用户选择
 
 **优先级（产品已确认）**：`SAGE_BROWSER_PATH` / `SAGE_FIREFOX_PATH` 环境变量 > 用户设置 `browser_path` > 内置浏览器（Win7 兜底）> 系统扫描。
 
-- [ ] **Step 1：失败测试**（`backend/tests/unit/test_browser_launcher.py`）
+- [x] **Step 1：失败测试**（`backend/tests/unit/test_browser_launcher.py`）
   ```python
   def test_discover_and_select_user_path_beats_embedded(monkeypatch, tmp_path):
       fake = tmp_path / "chrome.exe"
@@ -269,18 +269,18 @@ export async function setBrowserPath(path: string): Promise<{ success: boolean; 
       monkeypatch.setenv("SAGE_BROWSER_PATH", str(env_exe))
       assert discover_and_select(str(user_exe)).executable == str(env_exe)
   ```
-- [ ] **Step 2：实现**
+- [x] **Step 2：实现**
   - `browser_launcher.py`：把 `_discover_from_env()` 拆为 `_discover_env_browser_path()`（SAGE_BROWSER_PATH → SAGE_FIREFOX_PATH）与既有 `_discover_embedded()`；新增 `_discover_user_path(user_path)`（`(embedded)` → `_discover_embedded()`；文件存在 → `_create_capability(...)`）；
     `discover_and_select(user_path: Optional[str] = None)` 顺序：env 路径 → 用户选择 → 内置 → Windows → Darwin → PATH。
   - `browser_cdp.py`：
     - `discover_browser_executable()` 简化为 `cap = discover_and_select(_get_user_browser_path()); return cap.executable if cap else None`（保持「环境变量 > 用户 > 内置 > 扫描」）。
     - `launch_browser()` 中 `cap = discover_and_select(_get_user_browser_path())`。
-- [ ] **Step 3：运行** launcher / cdp 相关测试，确认通过且不破坏既有 env 用例
-- [ ] **Step 4：提交** `feat(browser): 启动链路按 环境变量>用户选择>内置兜底>系统扫描 选浏览器`
+- [x] **Step 3：运行** launcher / cdp 相关测试，确认通过且不破坏既有 env 用例
+- [x] **Step 4：提交** `feat(browser): 启动链路按 环境变量>用户选择>内置兜底>系统扫描 选浏览器`
 
 ## Task 6：Windows 版本探测 + headless 版本降级
 
-- [ ] **Step 1：失败测试**（`test_browser_launcher.py`）
+- [x] **Step 1：失败测试**（`test_browser_launcher.py`）
   ```python
   def test_chromium_major_version_reads_version_dirs(tmp_path):
       exe_dir = tmp_path / "Application"; exe_dir.mkdir()
@@ -298,20 +298,20 @@ export async function setBrowserPath(path: string): Promise<{ success: boolean; 
   def test_headless_flag_uses_new_for_recent_or_unknown(tmp_path):
       assert headless_flag(str(tmp_path / "missing")) == "--headless=new"
   ```
-- [ ] **Step 2：实现**
+- [x] **Step 2：实现**
   - `browser_launcher.py`：`_VERSION_DIR_RE = re.compile(r"(\d+)\.\d+\.\d+\.\d+")`、`NEW_HEADLESS_MIN_MAJOR = 109`；
     `chromium_major_version(executable)`：先扫 exe 同级 `X.Y.Z.W` 目录取最大值；Windows 到此为止（不执行 exe）；POSIX 再回退 `--version`。
     `headless_flag(executable)`：major 已知且 `< 109` → `"--headless"`，否则 `"--headless=new"`。
   - `ChromeLauncher.build_command` 与 `browser_cdp._build_launch_command` 的 headless 分支统一改用 `headless_flag(executable)`。
   - `diagnostic_routes._discover_all_browsers._get_version` 改为调用 `chromium_major_version` 并返回 `str(major)`，删除对 `--version` 的调用与 5s 超时路径。
-- [ ] **Step 3：运行** `test_browser_launcher.py`、`test_browser_tool.py -k launch_command`、`test_http_factory.py -k LaunchCommand`、`test_diagnostic_browser_health.py` 确认通过
-- [ ] **Step 4：提交** `fix(browser): Windows 版本目录探测与旧内核无头降级`
+- [x] **Step 3：运行** `test_browser_launcher.py`、`test_browser_tool.py -k launch_command`、`test_http_factory.py -k LaunchCommand`、`test_diagnostic_browser_health.py` 确认通过
+- [x] **Step 4：提交** `fix(browser): Windows 版本目录探测与旧内核无头降级`
 
 ## Task 7：浏览器会话上限自愈
 
 **Files**：`backend/tools/browser_cdp.py`（`BrowserSessionManager`）、`backend/tests/unit/test_browser_tool.py`
 
-- [ ] **Step 1：失败测试**（test_browser_tool.py，复用 `_fake_session`，扩展 `browser_type` 参数）
+- [x] **Step 1：失败测试**（test_browser_tool.py，复用 `_fake_session`，扩展 `browser_type` 参数）
 
 ```python
 def test_manager_prunes_dead_sessions_before_cap():
@@ -338,21 +338,21 @@ def test_manager_evicts_render_pool_before_cap_error():
     assert manager.count() <= browser_cdp.MAX_BROWSER_SESSIONS
 ```
 
-- [ ] **Step 2：实现**（`BrowserSessionManager`）
+- [x] **Step 2：实现**（`BrowserSessionManager`）
   - `__init__` 增加 `threading.Lock()`。
   - 新增 `_counted_locked()`：计数时排除 `BrowserType.EMBEDDED`（Electron 共享同一 Chromium 进程，见 `_EmbeddedProcess`）与 `EXTENSION_BROWSER_ID`（原有豁免）。
   - `register()` 在锁内按序：弹出同 id 旧实例 → **回收 `is_alive() == False` 的死实例** → 计数超限时**按插入序让位渲染池实例**（id == `RESERVED_BROWSER_ID` 或以 `RESERVED_BROWSER_ID + "-"` 开头，懒重建，下次渲染自动恢复）→ 仍超限则抛错。所有 `_terminate_session` 在锁外统一执行（`try/finally` 保证抛错路径也回收已弹出实例）。
   - 错误文案改为面向用户可操作：`f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}：请关闭 Sage 打开的浏览器窗口后重试（对话中可调用 browser_close 关闭实例）"`。
-- [ ] **Step 3：运行** `pytest backend/tests/unit/test_browser_tool.py -q`（含既有 `test_manager_cap` / `test_manager_require_and_dead_session_eviction`）
-- [ ] **Step 4：提交** `fix(browser): 会话上限先回收死实例并让位渲染池`
+- [x] **Step 3：运行** `pytest backend/tests/unit/test_browser_tool.py -q`（含既有 `test_manager_cap` / `test_manager_require_and_dead_session_eviction`）
+- [x] **Step 4：提交** `fix(browser): 会话上限先回收死实例并让位渲染池`
 
 ## Task 8：全量验证与 PR
 
-- [ ] `npx tsc --noEmit`
-- [ ] `npx eslint` 改动文件（`npm run lint` 全量可留到 CI）
+- [x] `npx tsc --noEmit`
+- [x] `npx eslint` 改动文件（`npm run lint` 全量可留到 CI）
 - [ ] `npx vitest run src/pages/settings src/shared/api/__tests__`（至少覆盖改动域）；`npm run test -- --run` 全量如时间允许
-- [ ] py38 后端目标测试 + `ruff check backend/tools/browser_cdp.py backend/tools/browser_launcher.py backend/api/diagnostic_routes.py`
-- [ ] `node scripts/architecture-check.mjs`（行数棘轮）
+- [x] py38 后端目标测试 + `ruff check backend/tools/browser_cdp.py backend/tools/browser_launcher.py backend/api/diagnostic_routes.py`
+- [x] `node scripts/architecture-check.mjs`（行数棘轮）
 - [ ] 本地手工验证（Electron dev，worktree 端口 8942/1597）：设置-网络列出浏览器、无 401、内置选项可选、高级区域可加载；点击登录不再报上限
 - [ ] push + `gh pr create`（目标 `release/win7`，说明根因与验收点）
 - [ ] 合并后 cherry-pick 到 `main` 并处理 py310/pydantic2 差异（本次改动后端不涉及 pydantic 模型变更，预期零冲突）
