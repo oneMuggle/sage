@@ -133,16 +133,21 @@ class McpTool(BaseTool):
 
 
 def register_mcp_tools(registry: Any) -> None:
-    """Discover configured MCP servers (once) and register their tools.
+    """Track the registry, then start MCP discovery in the background.
 
-    Startup discovery runs in parallel inside the pool and is idempotent;
-    the registry is tracked (weak ref) so servers added later via the
-    REST API fan their tools out to live registries without a restart.
+    Startup must not block on MCP handshakes: first discovery runs on a daemon
+    thread (``McpServerPool.start_background_discovery``). Servers that reach
+    READY fan their tools into the tracked registry
+    (``McpServerPool._register_server_tools``), so tools appear asynchronously
+    without a restart — the same mechanism REST-added servers already use.
     """
     pool = get_pool()
     try:
-        pool.ensure_discovered()
+        # Track first: discovery may already be running (or start concurrently)
+        # and fan-out must reach this registry as servers settle.
         pool.track_registry(registry)
+        pool.ensure_synced()
+        pool.start_background_discovery()
         count = pool.register_tools_into(registry)
     except Exception as exc:  # noqa: BLE001 — MCP must never break startup
         logger.error("MCP tool registration failed: %s", exc)
@@ -150,7 +155,7 @@ def register_mcp_tools(registry: Any) -> None:
     if count:
         logger.info("Registered %d MCP tools into registry", count)
     else:
-        logger.info("No MCP tools available (no READY servers)")
+        logger.info("MCP tools: discovery running in background")
 
 
 def shutdown_mcp_clients() -> None:

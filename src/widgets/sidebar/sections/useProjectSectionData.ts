@@ -251,7 +251,7 @@ export function useProjectSectionData({ onOpenSession }: UseProjectSectionDataPr
       try {
         const { session } = await projectApi.open(project.id);
         clearMissing(project.id);
-        await loadSessions();
+        await loadSessions(true);
         onOpenSession(session.id);
         void refresh();
         if (expandedIds.has(project.id)) void refreshSubSessions(project.id);
@@ -311,7 +311,7 @@ export function useProjectSectionData({ onOpenSession }: UseProjectSectionDataPr
       try {
         const { session } = await projectApi.createSession(project.id);
         clearMissing(project.id);
-        await loadSessions();
+        await loadSessions(true);
         onOpenSession(session.id);
         void refresh();
         if (expandedIds.has(project.id)) void refreshSubSessions(project.id);
@@ -357,7 +357,7 @@ export function useProjectSectionData({ onOpenSession }: UseProjectSectionDataPr
       setDeletingSessionId(sessionId);
       try {
         await sessionApi.delete(sessionId);
-        await loadSessions();
+        await loadSessions(true);
         await refresh();
         if (expandedIds.has(project.id)) await refreshSubSessions(project.id);
       } catch (err) {

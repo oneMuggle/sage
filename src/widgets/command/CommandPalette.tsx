@@ -249,7 +249,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     async (project: { id: string }) => {
       try {
         const { session } = await projectApi.open(project.id);
-        await loadSessions();
+        await loadSessions(true);
         handleOpenSession(session.id);
       } catch (err) {
         onOpenChange(false);
@@ -281,7 +281,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       if (!picked) return; // 用户取消
       const project = await projectApi.register(picked);
       const { session } = await projectApi.open(project.id);
-      await loadSessions();
+      await loadSessions(true);
       handleOpenSession(session.id);
     } catch (err) {
       toast.error(`添加项目失败：${err instanceof Error ? err.message : String(err)}`);

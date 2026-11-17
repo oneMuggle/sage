@@ -391,7 +391,7 @@ export function useChatReattachAndBtw(params: {
         useQuestionState.getState().resolve(sid);
         // R25-D5: 对账 —— producer 的 DONE 持久化是权威,重载服务端真值
         void useStore.getState().loadMessages(sid);
-        void useStore.getState().loadSessions();
+        void useStore.getState().loadSessions(true);
       };
 
       handle.finish = () => finishReattach(acc || null);
@@ -430,7 +430,7 @@ export function useChatReattachAndBtw(params: {
             onEvent: (evt) => {
               if (finished) return;
               if (evt.type === 'session_updated') {
-                void useStore.getState().loadSessions();
+                void useStore.getState().loadSessions(true);
                 return;
               }
               // 2026-10-26: heartbeat 只喂 watchdog（feedWatchdog 在 chatApi 层

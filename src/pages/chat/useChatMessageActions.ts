@@ -29,7 +29,7 @@ export interface UseChatMessageActionsParams {
   isLoading: boolean;
   messages: MessageType[];
   loadMessages: (sessionId: string) => Promise<void>;
-  loadSessions: () => Promise<void>;
+  loadSessions: (force?: boolean) => Promise<void>;
   setCurrentSessionId: (id: string | null) => void;
   removeMessage: (id: string) => void;
   sendMessage: (
@@ -155,7 +155,7 @@ export function useChatMessageActions({
       try {
         const forked = await sessionApi.fork(currentSessionId, messageId);
         toast.success(t('chat.fork_success'));
-        void loadSessions();
+        void loadSessions(true);
         setCurrentSessionId(forked.id);
       } catch (e) {
         toast.error(
@@ -182,7 +182,7 @@ export function useChatMessageActions({
     async (forkedId: string) => {
       toast.success(t('chat.rewind_success'));
       setRewindTarget(null);
-      void loadSessions();
+      void loadSessions(true);
       setCurrentSessionId(forkedId);
     },
     [loadSessions, setCurrentSessionId, t],
@@ -227,7 +227,7 @@ export function useChatMessageActions({
           beforeMessage: true,
         });
         toast.success(t('chat.edit_resend_forked'));
-        void loadSessions();
+        void loadSessions(true);
         setCurrentSessionId(forked.id);
         await sendMessage(content, forked.id);
       } catch (e) {
@@ -270,7 +270,7 @@ export function useChatMessageActions({
           beforeMessage: true,
         });
         toast.success(t('chat.regenerate_forked'));
-        void loadSessions();
+        void loadSessions(true);
         setCurrentSessionId(forked.id);
         await sendMessage(userMsg.content, forked.id);
       } catch (e) {
