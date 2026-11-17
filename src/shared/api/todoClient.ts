@@ -14,6 +14,7 @@
  *   todo_batch_complete → POST /api/v1/todos/batch/complete
  *   todo_batch_delete   → POST /api/v1/todos/batch/delete
  *   todo_export         → GET  /api/v1/todos/export
+ *   todo_tags           → GET  /api/v1/todos/tags
  *
  * All methods throw on IPC failure; callers wrap in try/catch and surface a
  * toast on failure.
@@ -29,6 +30,7 @@ import type {
   TodoListResponse,
   TodoStats,
   TodoSummary,
+  TodoTagCount,
   UpdateTodoInput,
 } from './types';
 
@@ -67,6 +69,10 @@ export const todoClient = {
 
   async stats(): Promise<TodoStats> {
     return invoke<TodoStats>('todo_stats', {});
+  },
+
+  async listTags(): Promise<TodoTagCount[]> {
+    return invoke<TodoTagCount[]>('todo_tags', {});
   },
 
   async batchComplete(ids: number[]): Promise<TodoBatchCompleteResult> {
@@ -125,6 +131,7 @@ export function auditTodoClientGovernance(): string {
         'batchComplete',
         'batchDelete',
         'exportTodos',
+        'listTags',
       ],
       sampleSummary: formatTodoListSummary({ items: [], total: 0, limit: 20, offset: 0 }),
     },

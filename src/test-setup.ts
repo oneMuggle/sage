@@ -1,6 +1,20 @@
 import '@testing-library/jest-dom/vitest';
 
 /**
+ * jsdom 不实现 ResizeObserver；@headlessui/react 的 Dialog 过渡会读取它。
+ * 全局注入空实现，避免每个用到 Modal 的测试重复打桩。
+ */
+if (typeof (globalThis as { ResizeObserver?: unknown }).ResizeObserver === 'undefined') {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  (globalThis as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver =
+    ResizeObserverStub;
+}
+
+/**
  * jsdom 29 + vitest 4 的 window.localStorage 是 Storage 实例占位但方法未实现，
  * 直接调用 setItem/getItem 会抛 TypeError。在所有测试运行前注入一个内存版
  * Storage 桩，让依赖 localStorage 的模块（entities/setting/storage 等）能在

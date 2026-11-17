@@ -398,6 +398,7 @@ export interface Todo {
   completed_at?: string | null;
   project_tag?: string | null;
   project_id?: string | null;
+  tags?: string[];
   is_recurring: boolean;
   recurrence_rule?: string | null;
   parent_id?: number | null;
@@ -413,6 +414,7 @@ export interface CreateTodoInput {
   project_tag?: string;
   recurrence_rule?: string;
   parent_id?: number;
+  tags?: string[];
 }
 
 export interface UpdateTodoInput {
@@ -424,6 +426,7 @@ export interface UpdateTodoInput {
   status?: 'pending' | 'in_progress' | 'cancelled';
   recurrence_rule?: string;
   parent_id?: number | null;
+  tags?: string[];
 }
 
 export interface TodoSummary {
@@ -462,6 +465,15 @@ export interface TodoListParams {
   offset?: number;
   /** 全文搜索关键词（后端 FTS5，LIKE 降级） */
   q?: string;
+  /** 多标签精确过滤 */
+  tag?: string;
+  /** 智能视图：today=今天到期 / week=近 7 天 / all=未完成 / completed=已完成 */
+  view?: 'all' | 'today' | 'week' | 'completed';
+}
+
+export interface TodoTagCount {
+  tag: string;
+  count: number;
 }
 
 export interface TodoBatchCompleteResult {

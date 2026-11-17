@@ -28,6 +28,7 @@ class CreateTodoIn(BaseModel):
     project_tag: Optional[str] = None
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
+    tags: Optional[List[str]] = None
 
     class Config:
         extra = "forbid"
@@ -44,6 +45,7 @@ class UpdateTodoIn(BaseModel):
     )
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
+    tags: Optional[List[str]] = None
 
     class Config:
         extra = "forbid"
@@ -60,6 +62,7 @@ class TodoOut(BaseModel):
     completed_at: Optional[str] = None
     project_tag: Optional[str] = None
     project_id: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
     is_recurring: bool
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
@@ -114,6 +117,11 @@ class ExportOut(BaseModel):
     content: str
 
 
+class TagCountOut(BaseModel):
+    tag: str
+    count: int
+
+
 def _todo_to_dict(todo: Todo) -> Dict[str, Any]:
     return todo.model_dump()
 
@@ -152,6 +160,10 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
         limit: int = Query(default=50, ge=1, le=500),
         offset: int = Query(default=0, ge=0),
         q: Optional[str] = Query(default=None, max_length=200),
+        tag: Optional[str] = Query(default=None, max_length=50),
+        view: Optional[str] = Query(
+            default=None, pattern="^(all|today|week|completed)$"
+        ),
         svc: TodoService = Depends(service_dep),
     ) -> Dict[str, Any]:
         # ``status=all`` is the documented escape hatch for the
@@ -169,6 +181,8 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
             sort_by=sort_by,
             sort_order=sort_order,
             q=q,
+            tag=tag,
+            view=view,
         )
         # ``total`` is the number of rows matching the filters, NOT the length
         # of this page — a ``?limit=2`` response must still report the full
@@ -179,6 +193,8 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
             priority=priority,
             include_completed=include_completed,
             q=q,
+            tag=tag,
+            view=view,
         )
         return {
             "items": [_todo_to_dict(t) for t in items],
@@ -202,6 +218,7 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
                 project_tag=payload.project_tag,
                 recurrence_rule=payload.recurrence_rule,
                 parent_id=payload.parent_id,
+                tags=payload.tags,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -214,6 +231,10 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
     @router.get("/todos/stats", response_model=StatsOut)
     def get_stats(svc: TodoService = Depends(service_dep)) -> Dict[str, Any]:
         return svc.get_todo_stats()
+
+    @router.get("/todos/tags", response_model=List[TagCountOut])
+    def list_tags(svc: TodoService = Depends(service_dep)) -> List[Dict[str, Any]]:
+        return svc.list_tags()
 
     # NOTE: /todos/export 与 /todos/batch/* 必须注册在 /todos/{todo_id} 等
     # 动态路由之前，否则会被 int 路径参数捕获成 422。
