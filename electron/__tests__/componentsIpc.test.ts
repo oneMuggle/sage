@@ -73,9 +73,7 @@ describe('runComponentCli', () => {
       spawnFn: spawnFn as never,
     });
 
-    child.stdout.write(
-      '{"event":"progress","phase":"extract","message":"a","done":1,"total":2}\n',
-    );
+    child.stdout.write('{"event":"progress","phase":"extract","message":"a","done":1,"total":2}\n');
     child.stdout.write('{"event":"result","ok":true,"installed":[],"discovered":[]}\n');
     child.stdout.end();
     child.emit('close', 0);

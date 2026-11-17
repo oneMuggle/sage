@@ -848,6 +848,14 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords:
       'feedback_include_diagnostics 诊断 日志 自动 附带 diagnostics log attach 反馈 feedback',
   },
+  // ── 组件管理 ──
+  {
+    key: 'components',
+    tab: 'components',
+    label: '离线组件包',
+    labelEn: 'Offline component packages',
+    keywords: 'components component sagepkg 组件 离线 导入 模型 offline',
+  },
   // ── 诊断与实验 ──
   {
     key: 'audit-export',

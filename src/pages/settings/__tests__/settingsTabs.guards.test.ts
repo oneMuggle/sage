@@ -63,7 +63,8 @@ describe('settings tab registry guards', () => {
   });
 
   it('the registry contains the expected tab count', () => {
-    // 16（main 基线）+ 1 feedback（上游 #2654）+ 1 audit-export（P3）+ 1 pet = 19
-    expect(SETTINGS_TABS.length).toBe(19);
+    // 16（main 基线）+ 1 feedback（上游 #2654）+ 1 audit-export（P3）+ 1 pet
+    // + 1 components（win7 离线组件包）= 20
+    expect(SETTINGS_TABS.length).toBe(20);
   });
 });

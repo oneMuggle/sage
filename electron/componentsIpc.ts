@@ -295,13 +295,15 @@ function asActionResult(result: ComponentResultEvent | null): ComponentActionRes
 }
 
 export function registerComponentsIpc(ipcMain: IpcMain, opts: ComponentsIpcOptions): void {
-  const emitProgress = (op: string) => (event: ComponentCliEvent): void => {
-    if (event.event !== 'progress') return;
-    const win = opts.getWindow();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('sage:event:components:progress', { op, ...event });
-    }
-  };
+  const emitProgress =
+    (op: string) =>
+    (event: ComponentCliEvent): void => {
+      if (event.event !== 'progress') return;
+      const win = opts.getWindow();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('sage:event:components:progress', { op, ...event });
+      }
+    };
 
   ipcMain.handle('components:list', async () => {
     const { result } = await runComponentCli(['list', '--json'], {
@@ -325,14 +327,11 @@ export function registerComponentsIpc(ipcMain: IpcMain, opts: ComponentsIpcOptio
     if (!validatePackagePath(packagePath) || !existsSync(packagePath)) {
       return { ok: false, error: '请选择有效的 .sagepkg 组件包', code: 'invalid_package' };
     }
-    const { result } = await runComponentCli(
-      ['import', packagePath, '--json', '--yes'],
-      {
-        resolveOpts: opts.resolveOpts,
-        branch: opts.branch,
-        onEvent: emitProgress('import'),
-      },
-    );
+    const { result } = await runComponentCli(['import', packagePath, '--json', '--yes'], {
+      resolveOpts: opts.resolveOpts,
+      branch: opts.branch,
+      onEvent: emitProgress('import'),
+    });
     return asActionResult(result);
   };
 
@@ -359,14 +358,11 @@ export function registerComponentsIpc(ipcMain: IpcMain, opts: ComponentsIpcOptio
     if (!isValidComponentId(id)) {
       return { ok: false, error: '组件 id 格式无效', code: 'invalid_component_id' };
     }
-    const { result } = await runComponentCli(
-      ['remove', id, '--json', '--yes'],
-      {
-        resolveOpts: opts.resolveOpts,
-        branch: opts.branch,
-        onEvent: emitProgress('remove'),
-      },
-    );
+    const { result } = await runComponentCli(['remove', id, '--json', '--yes'], {
+      resolveOpts: opts.resolveOpts,
+      branch: opts.branch,
+      onEvent: emitProgress('remove'),
+    });
     return asActionResult(result);
   });
 }
