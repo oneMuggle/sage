@@ -696,7 +696,9 @@ describe('OfficePreviewPanel — fidelity defaults & auto-load (Task 2)', () => 
     );
 
     await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith('高保真预览不可用，已切换到结构化视图');
+      expect(toastMock.error).toHaveBeenCalledWith('高保真预览不可用，已切换到结构化视图', {
+        description: expect.stringContaining('docx data unavailable'),
+      });
     });
     expect(screen.getByTestId('office-preview-structured')).toBeInTheDocument();
     expect(screen.getByText('正文段落。')).toBeInTheDocument();
