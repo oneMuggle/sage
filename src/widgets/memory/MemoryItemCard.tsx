@@ -137,6 +137,9 @@ export function MemoryItemCard({
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftContent, setDraftContent] = useState('');
+  // 标题是否被用户显式修改 —— 未修改时保存只提交 content，由后端按新内容
+  // 重推标题（否则旧标题会滞留在被改写的内容上）。
+  const [titleTouched, setTitleTouched] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   // Task 4.5: 记忆级反馈（👍/👎）—— 本地状态跟随提交结果,失败时回退到原始值。
   // 只允许 episodic / semantic 行反馈;working / session_summary 的 feedback 按钮不渲染。
@@ -265,9 +268,27 @@ export function MemoryItemCard({
     setExpanded((v) => !v);
   }, [selectable, onToggleSelect, memory, editing]);
 
+  // 整卡点击切换只在"空白区域点击"时生效：
+  // - 拖选正文复制时 mouseup 会触发 click —— 有选区时不折叠，避免打断阅读；
+  // - 交互子元素（按钮/输入框/复选框）各自 stopPropagation，不会走到这里。
+  const handleCardClick = useCallback(() => {
+    if (selectable) {
+      onToggleSelect?.(memory);
+      return;
+    }
+    if (editing) return;
+    const selection =
+      typeof window !== 'undefined' && typeof window.getSelection === 'function'
+        ? window.getSelection()
+        : null;
+    if (selection && selection.toString().length > 0) return;
+    setExpanded((v) => !v);
+  }, [selectable, onToggleSelect, memory, editing]);
+
   const startEditing = useCallback(() => {
     setDraftTitle((memory.title || '').trim());
     setDraftContent(memory.content || memory.summary || '');
+    setTitleTouched(false);
     setEditing(true);
     setExpanded(true);
   }, [memory]);
@@ -281,7 +302,11 @@ export function MemoryItemCard({
     if (!nextContent || savingEdit || !onUpdate) return;
     setSavingEdit(true);
     try {
-      await onUpdate(memory, { content: nextContent, title: draftTitle.trim() });
+      // 标题未被用户动过 → 不提交 title，后端按（新）内容重推；
+      // 用户动过（含清空）→ 提交当前值，空串由后端回退到推导标题。
+      const patch: MemoryUpdatePayload = { content: nextContent };
+      if (titleTouched) patch.title = draftTitle.trim();
+      await onUpdate(memory, patch);
       toast.success('记忆已更新');
       setEditing(false);
     } catch (err) {
@@ -290,7 +315,7 @@ export function MemoryItemCard({
     } finally {
       setSavingEdit(false);
     }
-  }, [draftContent, draftTitle, memory, onUpdate, savingEdit]);
+  }, [draftContent, draftTitle, memory, onUpdate, savingEdit, titleTouched]);
 
   return (
     <div
@@ -299,17 +324,7 @@ export function MemoryItemCard({
       data-focused={focused || undefined}
       data-selected={selectable && selected ? 'true' : undefined}
       data-expanded={expanded || undefined}
-      role={selectable ? undefined : 'button'}
-      tabIndex={selectable ? undefined : 0}
-      aria-expanded={selectable ? undefined : expanded}
-      onClick={toggleExpanded}
-      onKeyDown={(e) => {
-        if (selectable) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          toggleExpanded();
-        }
-      }}
+      onClick={handleCardClick}
       className={
         focused
           ? 'p-3 border-2 border-primary rounded-radius-sm bg-surface ring-1 ring-primary/30'
@@ -378,7 +393,10 @@ export function MemoryItemCard({
             type="text"
             value={draftTitle}
             maxLength={60}
-            onChange={(e) => setDraftTitle(e.target.value)}
+            onChange={(e) => {
+              setTitleTouched(true);
+              setDraftTitle(e.target.value);
+            }}
             placeholder="标题（留空则按内容自动生成）"
             aria-label="记忆标题"
             data-testid={`memory-edit-title-${memory.id}`}
@@ -460,6 +478,7 @@ export function MemoryItemCard({
             <button
               type="button"
               data-testid={`memory-toggle-${memory.id}`}
+              aria-expanded={expanded}
               onClick={(e) => {
                 e.stopPropagation();
                 toggleExpanded();

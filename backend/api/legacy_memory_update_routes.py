@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -20,6 +21,8 @@ from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由 with_db_l
     make_with_db_lock,
 )
 from backend.memory import get_memory_manager
+
+logger = logging.getLogger(__name__)
 
 
 def with_db_lock(func):
@@ -96,5 +99,7 @@ def update_memory(memory_id: str, data: MemoryUpdateRequest):
         return enriched[0]
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        # 内部异常细节只进服务端日志，不回传前端（避免透出 SQL/路径等实现细节）。
+        logger.exception("更新记忆失败 (memory_id=%s)", memory_id)
+        raise HTTPException(status_code=500, detail="记忆更新失败")

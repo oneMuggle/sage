@@ -84,13 +84,22 @@ describe('MemoryItemCard 展开/收起', () => {
     expect(screen.queryByTestId('memory-full-content-m1')).not.toBeInTheDocument();
   });
 
-  it('键盘 Enter 可切换展开', () => {
+  it('编辑态输入框的空格/回车不会被卡片切换逻辑吞掉', () => {
+    renderCard({ onUpdate: vi.fn().mockResolvedValue(undefined) });
+    fireEvent.click(screen.getByTestId('memory-edit-m1'));
+    const contentArea = screen.getByTestId('memory-edit-content-m1');
+    // 卡片外层不再拦截键盘事件：编辑框保持焦点、卡片保持展开
+    fireEvent.keyDown(contentArea, { key: ' ' });
+    fireEvent.keyDown(contentArea, { key: 'Enter' });
+    expect(screen.getByTestId('memory-edit-content-m1')).toBeInTheDocument();
+  });
+
+  it('详情按钮通过 aria-expanded 暴露展开状态', () => {
     renderCard();
-    const card = screen.getByTestId('memory-episodic-item');
-    fireEvent.keyDown(card, { key: 'Enter' });
-    expect(screen.getByTestId('memory-full-content-m1')).toBeInTheDocument();
-    fireEvent.keyDown(card, { key: 'Enter' });
-    expect(screen.queryByTestId('memory-full-content-m1')).not.toBeInTheDocument();
+    const toggle = screen.getByTestId('memory-toggle-m1');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('选择模式下点击卡片只触发勾选，不展开', () => {
@@ -125,6 +134,23 @@ describe('MemoryItemCard 内联编辑', () => {
       expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: 'm1' }), {
         content: '修正后的记忆内容',
         title: '新标题',
+      }),
+    );
+  });
+
+  it('只改内容不改标题时，补丁不含 title（由后端按新内容重推）', async () => {
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    renderCard({ onUpdate });
+
+    fireEvent.click(screen.getByTestId('memory-edit-m1'));
+    fireEvent.change(screen.getByTestId('memory-edit-content-m1'), {
+      target: { value: '只改内容' },
+    });
+    fireEvent.click(screen.getByTestId('memory-edit-save-m1'));
+
+    await waitFor(() =>
+      expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: 'm1' }), {
+        content: '只改内容',
       }),
     );
   });
