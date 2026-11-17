@@ -716,6 +716,67 @@ def fork_session(
             """,
             (new_session_id, now, source.id),
         )
+        # F1 (2026-11-17): fork 继承源会话的产物 —— 消息可以整段复制，产物
+        # 也必须跟上，否则 fork（编辑重发/回溯）后产物面板只剩新生成的产物，
+        # 历史消息里的产物链接也看不到归属。artifacts.id 是全局主键且产物
+        # content 端点按 session_id 校验，所以按新 id 复制行，源会话不受影响；
+        # artifact_versions 随之一并重映射（快照文件按路径共享，不复制）。
+        #
+        # 截断语义：显式分叉点（编辑重发/回溯）只复制分叉点之前的产物 ——
+        # 被丢弃的未来消息产生的产物不应出现在新分支；全量 fork（无分叉点）
+        # 复制全部。created_at 为毫秒时间戳，与消息同源可比。
+        full_copy = at_message_id is None
+        cut_created_at = None if full_copy or not prefix else prefix[-1].created_at
+        copy_artifacts = full_copy or bool(cut_created_at is not None)
+        artifacts_sql = (
+            "SELECT id, tool_call_id, path, name, kind, size, created_at, "
+            "workspace_path, format_spec FROM artifacts WHERE session_id = ?"
+        )
+        artifacts_params: List[Any] = [source.id]
+        if cut_created_at is not None:
+            artifacts_sql += " AND created_at <= ?"
+            artifacts_params.append(cut_created_at)
+        artifacts_sql += " ORDER BY created_at ASC, rowid ASC"
+        artifact_rows = (
+            cursor.execute(artifacts_sql, tuple(artifacts_params)).fetchall()
+            if copy_artifacts
+            else []
+        )
+        for art in artifact_rows:
+            new_artifact_id = f"art_{uuid.uuid4().hex[:12]}"
+            cursor.execute(
+                """
+                INSERT INTO artifacts (
+                    id, session_id, tool_call_id, path, name, kind, size,
+                    created_at, workspace_path, format_spec
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    new_artifact_id,
+                    new_session_id,
+                    art["tool_call_id"],
+                    art["path"],
+                    art["name"],
+                    art["kind"],
+                    art["size"],
+                    art["created_at"],
+                    art["workspace_path"],
+                    art["format_spec"],
+                ),
+            )
+            cursor.execute(
+                """
+                INSERT INTO artifact_versions (
+                    artifact_id, version_num, content_hash, snapshot_path,
+                    created_at, note
+                )
+                SELECT ?, version_num, content_hash, snapshot_path,
+                       created_at, note
+                FROM artifact_versions WHERE artifact_id = ?
+                """,
+                (new_artifact_id, art["id"]),
+            )
         conn.commit()
     except Exception:
         conn.rollback()
