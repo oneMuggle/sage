@@ -22,15 +22,20 @@ export function BrowserSettingsSection() {
   const [embeddedAvailable, setEmbeddedAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
     try {
       const result = await fetchBrowserList();
       setBrowsers(result.browsers);
       setUserConfigured(result.userConfigured);
       setEmbeddedAvailable(result.embeddedAvailable);
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : String(cause));
+      // 加载失败 ≠ 未发现浏览器：空态只用于「后端明确返回空」。
+      setError(cause instanceof Error ? cause.message : String(cause));
+      toast.error(t('settings.network.browser.load_failed'));
     } finally {
       setLoading(false);
     }
@@ -87,7 +92,23 @@ export function BrowserSettingsSection() {
       </h3>
       <p className="text-xs text-muted mb-3">{t('settings.network.browser.hint')}</p>
 
-      {browsers.length === 0 && !embeddedAvailable ? (
+      {error ? (
+        <div
+          data-testid="browser-load-error"
+          className="px-3 py-4 text-xs bg-surface rounded-radius-sm"
+        >
+          <div className="text-text">{t('settings.network.browser.load_failed')}</div>
+          <div className="text-muted mt-1 break-all font-mono">{error}</div>
+          <button
+            type="button"
+            data-testid="browser-retry"
+            onClick={() => void load()}
+            className="mt-2 px-3 py-1 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary-hover transition-colors"
+          >
+            {t('settings.network.browser.retry')}
+          </button>
+        </div>
+      ) : browsers.length === 0 && !embeddedAvailable ? (
         <div className="px-3 py-4 text-xs text-muted bg-surface rounded-radius-sm">
           {t('settings.network.browser.none_found')}
         </div>
