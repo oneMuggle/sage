@@ -19,6 +19,7 @@ v1 面向 coder（executor 边界）；导航仅允许 http/https/about/data。
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
 import time
@@ -74,7 +75,21 @@ LOCAL_STORAGE_CAP = 512 * 1024
 #: 允许的 URL scheme（file:// 可读本地文件 → 坚决拒绝；javascript: 注入面）
 _ALLOWED_SCHEMES = frozenset({"http", "https", "about", "data"})
 
-_VALID_ACTIONS = ("click", "type", "press", "scroll", "select", "hover", "check", "uncheck")
+_VALID_ACTIONS = (
+    "click",
+    "type",
+    "press",
+    "scroll",
+    "select",
+    "hover",
+    "check",
+    "uncheck",
+    "upload",
+)
+
+#: 视觉注入的截图约束（data URL 上限 1.5MB / 宽 1568px）
+SCREENSHOT_VISION_MAX_BYTES = 1536 * 1024
+SCREENSHOT_VISION_MAX_WIDTH = 1568
 
 _VALID_SNAPSHOT_MODES = ("interactive", "text", "full")
 
@@ -777,6 +792,185 @@ def _evaluate_json(session: BrowserSession, expression: str, target_id: Optional
     return (result.get("result") or {}).get("value")
 
 
+def _evaluate_element_object_id(
+    session: BrowserSession, expression: str, target_id: Optional[str] = None
+) -> str:
+    """Runtime.evaluate（returnByValue=False）→ 元素 objectId。
+
+    ``DOM.setFileInputFiles`` 必须拿到远端节点句柄（objectId），不能用
+    ``returnByValue`` 序列化元素。
+    """
+    result = cdp_command(
+        session,
+        "Runtime.evaluate",
+        {"expression": expression, "returnByValue": False},
+        target_id=target_id,
+    )
+    details = result.get("exceptionDetails")
+    if details:
+        raise BrowserCDPError(f"页面脚本执行失败: {json.dumps(details)[:300]}")
+    object_id = str((result.get("result") or {}).get("objectId") or "")
+    if not object_id:
+        raise BrowserCDPError("未找到上传目标元素（objectId 缺失）")
+    return object_id
+
+
+def _upload_lookup_js(ref: str, selector: str) -> str:
+    """上传目标元素的定位 JS 片段（ref 优先，selector 回退）。"""
+    if ref:
+        return "(window.__SAGE_REFS__||{})[" + json.dumps(str(ref)) + "]||null"
+    return "document.querySelector(" + json.dumps(str(selector)) + ")"
+
+
+def _build_upload_check_expression(ref: str, selector: str) -> str:
+    """校验上传目标存在、ref 未失效且为 ``input[type=file]``。"""
+    if ref:
+        guard = (
+            "var key=" + json.dumps(str(ref)) + ";"
+            "var el=(window.__SAGE_REFS__||{})[key]||null;"
+            "var names=window.__SAGE_REF_NAMES__||{};"
+            "if(!el||el.isConnected!==true)"
+            "{return{ok:false,reason:'stale-ref'};}"
+            "if(el.getAttribute('data-sage-ref-name')!==names[key])"
+            "{return{ok:false,reason:'stale-ref'};}"
+        )
+    else:
+        guard = (
+            "var el=document.querySelector(" + json.dumps(str(selector)) + ");"
+            "if(!el){return{ok:false,reason:'element_not_found'};}"
+        )
+    return (
+        "(function(){"
+        + guard
+        + "var tag=(el.tagName||'').toLowerCase();"
+        "var type=((el.getAttribute&&el.getAttribute('type'))||'').toLowerCase();"
+        "if(tag!=='input'||type!=='file')"
+        "{return{ok:false,reason:'not_file_input',tag:tag,type:type};}"
+        "return{ok:true};"
+        "})()"
+    )
+
+
+def _build_upload_element_expression(ref: str, selector: str) -> str:
+    """返回目标元素句柄的表达式（配合 ``returnByValue=False`` 取 objectId）。"""
+    return "(function(){return " + _upload_lookup_js(ref, selector) + ";})()"
+
+
+def _upload_file_to_input(
+    session: BrowserSession, ref: str, selector: str, file_path: Path
+) -> str:
+    """校验目标为 file input 后经 CDP 注入文件；返回可读成功信息。"""
+    check = _evaluate_json(session, _build_upload_check_expression(ref, selector), None)
+    if not isinstance(check, dict):
+        raise BrowserCDPError("上传目标校验结果异常（非 JSON）")
+    if not check.get("ok"):
+        reason = str(check.get("reason") or "")
+        if reason == STALE_REF_INFO:
+            raise BrowserCDPError(STALE_REF_ERROR)
+        if reason == "not_file_input":
+            raise BrowserCDPError(
+                "upload_target_not_file_input: 目标不是 input[type=file]"
+                f"（tag={check.get('tag') or '?'}, type={check.get('type') or '?'}）"
+            )
+        raise BrowserCDPError("upload_target_not_found: 未找到上传目标元素")
+    object_id = _evaluate_element_object_id(
+        session, _build_upload_element_expression(ref, selector)
+    )
+    cdp_command(
+        session,
+        "DOM.setFileInputFiles",
+        {"files": [str(file_path)], "objectId": object_id},
+        target_id=None,
+    )
+    return f"uploaded {file_path.name}"
+
+
+def _png_width(png_bytes: bytes) -> Optional[int]:
+    """从 PNG IHDR 读取宽度（无需 Pillow）；非 PNG 返回 None。"""
+    if len(png_bytes) < 24 or png_bytes[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    try:
+        return int.from_bytes(png_bytes[16:20], "big")
+    except Exception:  # noqa: BLE001 — 头损坏按未知宽度处理
+        return None
+
+
+def _build_screenshot_vision_payload(png_bytes: bytes) -> Dict[str, Any]:
+    """为视觉注入生成 data URL（≤1.5MB、宽 ≤1568px）。
+
+    Pillow 是可选依赖（随 OCR 引擎附带，不做硬依赖）：可用时按宽缩放到
+    1568px，PNG 仍超限再降级为 JPEG；不可用时只做尺寸检查，超限返回
+    ``vision_skipped: "too_large"``（调用方只回路径）。
+    """
+    data = png_bytes
+    mime = "image/png"
+    try:
+        from PIL import Image  # type: ignore
+    except Exception:  # noqa: BLE001 — Pillow 缺失按无缩放路径处理
+        Image = None  # type: ignore[assignment]
+    if Image is not None:
+        try:
+            with Image.open(io.BytesIO(png_bytes)) as source:
+                img = source
+                width, height = img.size
+                scale = 1.0
+                if width > SCREENSHOT_VISION_MAX_WIDTH:
+                    scale = SCREENSHOT_VISION_MAX_WIDTH / float(width)
+                best_png: Optional[bytes] = None
+                current_scale = scale
+                for _ in range(4):
+                    frame = img
+                    if current_scale < 1.0:
+                        frame = img.resize(
+                            (
+                                max(1, int(width * current_scale)),
+                                max(1, int(height * current_scale)),
+                            )
+                        )
+                    buf = io.BytesIO()
+                    frame.save(buf, format="PNG")
+                    candidate = buf.getvalue()
+                    best_png = candidate
+                    if len(candidate) <= SCREENSHOT_VISION_MAX_BYTES:
+                        break
+                    current_scale *= 0.75
+                if best_png is not None and len(best_png) <= SCREENSHOT_VISION_MAX_BYTES:
+                    data = best_png
+                    mime = "image/png"
+                else:
+                    # PNG 仍超限 → JPEG 质量阶梯（视觉 API 均接受）
+                    rgb = img.convert("RGB")
+                    if current_scale < 1.0:
+                        rgb = rgb.resize(
+                            (
+                                max(1, int(width * current_scale)),
+                                max(1, int(height * current_scale)),
+                            )
+                        )
+                    for quality in (85, 70, 55):
+                        buf = io.BytesIO()
+                        rgb.save(buf, format="JPEG", quality=quality, optimize=True)
+                        candidate = buf.getvalue()
+                        if len(candidate) <= SCREENSHOT_VISION_MAX_BYTES:
+                            data = candidate
+                            mime = "image/jpeg"
+                            break
+        except Exception:  # noqa: BLE001 — 压缩失败退回未缩放原图
+            data = png_bytes
+            mime = "image/png"
+
+    width = _png_width(data) if mime == "image/png" else None
+    if len(data) > SCREENSHOT_VISION_MAX_BYTES or (
+        width is not None and width > SCREENSHOT_VISION_MAX_WIDTH
+    ):
+        return {"vision_skipped": "too_large"}
+    encoded = base64.b64encode(data).decode("ascii")
+    return {
+        "image_data_url": f"data:{mime};base64,{encoded}",
+        "image_bytes": len(data),
+    }
+
+
 def _locate_tab(
     pages: List[Dict[str, Any]], tab_id: str, index: Optional[int]
 ) -> Dict[str, Any]:
@@ -802,6 +996,7 @@ def _interact_arg_error(
     value: str,
     key: str,
     ref: str,
+    path: str = "",
 ) -> Optional[str]:
     """按动作返回参数错误文案；None 表示放行。"""
     located = bool(ref or selector)
@@ -821,6 +1016,11 @@ def _interact_arg_error(
             error = "select 需要 ref 或 selector"
         elif not isinstance(value, str) or value == "":
             error = "select 需要 value（option 的 value 或文本）"
+    elif action == "upload":
+        if not located:
+            error = "upload 需要 ref 或 selector"
+        elif not (path or value):
+            error = "upload 需要 path（工作区内文件路径，也可复用 value）"
     elif action in ("hover", "check", "uncheck"):
         if not located:
             error = f"{action} 需要 ref 或 selector"
@@ -843,19 +1043,20 @@ def _validate_interact_args(
     value: str,
     key: str,
     ref: str,
+    path: str = "",
 ) -> Optional[ToolResult]:
     """browser_interact 参数校验；返回拒绝结果或 None（放行）。
 
     定位优先级 ref > selector > text：三者同时给出不报错（按优先级取用），
     但 click/type/select/hover/check/uncheck 至少要有 ref 或 selector
-    （click 也可用 text）。
+    （click 也可用 text）。upload 还需要 path（或复用 value）。
     """
     if kwargs:
         return ToolResult(
             success=False,
             error=f"未知参数: {', '.join(sorted(kwargs))}",
         )
-    error = _interact_arg_error(action, selector, text, value, key, ref)
+    error = _interact_arg_error(action, selector, text, value, key, ref, path)
     return None if error is None else ToolResult(success=False, error=error)
 
 
@@ -1325,11 +1526,12 @@ class BrowserInteractTool(BaseTool):
                 "与当前页面交互。首选 ref（browser_snapshot 返回的元素引用）；"
                 "也可用 selector（CSS）或 text（可见文本精确匹配）定位，优先级 "
                 "ref > selector > text。action=click | type | press | scroll | "
-                "select | hover | check | uncheck。type 需 value（React 兼容，"
-                "clear=true 先清空）；press 支持组合键（Control+A / Shift+Tab / "
-                "Meta+Enter）；select 的 value 为 option 的 value 或文本；"
-                "scroll 的 value 为像素（正下负上）。操作后请重新 browser_snapshot "
-                "确认效果（页面变化会使旧 ref 失效）。"
+                "select | hover | check | uncheck | upload。type 需 value（React "
+                "兼容，clear=true 先清空）；press 支持组合键（Control+A / "
+                "Shift+Tab / Meta+Enter）；select 的 value 为 option 的 value 或"
+                "文本；scroll 的 value 为像素（正下负上）；upload 需 path（仅允许"
+                "工作区内文件，目标须为 input[type=file]，且需用户确认）。操作后"
+                "请重新 browser_snapshot 确认效果（页面变化会使旧 ref 失效）。"
             ),
             parameters={
                 "type": "object",
@@ -1345,6 +1547,7 @@ class BrowserInteractTool(BaseTool):
                             "hover",
                             "check",
                             "uncheck",
+                            "upload",
                         ],
                         "description": "要执行的动作",
                     },
@@ -1359,7 +1562,11 @@ class BrowserInteractTool(BaseTool):
                     },
                     "value": {
                         "type": "string",
-                        "description": "type/select 的目标值 / scroll 的像素",
+                        "description": "type/select 的目标值 / scroll 的像素 / upload 的路径",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "upload 的文件路径（相对工作区，也可复用 value）",
                     },
                     "key": {
                         "type": "string",
@@ -1382,15 +1589,40 @@ class BrowserInteractTool(BaseTool):
         clear: bool = False,
         ref: str = "",
         browser_id: str = "",
+        path: str = "",
         **kwargs: Any,
     ) -> ToolResult:
-        rejection = _validate_interact_args(kwargs, action, selector, text, value, key, ref)
+        rejection = _validate_interact_args(
+            kwargs, action, selector, text, value, key, ref, path
+        )
         if rejection is not None:
             return rejection
 
-        expression = _build_interact_expression(
-            action, selector, text, value, key, bool(clear), ref
-        )
+        upload_file: Optional[Path] = None
+        expression = ""
+        if action == "upload":
+            root = self._policy.workspace_root
+            if not root:
+                return ToolResult(
+                    success=False, error="browser_interact upload 需要绑定工作区（workspace）"
+                )
+            raw_path = str(path or value)
+            candidate = Path(raw_path).expanduser()
+            if not candidate.is_absolute():
+                candidate = Path(root) / candidate
+            blocked = self._enforce_workspace(str(candidate))
+            if blocked is not None:
+                return blocked
+            resolved = candidate.resolve()
+            if not resolved.is_file():
+                return ToolResult(
+                    success=False, error=f"upload_file_not_found: {raw_path}"
+                )
+            upload_file = resolved
+        else:
+            expression = _build_interact_expression(
+                action, selector, text, value, key, bool(clear), ref
+            )
         session: Optional[BrowserSession] = None
         started = time.monotonic()
         try:
@@ -1514,7 +1746,18 @@ class BrowserInteractTool(BaseTool):
                         **target_fields,
                     )
                 approval = "approved"
-            outcome = _evaluate_json(session, expression, None)
+            if action == "upload":
+                assert upload_file is not None  # 参数校验已保证
+                info_text = _upload_file_to_input(session, ref, selector, upload_file)
+                page_url, page_title = _cached_page(session)
+                outcome = {
+                    "ok": True,
+                    "info": info_text,
+                    "url": page_url,
+                    "title": page_title,
+                }
+            else:
+                outcome = _evaluate_json(session, expression, None)
         except BrowserCDPError as exc:
             return _meta_error(exc, session, "interact")
         if not isinstance(outcome, dict):
@@ -1614,23 +1857,43 @@ class BrowserScreenshotTool(BaseTool):
             description=(
                 "截取当前页面为 PNG，保存到工作区（默认 "
                 "browser_screenshot_<时间戳>.png，可用 path 指定）。返回"
-                "文件路径，可用 read_file/预览面板查看。"
+                "文件路径，可用 read_file/预览面板查看。return_image=true 时"
+                "额外返回 data URL 供下一轮视觉识别（受 ≤1.5MB / 宽 ≤1568px "
+                "约束）；full_page=true 尝试整页截图（不支持时回退视口）。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "保存路径（相对工作区，可选）"},
+                    "return_image": {
+                        "type": "boolean",
+                        "description": "附带 image_data_url 供视觉模型看当前画面（默认 false）",
+                    },
+                    "full_page": {
+                        "type": "boolean",
+                        "description": "尝试整页截图（captureBeyondViewport，默认 false）",
+                    },
                     "browser_id": {"type": "string", "description": "单实例可省略"},
                 },
                 "required": [],
             },
         )
 
-    def execute(self, path: str = "", browser_id: str = "", **kwargs: Any) -> ToolResult:  # noqa: PLR0911
+    def execute(  # noqa: PLR0911 — 多个早退错误分支更清晰
+        self,
+        path: str = "",
+        browser_id: str = "",
+        return_image: bool = False,
+        full_page: bool = False,
+        **kwargs: Any,
+    ) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
-                error=f"未知参数: {', '.join(sorted(kwargs))}（合法参数: path, browser_id）",
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: path, browser_id, return_image, full_page）"
+                ),
             )
         # 工作区检查在前（纯本地、便宜）；会话解析在后（可能打 CDP）
         root = self._policy.workspace_root
@@ -1646,12 +1909,27 @@ class BrowserScreenshotTool(BaseTool):
             return blocked
 
         session: Optional[BrowserSession] = None
+        full_page_ok = False
+        full_page_note = ""
         try:
             session = _resolve_session(browser_id or None)
             blocked = _blocked_by_control(session, "browser_screenshot")
             if blocked is not None:
                 return blocked
-            result = cdp_command(session, "Page.captureScreenshot", {"format": "png"})
+            if bool(full_page):
+                try:
+                    result = cdp_command(
+                        session,
+                        "Page.captureScreenshot",
+                        {"format": "png", "captureBeyondViewport": True},
+                    )
+                    full_page_ok = True
+                except BrowserCDPError:
+                    # embedded 桥的 capturePage 不支持全页 → 回退视口截图
+                    result = cdp_command(session, "Page.captureScreenshot", {"format": "png"})
+                    full_page_note = "整页截图不受支持，已回退为当前视口截图"
+            else:
+                result = cdp_command(session, "Page.captureScreenshot", {"format": "png"})
             png_bytes = base64.b64decode(result.get("data") or "")
         except BrowserCDPError as exc:
             return _meta_error(exc, session, "screenshot")
@@ -1667,8 +1945,18 @@ class BrowserScreenshotTool(BaseTool):
         except Exception:  # noqa: BLE001 — artifact 记录失败不影响截图
             logger.warning("browser_screenshot artifact 记录失败", exc_info=True)
         resolved = str(target.resolve())
+        content: Dict[str, Any] = {"path": resolved, "bytes": len(png_bytes)}
+        if full_page:
+            content["full_page"] = full_page_ok
+            if full_page_note:
+                content["full_page_note"] = full_page_note
+        if bool(return_image):
+            vision = _build_screenshot_vision_payload(png_bytes)
+            content.update(vision)
+            if vision.get("image_data_url"):
+                content["attach_image_to_next_turn"] = True
         return _meta_result(
-            ToolResult(success=True, content={"path": resolved, "bytes": len(png_bytes)}),
+            ToolResult(success=True, content=content),
             session,
             "screenshot",
             screenshot_path=resolved,

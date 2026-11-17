@@ -169,6 +169,37 @@ _OCR_TEXT_MAX_CHARS_PER_IMAGE = 20_000
 _OCR_TEXT_MAX_TOTAL_CHARS = 60_000
 _OCR_TEXT_TRUNCATION_MARKER = "\n…[OCR 文本已截断]"
 
+#: 临时视觉反馈消息的固定前缀 —— 每轮迭代据此清理，绝不落持久化历史。
+TOOL_IMAGE_FEEDBACK_MARKER = "【SAGE_TOOL_IMAGE_FEEDBACK】"
+_TOOL_IMAGE_FEEDBACK_VISION_TEXT = (
+    "以下是浏览器当前页面截图，请结合画面判断（此消息为临时视觉输入）："
+)
+_TOOL_IMAGE_FEEDBACK_OCR_HEADER = "以下是从浏览器截图 OCR 出的文字："
+_TOOL_IMAGE_FEEDBACK_UNAVAILABLE = (
+    "当前页面无法进行视觉识别；请使用 browser_snapshot(mode=text/full) 或让用户接管。"
+)
+_TOOL_IMAGE_FEEDBACK_OCR_MAX_CHARS = 8_000
+
+
+def _tool_image_payload_from_content(content: Any) -> Optional[Dict[str, str]]:
+    """从工具结果 JSON 中提取截图附件（仅 ``return_image=true`` 会带）。"""
+    if not isinstance(content, str) or "attach_image_to_next_turn" not in content:
+        return None
+    try:
+        data = json.loads(content)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("attach_image_to_next_turn") is not True:
+        return None
+    data_url = data.get("image_data_url")
+    if not isinstance(data_url, str) or not data_url.startswith("data:image/"):
+        return None
+    path = data.get("path")
+    return {
+        "image_data_url": data_url,
+        "path": path if isinstance(path, str) else "",
+    }
+
 
 def _tool_signature(tc: Any) -> str:
     """B2 复读守卫: 规范化工具调用签名为 "工具名:排序参数JSON"。
@@ -1305,6 +1336,132 @@ class SageAgent:
             logger.warning("本地 OCR 流程异常", exc_info=True)
             return ["[图片文字识别失败]" for _ in images]
 
+    # ------------------------------------------------------------------
+    # Task 8 (M5): 浏览器截图 → 临时视觉 / OCR 兜底
+    #
+    # 工具层（browser_screenshot return_image=true）会在工具结果里附带
+    # 压缩后的 data URL。这里把它转成一条**临时** user 消息供下一次 LLM
+    # 调用使用，绝不写入持久化历史，也不参与压缩：消息文本带固定标记
+    # 前缀，每轮迭代开头按标记整体移除（与索引无关），再按最新工具结果
+    # 重新决定注入与否。
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_tool_image_feedback_message(message: Any) -> bool:
+        if not isinstance(message, dict) or message.get("role") != "user":
+            return False
+        content = message.get("content")
+        if isinstance(content, str):
+            return content.startswith(TOOL_IMAGE_FEEDBACK_MARKER)
+        if isinstance(content, list) and content:
+            first = content[0]
+            return (
+                isinstance(first, dict)
+                and first.get("type") == "text"
+                and str(first.get("text") or "").startswith(TOOL_IMAGE_FEEDBACK_MARKER)
+            )
+        return False
+
+    def _clear_tool_image_feedback(self, messages: List[Dict[str, Any]]) -> int:
+        """移除上一轮注入的临时视觉反馈；返回移除条数。"""
+        kept = [m for m in messages if not self._is_tool_image_feedback_message(m)]
+        removed = len(messages) - len(kept)
+        if removed:
+            messages[:] = kept
+        return removed
+
+    @staticmethod
+    def _latest_tool_image_payload(messages: List[Dict[str, Any]]) -> Optional[Dict[str, str]]:
+        """读取最近一条 role=tool 消息中的截图附件（无则 None）。"""
+        for message in reversed(messages):
+            if not isinstance(message, dict):
+                continue
+            if message.get("role") == "tool":
+                return _tool_image_payload_from_content(message.get("content"))
+            if message.get("role") in ("user", "assistant"):
+                # 只看最后一条工具结果：其后已有 user/assistant 消息说明
+                # 模型已回复过，不再回放旧截图。
+                return None
+        return None
+
+    async def _maybe_attach_tool_image_feedback(
+        self, messages: List[Dict[str, Any]]
+    ) -> bool:
+        """按最新工具结果追加一条临时视觉 / OCR 反馈消息。
+
+        - 视觉模型 → 临时 user 消息（文本 + image_url）
+        - 无视觉能力但本地 OCR 可用 → OCR 文本
+        - 都不满足 / OCR 失败 → 可操作的提示文本（绝不抛错）
+
+        进入前先清掉上一轮注入；``_pending_tool_image_feedback``（由
+        ``run_loop`` 的工具结果截断钩子写入，规避 data URL 被 100KB 上限
+        截断）优先于消息扫描。返回是否注入。
+        """
+        self._clear_tool_image_feedback(messages)
+        payload = getattr(self, "_pending_tool_image_feedback", None)
+        if isinstance(payload, dict):
+            self._pending_tool_image_feedback = None
+        else:
+            payload = self._latest_tool_image_payload(messages)
+        if not payload:
+            return False
+        data_url = str(payload.get("image_data_url") or "")
+        if not data_url:
+            return False
+
+        try:
+            capabilities = await self._get_model_capabilities(self._resolve_chat_model_id())
+        except Exception:  # noqa: BLE001 — 能力探测失败按不支持处理，不影响主流程
+            logger.warning("视觉能力探测失败，按不支持处理", exc_info=True)
+            capabilities = []
+        if "vision" in capabilities:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": TOOL_IMAGE_FEEDBACK_MARKER
+                            + _TOOL_IMAGE_FEEDBACK_VISION_TEXT,
+                        },
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }
+            )
+            return True
+
+        text = ""
+        if self._local_ocr_available():
+            text = await self._ocr_screenshot_for_feedback(str(payload.get("path") or ""))
+        if not text:
+            text = _TOOL_IMAGE_FEEDBACK_UNAVAILABLE
+        messages.append({"role": "user", "content": TOOL_IMAGE_FEEDBACK_MARKER + text})
+        return True
+
+    async def _ocr_screenshot_for_feedback(self, path: str) -> str:
+        """对截图文件跑本地 OCR；失败 / 无文字返回空串（调用方回落提示文本）。"""
+        if not path:
+            return ""
+        try:
+            from backend.services.ocr import get_ocr_service
+
+            service = get_ocr_service()
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(
+                None, functools.partial(service.recognize_path, path, lang="auto")
+            )
+        except Exception:  # noqa: BLE001 — OCR 故障不升级为聊天失败
+            logger.warning("截图 OCR 失败", exc_info=True)
+            return ""
+        if result is None or not getattr(result, "ok", False):
+            return ""
+        text = (getattr(result, "text", "") or "").strip()
+        if not text:
+            return ""
+        if len(text) > _TOOL_IMAGE_FEEDBACK_OCR_MAX_CHARS:
+            text = text[:_TOOL_IMAGE_FEEDBACK_OCR_MAX_CHARS] + _OCR_TEXT_TRUNCATION_MARKER
+        return _TOOL_IMAGE_FEEDBACK_OCR_HEADER + "\n" + text
+
     @staticmethod
     def _format_provided_ocr_text(index: int, text: str) -> str:
         """格式化用户确认/编辑后的 OCR 文本块。"""
@@ -2035,6 +2192,8 @@ class SageAgent:
         def cap_result_for_context(content: str) -> str:
             """按单结果上限 + run 级累计预算截断进 LLM 上下文的工具结果。"""
             nonlocal remaining_budget
+            # Task 8 (M5): 截图 data URL 走旁路保存原值（截断后仍可注入）。
+            self._pending_tool_image_feedback = _tool_image_payload_from_content(content)
             if len(content) <= tool_cap_chars and len(content) <= remaining_budget:
                 remaining_budget -= len(content)
                 return content
@@ -2063,6 +2222,9 @@ class SageAgent:
         _final_step_granted = False
         _budget_stop_reason: Optional[str] = None
         _iter_message_start: Optional[int] = None
+        # Task 8 (M5): 最近一条工具结果携带的截图附件。data URL 可能超过
+        # 单结果 100KB 上限，不能靠截断后的消息内容回读，故用旁路字段。
+        self._pending_tool_image_feedback: Optional[Dict[str, str]] = None
 
         try:
             for i in range(_loop_hard_cap):
@@ -2209,12 +2371,18 @@ class SageAgent:
                         "run_loop 迭代 %s 注入 %d 条用户补充消息", i, len(_steer_items)
                     )
 
+                # Task 8 (M5): 临时视觉反馈不得进入压缩输入 —— 压缩前先移除。
+                self._clear_tool_image_feedback(messages)
                 # RT2 (round7) + 2026-09-28 双层压缩: 迭代边界高水位预防 ——
                 # micro → first_aid 两级级联（见 _compact_if_over_budget）。
                 # 阈值按模型实际窗口派生；env SAGE_RUN_CTX_BUDGET_TOKENS=0 关闭。
                 _compact_failures = self._compact_if_over_budget(
                     messages, i, _compact_failures
                 )
+
+                # Task 8 (M5): 压缩后、记录本轮消息起点前注入临时视觉/OCR
+                # 反馈（下一轮迭代开头按标记移除，不落持久化历史）。
+                await self._maybe_attach_tool_image_feedback(messages)
 
                 # 动态预算: 记录本轮消息起点（steering/压缩之后），下一轮顶部
                 # 用 messages[_iter_message_start:] 生成本 step 的进度快照。
@@ -3159,6 +3327,9 @@ class SageAgent:
             self._run_loop_active = False
             self._accepts_steer = False
             self._pending_user_messages.clear()
+            # Task 8 (M5): 收尾时移除临时视觉反馈，确保不随 messages 落库。
+            self._clear_tool_image_feedback(messages)
+            self._pending_tool_image_feedback = None
             # 恢复 agent 实例的原始 LLM client / config(不污染跨请求状态);
             # 动态新建的 client 一并关闭, 防止 httpx 连接泄漏。
             await self._restore_llm_after_dynamic(

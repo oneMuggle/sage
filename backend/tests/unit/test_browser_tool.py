@@ -2078,3 +2078,207 @@ def test_press_non_enter_skips_focused_metadata_read(stubbed, monkeypatch):
     assert result.success is True
     assert len(calls) == 1
     assert calls[0]["use_focused"] is False
+
+
+# ---------------------------------------------------------------------------
+# Task 8 (M5): 截图视觉兜底 + 上传原语
+# ---------------------------------------------------------------------------
+
+
+def _png_with_width(width: int) -> bytes:
+    """构造仅含有效签名/IHDR 的 PNG 头（宽度可探测，Pillow 无法解码）。"""
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + struct.pack(">I", 13)
+        + b"IHDR"
+        + struct.pack(">I", width)
+        + struct.pack(">I", 10)
+        + b"\x08\x02\x00\x00\x00"
+    )
+
+
+def test_screenshot_default_keeps_old_content_shape(stubbed, tmp_path):
+    png = base64.b64encode(_png_with_width(10)).decode()
+    stubbed.results.append({"data": png})
+    result = BrowserScreenshotTool(
+        policy=ToolPolicy(workspace_root=str(tmp_path))
+    ).execute(browser_id="b1", path="one.png")
+    assert result.success is True
+    # browser_meta 是既有公共字段（前端时间线消费），Task 8 不应改变默认内容
+    assert set(result.content) == {"path", "bytes", "browser_meta"}
+    assert "image_data_url" not in result.content
+    assert "attach_image_to_next_turn" not in result.content
+
+
+def test_screenshot_return_image_attaches_data_url(stubbed, tmp_path):
+    raw = _png_with_width(10)
+    stubbed.results.append({"data": base64.b64encode(raw).decode()})
+    result = BrowserScreenshotTool(
+        policy=ToolPolicy(workspace_root=str(tmp_path))
+    ).execute(browser_id="b1", path="one.png", return_image=True)
+    assert result.success is True
+    assert result.content["attach_image_to_next_turn"] is True
+    assert result.content["image_data_url"].startswith("data:image/png;base64,")
+    assert result.content["image_bytes"] == len(raw)
+
+
+def test_screenshot_return_image_skips_oversized_width(stubbed, tmp_path):
+    raw = _png_with_width(4000)
+    stubbed.results.append({"data": base64.b64encode(raw).decode()})
+    result = BrowserScreenshotTool(
+        policy=ToolPolicy(workspace_root=str(tmp_path))
+    ).execute(browser_id="b1", path="wide.png", return_image=True)
+    assert result.success is True
+    assert result.content["vision_skipped"] == "too_large"
+    assert "image_data_url" not in result.content
+    assert "attach_image_to_next_turn" not in result.content
+
+
+def test_screenshot_full_page_requests_beyond_viewport(stubbed, tmp_path):
+    png = base64.b64encode(_png_with_width(10)).decode()
+    stubbed.results.append({"data": png})
+    result = BrowserScreenshotTool(
+        policy=ToolPolicy(workspace_root=str(tmp_path))
+    ).execute(browser_id="b1", path="full.png", full_page=True)
+    assert result.success is True
+    assert result.content["full_page"] is True
+    assert stubbed.calls[-1]["params"] == {
+        "format": "png",
+        "captureBeyondViewport": True,
+    }
+
+
+def test_screenshot_full_page_falls_back_when_unsupported(stubbed, tmp_path, monkeypatch):
+    png = base64.b64encode(_png_with_width(10)).decode()
+    calls: List[Dict[str, Any]] = []
+
+    def _cdp(session_, method, params=None, target_id=None):
+        calls.append(params or {})
+        if (params or {}).get("captureBeyondViewport"):
+            raise browser_tool.BrowserCDPError("captureBeyondViewport unsupported")
+        return {"data": png}
+
+    monkeypatch.setattr(browser_tool, "cdp_command", _cdp)
+    result = BrowserScreenshotTool(
+        policy=ToolPolicy(workspace_root=str(tmp_path))
+    ).execute(browser_id="b1", path="full.png", full_page=True)
+    assert result.success is True
+    assert result.content["full_page"] is False
+    assert "回退" in result.content["full_page_note"]
+    assert calls[0]["captureBeyondViewport"] is True
+
+
+def test_interact_upload_requires_workspace(stubbed, tmp_path):
+    target = tmp_path / "upload.txt"
+    target.write_text("hi", encoding="utf-8")
+    result = BrowserInteractTool(policy=ToolPolicy()).execute(
+        action="upload",
+        selector="input[type=file]",
+        path=str(target),
+        browser_id="b1",
+    )
+    assert result.success is False
+    assert "绑定工作区" in result.error
+
+
+def test_interact_upload_rejects_path_outside_workspace(stubbed, tmp_path):
+    outside = tmp_path.parent / "sage-outside-upload.txt"
+    outside.write_text("x", encoding="utf-8")
+    try:
+        result = BrowserInteractTool(
+            policy=ToolPolicy(workspace_root=str(tmp_path))
+        ).execute(
+            action="upload",
+            selector="input[type=file]",
+            path=str(outside),
+            browser_id="b1",
+        )
+    finally:
+        outside.unlink(missing_ok=True)
+    assert result.success is False
+    assert "path_outside_workspace" in result.error
+
+
+def test_interact_upload_rejects_missing_file(stubbed, tmp_path):
+    result = BrowserInteractTool(
+        policy=ToolPolicy(workspace_root=str(tmp_path))
+    ).execute(
+        action="upload",
+        selector="input[type=file]",
+        value="missing.txt",
+        browser_id="b1",
+    )
+    assert result.success is False
+    assert "upload_file_not_found" in result.error
+    assert stubbed.calls == []
+
+
+def test_interact_upload_rejects_non_file_input(stubbed, tmp_path):
+    target = tmp_path / "upload.txt"
+    target.write_text("hi", encoding="utf-8")
+    tool = BrowserInteractTool(policy=ToolPolicy(workspace_root=str(tmp_path)))
+    first = tool.execute(
+        action="upload",
+        selector="input[type=file]",
+        path="upload.txt",
+        browser_id="b1",
+    )
+    assert first.error.startswith("needs_confirmation: ")
+    pending = browser_safety.get_confirmation_registry().list("b1")
+    browser_safety.get_confirmation_registry().resolve(pending[0].id, "approve")
+    get_browser_control().set_state("b1", BrowserControlState.AGENT)
+
+    stubbed.results.append(
+        {"result": {"value": {"ok": False, "reason": "not_file_input", "tag": "div", "type": ""}}}
+    )
+    result = tool.execute(
+        action="upload",
+        selector="input[type=file]",
+        path="upload.txt",
+        browser_id="b1",
+    )
+    assert result.success is False
+    assert "upload_target_not_file_input" in result.error
+
+
+def test_interact_upload_sets_file_input_files(stubbed, tmp_path):
+    target = tmp_path / "upload.txt"
+    target.write_text("hi", encoding="utf-8")
+    tool = BrowserInteractTool(policy=ToolPolicy(workspace_root=str(tmp_path)))
+    first = tool.execute(
+        action="upload",
+        selector="input[type=file]",
+        path="upload.txt",
+        browser_id="b1",
+    )
+    assert first.success is False
+    assert first.error.startswith("needs_confirmation: ")
+    pending = browser_safety.get_confirmation_registry().list("b1")
+    assert pending
+    assert pending[0].code == "file_upload"
+    browser_safety.get_confirmation_registry().resolve(pending[0].id, "approve")
+    get_browser_control().set_state("b1", BrowserControlState.AGENT)
+
+    stubbed.results.extend(
+        [
+            {"result": {"value": {"ok": True}}},
+            {"result": {"objectId": "obj-42"}},
+            {},  # DOM.setFileInputFiles
+        ]
+    )
+    result = tool.execute(
+        action="upload",
+        selector="input[type=file]",
+        path="upload.txt",
+        browser_id="b1",
+    )
+    assert result.success is True
+    assert result.content["info"].startswith("uploaded ")
+    methods = [call["method"] for call in stubbed.calls]
+    assert methods == ["Runtime.evaluate", "Runtime.evaluate", "DOM.setFileInputFiles"]
+    assert stubbed.calls[0]["params"]["returnByValue"] is True
+    assert stubbed.calls[1]["params"]["returnByValue"] is False
+    assert stubbed.calls[2]["params"] == {
+        "files": [str(target.resolve())],
+        "objectId": "obj-42",
+    }

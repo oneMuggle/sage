@@ -153,6 +153,32 @@ describe('AgentBrowserBridge', () => {
     expect(commands).toEqual(['Page.navigate', 'Runtime.evaluate']);
   });
 
+  it('forwards DOM.setFileInputFiles to the target debugger', async () => {
+    const deps = makeDeps();
+    const bridge = new AgentBrowserBridge(deps);
+    const created = (await bridge.dispatch({
+      method: 'Target.createTarget',
+      params: { url: 'about:blank' },
+      headless: true,
+    })) as { targetId: string };
+    await bridge.dispatch({
+      method: 'Target.attachToTarget',
+      params: { targetId: created.targetId },
+      headless: true,
+    });
+
+    await bridge.dispatch({
+      method: 'DOM.setFileInputFiles',
+      params: { files: ['/tmp/sage-upload.txt'], objectId: 'obj-1' },
+      targetId: created.targetId,
+      headless: true,
+    });
+
+    const last = deps.windows[0].debuggerCommands.at(-1);
+    expect(last?.method).toBe('DOM.setFileInputFiles');
+    expect(last?.params).toEqual({ files: ['/tmp/sage-upload.txt'], objectId: 'obj-1' });
+  });
+
   it('maps Electron cookies to CDP shape and back', async () => {
     const deps = makeDeps([
       {

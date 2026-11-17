@@ -105,7 +105,7 @@ type Mode = 'headless' | 'visible';
 const PROTOCOL_VERSION = '1.3';
 
 /** 允许透传到 webContents.debugger 的域；写入类 Storage 命令被单独拦截。 */
-const DEBUGGER_PREFIXES = ['Page.', 'Runtime.', 'Network.', 'Input.'];
+const DEBUGGER_PREFIXES = ['Page.', 'Runtime.', 'Network.', 'Input.', 'DOM.'];
 
 function modeOf(request: BridgeRequest): Mode {
   return request.headless ? 'headless' : 'visible';
