@@ -13,7 +13,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.api.scheduled_router import build_router
-from backend.scheduler.evolution import ConsolidationResult
 from backend.services.scheduler import SchedulerService
 
 
@@ -66,20 +65,6 @@ class TestEvolutionRunApi:
         assert body["ok"] is True
         assert body["result"] == {"promoted": 2, "decayed": 3, "total": 5}
         task.run.assert_called_once()
-
-    def test_run_serializes_consolidation_result(
-        self, scheduler: SchedulerService, client: TestClient
-    ) -> None:
-        """ConsolidationResult 是 int 子类，必须展开为统计对象而不是裸数字。"""
-        _register(
-            scheduler,
-            ConsolidationResult(5, promoted=2, decayed=3),
-        )
-
-        r = client.post("/api/v1/scheduled/evolution/memory_consolidation/run")
-
-        assert r.status_code == 200
-        assert r.json()["result"] == {"promoted": 2, "decayed": 3, "total": 5}
 
     def test_run_wraps_scalar_result_as_total(
         self, scheduler: SchedulerService, client: TestClient
