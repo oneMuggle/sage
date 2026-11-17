@@ -23,6 +23,8 @@ import { isDemoMode } from './demoFlag';
 import { invoke } from './desktopInvoke';
 import type {
   BatchDeleteResponse,
+  EvolutionTaskName,
+  EvolutionTaskRunResult,
   Memory,
   MemoryConsolidationResult,
   MemoryListResponse,
@@ -281,6 +283,19 @@ function coerceSummariesListResponse(raw: unknown): MemorySummariesListResponse 
   };
 }
 
+async function runEvolutionTaskRequest(name: EvolutionTaskName): Promise<EvolutionTaskRunResult> {
+  try {
+    const raw = await invoke<unknown>('scheduled_evolution_run', { name });
+    const body = (raw ?? {}) as Record<string, unknown>;
+    if (body.ok === false) {
+      throw new Error(typeof body.detail === 'string' ? body.detail : `${name} 任务执行失败`);
+    }
+    return { name, result: (body.result ?? {}) as Record<string, unknown> };
+  } catch (error) {
+    throw handleApiError(error);
+  }
+}
+
 export const memoryApi = {
   async getMemoryDiagnostics(): Promise<MemoryDiagnostics> {
     try {
@@ -508,6 +523,16 @@ export const memoryApi = {
   },
 
   /**
+   * 立即触发任意进化维护任务（reflection / pruning / consolidation 等）。
+   *
+   * 刻意**不走 withRetry**：手动触发的重任务是用户主动行为，失败后自动重跑
+   * 既是重复开销也违背“立即执行”的语义；失败原因由调用方 toast 引导。
+   */
+  async runEvolutionTask(name: EvolutionTaskName): Promise<EvolutionTaskRunResult> {
+    return runEvolutionTaskRequest(name);
+  },
+
+  /**
    * R17-B: 立即触发记忆固化（evolution/memory_consolidation）。
    *
    * 刻意**不走 withRetry**：手动触发的重任务是用户主动行为，失败后自动重跑
@@ -516,23 +541,12 @@ export const memoryApi = {
    * （如 memory manager 未装配）。
    */
   async runConsolidation(): Promise<MemoryConsolidationResult> {
-    try {
-      const raw = await invoke<unknown>('scheduled_evolution_run', {
-        name: 'memory_consolidation',
-      });
-      const body = (raw ?? {}) as Record<string, unknown>;
-      if (body.ok === false) {
-        throw new Error(typeof body.detail === 'string' ? body.detail : '记忆固化任务执行失败');
-      }
-      const result = (body.result ?? {}) as Record<string, unknown>;
-      return {
-        promoted: Number(result.promoted) || 0,
-        decayed: Number(result.decayed) || 0,
-        total: Number(result.total) || 0,
-      };
-    } catch (error) {
-      throw handleApiError(error);
-    }
+    const { result } = await runEvolutionTaskRequest('memory_consolidation');
+    return {
+      promoted: Number(result.promoted) || 0,
+      decayed: Number(result.decayed) || 0,
+      total: Number(result.total) || 0,
+    };
   },
 
   // ---- 对标 S2 (2026-09-13): 写入台账 / 撤销 / 用户画像 ------------------
@@ -743,20 +757,18 @@ export const memoryApi = {
           threshold: safeThreshold,
         });
         if (!isRecord(raw) || !Array.isArray(raw.items)) return [];
-        return (raw.items as unknown[]).filter(isRecord).map(
-          (r): MemoryQualityCandidate => {
-            const memoryTypeRaw = asOptionalString(r.memory_type);
-            return {
-              id: asOptionalString(r.id) ?? '',
-              content: asOptionalString(r.content) ?? '',
-              memory_type: memoryTypeRaw === 'semantic' ? 'semantic' : 'episodic',
-              importance: asNumber(r.importance, 0),
-              quality_score: asNumber(r.quality_score, 0),
-              created_at_ms: asNumber(r.created_at_ms, 0),
-              access_count: asNumber(r.access_count, 0),
-            };
-          },
-        );
+        return (raw.items as unknown[]).filter(isRecord).map((r): MemoryQualityCandidate => {
+          const memoryTypeRaw = asOptionalString(r.memory_type);
+          return {
+            id: asOptionalString(r.id) ?? '',
+            content: asOptionalString(r.content) ?? '',
+            memory_type: memoryTypeRaw === 'semantic' ? 'semantic' : 'episodic',
+            importance: asNumber(r.importance, 0),
+            quality_score: asNumber(r.quality_score, 0),
+            created_at_ms: asNumber(r.created_at_ms, 0),
+            access_count: asNumber(r.access_count, 0),
+          };
+        });
       } catch (error) {
         throw handleApiError(error);
       }
@@ -839,7 +851,12 @@ export const memoryApi = {
         ...(options.reason ? { reason: options.reason } : {}),
       });
       if (!isRecord(raw)) {
-        return { status: 'ok', memory_id: memoryId, memory_type: options.memoryType ?? 'episodic', feedback };
+        return {
+          status: 'ok',
+          memory_id: memoryId,
+          memory_type: options.memoryType ?? 'episodic',
+          feedback,
+        };
       }
       return {
         status: asOptionalString(raw.status) ?? 'ok',

@@ -773,6 +773,77 @@ def test_extract_free_text_preference():
 
 ---
 
-**文档版本**：v1.1  
-**最后更新**：2026-11-09  
+## 五、进化执行与补跑（2026-11-17）
+
+### 5.1 根因
+
+用户 Win7 端约 300 条记忆长期未合并/修剪。排查确认三层叠加：
+
+1. **调度与桌面生命周期不匹配**：进化任务默认 cron 在 02:00–05:30，
+   应用关闭/系统睡眠即错过；`misfire_grace_time=300`，启动后不补跑。
+2. **时间戳单位失配**：`memories_episodic` / `memories_semantic` /
+   `sessions` 写入毫秒，而 `DailySummaryTask` / `MemoryPruningTask` /
+   `ImportanceReevaluationTask` / `MemoryConsolidationTask` 的阈值按秒比较。
+   后果：每日摘要恒 0 会话、30 天修剪永不命中、重要度从不衰减。
+   单测按秒造数，掩盖了 bug。
+3. **门槛与职责不处理正常记忆**：`max_memories=1000`；硬删除只针对
+   `importance<=1/<=3`；质量软失效要求 `<0.3` 且 90 天未访问；
+   `MemoryReflectionTask` 只看近 7 天、每表 120 条；`memory_consolidation`
+   实际只做晋升/衰减，不合并重复。
+
+### 5.2 修复
+
+- 新增 `backend/memory/time_utils.py`：`now_ms()` / `to_ms()` 作为毫秒
+  单一真相源；`evolution_log.created_at` 仍为秒（前端契约）。
+- 新增 schema migration v18：把 `sessions` / `messages` /
+  `memories_episodic` / `memories_semantic` / `memories_evolution_log`
+  中历史秒级时间戳归一为毫秒（`evolution_log` 保持秒）。
+- 进化任务阈值统一毫秒；每日摘要改为按
+  `COALESCE(last_message_at, updated_at, created_at)` 筛“今天有活动”的
+  会话，并对同一会话当天已有 `daily_summary` 去重（启动补跑/重启安全）。
+- 新增 `backend/scheduler/evolution_maintenance.py`：
+  - 读 `evolution_log` 最近 success/skipped 记录，按日报 26h / 周报 8d
+    计算逾期任务；
+  - 启动后 90 秒补跑一次，并注册 `system/evolution-catchup`
+    （`7,37 * * * *`）每 30 分钟检查；
+  - 记忆反思/固化/技能巡检等重任务要求 `IdleDetector` ≥ DEEP；
+  - 聚合写 `evolution_type='maintenance_catchup'`、`trigger_type='catch_up'`
+    日志，便于区分补跑与 cron。
+- `MemoryReflectionTask` 增加 `scan_mode`（`recent` / `backlog` / `both`，
+  默认 `both`）与滚动游标 `reflection_backlog_cursor_ms`：每轮额外扫描
+  旧记忆（每表默认 80 条），数周覆盖全部存量；有语义嵌入器时近重复阈值
+  0.92，否则保持字面 0.97。
+- 设置 → 进化页新增手动运行（记忆反思/修剪/固化），展示任务统计；
+  `memoryApi.runEvolutionTask(name)` 通用封装。后端
+  `/scheduled/evolution/{name}/run` 会把 `ConsolidationResult`（int 子类）
+  与 int 型任务结果归一化为 `{promoted, decayed, total}` / `{total}`，
+  避免 FastAPI 序列化成裸数字。
+- 记忆固化的重要度衰减与修剪/重评估一致，豁免 `environment` 标签记忆。
+
+### 5.3 验证
+
+```bash
+# 后端（release/win7，Python 3.8 环境）
+pytest backend/tests/unit/test_time_utils.py \
+       backend/tests/unit/test_evolution_tasks.py \
+       backend/tests/unit/test_evolution_maintenance.py \
+       backend/tests/unit/test_memory_reflection_p4.py \
+       backend/tests/integration/test_memory_phase3_pipeline.py -q
+
+# 前端
+npx vitest run src/shared/api/__tests__/memoryConsolidation.test.ts \
+  src/widgets/evolution/__tests__/EvolutionPanel.status.test.tsx
+npm run typecheck
+```
+
+### 5.4 后续（P2/P3）
+
+- 记忆管理中心：按主题/类别聚合、编辑/合并/删除/固定/忘记、来源追踪；
+- 记忆健康看板：总数、重复率、90 天未用占比、上次合并时间；
+- 时序实体图（参考 Zep/Graphiti）与评估集（recall@k、用户删除率）。
+
+---
+
+**文档版本**：v1.2
+**最后更新**：2026-11-17
 **维护者**：Sage 团队

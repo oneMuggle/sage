@@ -52,3 +52,31 @@ describe('memoryApi.runConsolidation (R17-B)', () => {
     await expect(memoryApi.runConsolidation()).rejects.toThrow(/失败/);
   });
 });
+
+describe('memoryApi.runEvolutionTask (memory evolution revival)', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset();
+  });
+
+  it('routes arbitrary task names and returns raw stats', async () => {
+    mockInvoke.mockResolvedValue({
+      name: 'memory_reflection',
+      ok: true,
+      result: { deduped: 2, merged: 1, consolidated: 0 },
+    });
+
+    await expect(memoryApi.runEvolutionTask('memory_reflection')).resolves.toEqual({
+      name: 'memory_reflection',
+      result: { deduped: 2, merged: 1, consolidated: 0 },
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('scheduled_evolution_run', {
+      name: 'memory_reflection',
+    });
+  });
+
+  it('surfaces backend detail when ok=false', async () => {
+    mockInvoke.mockResolvedValue({ ok: false, detail: 'task not registered' });
+
+    await expect(memoryApi.runEvolutionTask('memory_pruning')).rejects.toThrow(/not registered/);
+  });
+});
