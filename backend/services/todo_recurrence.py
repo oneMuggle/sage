@@ -50,6 +50,8 @@ def spawn_next_recurrence(
             project_tag=existing.project_tag,
             recurrence_rule=existing.recurrence_rule,
             parent_id=existing.parent_id,
+            tags=existing.tags,
+            reminder_offsets=existing.reminder_offsets,
         )
     except Exception as exc:  # noqa: BLE001 — fail-open by design
         logger.warning(

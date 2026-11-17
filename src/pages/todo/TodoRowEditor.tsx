@@ -9,6 +9,7 @@
  * - Status indicators: complete button, ✓ completed, ✗ cancelled
  */
 import {
+  Bell,
   Calendar,
   Check,
   CheckCircle2,
@@ -430,6 +431,21 @@ export function TodoRowEditor({
               title={(todo.tags ?? []).join(', ')}
             >
               +{(todo.tags?.length ?? 0) - 3}
+            </span>
+          )}
+
+          {/* 自定义提醒档位（有配置时显示） */}
+          {(todo.reminder_offsets?.length ?? 0) > 0 && (
+            <span
+              className="flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 flex-shrink-0"
+              title={`提醒：${(todo.reminder_offsets ?? [])
+                .map((m) =>
+                  m >= 1440 ? `提前${m / 1440}天` : m >= 60 ? `提前${m / 60}小时` : `提前${m}分钟`,
+                )
+                .join('、')}`}
+            >
+              <Bell className="w-3 h-3" />
+              {todo.reminder_offsets?.length}
             </span>
           )}
 

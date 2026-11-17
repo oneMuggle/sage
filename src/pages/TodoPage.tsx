@@ -114,6 +114,7 @@ export function TodoPage() {
       due_at?: string;
       project_tag?: string;
       tags?: string[];
+      reminder_offsets?: number[];
     }) => {
       setCreateBusy(true);
       try {

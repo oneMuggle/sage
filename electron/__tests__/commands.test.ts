@@ -1271,5 +1271,10 @@ describe('agent_* IPC commands', () => {
       expect(COMMAND_ROUTES.todo_tags.method).toBe('GET');
       expect(COMMAND_ROUTES.todo_tags.path({})).toBe('/api/v1/todos/tags');
     });
+
+    it('asr_transcribe is POST /api/v1/asr/transcribe', () => {
+      expect(COMMAND_ROUTES.asr_transcribe.method).toBe('POST');
+      expect(COMMAND_ROUTES.asr_transcribe.path({})).toBe('/api/v1/asr/transcribe');
+    });
   });
 });

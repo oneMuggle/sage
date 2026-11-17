@@ -29,6 +29,7 @@ class CreateTodoIn(BaseModel):
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
     tags: Optional[List[str]] = None
+    reminder_offsets: Optional[List[int]] = None
 
     class Config:
         extra = "forbid"
@@ -46,6 +47,7 @@ class UpdateTodoIn(BaseModel):
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
     tags: Optional[List[str]] = None
+    reminder_offsets: Optional[List[int]] = None
 
     class Config:
         extra = "forbid"
@@ -63,6 +65,7 @@ class TodoOut(BaseModel):
     project_tag: Optional[str] = None
     project_id: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
+    reminder_offsets: List[int] = Field(default_factory=list)
     is_recurring: bool
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
@@ -219,6 +222,7 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
                 recurrence_rule=payload.recurrence_rule,
                 parent_id=payload.parent_id,
                 tags=payload.tags,
+                reminder_offsets=payload.reminder_offsets,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
