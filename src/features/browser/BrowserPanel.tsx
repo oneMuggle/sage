@@ -27,15 +27,16 @@ import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { buildLocalImageSrc } from '../../shared/lib/localImageSrc';
 import { useStore, type ToolCall } from '../../shared/lib/store';
 import {
+  isBrowserPanelAutoOpenEnabled,
+  setBrowserPanelAutoOpenEnabled,
+} from '../right-panel/rightPanelStore';
+
+import { rememberBrowserSession, useBrowserSessionStore } from './browserSessionStore';
+import {
   collectPersistedBrowserCalls,
   latestBrowserSessionId,
   mergeBrowserToolCalls,
 } from './browserSteps';
-import { rememberBrowserSession, useBrowserSessionStore } from './browserSessionStore';
-import {
-  isBrowserPanelAutoOpenEnabled,
-  setBrowserPanelAutoOpenEnabled,
-} from '../right-panel/rightPanelStore';
 
 type PanelApi = NonNullable<Window['electronAPI']>['browserPanel'];
 
