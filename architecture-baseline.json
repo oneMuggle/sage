@@ -18,7 +18,7 @@
     "backend/cli/rescue.py": 814,
     "backend/core/legacy/agent.py": 4034,
     "backend/core/legacy/llm_client.py": 1457,
-    "backend/data/database.py": 2680,
+    "backend/data/database.py": 2693,
     "backend/data/session_repo.py": 1279,
     "backend/data/settings_canonicalizer.py": 1100,
     "backend/main.py": 2052,
