@@ -21,6 +21,7 @@ from backend.memory.preference_labels import (
     PREFERENCE_VALUE_LABELS,
     format_preference,
 )
+from backend.memory.time_utils import now_ms
 from backend.memory.vector_store import prune_orphan_vectors
 from backend.scheduler.evolution_log import elapsed_ms, record_evolution_log
 
@@ -145,20 +146,22 @@ class DailySummaryTask(BaseEvolutionTask):
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        # 获取今日时间范围
+        # 获取今日时间范围（毫秒；sessions.created_at/updated_at 均为 ms）
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        today_start_ts = int(today_start.timestamp())
-        now_ts = int(time.time())
+        today_start_ms = int(today_start.timestamp() * 1000)
+        now_ts = now_ms()
 
-        # 1. 获取今日所有会话
+        # 1. 获取今日有活动的会话：created_at 是毫秒；用 updated_at /
+        # last_message_at 兜底 —— 昨天创建、今天继续聊的会话也必须摘要。
         cursor.execute(
             """
             SELECT id, title, message_count
             FROM sessions
-            WHERE created_at >= ? AND created_at < ?
-            ORDER BY created_at DESC
+            WHERE COALESCE(last_message_at, updated_at, created_at) >= ?
+              AND COALESCE(last_message_at, updated_at, created_at) <= ?
+            ORDER BY COALESCE(last_message_at, updated_at, created_at) DESC
         """,
-            [today_start_ts, now_ts],
+            [today_start_ms, now_ts],
         )
 
         sessions = cursor.fetchall()
@@ -168,10 +171,19 @@ class DailySummaryTask(BaseEvolutionTask):
 
         for session in sessions:
             session_id = session["id"]
-            message_count = session["message_count"]
 
-            if message_count < self.min_messages:
-                logger.debug(f"会话 {session_id} 消息数不足 ({message_count})，跳过")
+            # 启动补跑/重启可能重复触发：同一会话当天已有摘要则跳过。
+            cursor.execute(
+                """
+                SELECT 1 FROM memories_episodic
+                WHERE session_id = ? AND memory_type = 'daily_summary'
+                  AND created_at >= ?
+                LIMIT 1
+                """,
+                [session_id, today_start_ms],
+            )
+            if cursor.fetchone():
+                logger.debug(f"会话 {session_id} 今日已有摘要，跳过")
                 continue
 
             # 2. 获取会话消息
@@ -321,8 +333,8 @@ class MemoryPruningTask(BaseEvolutionTask):
         cursor = conn.cursor()
 
         total_deleted = 0
-        now_ts = int(time.time())
-        thirty_days_ago = now_ts - 30 * 24 * 3600
+        now_ts = now_ms()
+        thirty_days_ago = now_ts - 30 * 24 * 3600 * 1000
 
         # 1. 删除过期记忆
         cursor.execute(
@@ -812,9 +824,9 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        now_ts = int(time.time())
-        seven_days_ago = now_ts - 7 * 24 * 3600
-        thirty_days_ago = now_ts - 30 * 24 * 3600
+        now_ts = now_ms()
+        seven_days_ago = now_ts - 7 * 24 * 3600 * 1000
+        thirty_days_ago = now_ts - 30 * 24 * 3600 * 1000
 
         total_adjusted = 0
 
@@ -922,8 +934,10 @@ class MemoryConsolidationTask(BaseEvolutionTask):
 
     功能（定期运行，例如每周日凌晨）:
     1. 识别高频访问的情景记忆 → 提升为语义记忆
-    2. 识别重复/相似的记忆 → 合并为一条
-    3. 降低长期未访问记忆的重要性
+    2. 降低长期未访问记忆的重要性
+
+    注意：重复/相似记忆的合并由 :class:`MemoryReflectionTask` 负责；
+    本任务只做晋升与重要性衰减，不做去重。
 
     类似人脑在睡眠期间整合记忆的过程。
     """
@@ -1009,7 +1023,7 @@ class MemoryConsolidationTask(BaseEvolutionTask):
         logger.info(f"提升高频记忆到语义记忆: {promoted} 条")
 
         # 2. 降低长期未访问记忆的重要性
-        decay_cutoff = int(time.time()) - self.decay_days * 24 * 3600
+        decay_cutoff = now_ms() - self.decay_days * 24 * 3600 * 1000
         cursor.execute(
             """
             UPDATE memories_episodic
@@ -1018,6 +1032,7 @@ class MemoryConsolidationTask(BaseEvolutionTask):
             AND (accessed_at IS NULL OR accessed_at < ?)
             AND created_at < ?
             AND importance > 1
+            AND COALESCE(tags, '') NOT LIKE '%environment%'
         """,
             [decay_cutoff, decay_cutoff],
         )
@@ -1161,8 +1176,12 @@ class MemoryReflectionTask(BaseEvolutionTask):
 
     DEFAULT_WINDOW_DAYS = 7
     DEFAULT_SAMPLE_LIMIT = 120
-    #: 与 conflict.NOOP_THRESHOLD 同值：近重复判定
+    #: 每轮 backlog 每表扫描条数（存量 300 条约 2-3 轮覆盖）
+    DEFAULT_BACKLOG_BATCH_LIMIT = 80
+    #: 与 conflict.NOOP_THRESHOLD 同值：字面近重复判定
     DEDUPE_SIMILARITY = 0.97
+    #: 语义嵌入器可用时的近重复阈值（同义改写通常 0.92+）
+    SEMANTIC_DEDUPE_SIMILARITY = 0.92
     #: 单组送 LLM 的条数上限（控提示词体积）
     LLM_GROUP_LIMIT = 40
     LLM_CONTENT_TRUNC = 160
@@ -1186,7 +1205,7 @@ class MemoryReflectionTask(BaseEvolutionTask):
             sample_limit = int(self.config.get("sample_limit", self.DEFAULT_SAMPLE_LIMIT))
         except (TypeError, ValueError):
             sample_limit = self.DEFAULT_SAMPLE_LIMIT
-        cutoff_ms = int(time.time() * 1000) - window_days * 86_400_000
+        cutoff_ms = now_ms() - window_days * 86_400_000
 
         conn = self.db.get_connection()
         rows: List[dict] = []
@@ -1211,6 +1230,129 @@ class MemoryReflectionTask(BaseEvolutionTask):
                 rows.append(d)
         return rows
 
+    def _backlog_start_cursor(self) -> int:
+        """backlog 首次扫描的起点：recent 窗口之外。"""
+        try:
+            window_days = int(self.config.get("window_days", self.DEFAULT_WINDOW_DAYS))
+        except (TypeError, ValueError):
+            window_days = self.DEFAULT_WINDOW_DAYS
+        return now_ms() - window_days * 86_400_000
+
+    def _load_backlog_cursor(self):
+        """从上一轮反思日志的 metrics 读取 backlog 游标（毫秒）。
+
+        没有游标（首次运行/旧日志）时返回 None，由调用方用
+        :meth:`_backlog_start_cursor` 初始化。
+        """
+        try:
+            row = self.db.get_connection().execute(
+                """
+                SELECT metrics_json FROM evolution_log
+                WHERE evolution_type = 'memory_reflection'
+                  AND status = 'success'
+                  AND metrics_json IS NOT NULL
+                ORDER BY created_at DESC, rowid DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        except Exception as exc:  # noqa: BLE001 — 读日志失败按首次处理
+            logger.warning(f"反思 backlog 游标读取失败: {exc}")
+            return None
+        if row is None:
+            return None
+        try:
+            data = json.loads(row["metrics_json"])
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        value = data.get("reflection_backlog_cursor_ms")
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _collect_backlog(self, cursor_ms: int) -> List[dict]:
+        """按游标向前扫描旧记忆（每表 ``backlog_batch_limit`` 条）。
+
+        活跃行才参与；已失效/被取代的记忆不再进反思候选。
+        """
+        try:
+            batch_limit = int(
+                self.config.get(
+                    "backlog_batch_limit", self.DEFAULT_BACKLOG_BATCH_LIMIT
+                )
+            )
+        except (TypeError, ValueError):
+            batch_limit = self.DEFAULT_BACKLOG_BATCH_LIMIT
+        conn = self.db.get_connection()
+        rows: List[dict] = []
+        for layer, table, extra, category_expr in (
+            ("episodic", "memories_episodic", "AND is_valid = 1", "memory_category"),
+            ("semantic", "memories_semantic", "", "NULL"),
+        ):
+            try:
+                cursor = conn.execute(
+                    f"SELECT id, content, created_at, scope, project_key, "
+                    f"{category_expr} AS memory_category "
+                    f"FROM {table} "
+                    f"WHERE invalid_at IS NULL AND created_at < ? {extra} "
+                    f"ORDER BY created_at DESC LIMIT ?",
+                    (cursor_ms, batch_limit),
+                )
+            except Exception as exc:  # noqa: BLE001 — 表异常时按无候选处理
+                logger.warning(f"反思 backlog 读取失败({layer}): {exc}")
+                continue
+            for row in cursor.fetchall():
+                d = dict(row)
+                d["memory_layer"] = layer
+                rows.append(d)
+        return rows
+
+    def _collect_candidates(self):
+        """收集本轮反思候选：recent + backlog，返回 (rows, scan_stats, next_cursor)。
+
+        ``scan_mode`` 支持 ``recent`` / ``backlog`` / ``both``（默认）。
+        backlog 游标存在 ``evolution_log.metrics_json``，每轮向前推进，
+        扫到最早后回绕到 recent 窗口边界。
+        """
+        mode = str(self.config.get("scan_mode", "both")).lower()
+        if mode not in ("recent", "backlog", "both"):
+            mode = "both"
+
+        recent: List[dict] = []
+        backlog: List[dict] = []
+        if mode in ("recent", "both"):
+            recent = self._collect_recent()
+        cursor = self._load_backlog_cursor()
+        if mode in ("backlog", "both"):
+            if cursor is None:
+                cursor = self._backlog_start_cursor()
+            backlog = self._collect_backlog(cursor)
+
+        seen = set()
+        merged: List[dict] = []
+        for row in recent + backlog:
+            key = (row.get("memory_layer"), row.get("id"))
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(row)
+
+        if mode in ("backlog", "both"):
+            if backlog:
+                oldest = min(int(r.get("created_at") or 0) for r in backlog)
+                next_cursor = max(0, oldest - 1)
+            else:
+                next_cursor = self._backlog_start_cursor()
+        else:
+            next_cursor = cursor
+
+        return merged, {
+            "recent_scanned": len(recent),
+            "backlog_scanned": len(backlog),
+        }, next_cursor
+
     @staticmethod
     def _group_by_attribution(rows: List[dict]) -> Dict[tuple, List[dict]]:
         """按归属分组：scope + project_key 完全一致才可能互相整理。"""
@@ -1222,24 +1364,69 @@ class MemoryReflectionTask(BaseEvolutionTask):
 
     # ---- 启发式：组内近重复去重 ---------------------------------------------
 
-    def _heuristic_dedupe(self, groups: Dict[tuple, List[dict]]) -> List[str]:
-        from backend.memory.conflict import _similarity
+    def _resolve_semantic_embedder(self):
+        """解析语义嵌入器：manager 注入优先，其次工厂；不可用返回 None。"""
+        if self.memory_manager is None:
+            return None
+        candidates = []
+        source = getattr(self.memory_manager, "embedder", None)
+        if source is not None:
+            candidates.append(source)
+        try:
+            from backend.memory.embedder_factory import create_embedder
 
+            candidates.append(create_embedder)
+        except Exception as exc:  # noqa: BLE001 — 工厂不可用按无语义处理
+            logger.debug(f"语义嵌入器工厂不可用，去重退化为字面: {exc}")
+        for candidate in candidates:
+            try:
+                embedder = candidate if hasattr(candidate, "encode") else candidate()
+            except Exception:  # noqa: BLE001 — 实例化失败按不可用处理
+                continue
+            if embedder is not None and getattr(embedder, "is_semantic", False):
+                return embedder
+        return None
+
+    def _dedupe_similarity_fn(self, rows: List[dict]):
+        """返回 ``(相似度函数, 阈值)``：语义可用 0.92，否则字面 0.97。
+
+        语义嵌入器存在但编码失败时，阈值随函数一起退回字面 0.97 ——
+        避免用 0.92 的字面相似度误合并不同事实。
+        """
+        from backend.memory.conflict import _cosine_similarity, _similarity
+
+        embedder = self._resolve_semantic_embedder()
+        if embedder is not None and rows:
+            try:
+                vectors = embedder.encode_batch(
+                    [r.get("content") or "" for r in rows]
+                )
+            except Exception as exc:  # noqa: BLE001 — 编码失败退回字面
+                logger.debug(f"反思去重语义编码失败，退化为字面相似度: {exc}")
+                vectors = None
+            if vectors and len(vectors) == len(rows):
+                by_id = {r["id"]: v for r, v in zip(rows, vectors)}
+                return (
+                    lambda a, b: _cosine_similarity(by_id[a["id"]], by_id[b["id"]]),
+                    self.SEMANTIC_DEDUPE_SIMILARITY,
+                )
+        return (
+            lambda a, b: _similarity(a.get("content") or "", b.get("content") or ""),
+            self.DEDUPE_SIMILARITY,
+        )
+
+    def _heuristic_dedupe(self, groups: Dict[tuple, List[dict]]) -> List[str]:
         invalidated_ids: List[str] = []
         for rows in groups.values():
             if len(rows) < 2:
                 continue
             # created_at 降序：第一条为"最新代表"，与其近重复的旧行失效
             ordered = sorted(rows, key=lambda r: r.get("created_at") or 0, reverse=True)
+            sim_fn, threshold = self._dedupe_similarity_fn(ordered)
             reps: List[dict] = []
             for row in ordered:
                 dup_of = next(
-                    (
-                        rep
-                        for rep in reps
-                        if _similarity(row.get("content") or "", rep.get("content") or "")
-                        >= self.DEDUPE_SIMILARITY
-                    ),
+                    (rep for rep in reps if sim_fn(row, rep) >= threshold),
                     None,
                 )
                 if dup_of is not None:
@@ -1455,8 +1642,11 @@ class MemoryReflectionTask(BaseEvolutionTask):
                 )
                 return stats
 
-            rows = self._collect_recent()
+            rows, scan_stats, backlog_cursor = self._collect_candidates()
+            stats.update(scan_stats)
             stats["scanned"] = len(rows)
+            if backlog_cursor is not None:
+                stats["reflection_backlog_cursor_ms"] = backlog_cursor
             groups = self._group_by_attribution(rows)
 
             deduped_ids = set(self._heuristic_dedupe(groups))
@@ -1472,8 +1662,11 @@ class MemoryReflectionTask(BaseEvolutionTask):
             stats["invalidated"] = llm_stats["invalidated"]
 
             description = (
-                f"记忆反思完成: 扫描 {stats['scanned']}, 去重 {stats['deduped']}, "
-                f"合并 {stats['merged']}, 失效 {stats['invalidated']}"
+                f"记忆反思完成: 扫描 {stats['scanned']}"
+                f"（recent {stats.get('recent_scanned', 0)} / "
+                f"backlog {stats.get('backlog_scanned', 0)}）, "
+                f"去重 {stats['deduped']}, 合并 {stats['merged']}, "
+                f"失效 {stats['invalidated']}"
             )
             record_evolution_log(
                 self.db,

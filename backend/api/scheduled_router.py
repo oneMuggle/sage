@@ -227,7 +227,17 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
                 detail={"type": "task_not_found", "message": f"evolution task '{name}' not registered"},
             )
         result = svc.run_evolution_task_now(name)
-        return {"name": name, "ok": result is not None, "result": result or {}}
+        # ConsolidationResult 是 int 子类，直接交给 FastAPI 会被序列化成裸数字，
+        # 前端拿不到 promoted/decayed；int 型任务（修剪/摘要）同样补一个 total。
+        if result is None:
+            payload: Any = {}
+        elif hasattr(result, "as_dict"):
+            payload = result.as_dict()
+        elif isinstance(result, int):
+            payload = {"total": int(result)}
+        else:
+            payload = result
+        return {"name": name, "ok": result is not None, "result": payload}
 
     # ---------- desktop notifications (2026-11-05) ----------
     # Electron 主进程每 15s 轮询本端点,把排空的通知转成 OS 通知。

@@ -17,6 +17,7 @@ from types import SimpleNamespace
 
 from backend.memory.semantic import SemanticMemory
 from backend.scheduler.evolution import (
+    DailySummaryTask,
     ImportanceReevaluationTask,
     MemoryConsolidationTask,
     MemoryPruningTask,
@@ -24,12 +25,12 @@ from backend.scheduler.evolution import (
 )
 from backend.tests.conftest import ensure_session
 
-SECONDS_PER_DAY = 24 * 3600
+MS_PER_DAY = 24 * 3600 * 1000
 
 
-def _now_s() -> int:
-    """秒级时间戳 — evolution.py 各任务 WHERE 子句按秒比较 created_at"""
-    return int(time.time())
+def _now_ms() -> int:
+    """生产同款毫秒时间戳 — evolution.py 各任务 WHERE 子句按毫秒比较。"""
+    return int(time.time() * 1000)
 
 
 def _insert_episodic(
@@ -45,7 +46,7 @@ def _insert_episodic(
 ):
     """直接插入一条 episodic 记忆行，返回记忆 id"""
     memory_id = str(uuid.uuid4())
-    created = created_at if created_at is not None else _now_s()
+    created = created_at if created_at is not None else _now_ms()
     db.get_connection().execute(
         """
         INSERT INTO memories_episodic
@@ -136,7 +137,7 @@ class TestMemoryConsolidationSoftDelete:
         assert log["after_content"].startswith("semantic:")
         assert log["reason"] == "memory_consolidation"
         # created_at 用毫秒（与 memories_episodic/memories_semantic 一致）
-        assert log["created_at"] > _now_s() * 100
+        assert log["created_at"] > 1_000_000_000_000
 
     async def test_duplicate_content_not_promoted_nor_soft_deleted(self, setup_test_db):
         db = setup_test_db
@@ -166,7 +167,7 @@ class TestImportanceReevaluationLog:
             content="陈旧的高重要性记忆",
             importance=8,
             access_count=1,
-            created_at=_now_s() - 8 * SECONDS_PER_DAY,
+            created_at=_now_ms() - 8 * MS_PER_DAY,
         )
         task = ImportanceReevaluationTask(db=db)
 
@@ -189,7 +190,7 @@ class TestImportanceReevaluationLog:
             content="频繁访问的低重要性记忆",
             importance=3,
             access_count=6,
-            created_at=_now_s(),
+            created_at=_now_ms(),
         )
         task = ImportanceReevaluationTask(db=db)
 
@@ -212,8 +213,8 @@ class TestMemoryPruningLog:
         # §1.3a: FK enforcement — parent session row for "sess-orphan" must
         # exist before the episodic insert below.
         ensure_session(db, "sess-orphan")
-        now = _now_s()
-        old = now - 31 * SECONDS_PER_DAY
+        now = _now_ms()
+        old = now - 31 * MS_PER_DAY
         # 规则一，已过期记忆
         _insert_episodic(db, content="过期记忆", importance=5, expires_at=now - 100)
         # 规则二，极低价值且从未访问且超过30天
@@ -255,7 +256,7 @@ class TestMemoryPruningLog:
 
     async def test_prune_no_deletions_writes_no_log(self, setup_test_db):
         db = setup_test_db
-        _insert_episodic(db, content="健康记忆", importance=6, created_at=_now_s())
+        _insert_episodic(db, content="健康记忆", importance=6, created_at=_now_ms())
         task = MemoryPruningTask(db=db)
 
         deleted = await task.run_async()
@@ -279,7 +280,7 @@ class TestEvolutionLogBestEffort:
 
     async def test_pruning_survives_log_table_failure(self, setup_test_db):
         db = setup_test_db
-        _insert_episodic(db, content="过期记忆", expires_at=_now_s() - 100)
+        _insert_episodic(db, content="过期记忆", expires_at=_now_ms() - 100)
         # 模拟日志表损坏：重命名后 INSERT 必失败
         db.get_connection().execute(
             "ALTER TABLE memories_evolution_log RENAME TO memories_evolution_log_bak"
@@ -315,7 +316,7 @@ class TestEvolutionLogBestEffort:
             content="陈旧的高重要性记忆",
             importance=9,
             access_count=0,
-            created_at=_now_s() - 8 * SECONDS_PER_DAY,
+            created_at=_now_ms() - 8 * MS_PER_DAY,
         )
         db.get_connection().execute(
             "ALTER TABLE memories_evolution_log RENAME TO memories_evolution_log_bak"
@@ -327,3 +328,101 @@ class TestEvolutionLogBestEffort:
 
         assert adjusted == 1
         assert _fetch_episodic(db, mid)["importance"] == 8
+
+
+class TestDailySummaryMilliseconds:
+    """每日摘要按毫秒窗口筛选“今天有活动”的会话。"""
+
+    async def test_summarizes_session_active_today_and_dedupes_same_day(
+        self, setup_test_db
+    ):
+        db = setup_test_db
+        now = _now_ms()
+        session_id = "sess-daily"
+        conn = db.get_connection()
+        conn.execute(
+            """
+            INSERT INTO sessions
+            (id, title, created_at, updated_at, last_message_at, message_count)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (session_id, "今日会话", now - 2 * MS_PER_DAY, now, now, 3),
+        )
+        messages = [
+            ("msg-1", "user", "我想聊聊记忆系统"),
+            ("msg-2", "assistant", "好的，我们开始"),
+            ("msg-3", "user", "请继续"),
+        ]
+        for idx, (message_id, role, content) in enumerate(messages):
+            conn.execute(
+                """
+                INSERT INTO messages (id, session_id, role, content, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (message_id, session_id, role, content, now - 1000 + idx),
+            )
+        conn.commit()
+
+        task = DailySummaryTask(db=db)
+        processed = await task.run_async()
+
+        assert processed == 1
+        row = conn.execute(
+            """
+            SELECT memory_type, importance FROM memories_episodic
+            WHERE session_id = ?
+            """,
+            [session_id],
+        ).fetchone()
+        assert row is not None
+        assert row["memory_type"] == "daily_summary"
+        assert row["importance"] == 6
+
+        # 同一会话当天重复执行（启动补跑/重启）不再生成第二条摘要
+        assert await task.run_async() == 0
+
+
+class TestMemoryConsolidationDecayMilliseconds:
+    """固化任务的 30 天衰减必须使用毫秒时间戳。"""
+
+    async def test_decays_stale_memory_with_millisecond_created_at(self, setup_test_db):
+        db = setup_test_db
+        old = _now_ms() - 40 * MS_PER_DAY
+        mid = _insert_episodic(
+            db,
+            content="四十天前的重要记忆",
+            importance=6,
+            access_count=0,
+            created_at=old,
+        )
+        task = MemoryConsolidationTask(
+            db=db, memory_manager=SimpleNamespace(semantic=SemanticMemory(db=db))
+        )
+
+        result = await task.run_async()
+
+        assert result["decayed"] >= 1
+        assert _fetch_episodic(db, mid)["importance"] == 5
+
+    async def test_environment_memory_is_not_decayed(self, setup_test_db):
+        db = setup_test_db
+        old = _now_ms() - 40 * MS_PER_DAY
+        mid = _insert_episodic(
+            db,
+            content="PowerShell 5.1 不支持三元运算符",
+            importance=6,
+            created_at=old,
+        )
+        conn = db.get_connection()
+        conn.execute(
+            "UPDATE memories_episodic SET tags = ? WHERE id = ?",
+            ('["environment"]', mid),
+        )
+        conn.commit()
+        task = MemoryConsolidationTask(
+            db=db, memory_manager=SimpleNamespace(semantic=SemanticMemory(db=db))
+        )
+
+        await task.run_async()
+
+        assert _fetch_episodic(db, mid)["importance"] == 6
