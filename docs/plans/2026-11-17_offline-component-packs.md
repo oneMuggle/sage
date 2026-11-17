@@ -75,14 +75,14 @@ docs/user-manual/README.md
 scripts/worktree.sh new feat/offline-component-packs --base release/win7
 ```
 
-- [ ] **Step 2: 链接主仓库 node_modules**
+- [x] **Step 2: 链接主仓库 node_modules**
 
 ```bash
 cd /home/fz/project/sage/.worktrees/feat-offline-component-packs
 ln -s /home/fz/project/sage/node_modules node_modules
 ```
 
-- [ ] **Step 3: 确认 py38 测试解释器**
+- [x] **Step 3: 确认 py38 测试解释器**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend-py38/bin/python -c "import cryptography; print(cryptography.__version__)"
@@ -108,7 +108,7 @@ ln -s /home/fz/project/sage/node_modules node_modules
   - `load_public_key(pem: bytes) -> PublicKey`
   - `verify_signature(public_key, payload: bytes, signature: bytes) -> bool`
 
-- [ ] **Step 1: 写失败测试（manifest 解析 + 验签）**
+- [x] **Step 1: 写失败测试（manifest 解析 + 验签）**
 
 ```python
 # backend/tests/unit/services/test_components_service.py
@@ -171,7 +171,7 @@ def test_signature_roundtrip_and_tamper():
     assert verify_signature(public_key, payload + b" ", signature) is False
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 ```bash
 cd /home/fz/project/sage/.worktrees/feat-offline-component-packs
@@ -180,7 +180,7 @@ PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
 # 期望：ModuleNotFoundError / ImportError
 ```
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `errors.py`：
 
@@ -353,7 +353,7 @@ def resolve_public_key_path(
     return None
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 ```bash
 PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
@@ -361,7 +361,7 @@ PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
 # 期望：2 passed
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/services/components backend/tests/unit/services/test_components_service.py
@@ -380,7 +380,7 @@ git commit -m "feat(components): add manifest model and signature verification"
 - Produces: `stage_payload(zip_path, manifest, staging_dir, progress=None) -> None`
 - 行为：拒绝 zip slip、符号链接、重复条目、未登记文件、大小/hash 不匹配。
 
-- [ ] **Step 1: 追加失败测试**
+- [x] **Step 1: 追加失败测试**
 
 ```python
 import hashlib
@@ -435,7 +435,7 @@ def test_stage_payload_verifies_hash(tmp_path: Path):
     assert (tmp_path / "stage" / "models" / "demo.bin").read_bytes() == payload
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```bash
 PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
@@ -443,7 +443,7 @@ PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
 # 期望：ImportError: backend.services.components.archive
 ```
 
-- [ ] **Step 3: 实现 `archive.py`**
+- [x] **Step 3: 实现 `archive.py`**
 
 要点：
 - `MAX_TOTAL_BYTES = 8 * 1024 ** 3`，`MAX_FILES = 100_000`。
@@ -533,7 +533,7 @@ def stage_payload(
         raise ComponentError(f"组件包缺少文件：{sorted(missing)[0]}")
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 ```bash
 PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
@@ -541,7 +541,7 @@ PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
 # 期望：全部 passed
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/services/components/archive.py backend/tests/unit/services/test_components_service.py
@@ -568,7 +568,7 @@ git commit -m "feat(components): add safe signed payload extraction"
 - 安装元数据：`<userData>/components/installed.json`
 - `user_data` target 只允许 `models/` 前缀；`component_dir` target 落在 `<userData>/components/<id>/<version>/`。
 
-- [ ] **Step 1: 追加失败测试（导入/重复安装/删除/非法目标）**
+- [x] **Step 1: 追加失败测试（导入/重复安装/删除/非法目标）**
 
 ```python
 def _build_pack(tmp_path: Path, key, manifest: dict, payload: dict):
@@ -615,7 +615,7 @@ def test_install_and_remove_user_data_component(tmp_path: Path, monkeypatch):
     assert service.list_installed() == []
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```bash
 PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
@@ -623,7 +623,7 @@ PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
 # 期望：ImportError: service
 ```
 
-- [ ] **Step 3: 实现 `service.py`**
+- [x] **Step 3: 实现 `service.py`**
 
 关键实现约束：
 - 读取 `component.json` 与 `signature.bin`：签名覆盖 `component.json` 原始字节。
@@ -666,21 +666,21 @@ class PackageScanResult:
     error: str = ""
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 ```bash
 PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
   backend/tests/unit/services/test_components_service.py -q
 ```
 
-- [ ] **Step 5: 补 py38 兼容与 ruff**
+- [x] **Step 5: 补 py38 兼容与 ruff**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend-py38/bin/python scripts/check_py38_compat.py
 /home/fz/anaconda3/envs/sage-backend-py38/bin/ruff check backend/services/components
 ```
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/services/components backend/tests/unit/services/test_components_service.py
@@ -708,7 +708,7 @@ git commit -m "feat(components): add install/remove/scan service"
   - `{"event":"result","ok":true,"installed":[...]}` 或 `{"event":"result","ok":false,"error":"..."}`
 - `rescue.py` 增加 `components` 子命令，转发到上述 CLI；REPL 增加 `[8] 管理离线组件包`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 from __future__ import annotations
@@ -734,7 +734,7 @@ def test_cli_json_error_is_machine_readable(tmp_path, capsys, monkeypatch):
     assert "不存在" in lines[-1]["error"]
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```bash
 PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
@@ -742,7 +742,7 @@ PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
 # 期望：ModuleNotFoundError
 ```
 
-- [ ] **Step 3: 实现 CLI**
+- [x] **Step 3: 实现 CLI**
 
 要点：
 - `ComponentService.from_environment()` 使用 `resolve_user_data_dir()`（`backend/services/rescue/paths.py`）和资源目录推导：
@@ -754,7 +754,7 @@ PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
 - `remove` 未带 `--yes` 时交互确认；非交互 stdin EOF 视为未确认（退出码 2）。
 - 错误统一 `ComponentError` 捕获，JSON 模式输出 `result ok=false`。
 
-- [ ] **Step 4: 修改 `rescue.py`**
+- [x] **Step 4: 修改 `rescue.py`**
 
 ```python
 p_comp = sub.add_parser("components", parents=[common], help="离线组件包管理")
@@ -767,14 +767,14 @@ p_comp.add_argument("--json", action="store_true", dest="as_json")
 
 `cmd_components(args)` 组装 argv 后调用 `components_cli.main`。REPL 增加菜单项 `[8]` 与 `_repl_components()`（list/scan/import/remove 循环）。
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 ```bash
 PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
   backend/tests/unit/cli/test_components_cli.py backend/tests/unit/cli/test_rescue_cli.py -q
 ```
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/cli/components.py backend/cli/rescue.py backend/tests/unit/cli/test_components_cli.py
@@ -793,7 +793,7 @@ git commit -m "feat(components): add CLI and SageDoctor entry"
 - Produces: `resolveModuleLaunchCommand(opts, moduleName, moduleArgs) -> CliLaunchPlan | undefined`
 - 保持 `resolveDoctorLaunchCommand` 行为不变，可改为调用新函数。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 it('resolveModuleLaunchCommand swaps backend.main for an arbitrary module', () => {
@@ -806,7 +806,7 @@ it('resolveModuleLaunchCommand swaps backend.main for an arbitrary module', () =
 });
 ```
 
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 ```ts
 export type CliLaunchPlan = DoctorLaunchPlan;
@@ -832,13 +832,13 @@ export function resolveModuleLaunchCommand(
 }
 ```
 
-- [ ] **Step 3: 运行测试**
+- [x] **Step 3: 运行测试**
 
 ```bash
 npx vitest run electron/__tests__/backendLauncher.test.ts
 ```
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add electron/backendLauncher.ts electron/__tests__/backendLauncher.test.ts
@@ -866,7 +866,7 @@ git commit -m "refactor(electron): add generic module launch command"
 - 进度事件：`sage:event:components:progress`
 - preload bridge：`window.electronAPI.components`
 
-- [ ] **Step 1: 写失败测试（JSON 行解析 + 路径校验）**
+- [x] **Step 1: 写失败测试（JSON 行解析 + 路径校验）**
 
 ```ts
 import { parseComponentEvents, validatePackagePath } from '../componentsIpc';
@@ -886,7 +886,7 @@ it('rejects non-sagepkg paths', () => {
 });
 ```
 
-- [ ] **Step 2: 实现 `componentsIpc.ts`**
+- [x] **Step 2: 实现 `componentsIpc.ts`**
 
 要点：
 - `runComponentCli(argv, resolveOpts, onEvent)`：
@@ -914,7 +914,7 @@ registerComponentsIpc(ipcMain, {
 });
 ```
 
-- [ ] **Step 3: preload + 类型**
+- [x] **Step 3: preload + 类型**
 
 ```ts
 components: {
@@ -928,14 +928,14 @@ components: {
 
 `electron-api.d.ts` 定义 `InstalledComponentSummary`、`ComponentPackageSummary`、`ComponentsElectronApiBridge`，并在 `ElectronAPI` 加 `components?: ComponentsElectronApiBridge;`。
 
-- [ ] **Step 4: 运行测试 + 类型检查**
+- [x] **Step 4: 运行测试 + 类型检查**
 
 ```bash
 npx vitest run electron/__tests__/componentsIpc.test.ts
 npx tsc -p tsconfig.electron.json --noEmit
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add electron/componentsIpc.ts electron/main.ts electron/preload.ts src/shared/types/electron-api.d.ts electron/__tests__/componentsIpc.test.ts
@@ -962,7 +962,7 @@ git commit -m "feat(electron): add offline component import IPC"
 - 搜索索引至少 1 条：`key: 'components'`, `tab: 'components'`
 - 守卫测试 tab 数量 19 → 20
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```tsx
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
@@ -986,7 +986,7 @@ it('renders installed components and imports a package', async () => {
 });
 ```
 
-- [ ] **Step 2: 实现 UI**
+- [x] **Step 2: 实现 UI**
 
 - 顶部说明 + 「导入 .sagepkg」「刷新」按钮。
 - 已安装列表：名称、id、版本、大小、target、安装时间、删除按钮。
@@ -996,7 +996,7 @@ it('renders installed components and imports a package', async () => {
 - 桌面端不可用（web 模式）显示提示。
 - 删除使用 `window.confirm` 二次确认。
 
-- [ ] **Step 3: i18n + tab 注册**
+- [x] **Step 3: i18n + tab 注册**
 
 新增 `zhComponents` / `enComponents` 并聚合；`settingsTabs.tsx` 在 `updates` 后加：
 
@@ -1011,7 +1011,7 @@ it('renders installed components and imports a package', async () => {
 
 搜索索引追加一条；守卫测试数量改 20。
 
-- [ ] **Step 4: 运行前端测试**
+- [x] **Step 4: 运行前端测试**
 
 ```bash
 npx vitest run \
@@ -1019,7 +1019,7 @@ npx vitest run \
   src/pages/settings/__tests__/settingsTabs.guards.test.ts
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/pages/settings/ComponentsTab.tsx src/pages/settings/settingsTabs.tsx \
@@ -1047,7 +1047,7 @@ git commit -m "feat(settings): add offline component manager tab"
 - `python scripts/gen-component-keypair.py --out-dir .secrets` → `.secrets/component-private-key.pem` + `resources/component-public-key.pem`
 - `python scripts/build-component-packs.py --print-public-key --key <private.pem>` → PEM 到 stdout
 
-- [ ] **Step 1: 写构建脚本测试（可 import 的函数）**
+- [x] **Step 1: 写构建脚本测试（可 import 的函数）**
 
 ```python
 from pathlib import Path
@@ -1072,7 +1072,7 @@ def test_build_pack_roundtrip(tmp_path: Path, key_path: Path):
     assert out.is_file()
 ```
 
-- [ ] **Step 2: 实现构建脚本**
+- [x] **Step 2: 实现构建脚本**
 
 - 用 `zipfile.ZipFile(..., ZIP_DEFLATED)`，固定 `date_time=(1980, 1, 1, 0, 0, 0)`。
 - `component.json` 使用 `json.dumps(..., ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")`。
@@ -1082,7 +1082,7 @@ def test_build_pack_roundtrip(tmp_path: Path, key_path: Path):
 - `--print-public-key` 输出 PEM。
 - `components-index.json` 记录每个包的 sha256/size/version/signature。
 
-- [ ] **Step 3: 生成密钥与公钥**
+- [x] **Step 3: 生成密钥与公钥**
 
 ```bash
 cd /home/fz/project/sage/.worktrees/feat-offline-component-packs
@@ -1098,7 +1098,7 @@ cd /home/fz/project/sage/.worktrees/feat-offline-component-packs
 component-private-key.pem
 ```
 
-- [ ] **Step 4: 本地端到端验证**
+- [x] **Step 4: 本地端到端验证**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend-py38/bin/python scripts/build-component-packs.py \
@@ -1110,7 +1110,7 @@ SAGE_USER_DATA_DIR=/tmp/sage-ud \
 # 期望：result ok=true；/tmp/sage-ud/models/bge-small-zh-v1.5/model.onnx 存在
 ```
 
-- [ ] **Step 5: 接入 release-win7.yml**
+- [x] **Step 5: 接入 release-win7.yml**
 
 Source job，在 `Fetch local AI models` 之后：
 
@@ -1141,7 +1141,7 @@ Source job，在 `Fetch local AI models` 之后：
 
 `upload-release` job 增加下载 `sage-components`，并把 `artifacts/components/**/*` 加入 `files:`。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add scripts/build-component-packs.py scripts/gen-component-keypair.py \
@@ -1161,7 +1161,7 @@ git commit -m "feat(build): generate signed offline component packs"
 - Create: `docs/user-manual/54-offline-component-packs.md`
 - Modify: `docs/user-manual/README.md`
 
-- [ ] **Step 1: 技术文档**
+- [x] **Step 1: 技术文档**
 
 内容：
 - `.sagepkg` 格式与签名校验链；
@@ -1171,7 +1171,7 @@ git commit -m "feat(build): generate signed offline component packs"
 - 安全边界（不执行 pip/npm、签名必需、zip slip 防护、路径白名单）；
 - 全量安装包保持不变，组件包为独立资产。
 
-- [ ] **Step 2: 用户手册**
+- [x] **Step 2: 用户手册**
 
 内容：
 - 内网管理员如何通过 SageDoctor `components import` 导入；
@@ -1179,9 +1179,9 @@ git commit -m "feat(build): generate signed offline component packs"
 - 导入后重启生效；
 - 常见错误（未配置公钥、签名无效、文件被占用、版本不匹配）。
 
-- [ ] **Step 3: 更新 README 索引与 101 交叉链接**
+- [x] **Step 3: 更新 README 索引与 101 交叉链接**
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add docs/technical/161-offline-component-packs.md docs/technical/README.md \
@@ -1194,7 +1194,7 @@ git commit -m "docs: document offline component packs"
 
 ## Task 10: 全量验证
 
-- [ ] **Step 1: 后端针对性测试（py38）**
+- [x] **Step 1: 后端针对性测试（py38）**
 
 ```bash
 cd /home/fz/project/sage/.worktrees/feat-offline-component-packs
@@ -1204,7 +1204,7 @@ PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
   backend/tests/unit/cli/test_rescue_cli.py -q
 ```
 
-- [ ] **Step 2: py38 兼容 / ruff**
+- [x] **Step 2: py38 兼容 / ruff**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend-py38/bin/python scripts/check_py38_compat.py
@@ -1213,7 +1213,7 @@ PYTHONPATH=. /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest \
   scripts/build-component-packs.py scripts/gen-component-keypair.py
 ```
 
-- [ ] **Step 3: 前端测试**
+- [x] **Step 3: 前端测试**
 
 ```bash
 npx vitest run \
@@ -1223,7 +1223,7 @@ npx vitest run \
   electron/__tests__/backendLauncher.test.ts
 ```
 
-- [ ] **Step 4: 类型与架构**
+- [x] **Step 4: 类型与架构**
 
 ```bash
 npm run typecheck
@@ -1231,7 +1231,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 node scripts/architecture-check.mjs
 ```
 
-- [ ] **Step 5: 端到端冒烟（本地）**
+- [x] **Step 5: 端到端冒烟（本地）**
 
 1. 生成密钥与组件包；
 2. 运行 `backend.cli.components import --json --yes`；
