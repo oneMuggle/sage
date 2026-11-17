@@ -216,7 +216,8 @@ class BrowserSessionManager:
         return sum(
             1
             for session in self._sessions.values()
-            if session.browser_type not in (BrowserType.EMBEDDED, BrowserType.EXTERNAL)
+            if getattr(session, "browser_type", None)
+            not in (BrowserType.EMBEDDED, BrowserType.EXTERNAL)
         )
 
     def register(self, session: BrowserSession) -> None:
@@ -242,7 +243,7 @@ class BrowserSessionManager:
                 # 用户共享标签页与内置浏览器不需要新进程，不占进程名额。
                 needs_slot = (
                     session.browser_id != EXTENSION_BROWSER_ID
-                    and session.browser_type != BrowserType.EMBEDDED
+                    and getattr(session, "browser_type", None) != BrowserType.EMBEDDED
                 )
                 if needs_slot and self._counted_locked() >= MAX_BROWSER_SESSIONS:
                     # 渲染池是懒重建的后台实例：为前台会话让位，下次渲染按需重建。
@@ -254,7 +255,7 @@ class BrowserSessionManager:
                             bid == RESERVED_BROWSER_ID
                             or bid.startswith(RESERVED_BROWSER_ID + "-")
                         )
-                        and pooled.browser_type != BrowserType.EMBEDDED
+                        and getattr(pooled, "browser_type", None) != BrowserType.EMBEDDED
                     ]:
                         if self._counted_locked() < MAX_BROWSER_SESSIONS:
                             break
