@@ -551,6 +551,45 @@ register_migration(16, "group_chat_support", _v16_group_chat_support)
 register_migration(17, "office_rules", _v17_office_rules)
 
 
+def _v18_normalize_millisecond_timestamps(conn: Any) -> None:
+    """v18：把记忆/会话相关表的历史秒级时间戳归一为毫秒。
+
+    背景：仓储层当前统一写毫秒，但历史上部分行落的是秒（质量评分器
+    一直用 ``_as_millis`` 兼容）。进化任务的 30 天/7 天阈值按毫秒比较，
+    若遗留秒级行被当作毫秒，会被误判为“极旧记忆”而提前修剪/衰减。
+    本迁移只转换 ``0 < col < 1e11`` 的值（秒级 epoch），幂等可重跑。
+    ``evolution_log.created_at`` 按设计是秒（前端契约），不在转换范围。
+    """
+    second_like_limit = 100_000_000_000
+    targets = (
+        ("sessions", ("created_at", "updated_at", "last_message_at", "last_run_at")),
+        ("messages", ("created_at", "compacted_at")),
+        (
+            "memories_episodic",
+            ("created_at", "accessed_at", "expires_at", "invalid_at"),
+        ),
+        ("memories_semantic", ("created_at", "invalid_at")),
+        ("memories_evolution_log", ("created_at",)),
+    )
+    for table, columns in targets:
+        cursor = conn.execute(f"PRAGMA table_info({table})")
+        existing = {row["name"] for row in cursor.fetchall()}
+        for column in columns:
+            if column not in existing:
+                continue
+            conn.execute(
+                f"UPDATE {table} SET {column} = {column} * 1000 "
+                f"WHERE {column} > 0 AND {column} < ?",
+                (second_like_limit,),
+            )
+    conn.commit()
+
+
+register_migration(
+    18, "normalize_millisecond_timestamps", _v18_normalize_millisecond_timestamps
+)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(

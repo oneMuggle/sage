@@ -530,6 +530,17 @@ async def _deferred_startup_init(
             list(_evo_registered.keys()),
         )
 
+        # 进化任务补跑：桌面应用经常在凌晨不在线，启动后检查逾期任务。
+        # 重任务（反思/固化）只在深度空闲时执行，避免抢用户资源。
+        try:
+            from backend.scheduler.evolution_maintenance import (  # noqa: PLC0415 — 延迟导入，避免影响启动关键路径
+                start_maintenance,
+            )
+
+            start_maintenance(scheduler_service, get_database())
+        except Exception:
+            logger.exception("evolution maintenance startup failed (ignored)")
+
         def _create_backup_daily() -> None:
             from backend.services.backup_service import create_backup
 

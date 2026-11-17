@@ -66,6 +66,16 @@ class TestEvolutionRunApi:
         assert body["result"] == {"promoted": 2, "decayed": 3, "total": 5}
         task.run.assert_called_once()
 
+    def test_run_wraps_scalar_result_as_total(
+        self, scheduler: SchedulerService, client: TestClient
+    ) -> None:
+        _register(scheduler, 4)
+
+        r = client.post("/api/v1/scheduled/evolution/memory_consolidation/run")
+
+        assert r.status_code == 200
+        assert r.json()["result"] == {"total": 4}
+
     def test_run_unknown_task_is_404(self, client: TestClient) -> None:
         r = client.post("/api/v1/scheduled/evolution/no_such_task/run")
         assert r.status_code == 404

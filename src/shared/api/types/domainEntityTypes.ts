@@ -120,7 +120,6 @@ export interface MemoryPromoteResult {
   previous_agent_id: string | null;
 }
 
-
 /**
  * ``/memory/list`` 返回的 envelope,Task 2 起替换裸 list 契约。
  * 旧 caller 拿 ``resp.json()`` 直接当数组用 — 现在必须读 ``.items``。
@@ -168,6 +167,22 @@ export interface MemoryConsolidationResult {
   /** 衰减 importance 的条数 */
   decayed: number;
   total: number;
+}
+
+/** 进化维护任务名 —— 与后端 `_DEFAULT_SCHEDULE` / evolution_maintenance 对齐 */
+export type EvolutionTaskName =
+  | 'daily_summary'
+  | 'memory_pruning'
+  | 'preference_learning'
+  | 'importance_reevaluation'
+  | 'memory_consolidation'
+  | 'skill_consolidation'
+  | 'memory_reflection';
+
+/** `scheduled_evolution_run` 的归一化返回（result 中的统计字段因任务而异） */
+export interface EvolutionTaskRunResult {
+  name: EvolutionTaskName;
+  result: Record<string, unknown>;
 }
 
 /**
