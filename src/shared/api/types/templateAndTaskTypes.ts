@@ -399,6 +399,8 @@ export interface Todo {
   project_tag?: string | null;
   project_id?: string | null;
   tags?: string[];
+  /** 自定义提醒档位：到期前多少分钟提醒（如 [1440, 60, 10]） */
+  reminder_offsets?: number[];
   is_recurring: boolean;
   recurrence_rule?: string | null;
   parent_id?: number | null;
@@ -415,6 +417,7 @@ export interface CreateTodoInput {
   recurrence_rule?: string;
   parent_id?: number;
   tags?: string[];
+  reminder_offsets?: number[];
 }
 
 export interface UpdateTodoInput {
@@ -427,6 +430,7 @@ export interface UpdateTodoInput {
   recurrence_rule?: string;
   parent_id?: number | null;
   tags?: string[];
+  reminder_offsets?: number[];
 }
 
 export interface TodoSummary {

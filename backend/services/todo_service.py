@@ -1,6 +1,7 @@
 """Todo service — business logic for personal task management"""
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -51,6 +52,7 @@ _TODO_MODEL_FIELDS = (
     "project_tag",
     "project_id",
     "tags",
+    "reminder_offsets",
     "is_recurring",
     "recurrence_rule",
     "parent_id",
@@ -72,6 +74,7 @@ _UPDATABLE_FIELDS = frozenset(
         "recurrence_rule",
         "parent_id",
         "tags",
+        "reminder_offsets",
     }
 )
 
@@ -104,11 +107,42 @@ class Todo(BaseModel):
     project_tag: Optional[str] = None
     project_id: Optional[str] = None  # TEXT — projects.id is a hex/uuid string
     tags: List[str] = Field(default_factory=list)
+    reminder_offsets: List[int] = Field(default_factory=list)
     is_recurring: bool = False
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
     created_at: str
     updated_at: str
+
+
+# 自定义提醒档位：分钟偏移，上限 5 档、单档 ≤7 天。
+MAX_REMINDER_OFFSETS = 5
+MAX_REMINDER_OFFSET_MINUTES = 7 * 24 * 60
+
+
+def _normalize_reminder_offsets(offsets: Optional[List[int]]) -> List[int]:
+    """清洗提醒档位：取正整数、去重、升序、上限 5 档且单档 ≤7 天。"""
+    if not offsets:
+        return []
+    cleaned: List[int] = []
+    seen = set()
+    for raw in offsets:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if value < 1 or value > MAX_REMINDER_OFFSET_MINUTES or value in seen:
+            continue
+        seen.add(value)
+        cleaned.append(value)
+        if len(cleaned) >= MAX_REMINDER_OFFSETS:
+            break
+    return sorted(cleaned)
+
+
+def _dump_reminder_offsets(offsets: Optional[List[int]]) -> Optional[str]:
+    normalized = _normalize_reminder_offsets(offsets)
+    return json.dumps(normalized) if normalized else None
 
 
 class TodoService:
@@ -127,6 +161,7 @@ class TodoService:
         recurrence_rule: Optional[str] = None,
         parent_id: Optional[int] = None,
         tags: Optional[List[str]] = None,
+        reminder_offsets: Optional[List[int]] = None,
     ) -> Todo:
         """Create a new todo and return the persisted row.
 
@@ -154,10 +189,12 @@ class TodoService:
         cursor = conn.execute(
             """INSERT INTO todos
                (title, description, due_at, priority, project_tag, project_id,
-                tags, is_recurring, recurrence_rule, parent_id, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                tags, reminder_offsets, is_recurring, recurrence_rule, parent_id,
+                created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (title, description, due_at, priority, project_tag, project_id,
-             todo_tags.dump_tags(tags), is_recurring, recurrence_rule, parent_id, now, now)
+             todo_tags.dump_tags(tags), _dump_reminder_offsets(reminder_offsets),
+             is_recurring, recurrence_rule, parent_id, now, now)
         )
         todo_id = cursor.lastrowid
         conn.commit()
@@ -331,6 +368,18 @@ class TodoService:
         # 多标签：清洗后序列化；显式 None / 空列表都清空为 NULL。
         if "tags" in updates:
             updates["tags"] = todo_tags.dump_tags(updates["tags"])
+
+        # 自定义提醒档位：清洗后序列化；任何改动都清空已触发书签。
+        if "reminder_offsets" in updates:
+            updates["reminder_offsets"] = _dump_reminder_offsets(
+                updates["reminder_offsets"]
+            )
+        if (
+            "reminder_offsets" in updates
+            or "due_at" in updates
+            or "status" in updates
+        ):
+            updates["reminder_fired_offsets"] = None
 
         # Normalize due_at: naive pass-through, tz-aware → naive local
         if updates.get("due_at") is not None:
@@ -571,6 +620,49 @@ class TodoService:
         )
         conn.commit()
 
+    # --- custom reminder offsets (阶段 1b) ---
+
+    def get_custom_reminder_candidates(self) -> List[Todo]:
+        """未完成、未到期且配置了自定义提醒档位的待办。"""
+        now_iso = datetime.now().isoformat()
+        conn = self.db.get_connection()
+        rows = conn.execute(
+            "SELECT * FROM todos "
+            "WHERE status IN ('pending', 'in_progress') "
+            "AND due_at IS NOT NULL AND due_at > ? "
+            "AND reminder_offsets IS NOT NULL "
+            "ORDER BY due_at ASC",
+            (now_iso,),
+        ).fetchall()
+        return [self._row_to_todo(r) for r in rows]
+
+    def get_fired_reminder_offsets(self, todo_id: int) -> List[int]:
+        """该待办已触发的自定义提醒档位（分钟）。"""
+        conn = self.db.get_connection()
+        row = conn.execute(
+            "SELECT reminder_fired_offsets FROM todos WHERE id = ?", (todo_id,)
+        ).fetchone()
+        if row is None or not row[0]:
+            return []
+        try:
+            parsed = json.loads(row[0])
+        except (json.JSONDecodeError, TypeError):
+            return []
+        return [int(v) for v in parsed] if isinstance(parsed, list) else []
+
+    def mark_custom_reminder_fired(self, todo_id: int, offset: int) -> None:
+        """记录某档位已触发（不碰 updated_at —— 书签不是内容变更）。"""
+        fired = self.get_fired_reminder_offsets(todo_id)
+        if offset in fired:
+            return
+        fired.append(offset)
+        conn = self.db.get_connection()
+        conn.execute(
+            "UPDATE todos SET reminder_fired_offsets = ? WHERE id = ?",
+            (json.dumps(fired), todo_id),
+        )
+        conn.commit()
+
     def get_startup_summary(self) -> dict:
         """启动摘要（逾期/今日/未来 7 天/高优先级/计数）。口径见 todo_stats。"""
         return todo_stats.startup_summary(self.db, self._row_to_todo)
@@ -649,6 +741,17 @@ class TodoService:
         data = {name: row[name] for name in _TODO_MODEL_FIELDS}
         data["is_recurring"] = bool(data["is_recurring"])
         data["tags"] = todo_tags.parse_tags(data.get("tags"))
+        try:
+            parsed_offsets = (
+                json.loads(data["reminder_offsets"])
+                if data.get("reminder_offsets")
+                else []
+            )
+        except (json.JSONDecodeError, TypeError):
+            parsed_offsets = []
+        data["reminder_offsets"] = _normalize_reminder_offsets(
+            parsed_offsets if isinstance(parsed_offsets, list) else []
+        )
 
         return Todo(**data)
 

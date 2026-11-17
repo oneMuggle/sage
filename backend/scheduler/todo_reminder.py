@@ -154,6 +154,34 @@ class TodoReminderScheduler:
                 urgency="critical",
             )
 
+        # 自定义提醒档位（阶段 1b）：配置了 reminder_offsets 的待办按档位触发。
+        self._fire_custom_reminders(now)
+
+    def _fire_custom_reminders(self, now: datetime) -> None:
+        """按用户自定义档位（分钟偏移）触发提醒，每档只触发一次。"""
+        for todo in self.todo_service.get_custom_reminder_candidates():
+            due_at = self._due_at(todo)
+            fired = set(self.todo_service.get_fired_reminder_offsets(todo.id))
+            for offset in todo.reminder_offsets:
+                if offset in fired:
+                    continue
+                fire_time = due_at - timedelta(minutes=offset)
+                if now < fire_time:
+                    continue
+                minutes = max(0, int((due_at - now).total_seconds() // 60))
+                if minutes >= 24 * 60:
+                    horizon = f"{minutes // (24 * 60)} 天"
+                elif minutes >= 60:
+                    horizon = f"{minutes // 60} 小时"
+                else:
+                    horizon = f"{minutes} 分钟"
+                self._send_notification(
+                    title="🔔 待办提醒",
+                    body=f"「{todo.title}」将在 {horizon} 后到期",
+                    urgency="normal",
+                )
+                self.todo_service.mark_custom_reminder_fired(todo.id, offset)
+
     # ------------------------------------------------------------------ #
     # Time arithmetic
     # ------------------------------------------------------------------ #
