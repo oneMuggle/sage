@@ -28,6 +28,7 @@ from backend.memory.quality_scorer import MemoryQualityScorer
 from backend.memory.summary import (
     list_summaries_for_session as _list_summaries_for_session,
 )
+from backend.memory.title_text import derive_title
 
 logger = logging.getLogger(__name__)
 
@@ -367,6 +368,10 @@ def _enrich_memory_records(
         item = dict(raw)
         item["source"] = source  # 强制覆盖,与 DB 列 source 解耦
         item["layer"] = layer
+        # 2026-11-17 记忆详情化:title 缺失(存量行/旧写入路径)时确定性兜底,
+        # 前端无需再把 content 首行截断当"标题"。
+        if not str(item.get("title") or "").strip():
+            item["title"] = derive_title(item.get("content") or item.get("summary") or "")
         # created_at (秒) → created_at_ms (毫秒)
         if "created_at_ms" not in item and "created_at" in item:
             ts = item["created_at"]
@@ -423,6 +428,8 @@ def _enrich_working_records(
         item["timestamp_ms"] = item["created_at_ms"]
         item["content"] = item.get("content", "")
         item["importance"] = item.get("importance", 0)
+        # 2026-11-17 记忆详情化:工作记忆无标题列,按内容确定性推导。
+        item["title"] = derive_title(item["content"])
         enriched.append(item)
     return enriched
 
@@ -447,6 +454,7 @@ def _enrich_summary_records(
                 "session_id": s.session_id,
                 "source_turn_id": s.source_turn_id,
                 "content": s.content,
+                "title": derive_title(s.content),
                 "status": s.status,
                 "error_message": s.error_message,
                 "created_at_ms": s.created_at_ms,

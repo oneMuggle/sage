@@ -376,6 +376,7 @@
     "undo_memory_write": { "method": "POST", "path": "/api/v1/memory/undo-write" },
     "update_agent": { "method": "PATCH", "path": "/api/v1/agents/{id}" },
     "update_learned_preference": { "method": "PUT", "path": "/api/v1/memory/preferences/learned" },
+    "update_memory": { "method": "PUT", "path": "/api/v1/memory/{id}" },
     "update_user_profile": { "method": "PUT", "path": "/api/v1/memory/profile/{id}" },
     "usage_by_endpoint": { "method": "GET", "path": "/api/v1/usage/by-endpoint" },
     "usage_export_csv": { "method": "GET", "path": "/api/v1/usage/export.csv" },
