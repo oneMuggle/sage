@@ -95,6 +95,7 @@ from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapt
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.artifact_routes import router as artifact_router
+from backend.api.asr_router import build_router as build_asr_router
 from backend.api.browser_extension_routes import router as browser_extension_router
 from backend.api.chat_attachment_routes import router as chat_attachment_router
 from backend.api.chat_stream_registry import StreamRegistry
@@ -1834,6 +1835,7 @@ app.include_router(build_wake_router(get_chat_service), prefix="/api/v1")
 
 # Todo personal task management
 app.include_router(build_todo_router(get_todo_service), prefix="/api/v1")
+app.include_router(build_asr_router(), prefix="/api/v1")
 
 # M3: MCP multi-server management (status / servers CRUD)
 app.include_router(mcp_router, prefix="/api/v1")

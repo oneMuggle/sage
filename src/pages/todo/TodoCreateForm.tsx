@@ -5,7 +5,7 @@
  * due_at, project_tag) collapsed behind a "更多选项" toggle. Submit creates
  * via store.create() and resets the form.
  */
-import { Calendar, ChevronDown, ChevronUp, Flag, Plus, Tag } from 'lucide-react';
+import { Bell, Calendar, ChevronDown, ChevronUp, Flag, Plus, Tag } from 'lucide-react';
 import { useState } from 'react';
 
 import type { CreateTodoInput, TodoPriority } from '../../shared/api/types';
@@ -28,6 +28,13 @@ const PRIORITY_CONFIG: Array<{
   { value: 'high', label: '高', color: 'text-red-600', icon: '🔴' },
 ];
 
+/** 自定义提醒档位预设（分钟）。可多选。 */
+const REMINDER_PRESETS: Array<{ minutes: number; label: string }> = [
+  { minutes: 1440, label: '提前1天' },
+  { minutes: 60, label: '提前1小时' },
+  { minutes: 10, label: '提前10分钟' },
+];
+
 export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState('');
@@ -36,8 +43,15 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
   const [dueAtLocal, setDueAtLocal] = useState('');
   const [projectTag, setProjectTag] = useState('');
   const [tagsText, setTagsText] = useState('');
+  const [reminderOffsets, setReminderOffsets] = useState<number[]>([]);
 
   const canSubmit = title.trim().length > 0 && !busy;
+
+  const toggleReminderOffset = (minutes: number) => {
+    setReminderOffsets((prev) =>
+      prev.includes(minutes) ? prev.filter((v) => v !== minutes) : [...prev, minutes],
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +68,7 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
       .map((tag) => tag.trim())
       .filter(Boolean);
     if (tags.length > 0) input.tags = tags;
+    if (reminderOffsets.length > 0) input.reminder_offsets = reminderOffsets;
 
     await onCreate(input);
 
@@ -64,6 +79,7 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
     setDueAtLocal('');
     setProjectTag('');
     setTagsText('');
+    setReminderOffsets([]);
   };
 
   return (
@@ -197,6 +213,35 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
               data-testid="todo-create-tags"
               className="w-full px-2.5 py-1.5 text-xs border border-border rounded-radius-sm bg-background focus:outline-none focus:border-primary placeholder:text-text-muted"
             />
+          </div>
+
+          {/* Reminder offsets */}
+          <div>
+            <label className="flex items-center gap-1 text-ui-xs text-text-muted mb-1">
+              <Bell className="w-3 h-3" />
+              提醒（可多选）
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {REMINDER_PRESETS.map((preset) => {
+                const active = reminderOffsets.includes(preset.minutes);
+                return (
+                  <button
+                    key={preset.minutes}
+                    type="button"
+                    onClick={() => toggleReminderOffset(preset.minutes)}
+                    aria-pressed={active}
+                    data-testid={`todo-reminder-${preset.minutes}`}
+                    className={`px-2 py-1 text-xs rounded-radius-sm border transition-colors ${
+                      active
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-text-muted hover:border-primary/50'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

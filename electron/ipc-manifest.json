@@ -5,6 +5,7 @@
     "agent_chat_stream": { "method": "POST", "path": "/api/v1/chat/stream" },
     "approve_skill_draft": { "method": "POST", "path": "/api/v1/skill-drafts/{draft_id}/approve" },
     "archive_skill": { "method": "POST", "path": "/api/v1/skills/{name}/archive" },
+    "asr_transcribe": { "method": "POST", "path": "/api/v1/asr/transcribe" },
     "attach_chat_stream": { "method": "GET", "path": "/api/v1/chat/stream/{streamId}" },
     "attachment_rag_delete_index": { "method": "DELETE", "path": "/api/v1/chat/attachments/{mediaId}/index" },
     "attachment_rag_index": { "method": "POST", "path": "/api/v1/chat/attachments/{mediaId}/index" },

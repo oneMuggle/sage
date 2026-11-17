@@ -33,6 +33,7 @@ def _mock_service():
     svc.get_unfired_24h_reminders.return_value = []
     svc.get_unfired_1h_reminders.return_value = []
     svc.get_overdue_todos.return_value = []
+    svc.get_custom_reminder_candidates.return_value = []
     return svc
 
 
@@ -228,3 +229,59 @@ def test_scan_interval_is_fifteen_minutes():
 def test_precise_lead_is_five_minutes():
     from backend.scheduler.todo_reminder import PRECISE_LEAD_MINUTES
     assert PRECISE_LEAD_MINUTES == 5
+
+
+# --- 阶段 1b：自定义提醒档位 ---
+
+
+def _custom_notes(sched):
+    return [
+        n for n in sched.get_pending_notifications()
+        if n["title"] == "🔔 待办提醒"
+    ]
+
+
+def test_custom_reminder_fires_once_when_offset_reached(todo_service):  # noqa: F811
+    sched = TodoReminderScheduler(todo_service)
+    due = datetime.now() + timedelta(minutes=10)
+    todo = todo_service.create_todo(
+        title="交周报",
+        due_at=due.isoformat(),
+        reminder_offsets=[15, 120],
+    )
+
+    sched._periodic_scan()
+
+    fired_notes = _custom_notes(sched)
+    # 两档的 fire_time 均已过（due-15min / due-120min）→ 各触发一次。
+    assert len(fired_notes) == 2
+    assert all("交周报" in n["body"] for n in fired_notes)
+    assert todo_service.get_fired_reminder_offsets(todo.id) == [15, 120]
+
+    sched._periodic_scan()
+    assert _custom_notes(sched) == []  # 不重复提醒
+
+
+def test_custom_reminder_not_fired_before_offset(todo_service):  # noqa: F811
+    sched = TodoReminderScheduler(todo_service)
+    due = datetime.now() + timedelta(hours=5)
+    todo = todo_service.create_todo(
+        title="远期任务",
+        due_at=due.isoformat(),
+        reminder_offsets=[10],  # fire_time = due-10min，尚未到
+    )
+
+    sched._periodic_scan()
+
+    assert _custom_notes(sched) == []
+    assert todo_service.get_fired_reminder_offsets(todo.id) == []
+
+
+def test_custom_reminder_ignores_todos_without_offsets(todo_service):  # noqa: F811
+    sched = TodoReminderScheduler(todo_service)
+    due = datetime.now() + timedelta(minutes=20)
+    todo_service.create_todo(title="默认提醒", due_at=due.isoformat())
+
+    sched._periodic_scan()
+
+    assert _custom_notes(sched) == []

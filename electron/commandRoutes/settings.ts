@@ -331,6 +331,12 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     },
   },
 
+  // ASR 转写（待办阶段 1b：语音快速录入）
+  asr_transcribe: {
+    method: 'POST',
+    path: () => '/api/v1/asr/transcribe',
+  },
+
   // custom CSS theme storage (themeCssClient)
   // Backend theme_router 挂在 /api/v1/theme (与其他 IPC 路由一致)
   theme_list: { method: 'GET', path: () => '/api/v1/theme/list' },
