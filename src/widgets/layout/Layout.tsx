@@ -12,6 +12,7 @@ import { TaskCenterRuntimeHost } from '../../features/task-center/TaskCenterRunt
 import { useResizableSidebar } from '../../shared/lib/useResizableSidebar';
 import { PageSkeleton } from '../../shared/ui';
 import { EndpointStatusBanner } from '../system/EndpointStatusBanner';
+import { StartupStatusIndicator } from '../system/StartupStatusIndicator';
 import { TaskbarAttentionBridge } from '../system/TaskbarAttentionBridge';
 import { DeliveryDrawerHost } from '../task-center/DeliveryDrawerHost';
 
@@ -179,6 +180,8 @@ export function Layout() {
           />
           {/* 第二轮 C3: 云端模型端点不可达 / 系统断网时的全局提示 */}
           <EndpointStatusBanner />
+          {/* Progressive readiness: 后台服务 warmup 进度 / 降级提示（L3 后自动隐藏） */}
+          <StartupStatusIndicator />
           <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden">
             <ErrorBoundary
               fallback={(error, reset) => (

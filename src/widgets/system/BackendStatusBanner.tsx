@@ -75,6 +75,13 @@ export function BackendStatusBanner() {
         return;
       }
       offs.push(offStarting, offReady, offDisconnected, offReconnected, offAuthFailed);
+      // 启动竞态兜底：先订阅事件、再查 lifecycle 快照。`backend:starting`
+      // 通常在 renderer 订阅之前发出，只靠事件会在冷启动时丢失横幅。
+      // 顺序保证「查询 → 订阅之间」的状态迁移不会漏掉。
+      const snapshot = await api.getBackendLifecycle?.();
+      if (!cancelled && snapshot?.lifecycle === 'starting') {
+        setState((prev) => (prev === 'failed' || prev === 'auth_failed' ? prev : 'starting'));
+      }
     };
 
     setup().catch((err) => {
@@ -146,7 +153,10 @@ export function evaluateBackendStatusBannerGovernanceAudit(
   if (input.bannerState === 'auth_failed') {
     issueCodes.push('BACKEND_BANNER_AUTH_FAILED');
   }
-  if (input.bannerState === 'reconnecting' && (input.reconnectAttempt <= 0 || input.reconnectAttempt > 10)) {
+  if (
+    input.bannerState === 'reconnecting' &&
+    (input.reconnectAttempt <= 0 || input.reconnectAttempt > 10)
+  ) {
     issueCodes.push('BACKEND_BANNER_RECONNECT_ATTEMPT_INVALID');
   }
   if (input.recoveredVisibleMs < 500 || input.recoveredVisibleMs > 10000) {

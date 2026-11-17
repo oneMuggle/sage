@@ -182,6 +182,8 @@ import {
   writeLastRun,
 } from './lastRunState';
 import { createHeartbeatMonitor } from './heartbeat';
+import { fetchStartupStatus } from './startupStatus';
+import type { StartupStatusSnapshot } from './startupStatus';
 import { openRescueTool, runRescueReport, showCrashRecoveryDialog } from './rescueDialogs';
 import { installDefaultWebContentsHardening } from './webContentsHardening';
 import { mainWindow, setMainWindow } from './mainWindow';
@@ -194,6 +196,10 @@ import {
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const BACKEND_HEALTH = `${BACKEND_URL}/health/proof`;
+// Progressive readiness：后端存活后轮询的逐模块 warmup 快照（纯内存端点）。
+const BACKEND_READY_STATUS = `${BACKEND_URL}/health/ready`;
+const STARTUP_STATUS_POLL_INTERVAL_MS = 1000;
+const STARTUP_STATUS_POLL_DEADLINE_MS = 120_000;
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 const VITE_DEV_URL =
   process.env.VITE_DEV_SERVER_URL ?? `http://localhost:${process.env.VITE_DEV_PORT ?? 1420}`;
@@ -592,6 +598,13 @@ let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
+// Progressive readiness：最近一次 /health/ready 快照 + 轮询定时器。
+let lastStartupStatus: StartupStatusSnapshot | null = null;
+let startupStatusPollTimer: ReturnType<typeof setInterval> | null = null;
+// L3 收尾定时器提升为模块级：旧轮询周期遗留的收尾定时器不得杀掉新一轮。
+let startupStatusSettleTimer: ReturnType<typeof setTimeout> | null = null;
+// 轮询周期代号：每次启动/停止自增，in-flight 请求返回后据此丢弃过期结果。
+let startupStatusEpoch = 0;
 
 /**
  * PR #2976 让主窗口先于后端 ready 展示；窗口期（约 10s+）内渲染层的首屏
@@ -923,6 +936,9 @@ function spawnBackend(): ChildProcess {
     cmd: plan.cmd,
     args: plan.args,
   });
+  // 启动瀑布：spawn 时点（此前只有 window_created/first_paint，无法分离
+  // 「界面加载」与「后端就绪」两段耗时）。
+  markBootStage('backend_spawned');
 
   proc.stdout?.on('data', (b) =>
     logger.debug('backend: stdout', { line: stdoutDecoder.push(b).trim() }),
@@ -1033,6 +1049,8 @@ export function scheduleBackendRestart(): void {
   if (restartCount >= MAX_RESTART_ATTEMPTS) {
     logger.error('main: backend restart exhausted', { attempts: restartCount });
     backendReadyQueue.rejectAll(new BackendNotReadyError());
+    // 后端永久失败：停止就绪轮询并清空快照，避免进度条冻结在 warming。
+    stopStartupStatusPolling(true);
     mainWindow?.webContents.send('sage:event:backend:disconnected', { attempt: -1 });
     return;
   }
@@ -1057,6 +1075,8 @@ export function scheduleBackendRestart(): void {
         if (ready) {
           restartCount = 0;
           mainWindow?.webContents.send('sage:event:backend:reconnected', {});
+          // 重启后的后端是一次新的冷启动：重新开始就绪进度轮询。
+          startStartupStatusPolling();
           return;
         }
         // Health check never passed: without this branch the lifecycle stayed
@@ -1085,6 +1105,67 @@ export function scheduleBackendRestart(): void {
  * transition, we'd hand a stale `ready` flag to the renderer that points at
  * a dead process.
  */
+/**
+ * Progressive readiness 轮询（2026-11-16）。
+ *
+ * 后端 `/health/proof` 通过后，以 1s 间隔拉取 `/health/ready` 并广播
+ * `backend:startup-status`，让渲染层展示「正在加载会话与后台服务」的
+ * 分层进度。有界：L3（全部模块终态）后再保持 3s 收尾即停；120s 硬上限。
+ * 渲染层另有 getBackendStartupStatus() 快照查询，避免事件竞态。
+ */
+function stopStartupStatusPolling(clearSnapshot = false): void {
+  // 自增周期代号：正在 await 的 tick 返回后会发现代号过期并丢弃结果，
+  // 不会把上一代后端的快照写回 lastStartupStatus。
+  startupStatusEpoch += 1;
+  if (startupStatusPollTimer) {
+    clearInterval(startupStatusPollTimer);
+    startupStatusPollTimer = null;
+  }
+  if (startupStatusSettleTimer) {
+    clearTimeout(startupStatusSettleTimer);
+    startupStatusSettleTimer = null;
+  }
+  if (clearSnapshot) lastStartupStatus = null;
+}
+
+function startStartupStatusPolling(): void {
+  stopStartupStatusPolling(true);
+  const epoch = startupStatusEpoch;
+  const deadline = Date.now() + STARTUP_STATUS_POLL_DEADLINE_MS;
+  const tick = async () => {
+    if (appIsQuitting || Date.now() > deadline) {
+      stopStartupStatusPolling();
+      return;
+    }
+    const snapshot = await fetchStartupStatus(BACKEND_READY_STATUS, 1000, {
+      'X-Sage-Local-Authorization': `Bearer ${backendAuthToken ?? ''}`,
+    });
+    // 过期周期（期间发生过 stop/restart）→ 丢弃，避免回写旧后端快照。
+    if (epoch !== startupStatusEpoch) return;
+    if (!snapshot) return;
+    lastStartupStatus = snapshot;
+    mainWindow?.webContents.send('sage:event:backend:startup-status', snapshot);
+    if (snapshot.phase === 'L3') {
+      if (startupStatusSettleTimer === null) {
+        // L3 是稳定终态：给 UI 留一拍收尾动画，然后停止轮询。
+        startupStatusSettleTimer = setTimeout(() => {
+          startupStatusSettleTimer = null;
+          stopStartupStatusPolling();
+        }, 3000);
+      }
+    } else if (startupStatusSettleTimer !== null) {
+      // 阶段回退（重启后的新后端重新 warmup）→ 取消遗留收尾定时器。
+      clearTimeout(startupStatusSettleTimer);
+      startupStatusSettleTimer = null;
+    }
+  };
+  startupStatusPollTimer = setInterval(() => {
+    void tick();
+  }, STARTUP_STATUS_POLL_INTERVAL_MS);
+  // 不等第一拍：ready 后立即给渲染层一个初始快照。
+  void tick();
+}
+
 async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<boolean> {
   const expectedBackend = currentBackend;
   if (!expectedBackend || backendLifecycle !== 'starting') return false;
@@ -1148,6 +1229,8 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
           continue;
         }
         backendLifecycle = 'ready';
+        markBootStage('backend_ready');
+        startStartupStatusPolling();
         // 冷启动窗口期入队的 IPC 请求现在可以下发了（含自动重启成功后的重连窗口）。
         if (backendReadyQueue.size() > 0) {
           logger.info('main: flushing queued ipc requests', {
@@ -2123,6 +2206,34 @@ async function registerIpcHandlers(): Promise<void> {
   // E-2 (round5 批次 E): 关闭即隐藏到托盘偏好读写（JSON 文件,主进程持有）
   ipcMain.handle('sage:close-to-tray:get', () => {
     return { enabled: closeToTrayEnabled };
+  });
+
+  // 启动竞态修复：backend:starting 事件通常在 renderer 订阅之前发出，
+  // 冷启动时横幅会丢失。提供 lifecycle 快照查询，与事件订阅互补。
+  ipcMain.handle('sage:backend-lifecycle', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      throw new Error('未授权的窗口请求');
+    }
+    return {
+      lifecycle: backendLifecycle,
+      generation: currentBackend?.generation ?? null,
+    };
+  });
+
+  // Progressive readiness：最近一次 /health/ready 快照（事件竞态兜底）。
+  ipcMain.handle('sage:backend-startup-status', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) {
+      throw new Error('未授权的窗口请求');
+    }
+    return lastStartupStatus;
+  });
+
+  // 渲染层业务阶段埋点 → last-run.json 启动瀑布（白名单防注入）。
+  const BOOT_STAGE_ALLOWLIST = new Set(['sessions_loaded', 'messages_loaded', 'settings_loaded']);
+  ipcMain.on('sage:boot:stage', (evt, stage: unknown) => {
+    if (!isTrustedRenderer(evt.sender)) return;
+    if (typeof stage !== 'string' || !BOOT_STAGE_ALLOWLIST.has(stage)) return;
+    markBootStage(stage);
   });
 
   ipcMain.handle('sage:close-to-tray:set', (evt, payload: { enabled: boolean }) => {
@@ -3107,6 +3218,9 @@ async function shutdownBackend(): Promise<void> {
     return;
   }
   backendLifecycle = 'stopping';
+  // 后端停止/重启中：就绪轮询针对的是上一代进程，立即停止并清空快照
+  // （重启成功后会重新开始新一轮）。
+  stopStartupStatusPolling(true);
   logger.info('main: killing backend subprocess', { pid: proc.pid });
   const exited = new Promise<void>((resolve) => {
     let settled = false;
@@ -3601,6 +3715,7 @@ app.on('before-quit', () => {
   appIsQuitting = true;
   // 退出后排队的请求永远不会被服务，立即拒绝避免悬挂。
   backendReadyQueue.rejectAll(new BackendNotReadyError());
+  stopStartupStatusPolling();
   disposePet();
   globalShortcut.unregister(REMOTE_MCP_HOTKEY);
   getGlobalSyncer()?.stop();

@@ -990,6 +990,27 @@ const electronAPI = {
   notifyFirstPaint(): void {
     ipcRenderer.send('sage:boot:first-paint');
   },
+  /**
+   * 启动竞态修复：查询后端 lifecycle 快照。
+   * `backend:starting` 事件通常早于 renderer 订阅，挂载时改用此快照兜底。
+   */
+  getBackendLifecycle(): Promise<{ lifecycle: string; generation: number | null }> {
+    return ipcRenderer.invoke('sage:backend-lifecycle') as Promise<{
+      lifecycle: string;
+      generation: number | null;
+    }>;
+  },
+  /** 启动阶段埋点 → 主进程写 last-run.json 启动瀑布（白名单校验）。 */
+  reportBootStage(stage: 'sessions_loaded' | 'messages_loaded' | 'settings_loaded'): void {
+    ipcRenderer.send('sage:boot:stage', stage);
+  },
+  /**
+   * Progressive readiness：最近一次 /health/ready 快照（事件先于订阅时兜底）。
+   * 事件通道为 `backend:startup-status`。
+   */
+  getBackendStartupStatus(): Promise<unknown | null> {
+    return ipcRenderer.invoke('sage:backend-startup-status') as Promise<unknown | null>;
+  },
 };
 
 const isPetWindow = process.argv.includes('--sage-pet-window=1');

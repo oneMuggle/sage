@@ -308,3 +308,91 @@ describe('session list pagination', () => {
     expect(mockInvoke).not.toHaveBeenCalled();
   });
 });
+
+describe('session list loading/error tri-state', () => {
+  const session = (id: string): Session => ({
+    id,
+    title: id,
+    created_at: 1,
+    updated_at: 1,
+    last_message_at: null,
+    message_count: 0,
+    is_pinned: false,
+  });
+
+  beforeEach(() => {
+    mockInvoke.mockReset();
+    useStore.setState({
+      sessions: [],
+      sessionsLoading: true,
+      sessionsError: null,
+      sessionsHasMore: false,
+      sessionsLoadingMore: false,
+    });
+  });
+
+  it('success clears loading and error', async () => {
+    mockInvoke.mockResolvedValueOnce([session('s1')]);
+    await useStore.getState().loadSessions();
+    expect(useStore.getState().sessionsLoading).toBe(false);
+    expect(useStore.getState().sessionsError).toBeNull();
+    expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['s1']);
+  });
+
+  it('failure records sessionsError and stops loading', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('backend not ready'));
+    await useStore.getState().loadSessions();
+    expect(useStore.getState().sessionsLoading).toBe(false);
+    expect(useStore.getState().sessionsError).toContain('backend not ready');
+  });
+
+  it('retry after failure clears the error on the next attempt', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('boom'));
+    await useStore.getState().loadSessions();
+    expect(useStore.getState().sessionsError).toContain('boom');
+
+    mockInvoke.mockResolvedValueOnce([session('s1')]);
+    await useStore.getState().loadSessions();
+    expect(useStore.getState().sessionsError).toBeNull();
+    expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['s1']);
+  });
+
+  it('single-flights concurrent loadSessions calls', async () => {
+    let resolveInvoke: (sessions: Session[]) => void = () => {};
+    mockInvoke.mockReturnValueOnce(
+      new Promise<Session[]>((resolve) => {
+        resolveInvoke = resolve;
+      }),
+    );
+
+    const first = useStore.getState().loadSessions();
+    const second = useStore.getState().loadSessions();
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+
+    resolveInvoke([session('s1')]);
+    await Promise.all([first, second]);
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+    expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['s1']);
+  });
+
+  it('force refresh during an in-flight load queues a follow-up fetch', async () => {
+    let resolveFirst: (sessions: Session[]) => void = () => {};
+    mockInvoke.mockReturnValueOnce(
+      new Promise<Session[]>((resolve) => {
+        resolveFirst = resolve;
+      }),
+    );
+
+    const first = useStore.getState().loadSessions();
+    // 变更方（如归档/新建项目后）要求最新结果：不能复用变更前的 in-flight。
+    mockInvoke.mockResolvedValueOnce([session('s2')]);
+    const forced = useStore.getState().loadSessions(true);
+    expect(mockInvoke).toHaveBeenCalledTimes(1);
+
+    resolveFirst([session('s1')]);
+    await forced;
+    expect(mockInvoke).toHaveBeenCalledTimes(2);
+    expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['s2']);
+    await first;
+  });
+});
