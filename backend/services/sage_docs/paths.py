@@ -45,6 +45,7 @@ TECHNICAL_WHITELIST = (
     "135-specialist-asset-hub.md",
     "139-specialist-dm-group-chat.md",
     "142-sage-guide-specialist.md",
+    "161-offline-component-packs.md",
 )
 
 

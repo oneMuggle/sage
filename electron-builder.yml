@@ -116,6 +116,7 @@ extraResources:
       - "technical/135-specialist-asset-hub.md"
       - "technical/139-specialist-dm-group-chat.md"
       - "technical/148-sage-guide-specialist.md"
+      - "technical/161-offline-component-packs.md"
 
   # 本地 AI 模型（OCR + Embedding）—— 由 scripts/download-models.sh 下载。
   # 打包态后端通过 SAGE_BUNDLED_MODELS_DIR 环境变量定位；用户如在
