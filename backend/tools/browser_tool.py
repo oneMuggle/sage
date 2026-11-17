@@ -432,12 +432,28 @@ def _read_target_metadata(
         locator = f"document.querySelector({json.dumps(str(selector))})"
     else:
         locator = "(document.activeElement||document.body)"
+    if use_focused:
+        # 无真实焦点时 activeElement 即 body：绝不对 body/documentElement
+        # 取 innerText（否则页面正文会进入 name → 审计/确认描述）。
+        name_source = (
+            "var name='';"
+            "var isBody=(el===document.body||el===document.documentElement);"
+            "if(!isBody){"
+            "name=(el.getAttribute&&(el.getAttribute('aria-label')||''))||'';"
+            "if(!name&&el.labels&&el.labels.length){name=el.labels[0].textContent||'';}"
+            "if(!name){name=el.innerText||el.textContent||'';}"
+            "}"
+        )
+    else:
+        name_source = (
+            "var name=(el.getAttribute&&(el.getAttribute('aria-label')||''))||'';"
+            "if(!name&&el.labels&&el.labels.length){name=el.labels[0].textContent||'';}"
+            "if(!name){name=el.innerText||el.textContent||'';}"
+        )
     expression = (
         "(function(){var el=" + locator + ";if(!el)return null;"
-        "var name=(el.getAttribute&&(el.getAttribute('aria-label')||''))||'';"
-        "if(!name&&el.labels&&el.labels.length){name=el.labels[0].textContent||'';}"
-        "if(!name){name=el.innerText||el.textContent||'';}"
-        "return{tag:(el.tagName||'').toLowerCase(),"
+        + name_source
+        + "return{tag:(el.tagName||'').toLowerCase(),"
         "role:(el.getAttribute&&el.getAttribute('role'))||'',"
         "name:String(name).trim().slice(0,120),"
         "type:String((el.getAttribute&&el.getAttribute('type'))||'').toLowerCase(),"
@@ -1384,9 +1400,13 @@ class BrowserInteractTool(BaseTool):
                 return blocked
             target_fields = {"target_ref": ref or selector, "target_name": text}
             # M4 敏感动作：先取目标元数据再分类；hard_block 不允许用户放行。
-            # press 无定位时作用于焦点元素，元数据也按 activeElement 读取。
+            # 仅 press Enter/Return 需要读焦点元素（触发默认提交/点击语义），
+            # 其他按键不产生副作用，省一次 Runtime.evaluate。
+            press_enter = (
+                action == "press" and str(key or "").strip().lower() in ("enter", "return")
+            )
             target_meta = _read_target_metadata(
-                session, ref=ref, selector=selector, use_focused=action == "press"
+                session, ref=ref, selector=selector, use_focused=press_enter
             )
             metadata_unavailable = target_meta is None and not text
             if not target_meta and text:

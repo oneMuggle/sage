@@ -1989,3 +1989,92 @@ def test_interact_metadata_missing_click_with_text_still_classified(stubbed, mon
     pending = browser_safety.get_confirmation_registry().list("b1")
     assert len(pending) == 1
     assert pending[0].code == "sensitive_submit"
+
+
+def test_focused_metadata_never_reads_body_text(monkeypatch):
+    """无真实焦点（activeElement=body）时 name 必须为空，不得取正文。"""
+    session = _fake_session("b1")
+    captured: Dict[str, str] = {}
+
+    def _fake_cdp(session_, method, params=None, target_id=None):
+        captured["expression"] = params["expression"]
+        return {
+            "result": {
+                "value": {
+                    "tag": "body",
+                    "role": "",
+                    "name": "",
+                    "type": "",
+                    "placeholder": "",
+                }
+            }
+        }
+
+    monkeypatch.setattr(browser_tool, "cdp_command", _fake_cdp)
+
+    meta = browser_tool._read_target_metadata(session, use_focused=True)
+
+    expression = captured["expression"]
+    assert "el===document.body" in expression
+    assert "el===document.documentElement" in expression
+    # innerText 取值只在非 body 的真实焦点元素分支内
+    assert expression.index("isBody") < expression.index("el.innerText")
+    assert meta is not None
+    assert meta["name"] == ""
+
+
+def test_metadata_read_without_locator_skips_cdp(monkeypatch):
+    """无定位且不读焦点元素时不发 Runtime.evaluate。"""
+    session = _fake_session("b1")
+    calls: List[tuple] = []
+
+    def _fake_cdp(*args, **kwargs):
+        calls.append(args)
+        return {}
+
+    monkeypatch.setattr(browser_tool, "cdp_command", _fake_cdp)
+
+    assert browser_tool._read_target_metadata(session) is None
+    assert calls == []
+
+
+def test_press_enter_without_locator_on_body_keeps_audit_text_empty(stubbed, monkeypatch):
+    """activeElement=body 时 press Enter：分类 ok、审计 target_desc 为空。"""
+    records: List[tuple] = []
+
+    def _capture(session, tool_name, action, outcome, **fields):
+        records.append((tool_name, action, outcome, fields))
+
+    def _body_meta(*_args, **_kwargs):
+        return {"tag": "body", "role": "", "name": "", "type": "", "placeholder": ""}
+
+    monkeypatch.setattr(browser_tool, "_read_target_metadata", _body_meta)
+    monkeypatch.setattr(browser_tool, "_record_browser_audit", _capture)
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "pressed Enter"}}})
+
+    result = _tool(BrowserInteractTool).execute(
+        action="press", key="Enter", browser_id="b1"
+    )
+
+    assert result.success is True
+    assert records[-1][1:3] == ("press", "ok")
+    assert records[-1][3]["target_ref"] == ""
+    assert records[-1][3]["target_desc"] == ""
+    assert browser_safety.get_confirmation_registry().list("b1") == []
+
+
+def test_press_non_enter_skips_focused_metadata_read(stubbed, monkeypatch):
+    """非 Enter 按键无副作用：不读 activeElement 元数据。"""
+    calls: List[Dict[str, Any]] = []
+
+    def _meta(*_args, **kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(browser_tool, "_read_target_metadata", _meta)
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "pressed Tab"}}})
+
+    result = _tool(BrowserInteractTool).execute(action="press", key="Tab", browser_id="b1")
+
+    assert result.success is True
+    assert len(calls) == 1
+    assert calls[0]["use_focused"] is False
