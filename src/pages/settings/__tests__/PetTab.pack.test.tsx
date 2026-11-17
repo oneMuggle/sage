@@ -64,6 +64,11 @@ function installBridge({ packs = [], config = BASE_CONFIG }: BridgeOptions = {})
       currentConfig = { ...currentConfig, ...patch };
       return currentConfig;
     }),
+    getCompatStatus: vi.fn(async () => ({
+      legacyWindows: false,
+      dwmComposition: true,
+      transparencyUnavailable: false,
+    })),
     getState: vi.fn(),
     onState: vi.fn(() => () => undefined),
     onConfig: vi.fn(() => () => undefined),
