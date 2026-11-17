@@ -240,8 +240,10 @@ def _seed_prune_candidates(db: Database) -> dict:
     stale = NOW_MS - 200 * DAY_MS
     return {
         # 质量差 + 长期未访问 → 唯一应被软失效的行
+        # importance=4 避免同时命中 importance<=1 的硬删除规则，
+        # 保证这个用例只验证“质量分软失效”路径。
         "bad": _insert_row(
-            db, content=BAD_CONTENT, importance=1, created_at=stale, access_count=0
+            db, content=BAD_CONTENT, importance=4, created_at=stale, access_count=0
         ),
         # 同样写得差，但刚创建 → 保留（可能只是还没被检索到）
         "recent": _insert_row(

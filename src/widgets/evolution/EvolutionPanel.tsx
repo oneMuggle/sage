@@ -24,8 +24,34 @@ const TASK_DISPLAY: Record<string, string> = {
   memory_pruning: '记忆修剪',
   preference_learning: '偏好学习',
   importance_reevaluation: '重要性重评估',
-  memory_consolidation: '记忆合并',
+  // 本任务只做“晋升 + 重要度衰减”，不合并重复事实
+  memory_consolidation: '记忆固化（晋升/衰减）',
+  memory_reflection: '记忆反思（去重/合并）',
+  skill_consolidation: '技能巡检',
+  maintenance_catchup: '进化补跑',
 };
+
+const RUNNABLE_TASKS: Array<{
+  name: string;
+  label: string;
+  description: string;
+}> = [
+  {
+    name: 'memory_reflection',
+    label: '立即整理记忆',
+    description: '扫描近 7 天 + 滚动存量，去重/合并/失效',
+  },
+  {
+    name: 'memory_pruning',
+    label: '立即修剪',
+    description: '清理过期、低价值与低质量长期未用记忆',
+  },
+  {
+    name: 'memory_consolidation',
+    label: '立即固化',
+    description: '高频情景记忆晋升语义层并衰减冷记忆重要度',
+  },
+];
 
 const STATUS_DISPLAY: Record<string, { label: string; className: string }> = {
   success: { label: '成功', className: 'text-success' },
@@ -37,6 +63,8 @@ export const EvolutionPanel: React.FC = () => {
   const [logs, setLogs] = useState<EvolutionLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [runningTask, setRunningTask] = useState<string | null>(null);
+  const [runMessage, setRunMessage] = useState<string | null>(null);
 
   const fetchLogs = async () => {
     try {
@@ -58,6 +86,29 @@ export const EvolutionPanel: React.FC = () => {
     const interval = setInterval(fetchLogs, 60_000);
     return () => clearInterval(interval);
   }, []);
+
+  const runTask = async (name: string, label: string) => {
+    setRunningTask(name);
+    setRunMessage(`${label}执行中...`);
+    try {
+      const raw = await invoke<unknown>('scheduled_evolution_run', { name });
+      const body = (raw ?? {}) as Record<string, unknown>;
+      if (body.ok === false) {
+        throw new Error(typeof body.detail === 'string' ? body.detail : '任务执行失败');
+      }
+      const result = (body.result ?? {}) as Record<string, unknown>;
+      const parts = Object.entries(result)
+        // 游标是内部实现细节，不展示给用户
+        .filter(([key]) => key !== 'reflection_backlog_cursor_ms')
+        .map(([key, value]) => `${key}: ${String(value)}`);
+      setRunMessage(`${label}完成${parts.length > 0 ? `：${parts.join('，')}` : ''}`);
+      await fetchLogs();
+    } catch (err) {
+      setRunMessage(`${label}失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setRunningTask(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -94,6 +145,33 @@ export const EvolutionPanel: React.FC = () => {
           但技能演化不一样 —— 它只产出草稿,不会自行改动你的技能。
           草稿需在「技能」页逐条预览后批准或拒绝,批准前不影响现有行为。
         </p>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-medium text-text-secondary mb-3">维护操作</h3>
+        <p className="text-xs text-muted mb-2">
+          应用关闭会错过凌晨的自动任务；这里可手动补跑。重度任务会调用模型，建议空闲时执行。
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {RUNNABLE_TASKS.map((task) => (
+            <button
+              key={task.name}
+              type="button"
+              disabled={runningTask !== null}
+              onClick={() => void runTask(task.name, task.label)}
+              title={task.description}
+              data-testid={`evolution-run-${task.name}`}
+              className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+            >
+              {runningTask === task.name ? '执行中...' : task.label}
+            </button>
+          ))}
+        </div>
+        {runMessage && (
+          <p className="text-xs text-text-secondary mt-2" data-testid="evolution-run-result">
+            {runMessage}
+          </p>
+        )}
       </div>
 
       <div>

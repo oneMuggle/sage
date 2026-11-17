@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 
 import pytest
@@ -289,3 +290,53 @@ def test_reflection_last_run_recorded(db: Database, manager: MemoryManager):
     assert ts is not None
     # 秒级时间戳：上次反思时间
     assert abs(ts - time.time()) < 120
+
+
+def test_reflection_backlog_scans_older_memories_and_advances_cursor(
+    db: Database, manager: MemoryManager
+):
+    """存量记忆不在近 7 天窗口内也能被 backlog 轮转扫到。"""
+    now = int(time.time() * 1000)
+    ids = []
+    for idx, days in enumerate((40, 35, 30)):
+        mid = _save_epi(manager, f"历史记忆 {idx} 的唯一内容 {days}")
+        _set_created(db, "memories_episodic", mid, now - days * 86_400_000)
+        ids.append(mid)
+
+    task = MemoryReflectionTask(
+        db=db,
+        memory_manager=manager,
+        llm_client=None,
+        config={"scan_mode": "backlog", "backlog_batch_limit": 2},
+    )
+    stats = task.run()
+
+    assert stats["recent_scanned"] == 0
+    assert stats["backlog_scanned"] == 2
+    assert stats["scanned"] == 2
+
+    row = db.get_connection().execute(
+        "SELECT metrics_json FROM evolution_log "
+        "WHERE evolution_type='memory_reflection' ORDER BY rowid DESC LIMIT 1"
+    ).fetchone()
+    metrics = json.loads(row["metrics_json"])
+    cursor = metrics["reflection_backlog_cursor_ms"]
+    assert cursor < now - 30 * 86_400_000  # 游标已推进到本轮最早记忆之前
+
+    # 第二轮继续向前扫描剩余的一条旧记忆
+    task2 = MemoryReflectionTask(
+        db=db,
+        memory_manager=manager,
+        llm_client=None,
+        config={"scan_mode": "backlog", "backlog_batch_limit": 2},
+    )
+    stats2 = task2.run()
+    assert stats2["backlog_scanned"] == 1
+    scanned_ids = {
+        r["id"]
+        for r in db.get_connection().execute(
+            "SELECT id FROM memories_episodic WHERE created_at < ?",
+            (now - 7 * 86_400_000,),
+        ).fetchall()
+    }
+    assert scanned_ids == set(ids)
