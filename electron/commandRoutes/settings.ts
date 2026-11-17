@@ -245,6 +245,15 @@ export const settingsRoutes: Record<string, CommandRoute> = {
         params.set('priority', String(a.priority));
       }
       if (a?.include_completed) params.set('include_completed', 'true');
+      if (a?.q !== undefined && a?.q !== null && String(a.q) !== '') {
+        params.set('q', String(a.q));
+      }
+      if (a?.tag !== undefined && a?.tag !== null && String(a.tag) !== '') {
+        params.set('tag', String(a.tag));
+      }
+      if (a?.view !== undefined && a?.view !== null) {
+        params.set('view', String(a.view));
+      }
       if (a?.sort_by !== undefined && a?.sort_by !== null) {
         params.set('sort_by', String(a.sort_by));
       }
@@ -299,6 +308,33 @@ export const settingsRoutes: Record<string, CommandRoute> = {
   todo_stats: {
     method: 'GET',
     path: () => '/api/v1/todos/stats',
+  },
+  todo_tags: {
+    method: 'GET',
+    path: () => '/api/v1/todos/tags',
+  },
+  todo_batch_complete: {
+    method: 'POST',
+    path: () => '/api/v1/todos/batch/complete',
+  },
+  todo_batch_delete: {
+    method: 'POST',
+    path: () => '/api/v1/todos/batch/delete',
+  },
+  todo_export: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      params.set('format', String(a?.format ?? 'json'));
+      if (a?.include_completed) params.set('include_completed', 'true');
+      return `/api/v1/todos/export?${params.toString()}`;
+    },
+  },
+
+  // ASR 转写（待办阶段 1b：语音快速录入）
+  asr_transcribe: {
+    method: 'POST',
+    path: () => '/api/v1/asr/transcribe',
   },
 
   // custom CSS theme storage (themeCssClient)

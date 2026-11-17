@@ -266,6 +266,9 @@ export const zhChatAndSider = {
   // Task 9 (2026-10-15): vision model fallback UI
   'chat.vision_not_available':
     '当前对话模型不支持视觉识别，请配置视觉理解模型或更换支持视觉的对话模型',
+  'chat.vision_mark_supported': '误判了？标记为支持图片',
+  'chat.vision_mark_supported_success': '已标记为支持图片，可重新上传',
+  'chat.vision_mark_supported_failed': '标记失败，请稍后重试',
   'chat.vision_fallback_info': '图片将通过视觉理解模型识别后转为文本描述',
   'chat.ocr_fallback_info': '图片将通过本地 OCR 识别为文本（仅在本机处理，不上传图片）',
   'chat.image_ocr_title': '图片文字（本地 OCR）',
@@ -413,12 +416,15 @@ export const zhChatAndSider = {
   'settings.pet.sound_error': '工具出错提示音',
   'settings.pet.sound_done': '对话完成提示音',
   'settings.pet.compatibility': '兼容模式',
-  'settings.pet.compatibility_desc': 'Win7 无 Aero 或远程桌面下，使用不透明窗口并关闭点击穿透。',
+  'settings.pet.compatibility_desc':
+    '关闭时使用透明窗口（Win7 需系统开启 Aero/桌面合成）；开启时使用不透明窗口并关闭点击穿透。',
   'settings.pet.compat.auto': '自动',
   'settings.pet.compat.on': '开启',
   'settings.pet.compat.off': '关闭',
   'settings.pet.compatibility_win7_hint':
-    '提示：Windows 7 上透明窗口可能显示为黑色背景，建议开启兼容模式或使用应用内模式。',
+    '若桌面窗背景变黑或看不到桌宠，请改用「自动」或「开启」；透明背景需要系统开启 Aero/桌面合成。',
+  'settings.pet.compatibility_no_dwm':
+    '当前系统未开启桌面合成（Aero），透明窗口不可用，已按兼容模式显示。',
   'settings.pet.reset_position': '回到初始位置',
   'settings.pet.asset_notice': '素材来自 dsh-pet（MIT）；完整动画包随安装包分发。',
   'settings.search.placeholder': '搜索设置…',
@@ -851,6 +857,8 @@ export const zhChatAndSider = {
   'settings.network.browser.loading': '正在扫描可用浏览器…',
   'settings.network.browser.none_found':
     '未发现可用浏览器。请安装 Chrome/Edge 或使用 SAGE_BROWSER_PATH 环境变量指定路径。',
+  'settings.network.browser.load_failed': '浏览器列表加载失败，请重试。',
+  'settings.network.browser.retry': '重试',
   'settings.network.browser.embedded': 'Sage 内置浏览器',
   'settings.network.browser.embedded_hint': 'Electron 自带的 Chromium 内核（部分站点可能不兼容）',
   'settings.network.browser.system_default': '系统默认',

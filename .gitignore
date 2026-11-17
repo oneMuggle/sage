@@ -200,3 +200,8 @@ r[0-9]*-*.log
 # win7-sync: generated parity report (see docs/win7-sync/README.md)
 docs/win7-sync/parity-auto.md
 docs/win7-sync/parity-auto.json
+
+# 组件包签名私钥（公钥 resources/component-public-key.pem 可入库）
+.secrets/
+*.component-private.pem
+component-private-key.pem

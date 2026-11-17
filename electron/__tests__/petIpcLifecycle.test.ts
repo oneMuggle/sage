@@ -47,7 +47,7 @@ describe('pet IPC registration lifecycle', () => {
 
   it('registers every pet channel', () => {
     registerPetIpc(fakeController());
-    expect(handlers.size).toBe(9);
+    expect(handlers.size).toBe(10);
     expect(listeners.size).toBe(16);
   });
 
@@ -58,7 +58,7 @@ describe('pet IPC registration lifecycle', () => {
     expect(listeners.size).toBe(0);
 
     expect(() => registerPetIpc(fakeController())).not.toThrow();
-    expect(handlers.size).toBe(9);
+    expect(handlers.size).toBe(10);
     expect(listeners.size).toBe(16);
   });
 

@@ -175,6 +175,10 @@ function ProjectChat({ projectPath }: { projectPath: string }) {
     settings.settings.modelSelections.chatModel,
     settings.settings.endpoints,
   );
+  const embeddingSelection = settings.settings.modelSelections.embeddingModel;
+  const embedEndpoint = embeddingSelection
+    ? resolveEndpoint(embeddingSelection, settings.settings.endpoints)
+    : undefined;
   const model = settings.settings.modelSelections.chatModel.modelId;
   const canSend =
     !loading && !sourceLoading && !sourceError && selected.length > 0 && !!endpoint && !!model;
@@ -192,9 +196,11 @@ function ProjectChat({ projectPath }: { projectPath: string }) {
       llmBaseUrl: endpoint.baseUrl,
       llmApiKey: endpoint.apiKey,
       llmModel: model,
-      embedBaseUrl: endpoint.baseUrl,
-      embedApiKey: endpoint.apiKey,
-      embedModel: 'text-embedding-3-small',
+      // 2026-11-15: 向量检索使用 embeddingModel 选中的端点/模型；
+      // 未配置时传空串，后端检索自动降级为 token 搜索（不阻塞问答）。
+      embedBaseUrl: embedEndpoint?.baseUrl ?? '',
+      embedApiKey: embedEndpoint?.apiKey ?? '',
+      embedModel: embeddingSelection?.modelId ?? '',
     });
     setStreamId(`wiki-chat-${crypto.randomUUID()}`);
   };
@@ -208,7 +214,9 @@ function ProjectChat({ projectPath }: { projectPath: string }) {
       `- 项目路径: ${projectPath}`,
       `- 消息数量: ${messages.length}`,
       '',
-      ...messages.map((m, idx) => `### [${idx + 1}] ${m.role === 'user' ? '提问' : '回答'}\n\n${m.content}`),
+      ...messages.map(
+        (m, idx) => `### [${idx + 1}] ${m.role === 'user' ? '提问' : '回答'}\n\n${m.content}`,
+      ),
     ];
     void navigator.clipboard?.writeText(lines.join('\n'));
     /* v8 ignore stop */

@@ -81,6 +81,23 @@ export function SourcesView() {
       toast.error('请先在设置中配置聊天模型');
       return;
     }
+    // 2026-11-15: 嵌入可选（对齐 llm_wiki）——未配置时跳过向量化，导入照常完成；
+    // 已配置则用 embeddingModel 选中的端点/模型，不复用聊天端点。
+    const embeddingSelection = settings?.settings.modelSelections.embeddingModel;
+    const embedEndpoint =
+      settings && embeddingSelection
+        ? resolveEndpoint(embeddingSelection, settings.settings.endpoints)
+        : undefined;
+    const embedModelId = embeddingSelection?.modelId ?? '';
+    const embeddingReady = Boolean(embedEndpoint && embedModelId);
+    if (!embeddingReady) {
+      toast.info('未配置嵌入模型，本次导入将跳过向量化（可在设置 → 模型选择中配置）');
+    }
+    // 未就绪时整组 embedding 字段传空，避免只带 base/key 不带 model 的半配置。
+    const embed =
+      embeddingReady && embedEndpoint
+        ? { baseUrl: embedEndpoint.baseUrl, apiKey: embedEndpoint.apiKey, model: embedModelId }
+        : { baseUrl: '', apiKey: '', model: '' };
     try {
       const { streamId } = await wikiIngestStream({
         sourceFile: path,
@@ -88,9 +105,9 @@ export function SourcesView() {
         llmBaseUrl: endpoint.baseUrl,
         llmApiKey: endpoint.apiKey,
         llmModel: modelId,
-        embedBaseUrl: endpoint.baseUrl,
-        embedApiKey: endpoint.apiKey,
-        embedModel: modelId,
+        embedBaseUrl: embed.baseUrl,
+        embedApiKey: embed.apiKey,
+        embedModel: embed.model,
       });
       setIngestId(streamId);
     } catch (error) {

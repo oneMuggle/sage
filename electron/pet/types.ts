@@ -77,6 +77,14 @@ export interface PetInstanceConfig {
   pinnedSessionId: string | null;
 }
 
+/** Settings-page view of the pet window's effective compatibility mode. */
+export interface PetCompatStatus {
+  legacyWindows: boolean;
+  dwmComposition: boolean;
+  /** True when transparent windows cannot composite at all (legacy + DWM off). */
+  transparencyUnavailable: boolean;
+}
+
 export interface PetConfig {
   version: 3;
   enabled: boolean;

@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
+from backend.api.wiki_credentials import resolve_llm_api_key
 from backend.wiki import (
     ChatConfig,
     GraphData,
@@ -442,9 +443,10 @@ class IngestRequest(BaseModel):
     llm_base_url: str
     llm_api_key: str
     llm_model: str
-    embed_base_url: str
-    embed_api_key: str
-    embed_model: str
+    # 2026-11-15: 嵌入可选 — 省略/空串视为关闭向量化（导入照常完成）
+    embed_base_url: str = ""
+    embed_api_key: str = ""
+    embed_model: str = ""
 
 
 class ChatRequest(BaseModel):
@@ -455,9 +457,10 @@ class ChatRequest(BaseModel):
     llm_base_url: str
     llm_api_key: str
     llm_model: str
-    embed_base_url: str
-    embed_api_key: str
-    embed_model: str
+    # 2026-11-15: 嵌入可选 — 空配置时检索降级为 token 搜索
+    embed_base_url: str = ""
+    embed_api_key: str = ""
+    embed_model: str = ""
     max_tokens: int = 4096
     selected_paths: Optional[List[str]] = Field(default=None, max_length=500)
 
@@ -901,19 +904,24 @@ async def ingest_stream(req: IngestRequest) -> StreamingResponse:
         _cleanup_temp_paths(temp_md, source_snapshot, project_root=project_root)
         raise HTTPException(status_code=400, detail="文档解析失败") from exc
 
+    # 2026-11-15: 渲染层 GET 设置时 apiKey 被脱敏为空串，缓存丢失/换机后
+    # 请求会带空 key 打上游 401 —— 为空时从持久化设置按 baseUrl 兜底。
+    llm_api_key = resolve_llm_api_key(req.llm_base_url, req.llm_api_key)
+    embed_api_key = resolve_llm_api_key(req.embed_base_url, req.embed_api_key)
+
     config = IngestConfig(
         llm_base_url=req.llm_base_url,
-        llm_api_key=req.llm_api_key,
+        llm_api_key=llm_api_key,
         llm_model=req.llm_model,
         embed_base_url=req.embed_base_url,
-        embed_api_key=req.embed_api_key,
+        embed_api_key=embed_api_key,
         embed_model=req.embed_model,
     )
 
     # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON；按任务路由模型）
     ctx = make_task_llm_context(
         req.llm_base_url,
-        req.llm_api_key,
+        llm_api_key,
         req.llm_model,
         project_root=project_root,
         task="ingest",
@@ -1176,10 +1184,14 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
         if not set(req.selected_paths).issubset(allowed):
             raise HTTPException(status_code=403, detail="来源不是可访问的 Wiki 页面")
 
+    # 2026-11-15: 同 ingest —— 渲染层脱敏后的空 key 由持久化设置兜底。
+    llm_api_key = resolve_llm_api_key(req.llm_base_url, req.llm_api_key)
+    embed_api_key = resolve_llm_api_key(req.embed_base_url, req.embed_api_key)
+
     # LLM/HTTP 能力（PR-2/3 用 ctx.llm_stream_call 切换 NDJSON；按任务路由模型）
     ctx = make_task_llm_context(
         req.llm_base_url,
-        req.llm_api_key,
+        llm_api_key,
         req.llm_model,
         project_root=project_root,
         task="chat",
@@ -1188,10 +1200,10 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
     # 配置
     config = ChatConfig(
         llm_base_url=req.llm_base_url,
-        llm_api_key=req.llm_api_key,
+        llm_api_key=llm_api_key,
         llm_model=ctx.model,
         embed_base_url=req.embed_base_url,
-        embed_api_key=req.embed_api_key,
+        embed_api_key=embed_api_key,
         embed_model=req.embed_model,
         max_tokens=req.max_tokens,
         selected_paths=req.selected_paths,
@@ -1396,10 +1408,13 @@ async def start_research(req: ResearchRequest) -> dict:
         topic=req.topic,
     )
 
+    # 2026-11-15: 同 ingest —— 渲染层脱敏后的空 key 由持久化设置兜底。
+    llm_api_key = resolve_llm_api_key(req.llm_base_url, req.llm_api_key)
+
     # LLM/HTTP 能力（按任务路由 research 模型）
     ctx = make_task_llm_context(
         req.llm_base_url,
-        req.llm_api_key,
+        llm_api_key,
         req.llm_model,
         project_root=project_root,
         task="research",
@@ -1410,10 +1425,10 @@ async def start_research(req: ResearchRequest) -> dict:
     if req.auto_ingest:
         ingest_config = IngestConfig(
             llm_base_url=req.llm_base_url,
-            llm_api_key=req.llm_api_key,
+            llm_api_key=llm_api_key,
             llm_model=ctx.model,
             embed_base_url=req.llm_base_url,  # 使用相同的 API
-            embed_api_key=req.llm_api_key,
+            embed_api_key=llm_api_key,
             embed_model=req.llm_model,
         )
 

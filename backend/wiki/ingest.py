@@ -41,12 +41,25 @@ from .files import (
 from .llm_context import LLMContext
 from .models import Analysis, AnalysisConcept, AnalysisEntity, IngestProgress, IngestResult
 from .operation_log import append_log
+from .vectorstore import read_stored_dim
 from .vectorstore_factory import open_vector_store
 
 logger = logging.getLogger(__name__)
 
 INGEST_STREAM_ERROR_CODE = "wiki_ingest_failed"
 INGEST_STREAM_ERROR_MESSAGE = "Wiki 导入失败"
+
+
+def _stream_failure_message(exc: Exception) -> str:
+    """失败事件的用户可见文案。
+
+    带上上游 HTTP 状态码便于定位（如 401 凭据失效），不包含响应体、URL query
+    或任何凭据；非 HTTP 异常统一回落到通用文案。
+    """
+    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status_code, int):
+        return f"{INGEST_STREAM_ERROR_MESSAGE}（LLM 请求返回 HTTP {status_code}）"
+    return INGEST_STREAM_ERROR_MESSAGE
 
 # 常量
 MAX_CONTENT_CHARS = 50_000  # 50KB
@@ -164,9 +177,16 @@ async def ingest_source(
     )
     wiki_page_path = f"wiki/sources/{wiki_file.name}"
 
-    # Step 6: 嵌入 + 存储 (80%)
-    _report("embedding", 80, "嵌入 Wiki 页面")
-    await embed_pages(project_root, wiki_page_path, wiki_content, config, http_post)
+    # Step 6: 嵌入 + 存储 (80%) —— 嵌入可选，未配置/失败均不阻断导入
+    embed_configured = bool(config.embed_base_url and config.embed_model)
+    _report(
+        "embedding",
+        80,
+        "嵌入 Wiki 页面" if embed_configured else "跳过嵌入（未配置嵌入模型）",
+    )
+    embed_dim = await embed_pages(project_root, wiki_page_path, wiki_content, config, http_post)
+    if embed_configured and embed_dim is None:
+        _report("embedding", 85, "嵌入失败，已跳过（详见后端日志）")
 
     # Step 7: 更新缓存 (95%)
     _report("finalize", 95, "更新缓存")
@@ -590,39 +610,95 @@ async def generate_pages(
     return wiki_file, page_type, wiki_content
 
 
+async def _request_page_vectors(
+    config: IngestConfig,
+    chunks: List[str],
+    http_post: Callable[[str, Dict[str, str], dict], Any],
+) -> Optional[List[List[float]]]:
+    """调用嵌入接口；请求/解析失败或响应非法时返回 ``None``（非致命）。"""
+    try:
+        embed_req = build_embed_request(
+            EmbeddingConfig(
+                base_url=config.embed_base_url,
+                api_key=config.embed_api_key,
+                model=config.embed_model,
+                dim=config.embed_dim,
+            ),
+            chunks,
+        )
+        embed_response = await http_post(embed_req.url, embed_req.headers, embed_req.body)
+        vectors = parse_embed_response(embed_response, 0)
+    except Exception as exc:  # 嵌入失败非致命：导入照常完成
+        logger.warning(
+            "embed_pages: embedding request failed: error_type=%s", type(exc).__name__
+        )
+        return None
+    if not vectors:
+        return None
+    dim = len(vectors[0])
+    if dim <= 0 or any(len(vector) != dim for vector in vectors):
+        logger.warning("embed_pages: inconsistent embedding dimensions; skipped")
+        return None
+    return vectors
+
+
+def _store_page_vectors(
+    project_root: Path,
+    wiki_page_path: str,
+    chunks: List[str],
+    vectors: List[List[float]],
+) -> Optional[int]:
+    """写入向量库；维度变化时重置派生库，写库失败返回 ``None``（非致命）。"""
+    dim = len(vectors[0])
+    storage_path = project_root / ".llm-wiki" / "vectors.json"
+    stored_dim = read_stored_dim(storage_path)
+    if stored_dim is not None and stored_dim != dim:
+        logger.warning(
+            "wiki vector dim changed (%s -> %s); resetting vector store", stored_dim, dim
+        )
+        with suppress(OSError):
+            storage_path.unlink()
+    try:
+        vector_store = open_vector_store(project_root, dim)
+        vector_store.upsert_chunks(
+            wiki_page_path,
+            [(idx, chunk, vec) for idx, (chunk, vec) in enumerate(zip(chunks, vectors))],  # noqa: B905 — strict keyword is unavailable on Python 3.8
+        )
+    except Exception as exc:  # 写库失败同样不阻断导入
+        logger.warning(
+            "embed_pages: vector store write failed: error_type=%s", type(exc).__name__
+        )
+        return None
+    return dim
+
+
 async def embed_pages(
     project_root: Path,
     wiki_page_path: str,
     wiki_content: str,
     config: IngestConfig,
     http_post: Callable[[str, Dict[str, str], dict], Any],
-) -> None:
+) -> Optional[int]:
     """Step 6: 分块 → 调用 embed HTTP → upsert 到 VectorStore。
 
-    无 chunk 时跳过(空文档场景)。
+    嵌入是可选能力（对齐 llm_wiki）：未配置 embed 端点/模型时直接跳过；
+    调用/解析/写库失败同样非致命（记录日志后返回 ``None``），不中断导入。
+    向量维度以嵌入响应为准（自适应）；与既有向量库维度不一致时重置该库
+    （向量是派生数据，重新导入源文件即可恢复）。
+
+    Returns:
+        写入的向量维度；跳过或失败返回 ``None``。
     """
+    if not (config.embed_base_url and config.embed_model):
+        logger.info("embed_pages skipped: embedding not configured")
+        return None
     chunks = chunk_markdown(wiki_content, target_chunk_size=500)
     if not chunks:
-        return
-
-    embed_req = build_embed_request(
-        EmbeddingConfig(
-            base_url=config.embed_base_url,
-            api_key=config.embed_api_key,
-            model=config.embed_model,
-            dim=config.embed_dim,
-        ),
-        chunks,
-    )
-
-    embed_response = await http_post(embed_req.url, embed_req.headers, embed_req.body)
-    vectors = parse_embed_response(embed_response, config.embed_dim)
-
-    vector_store = open_vector_store(project_root, config.embed_dim)
-    vector_store.upsert_chunks(
-        wiki_page_path,
-        [(idx, chunk, vec) for idx, (chunk, vec) in enumerate(zip(chunks, vectors))],  # noqa: B905 — strict keyword is unavailable on Python 3.8
-    )
+        return None
+    vectors = await _request_page_vectors(config, chunks, http_post)
+    if vectors is None:
+        return None
+    return _store_page_vectors(project_root, wiki_page_path, chunks, vectors)
 
 
 def cache_put(
@@ -675,20 +751,21 @@ async def ingest_source_stream(
 
         started → copy_source → step1_analyze → step2_write → embedding → completed
 
-    ``failed`` 阶段在异常路径发出(``percent=0``),随后 ``raise`` 让上层 FastAPI
-    关闭流。
+    ``failed`` 阶段在异常路径发出(``percent=0``,``message`` 为字符串、错误码
+    放独立 ``code`` 字段),随后 ``raise`` 让上层 FastAPI 关闭流:
+
+    .. code-block:: json
+
+        {"event":"progress","data":{"stage":"failed","percent":0,"message":"...","code":"wiki_ingest_failed"}}
     """
 
-    def emit(stage: str, percent: int, message: Optional[object] = None) -> bytes:
+    def emit(
+        stage: str, percent: int, message: Optional[str] = None, **extra: object
+    ) -> bytes:
+        data: Dict[str, object] = {"stage": stage, "percent": percent, "message": message}
+        data.update(extra)
         return (
-            json.dumps(
-                {
-                    "event": "progress",
-                    "data": {"stage": stage, "percent": percent, "message": message},
-                },
-                ensure_ascii=False,
-            )
-            + "\n"
+            json.dumps({"event": "progress", "data": data}, ensure_ascii=False) + "\n"
         ).encode("utf-8")
 
     try:
@@ -732,8 +809,17 @@ async def ingest_source_stream(
         )
         wiki_page_path = f"wiki/sources/{wiki_file.name}"
 
-        yield emit("embedding", 80, f"嵌入 {wiki_file.name}")
-        await embed_pages(project_root, wiki_page_path, wiki_content, config, ctx.http_post)
+        embed_configured = bool(config.embed_base_url and config.embed_model)
+        yield emit(
+            "embedding",
+            80,
+            f"嵌入 {wiki_file.name}" if embed_configured else "跳过嵌入（未配置嵌入模型）",
+        )
+        embed_dim = await embed_pages(
+            project_root, wiki_page_path, wiki_content, config, ctx.http_post
+        )
+        if embed_configured and embed_dim is None:
+            yield emit("embedding", 85, "嵌入失败，已跳过（详见后端日志）")
 
         cache_put(
             project_root,
@@ -752,7 +838,8 @@ async def ingest_source_stream(
         yield emit(
             "failed",
             0,
-            {"code": INGEST_STREAM_ERROR_CODE, "message": INGEST_STREAM_ERROR_MESSAGE},
+            _stream_failure_message(e),
+            code=INGEST_STREAM_ERROR_CODE,
         )
         raise
 

@@ -1,108 +1,20 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
-/** r75/r76: 聊天文档附件支持的扩展名（Chat.tsx 上传白名单与 ChatInput
- * 提示条件共用，避免两处口径漂移）。
- * 2026-10-13: 扩展覆盖常见编程语言、配置、数据格式，与后端
- * ALLOWED_TEXT_EXTENSIONS + ALLOWED_DOC_EXTENSIONS 同口径。 */
-export const CHAT_DOCUMENT_EXTENSIONS = new Set([
-  // 基础文本
-  'txt',
-  'md',
-  'csv',
-  // 编程语言
-  'py',
-  'js',
-  'ts',
-  'jsx',
-  'tsx',
-  'java',
-  'go',
-  'rs',
-  'rb',
-  'php',
-  'c',
-  'cpp',
-  'h',
-  'hpp',
-  'cs',
-  'swift',
-  'kt',
-  'scala',
-  'r',
-  // 前端
-  'html',
-  'css',
-  'scss',
-  'less',
-  'vue',
-  'svelte',
-  // 数据/配置
-  'json',
-  'yaml',
-  'yml',
-  'xml',
-  'toml',
-  'ini',
-  'cfg',
-  'conf',
-  // 脚本/构建
-  'sh',
-  'bash',
-  'bat',
-  'ps1',
-  'sql',
-  'makefile',
-  'cmake',
-  'gradle',
-  // 特殊命名
-  'dockerfile',
-  'gitignore',
-  'properties',
-  // 日志
-  'log',
-  // 二进制文档（需后端解析）
-  'pdf',
-  'docx',
-  'xlsx',
-]);
-/** r78: 文件选择器 accept 提示（与 CHAT_DOCUMENT_EXTENSIONS 同口径）。
- * 仅列最常见的扩展名以保持对话框简洁，实际验证由后端完成。 */
-export const CHAT_DOCUMENT_ACCEPT = [
-  '.txt',
-  '.md',
-  '.csv',
-  '.pdf',
-  '.docx',
-  '.xlsx',
-  '.json',
-  '.yaml',
-  '.yml',
-  '.xml',
-  '.html',
-  '.css',
-  '.py',
-  '.js',
-  '.ts',
-  '.jsx',
-  '.tsx',
-  '.java',
-  '.go',
-  '.rs',
-  '.sh',
-  '.bash',
-  '.bat',
-  '.sql',
-  '.log',
-  '.ini',
-  '.cfg',
-  '.conf',
-  '.toml',
-].join(',');
+import {
+  CHAT_DOCUMENT_EXTENSIONS,
+  CHAT_IMAGE_MIME_TYPES,
+  MAX_ATTACHMENT_COUNT,
+  MAX_ATTACHMENT_SIZE,
+} from '../chatAttachmentFormats';
 
-// P2 (2026-11-04): 前端预检硬限制 —— 与后端 `MAX_ATTACHMENT_SIZE` / 注入循环
-// `[:10]` 同口径；在 selection 阶段就拒绝，而不是上传后才 toast。
-export const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024; // 25 MB
-export const MAX_ATTACHMENT_COUNT = 10;
+export {
+  CHAT_DOCUMENT_ACCEPT,
+  CHAT_DOCUMENT_EXTENSIONS,
+  CHAT_IMAGE_ACCEPT,
+  CHAT_IMAGE_MIME_TYPES,
+  MAX_ATTACHMENT_COUNT,
+  MAX_ATTACHMENT_SIZE,
+} from '../chatAttachmentFormats';
 
 /**
  * P2: 预检单个文件是否可加入附件列表。
@@ -129,7 +41,7 @@ export function preflightAttachment(
     if (!ext || !CHAT_DOCUMENT_EXTENSIONS.has(ext)) {
       return { ok: false, reason: 'unsupported' };
     }
-  } else if (!file.type.startsWith('image/')) {
+  } else if (!CHAT_IMAGE_MIME_TYPES.has(file.type)) {
     return { ok: false, reason: 'unsupported' };
   }
   if (existing.some((e) => e.name === file.name)) {
@@ -164,17 +76,13 @@ interface UseFileUploadReturn {
   removeFile: (index: number) => void;
   removeImage: (index: number) => void;
   clearAll: () => void;
-  handleDrop: (e: React.DragEvent) => void;
-  handleDragOver: (e: React.DragEvent) => void;
   /** U13: 剪贴板粘贴图片（无图片时放行为默认粘贴文本） */
   handlePaste: (e: React.ClipboardEvent) => void;
-  isDragOver: boolean;
 }
 
 export function useFileUpload(): UseFileUploadReturn {
   const [files, setFiles] = useState<AttachedFile[]>([]);
   const [images, setImages] = useState<AttachedFile[]>([]);
-  const [isDragOver, setIsDragOver] = useState(false);
 
   // P2 (2026-11-04): preflight 需要在 addFile/addImage 内读取"当前"条数,
   // 而 setState 是异步的, 直接读 state 会拿到闭包里的陈旧值 ——
@@ -344,31 +252,7 @@ export function useFileUpload(): UseFileUploadReturn {
     setImages([]);
   }, []);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragOver(false);
-
-      const droppedFiles = Array.from(e.dataTransfer.files);
-      droppedFiles.forEach((file) => {
-        if (file.type.startsWith('image/')) {
-          addImage(file);
-        } else {
-          addFile(file);
-        }
-      });
-    },
-    [addFile, addImage],
-  );
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  }, []);
-
-  // U13 (对标增强第二轮批次 B): 剪贴板粘贴图片 — 与拖放/按钮上传同管道
+  // U13 (对标增强第二轮批次 B): 剪贴板粘贴图片 — 与按钮上传同管道
   // (G6 images 附件)。剪贴板无文件时不 preventDefault,保持默认文本粘贴。
   // P2 (2026-11-04): 扩展为粘贴任意文件（非图片走 addFile 文档通道）。
   const handlePaste = useCallback(
@@ -396,10 +280,7 @@ export function useFileUpload(): UseFileUploadReturn {
     removeFile,
     removeImage,
     clearAll,
-    handleDrop,
-    handleDragOver,
     handlePaste,
-    isDragOver,
   };
 }
 

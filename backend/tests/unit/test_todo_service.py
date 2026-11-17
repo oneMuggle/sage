@@ -398,8 +398,10 @@ def test_get_startup_summary_buckets(todo_service, monkeypatch):
     R97 跟进：冻结服务时钟到上午 10 点 —— 原实现用真实 now+1h 构造
     today 桶条目，CI 在 23:00-23:59 运行时跨过午夜落入 upcoming
     （today_end = 当日 23:59:59），today 断言必炸。冻结后彻底确定性。
+
+    阶段 1：聚合逻辑拆到 ``todo_stats`` 模块，时钟冻结目标随之迁移。
     """
-    import backend.services.todo_service as todo_service_module
+    import backend.services.todo_stats as todo_stats_module
 
     # 与服务一致使用 tz-naive；本地裸 datetime 构造豁免 DTZ001
     fixed_now = datetime(2026, 1, 15, 10, 0, 0)  # noqa: DTZ001
@@ -409,7 +411,7 @@ def test_get_startup_summary_buckets(todo_service, monkeypatch):
         def now(cls, tz=None):
             return fixed_now
 
-    monkeypatch.setattr(todo_service_module, "datetime", _FixedDatetime)
+    monkeypatch.setattr(todo_stats_module, "datetime", _FixedDatetime)
     todo_service.create_todo(title="Overdue", due_at=(fixed_now - timedelta(hours=2)).isoformat())
     todo_service.create_todo(title="Today", due_at=(fixed_now + timedelta(hours=1)).isoformat())
     todo_service.create_todo(title="Upcoming", due_at=(fixed_now + timedelta(days=3)).isoformat())
@@ -597,3 +599,4 @@ def test_update_unrelated_field_does_not_reset_latches(todo_service):
 
     todo_service.update_todo(created.id, title="New title", priority="high")
     assert todo_service.get_unfired_24h_reminders() == []
+

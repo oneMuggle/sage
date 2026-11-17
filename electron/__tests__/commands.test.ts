@@ -1190,21 +1190,26 @@ describe('agent_* IPC commands', () => {
       'todo_cancel',
       'todo_summary',
       'todo_stats',
+      'todo_tags',
+      'todo_batch_complete',
+      'todo_batch_delete',
+      'todo_export',
     ];
 
-    it('registers all 9 todo commands', () => {
+    it('registers all 13 todo commands', () => {
       for (const cmd of TODO_COMMANDS) {
         expect(COMMAND_ROUTES[cmd], `missing route for ${cmd}`).toBeDefined();
       }
     });
 
-    it('todo_list builds a query string from flat params', () => {
+    it('todo_list builds a query string from flat params (incl. q search)', () => {
       expect(COMMAND_ROUTES.todo_list.path({})).toBe('/api/v1/todos');
       expect(
         COMMAND_ROUTES.todo_list.path({
           status: 'pending',
           priority: 'high',
           include_completed: true,
+          q: '周报',
           sort_by: 'priority',
           sort_order: 'desc',
           limit: 20,
@@ -1212,8 +1217,12 @@ describe('agent_* IPC commands', () => {
         }),
       ).toBe(
         '/api/v1/todos?status=pending&priority=high&include_completed=true' +
-          '&sort_by=priority&sort_order=desc&limit=20&offset=5',
+          '&q=%E5%91%A8%E6%8A%A5&sort_by=priority&sort_order=desc&limit=20&offset=5',
       );
+    });
+
+    it('todo_list omits an empty q', () => {
+      expect(COMMAND_ROUTES.todo_list.path({ q: '' })).toBe('/api/v1/todos');
     });
 
     it('todo_list ignores false include_completed', () => {
@@ -1235,6 +1244,37 @@ describe('agent_* IPC commands', () => {
       expect(COMMAND_ROUTES.todo_summary.method).toBe('GET');
       expect(COMMAND_ROUTES.todo_summary.path({})).toBe('/api/v1/todos/summary');
       expect(COMMAND_ROUTES.todo_stats.path({})).toBe('/api/v1/todos/stats');
+    });
+
+    it('todo_batch_complete / todo_batch_delete are POST sub-paths', () => {
+      expect(COMMAND_ROUTES.todo_batch_complete.method).toBe('POST');
+      expect(COMMAND_ROUTES.todo_batch_complete.path({})).toBe('/api/v1/todos/batch/complete');
+      expect(COMMAND_ROUTES.todo_batch_delete.method).toBe('POST');
+      expect(COMMAND_ROUTES.todo_batch_delete.path({})).toBe('/api/v1/todos/batch/delete');
+    });
+
+    it('todo_export builds the format query string', () => {
+      expect(COMMAND_ROUTES.todo_export.method).toBe('GET');
+      expect(COMMAND_ROUTES.todo_export.path({})).toBe('/api/v1/todos/export?format=json');
+      expect(COMMAND_ROUTES.todo_export.path({ format: 'md', include_completed: true })).toBe(
+        '/api/v1/todos/export?format=md&include_completed=true',
+      );
+    });
+
+    it('todo_list includes tag and view filters', () => {
+      expect(COMMAND_ROUTES.todo_list.path({ tag: '工作', view: 'today' })).toBe(
+        '/api/v1/todos?tag=%E5%B7%A5%E4%BD%9C&view=today',
+      );
+    });
+
+    it('todo_tags is GET /api/v1/todos/tags', () => {
+      expect(COMMAND_ROUTES.todo_tags.method).toBe('GET');
+      expect(COMMAND_ROUTES.todo_tags.path({})).toBe('/api/v1/todos/tags');
+    });
+
+    it('asr_transcribe is POST /api/v1/asr/transcribe', () => {
+      expect(COMMAND_ROUTES.asr_transcribe.method).toBe('POST');
+      expect(COMMAND_ROUTES.asr_transcribe.path({})).toBe('/api/v1/asr/transcribe');
     });
   });
 });

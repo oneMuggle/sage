@@ -318,9 +318,11 @@ export function OfficePreviewPanel({
   const buildManagedPath = (ws: string) =>
     [ws, 'office', summary.doc_type, summary.id, summary.generated_filename].join('/');
 
-  const fallbackToStructured = (notify = true) => {
+  const fallbackToStructured = (notify = true, detail?: string) => {
     setFidelityOn(false);
-    if (notify) toast.error(t('office.fidelity.fallback'));
+    if (notify) {
+      toast.error(t('office.fidelity.fallback'), detail ? { description: detail } : undefined);
+    }
   };
 
   const loadFidelity = async () => {
@@ -783,7 +785,7 @@ export function OfficePreviewPanel({
             workspacePath={workspacePath ?? summary.workspace_path ?? ''}
             managedPath={buildManagedPath(workspacePath ?? summary.workspace_path ?? '')}
             revision={docRevision ?? undefined}
-            onError={() => fallbackToStructured()}
+            onError={(detail) => fallbackToStructured(true, detail)}
           />
         ) : (
           <div className="p-4" data-testid="office-preview-structured">

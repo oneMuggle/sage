@@ -663,9 +663,18 @@ export interface PetApiInfoBridge {
   error?: string | null;
 }
 
+/** Effective transparency capability of the desktop pet window. */
+export interface PetCompatStatusBridge {
+  legacyWindows: boolean;
+  dwmComposition: boolean;
+  /** True when transparent windows cannot composite (legacy Windows + DWM off). */
+  transparencyUnavailable: boolean;
+}
+
 export interface PetElectronApiBridge {
   getConfig: () => Promise<PetConfigBridge>;
   setConfig: (patch: Partial<PetConfigBridge>) => Promise<PetConfigBridge>;
+  getCompatStatus: () => Promise<PetCompatStatusBridge>;
   getState: () => Promise<PetSnapshotBridge>;
   getStates: () => Promise<Record<string, PetSnapshotBridge>>;
   onStates: (handler: (states: Record<string, PetSnapshotBridge>) => void) => UnlistenFn;
@@ -710,6 +719,57 @@ export interface PreviewElectronApiBridge {
   revoke: (id: string) => Promise<boolean>;
 }
 
+export interface InstalledComponentSummary {
+  id: string;
+  name: string;
+  version: string;
+  target: string;
+  installedAt: string;
+  fileCount: number;
+  totalBytes: number;
+  sourcePackage: string;
+  signatureVerified: boolean;
+}
+
+export interface ComponentPackageSummary {
+  path: string;
+  id: string;
+  name: string;
+  version: string;
+  size: number;
+  error?: string;
+}
+
+export interface ComponentsListResult {
+  ok: boolean;
+  installed: InstalledComponentSummary[];
+  discovered: ComponentPackageSummary[];
+  error?: string;
+}
+
+export interface ComponentsScanResult {
+  ok: boolean;
+  discovered: ComponentPackageSummary[];
+  error?: string;
+}
+
+export interface ComponentActionResult {
+  ok: boolean;
+  component?: InstalledComponentSummary;
+  componentId?: string;
+  error?: string;
+  code?: string;
+}
+
+/** 离线组件包（.sagepkg）管理桥；Web 模式下为 undefined。 */
+export interface ComponentsElectronApiBridge {
+  list: () => Promise<ComponentsListResult>;
+  scan: () => Promise<ComponentsScanResult>;
+  pickAndImport: () => Promise<ComponentActionResult>;
+  importPath: (path: string) => Promise<ComponentActionResult>;
+  remove: (id: string) => Promise<ComponentActionResult>;
+}
+
 export interface ElectronAPI {
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
@@ -721,6 +781,8 @@ export interface ElectronAPI {
   devtools?: {
     inspectAt: (x: number, y: number) => void;
   };
+  /** 离线组件包（.sagepkg）管理桥；进度经 components:progress 事件订阅。 */
+  components?: ComponentsElectronApiBridge;
   /**
    * P8 (2026-09-14): 嵌入模型下载桥 —— models:embedder:download / cancel
    * 原生 IPC；进度经 api.listen('models:embedder:progress') 订阅。
@@ -932,6 +994,38 @@ export interface ElectronAPI {
    */
   sendHeartbeat?: () => void;
   notifyFirstPaint?: () => void;
+  /**
+   * 启动竞态修复：查询后端 lifecycle 快照。
+   * `backend:starting` 事件可能早于 renderer 订阅，挂载时用快照兜底。
+   */
+  getBackendLifecycle?: () => Promise<{ lifecycle: string; generation: number | null }>;
+  /**
+   * 启动阶段埋点（渲染层 → 主进程 last-run.json 启动瀑布）。
+   * 白名单：sessions_loaded / messages_loaded / settings_loaded。
+   */
+  reportBootStage?: (stage: 'sessions_loaded' | 'messages_loaded' | 'settings_loaded') => void;
+  /**
+   * Progressive readiness：最近一次 /health/ready 快照（事件先于订阅时兜底）。
+   * 事件通道为 `backend:startup-status`。
+   */
+  getBackendStartupStatus?: () => Promise<StartupStatusSnapshot | null>;
+}
+
+/** `/health/ready` 单模块状态（后端 backend/services/startup_status.py 的输出）。 */
+export interface StartupStatusModule {
+  state: 'pending' | 'warming' | 'ready' | 'degraded' | 'failed';
+  layer: number;
+  elapsed_ms: number | null;
+  detail: Record<string, unknown> | null;
+}
+
+/** `/health/ready` 快照：L0–L3 分层 + 逐模块 warmup 状态。 */
+export interface StartupStatusSnapshot {
+  status: 'warming' | 'ready' | 'degraded';
+  phase: 'L0' | 'L1' | 'L2' | 'L3';
+  boot_ms: number;
+  modules: Record<string, StartupStatusModule>;
+  warmup: { done: number; total: number };
 }
 
 declare global {

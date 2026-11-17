@@ -171,6 +171,30 @@ class TestModelCapabilities:
         assert caps == ["chat", "vision"]
 
     @pytest.mark.asyncio()
+    async def test_marker_miss_is_unknown_not_confirmed_false(self):
+        """名字未命中 marker → vision_known=False，应按未知放行而不是拦截。"""
+        agent = _bare_agent()
+        agent.capability_resolver = lambda model_id: ModelCapabilities(
+            vision=False, vision_known=False
+        )
+
+        caps = await agent._get_model_capabilities("deepseek-flash")
+
+        assert caps == ["chat", "vision"]
+
+    @pytest.mark.asyncio()
+    async def test_known_false_still_excludes_vision(self):
+        """明确知道不支持（命中负向 marker）时仍需剔除 vision。"""
+        agent = _bare_agent()
+        agent.capability_resolver = lambda model_id: ModelCapabilities(
+            vision=False, vision_known=True
+        )
+
+        caps = await agent._get_model_capabilities("gpt-3.5-turbo")
+
+        assert caps == ["chat"]
+
+    @pytest.mark.asyncio()
     async def test_resolver_returning_none_is_unknown_not_false(self):
         """resolver 明确返回 None = 未知，不得当成「不支持」。"""
         agent = _bare_agent()

@@ -249,7 +249,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     async (project: { id: string }) => {
       try {
         const { session } = await projectApi.open(project.id);
-        await loadSessions();
+        await loadSessions(true);
         handleOpenSession(session.id);
       } catch (err) {
         onOpenChange(false);
@@ -281,7 +281,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       if (!picked) return; // 用户取消
       const project = await projectApi.register(picked);
       const { session } = await projectApi.open(project.id);
-      await loadSessions();
+      await loadSessions(true);
       handleOpenSession(session.id);
     } catch (err) {
       toast.error(`添加项目失败：${err instanceof Error ? err.message : String(err)}`);
@@ -298,8 +298,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       else if (id === 'toggle-theme') handleToggleTheme();
       else if (id === 'add-project') void handleAddProject();
       else if (id === 'toggle-right-panel') handleToggleRightPanel();
+      else if (id === 'add-todo') handleNav('/todos?quickadd=1');
     },
-    [handleAddProject, handleNewChat, handleToggleTheme, handleToggleRightPanel],
+    [handleAddProject, handleNewChat, handleToggleTheme, handleToggleRightPanel, handleNav],
   );
 
   // 最近会话（按时间排序，取前 8 个）

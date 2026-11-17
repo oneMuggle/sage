@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-159；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-162；本索引以目录中的实际文件为准。
 
 
 ## 章节目录
@@ -107,7 +107,7 @@
 | 128 | [默认本地时区](./128-timezone-default-local.md) | 日志/趋势/调度/前端渲染统一本地时区，失败回退 Asia/Shanghai (+08:00)；`localtime` 解析链（`tzlocal` → `astimezone()` 偏移 → 固定 +08:00）+ naive/aware 防御 + APScheduler `timezone=` + `formatLocalTime` 封装 |
 | 129 | [工作区绑定跳过机制](./129-workspace-binding-skip.md) | 新会话页"不绑定项目"语义贯穿前后端：`skip_workspace_binding` API 字段 + 解析链跳过 + 主流应用对标 |
 | 130 | [侧边栏 Git 面板上下文对齐](./130-sidebar-git-context.md) | 左栏 Git 面板与右栏变更 Tab 绑定同一目录（会话 workspace 优先，最近项目兜底）+ 非 git 空状态显示检查路径；`git status --porcelain=v1 -z -b` 共享解析器（`backend/tools/git_status_parser.py`）供 GitStatusTool 与 `GET /git/status` 共用 |
-| 131 | [聊天附件链路](./131-attachment-pipeline.md) | MediaStore sidecar 元数据 + 后缀回退表与上传 allowlist 同口径；R37 注入带 name/type + 逐附件 `ok/skipped/error` 状态双出口（`attachments_processed` 事件 + `client_meta.attachments_status` 落库）；`useFileUpload` 预检状态机 + 气泡附件卡片 + 整页拖放共享 hook |
+| 131 | [聊天附件链路](./131-attachment-pipeline.md) | MediaStore sidecar 元数据 + 后缀回退表与上传 allowlist 同口径；R37 注入带 name/type + 逐附件 `ok/skipped/error` 状态双出口（`attachments_processed` 事件 + `client_meta.attachments_status` 落库）；`extract_attachment_text` 统一分发表覆盖 pdf/docx/xlsx/pptx（修复 xlsx 被当 UTF-8 解码的回归）；`useFileUpload` 预检状态机 + 气泡附件卡片 + 整页拖放共享 hook |
 | 132 | [会话标题生成机制](./132-session-title-generation.md) | 标题 LLM 生成流程 / `title_attempts` 计数器 / 启动回补调度器 / 专用标题模型配置 |
 | 133 | [专家（数字员工）系统](./133-specialist-persona.md) | M0–M4 全量：AgentProfile 运行时接线 / 技能作用域 fail-closed / 知识绑定 RRF / 记忆 agent_id 隔离 / 包格式 v2 + 模板库 + 版本回滚 + 黄金任务评测；§12 工具白名单三态语义 + 14 个能力包 + 向导工具选择 |
 | 134 | [AI 文档工作台](./134-office-ai-workbench.md) | 文档库搜索/筛选/排序契约 + 内容哈希重复检测与清理 + 规范书库（提取/激活/绑定，优先级解析）+ AI 合并审校（规则包 → LLM，来源标注）+ 应用到 Word 修订痕迹 + pre-edit 快照 + 审校历史与成本记录 + P2 AI 侧栏（选区改写/对话/审校/指令式修改 + 编辑预览对话框 AI 接入） + P3 文档生成工作台（自然语言 / 参考文档 / 模板对话 / 迭代改写，四种模式共用表单 + 结果卡）+ 规则管理（v17 分组/规则表、12 个 `/api/v1/rules/*` 端点、正则与 AI 规则、增量 PUT、冲突检查、`.sage-rules` 导出导入、规范书抽取、只读规则审校）+ 页面布局（文档库复用全局侧栏：SidebarSlotProvider + portal，折叠/无 slot 回退两栏） |
@@ -132,7 +132,10 @@
 | 156 | [本地 AI 模型内置与离线导入](./156-local-ai-models.md) | OCR（6MB）+ Embedding（91MB）随安装包内置：`extraResources` 打包 `resources/models/` + 路径优先级链（userData > bundled > repo）+ 本地导入 IPC（目录选择 + SHA-256 校验）+ CI 缓存下载 |
 | 157 | [MinerU 内网独立部署](./157-mineru-deployment.md) | A6000 服务器独立部署 MinerU 4.1（Python 3.12 + vLLM，`--tier standard`）：模型离线搬运三段式 + `source: local` 零外网依赖 + V1 异步 API 契约（create→PUT→poll→download）+ Sage 工具接入（`mineru_parse_document`）+ systemd 托管与验证清单 |
 | 158 | [项目健康监控与 AI 辅助规程定制](./158-project-health-ai-stages.md) | M1 主动告警（桌面通知 + 24h 节流）+ M2 对话式规程定制（多轮迭代 / 目录推断 / git 推断 / LLM 降级）+ M3 定时健康检查（每天 09:00 cron + HealthReport） |
-| 159 | [受控浏览器使用](./159-controlled-browser-use.md) | 纯 CDP 浏览器工具面（10 个 `browser_*` 工具）+ 无障碍树快照 v2 / ref 协议 + 可见窗口 / 步骤时间线 / 暂停·接管状态机 + 站点策略·敏感动作确认·一次性指纹·注入警告 + 视觉兜底（临时图像 / OCR） |
+| 159 | [PDF 页码引用与图表内联引用](./159-pdf-figure-citation.md) | 页标记文本（`--- page N ---`）+ 图表抽取/图注/清单缓存 + `<attached_figures>` 注入 + RAG 页码反查 + Markdown 图片白名单 + 工具结果 dataclass 序列化修复 |
+| 160 | [启动分层就绪与后台自检](./160-startup-progressive-readiness.md) | L0–L3 分层就绪（StartupRegistry + `/health/ready`）+ MCP 后台发现（不阻塞 lifespan）+ 会话三态/防闪烁骨架 + 启动状态指示条 + last-run 启动瀑布（backend_spawned/ready/sessions_loaded） |
+| 161 | [内网离线组件包（.sagepkg）](./161-offline-component-packs.md) | 签名组件包 + 安全解包 + 设置页/SageDoctor 双入口 + win7 全量安装包保持不变 |
+| 162 | [受控浏览器使用](./162-controlled-browser-use.md) | 纯 CDP 浏览器工具面（10 个 `browser_*` 工具）+ 无障碍树快照 v2 / ref 协议 + 可见窗口 / 步骤时间线 / 暂停·接管状态机 + 站点策略·敏感动作确认·一次性指纹·注入警告 + 视觉兜底（临时图像 / OCR） |
 ---
 
 ## 与核心章节的关系
@@ -140,7 +143,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 用户价值层 | [01 概述](../01-overview.md) — [12 实施计划](../12-plan.md) |
-| 横切关注点 | 本目录（15-159）                                            |
+| 横切关注点 | 本目录（15-160）                                            |
 ---
 
 _本目录文档命名规则：`XX-topic-name.md`（XX 为两位数字，topic-name 为 kebab-case）。_

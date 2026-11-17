@@ -21,6 +21,7 @@ import type { WindowControlsBridge } from '../src/shared/api/windowControlsClien
 import type {
   ArenaTokenElectronApiBridge,
   ArenaTokenStatus,
+  ComponentsElectronApiBridge,
   DiagnosticElectronApiBridge,
   FeedbackElectronApiBridge,
   FileElectronApiBridge,
@@ -34,6 +35,7 @@ import type {
   PickedOfficeFile,
   PetConfigBridge,
   PetApiInfoBridge,
+  PetCompatStatusBridge,
   PetElectronApiBridge,
   PetPackDeleteResultBridge,
   PetPackExportResultBridge,
@@ -260,6 +262,18 @@ const electronAPI = {
     /** 从本地磁盘导入 OCR 模型（打开目录选择对话框）。 */
     importLocalOcr: () => ipcRenderer.invoke('models:ocr:import-local'),
   },
+
+  /**
+   * 离线组件包（.sagepkg）管理桥 —— 委托 main 进程 components:* IPC。
+   * 导入/卸载进度经 api.listen('components:progress') 订阅。
+   */
+  components: {
+    list: () => ipcRenderer.invoke('components:list'),
+    scan: () => ipcRenderer.invoke('components:scan'),
+    pickAndImport: () => ipcRenderer.invoke('components:pick-and-import'),
+    importPath: (path: string) => ipcRenderer.invoke('components:import-path', path),
+    remove: (id: string) => ipcRenderer.invoke('components:remove', id),
+  } satisfies ComponentsElectronApiBridge,
 
   /**
    * P13 (2026-09-14): sage-file 工作区注册表 —— 渲染端绑定工作区时经此
@@ -872,6 +886,8 @@ const electronAPI = {
   pet: {
     getConfig: () => ipcRenderer.invoke('pet:get-config') as Promise<PetConfigBridge>,
     setConfig: (patch) => ipcRenderer.invoke('pet:set-config', patch) as Promise<PetConfigBridge>,
+    getCompatStatus: () =>
+      ipcRenderer.invoke('pet:get-compat-status') as Promise<PetCompatStatusBridge>,
     getState: () => ipcRenderer.invoke('pet:get-state') as Promise<PetSnapshotBridge>,
     getStates: () =>
       ipcRenderer.invoke('pet:get-states') as Promise<Record<string, PetSnapshotBridge>>,
@@ -986,6 +1002,27 @@ const electronAPI = {
   },
   notifyFirstPaint(): void {
     ipcRenderer.send('sage:boot:first-paint');
+  },
+  /**
+   * 启动竞态修复：查询后端 lifecycle 快照。
+   * `backend:starting` 事件通常早于 renderer 订阅，挂载时改用此快照兜底。
+   */
+  getBackendLifecycle(): Promise<{ lifecycle: string; generation: number | null }> {
+    return ipcRenderer.invoke('sage:backend-lifecycle') as Promise<{
+      lifecycle: string;
+      generation: number | null;
+    }>;
+  },
+  /** 启动阶段埋点 → 主进程写 last-run.json 启动瀑布（白名单校验）。 */
+  reportBootStage(stage: 'sessions_loaded' | 'messages_loaded' | 'settings_loaded'): void {
+    ipcRenderer.send('sage:boot:stage', stage);
+  },
+  /**
+   * Progressive readiness：最近一次 /health/ready 快照（事件先于订阅时兜底）。
+   * 事件通道为 `backend:startup-status`。
+   */
+  getBackendStartupStatus(): Promise<unknown | null> {
+    return ipcRenderer.invoke('sage:backend-startup-status') as Promise<unknown | null>;
   },
 };
 

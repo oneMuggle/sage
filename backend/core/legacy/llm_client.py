@@ -78,6 +78,27 @@ def _is_context_overflow_text(text: str) -> bool:
     return any(marker in lowered for marker in _CONTEXT_OVERFLOW_MARKERS)
 
 
+# 4xx 响应体命中这些特征串 → 上游拒绝图片输入（模型不支持 vision）。
+# 这不是可重试错误，但需要把用户从「LLM HTTP 错误: 400」引向恢复路径。
+_IMAGE_UNSUPPORTED_MARKERS = (
+    "image_url",
+    "image input",
+    "does not support image",
+    "doesn't support image",
+    "image is not supported",
+    "unsupported image",
+    "vision is not supported",
+    "not support vision",
+    "unknown variant `image",
+)
+
+
+def _is_image_unsupported_text(text: str) -> bool:
+    """判断错误文本是否命中「模型不支持图片输入」特征串（大小写不敏感）。"""
+    lowered = text.lower()
+    return any(marker in lowered for marker in _IMAGE_UNSUPPORTED_MARKERS)
+
+
 def _retry_settings() -> Tuple[int, float, float, float]:
     """读重试配置：委托给 ``resolve_retry_settings()``，env > app_settings > 默认。
 
@@ -623,16 +644,25 @@ class LLMClient:
                 )
             # RT1 (round7): HTTP 400/413 且响应体命中溢出特征串 → CONTEXT_OVERFLOW。
             # 不命中特征串的 4xx 维持 UNKNOWN（避免把真实参数错误误标成溢出）。
-            if status in (400, 413):
+            if status in (400, 413, 422):
                 body_text = ""
                 try:
                     body_text = exc.response.text or ""
                 except Exception:  # noqa: BLE001 — 流式/已关闭响应读不出正文，按空处理
                     body_text = ""
-                if _is_context_overflow_text(f"{exc} {body_text}"):
+                error_text = f"{exc} {body_text}"
+                if _is_context_overflow_text(error_text):
                     raise LLMError(
                         LLMErrorType.CONTEXT_OVERFLOW,
                         f"输入超过模型上下文窗口 (HTTP {status})",
+                        status_code=status,
+                    )
+                if _is_image_unsupported_text(error_text):
+                    raise LLMError(
+                        LLMErrorType.UNKNOWN,
+                        "该模型可能不支持图片输入。请更换支持视觉的对话模型，"
+                        "或在「设置 → 模型 → 视觉能力」中标记为“不支持图片”，"
+                        "以启用视觉理解模型或本地 OCR 回退。",
                         status_code=status,
                     )
             raise LLMError(LLMErrorType.UNKNOWN, f"LLM HTTP 错误: {status}", status_code=status)

@@ -47,6 +47,16 @@ from fastapi.responses import JSONResponse
 from sage_core import Message, Role
 
 from backend.config import is_web_mode
+from backend.services.startup_status import (
+    STATE_DEGRADED,
+    STATE_FAILED,
+    STATE_READY,
+    STATE_WARMING,
+    declare_all_modules,
+    get_startup_status,
+    mark_module,
+    reset_startup_status,
+)
 
 
 def configure_ssl_ca_bundle(where: Callable[[], str]) -> Optional[str]:
@@ -85,6 +95,7 @@ from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapt
 from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.artifact_routes import router as artifact_router
+from backend.api.asr_router import build_router as build_asr_router
 from backend.api.browser_extension_routes import router as browser_extension_router
 from backend.api.browser_use_routes import router as browser_use_router
 from backend.api.chat_attachment_routes import router as chat_attachment_router
@@ -277,7 +288,7 @@ def _build_compute_adapter():
     raise ValueError(f"未知的 ghm.adapter 类型: {adapter_type!r},有效值: 'subprocess'")
 
 
-def _build_chat_service(lifecycle=None) -> ChatService:
+def _build_chat_service(lifecycle=None, memory_port=None) -> ChatService:
     """工厂：装配 7 个 ports（7 个生产 adapter）。
 
     - llm:     HttpxLLMAdapter（包装既有 LLMClient）
@@ -314,9 +325,11 @@ def _build_chat_service(lifecycle=None) -> ChatService:
         tools = inner_tools
 
     # 装配 MemoryPort (Memory Integration)
-    # 使用全局单例 MemoryManager，确保 WorkingMemory 跨请求持久存在
+    # 使用全局单例 MemoryManager，确保 WorkingMemory 跨请求持久存在。
+    # 启动性能：lifespan 已构造的 MemoryAdapter（app.state.memory_port）
+    # 优先复用，避免第二次 VectorStore 初始化/向量回填检查。
     memory_manager = get_memory_manager()
-    memory_adapter = MemoryAdapter(memory_manager)
+    memory_adapter = memory_port if memory_port is not None else MemoryAdapter(memory_manager)
     logger.info("MemoryAdapter 已装配（三层记忆系统：Working/Episodic/Semantic，全局单例）")
 
     # M2 工具调用预算守卫：从 OrchSettings（UI 可调，持久化到 app_settings）
@@ -363,6 +376,23 @@ def _build_lifecycle_extractor():
     return MemoryExtractor(llm_client=build_httpx_adapter_from_settings())
 
 
+def _mark_llm_configured() -> None:
+    """L2 就绪条件：LLM 端点是否已配置（只查配置，不发起网络请求）。
+
+    未配置时不记为 degraded —— 首次安装本来就是这种状态，设置页会引导
+    配置；detail 里保留 ``configured: False`` 供状态详情展示。
+    """
+    try:
+        from backend.orchestration.llm_factory import build_httpx_adapter_from_settings
+
+        if build_httpx_adapter_from_settings() is None:
+            mark_module("llm", STATE_READY, {"configured": False, "hint": "未配置 LLM 端点"})
+        else:
+            mark_module("llm", STATE_READY, {"configured": True})
+    except Exception as exc:  # noqa: BLE001 — 配置探测失败不阻断启动
+        mark_module("llm", STATE_DEGRADED, {"detail": str(exc)})
+
+
 def _wire_scheduler_executor(app: Any, main_loop: asyncio.AbstractEventLoop) -> bool:
     """把 ChatService 暴露给 APScheduler 后台线程（execute 模式任务的入口）。
 
@@ -401,6 +431,93 @@ def _resolve_default_context_window() -> Optional[int]:
         return None
 
 
+def _check_storage() -> None:
+    """L3 自检：用户数据目录剩余空间（<500MB 记 degraded）。"""
+    mark_module("storage", STATE_WARMING)
+    try:
+        import shutil
+
+        base = Path(os.environ.get("SAGE_USER_DATA_DIR") or "backend/data")
+        usage = shutil.disk_usage(str(base))
+        free_mb = int(usage.free // (1024 * 1024))
+        if free_mb < 500:
+            mark_module("storage", STATE_DEGRADED, {"free_mb": free_mb})
+        else:
+            mark_module("storage", STATE_READY, {"free_mb": free_mb})
+    except Exception as exc:  # noqa: BLE001 — 磁盘探测失败不阻断启动
+        mark_module("storage", STATE_DEGRADED, {"detail": str(exc)})
+
+
+async def _watch_mcp_discovery() -> None:
+    """后台观察 MCP 首次发现进度（逐服务器终态），写入就绪注册表。
+
+    首次发现由 ``register_mcp_tools`` 在后台线程执行（不再阻塞 lifespan）；
+    本协程只读池状态，1s 一次，全部服务器到达终态后标记 mcp 模块终态。
+    """
+    mark_module("mcp", STATE_WARMING)
+    try:
+        from backend.mcp.pool import get_pool
+
+        pool = get_pool()
+        pool.ensure_synced()
+        # 观察者同时确保首次发现已启动（幂等）：若 ChatService 装配被
+        # harness 裁剪或失败导致 register_mcp_tools 未执行，这里兜底推进，
+        # 避免记录停在 DISCOVERING 空转 90s 后误报"后台发现超时"。
+        pool.start_background_discovery()
+        deadline = time.monotonic() + 90.0
+        while True:
+            report = pool.status_report()
+            servers = [
+                {
+                    "name": s.name,
+                    "state": s.state,
+                    "tool_count": s.tool_count,
+                    "error": s.last_error,
+                }
+                for s in report.servers
+            ]
+            terminal = all(
+                s.state in ("ready", "failed", "disabled") for s in report.servers
+            )
+            if terminal:
+                degraded = report.degraded or report.failed_required
+                mark_module(
+                    "mcp",
+                    STATE_DEGRADED if degraded else STATE_READY,
+                    {"servers": servers},
+                )
+                return
+            mark_module("mcp", STATE_WARMING, {"servers": servers})
+            if time.monotonic() >= deadline:
+                mark_module(
+                    "mcp", STATE_DEGRADED, {"servers": servers, "detail": "后台发现超时"}
+                )
+                return
+            await asyncio.sleep(1.0)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — 自检失败不得影响后台任务
+        mark_module("mcp", STATE_DEGRADED, {"detail": str(exc)})
+
+
+def _finalize_pending_modules(reason: str) -> None:
+    """Deferred 兜底：仍未到终态的模块标记 degraded，保证 L3 可达。
+
+    ``mcp`` 例外：它由独立的后台观察协程（``_watch_mcp_discovery``）负责，
+    自身保证 90s 内必达终态；deferred 结束时它几乎必然还在途中，这里
+    强行标记反而会把 L3 提前拉起来又回退（且冻结 elapsed 计时）。
+    """
+    try:
+        snapshot = get_startup_status().snapshot()
+    except Exception:  # noqa: BLE001
+        return
+    for name, entry in snapshot.get("modules", {}).items():
+        if name == "mcp":
+            continue
+        if entry.get("state") not in (STATE_READY, STATE_DEGRADED, STATE_FAILED):
+            mark_module(name, STATE_DEGRADED, {"detail": reason})
+
+
 async def _deferred_startup_init(
     app: FastAPI,
     main_loop: asyncio.AbstractEventLoop,
@@ -414,6 +531,12 @@ async def _deferred_startup_init(
     """
     try:
         import threading as _threading
+
+        # ── 启动自检 / 后台就绪观察（Progressive Readiness） ──
+        _check_storage()
+        app.state.mcp_status_task = asyncio.create_task(
+            _watch_mcp_discovery(), name="startup-mcp-watch"
+        )
 
         # ── jieba 词典预热（Phase 3：从模块导入期挪到后台线程） ──
         def _warm_jieba_bg() -> None:
@@ -432,8 +555,10 @@ async def _deferred_startup_init(
         logger.info("[deferred] MemoryExtractionQueue 已启动")
 
         # ── Scheduler 启动 + evolution 任务 + 定时备份 ──
+        mark_module("scheduler", STATE_WARMING)
         scheduler_service.start()
         _startup_mark("scheduler")
+        mark_module("scheduler", STATE_READY)
         from backend.services._evolution_register import _register_evolution_tasks
 
         _evo_registered = _register_evolution_tasks(
@@ -446,6 +571,17 @@ async def _deferred_startup_init(
             len(_evo_registered),
             list(_evo_registered.keys()),
         )
+
+        # 进化任务补跑：桌面应用经常在凌晨不在线，启动后检查逾期任务。
+        # 重任务（反思/固化）只在深度空闲时执行，避免抢用户资源。
+        try:
+            from backend.scheduler.evolution_maintenance import (  # noqa: PLC0415 — 延迟导入，避免影响启动关键路径
+                start_maintenance,
+            )
+
+            start_maintenance(scheduler_service, get_database())
+        except Exception:
+            logger.exception("evolution maintenance startup failed (ignored)")
 
         def _create_backup_daily() -> None:
             from backend.services.backup_service import create_backup
@@ -503,6 +639,7 @@ async def _deferred_startup_init(
         app.state.todo_reminder_scheduler = todo_reminder_scheduler
         logger.info("[deferred] TodoReminderScheduler started")
         _startup_mark("todo_reminder_scheduler")
+        mark_module("todo", STATE_READY)
 
         # ── 标题回补 ──
         from backend.scheduler.title_backfill import TitleBackfill
@@ -554,6 +691,7 @@ async def _deferred_startup_init(
         get_review_queue().start()
         logger.info("[deferred] ReviewQueue 协作对象已注入且 worker 已启动")
         _startup_mark("review-queue")
+        mark_module("review_queue", STATE_READY)
 
         # ── Arena 自动化装配 ──
         # Win7 (2026-09-21 alpha.51): cryptography 47.0.0 在部分 Win7 SP1 机器
@@ -572,6 +710,9 @@ async def _deferred_startup_init(
                         "功能降级为禁用（Arena 端点返回 403）"
                     )
                     _startup_mark("arena-skip-crypto-unavailable")
+                    mark_module(
+                        "arena", STATE_DEGRADED, {"detail": "cryptography unavailable"}
+                    )
                 else:
                     from backend.api.arena_routes import (
                         init_arena_service,
@@ -593,12 +734,15 @@ async def _deferred_startup_init(
                         "[deferred] Arena 自动化已启用（db=%s）", _arena_db
                     )
                     _startup_mark("arena")
+                    mark_module("arena", STATE_READY, {"enabled": True})
             else:
                 logger.info(
                     "[deferred] Arena 自动化未启用（enabled=false）"
                 )
-        except Exception:  # noqa: BLE001
+                mark_module("arena", STATE_READY, {"enabled": False})
+        except Exception as exc:  # noqa: BLE001
             logger.exception("Arena 自动化装配失败（忽略）")
+            mark_module("arena", STATE_DEGRADED, {"detail": str(exc)})
 
         # ── Design Studio ──
         try:
@@ -618,25 +762,35 @@ async def _deferred_startup_init(
             )
             _llm_client = build_llm_client_from_settings()
             if _llm_client is None:
-                logger.warning(
-                    "[deferred] DesignStudio: LLM client not configured, skipping"
+                # 首次安装尚未配置 LLM 是正常状态，不是"降级"：跳过装配，
+                # 模块按 ready（configured=False）上报，避免健康安装常驻
+                # "1 项功能降级"假警报。
+                logger.info(
+                    "[deferred] DesignStudio: LLM client not configured — skipped"
                 )
-                raise RuntimeError("LLM client not configured")
-            design_studio = DesignStudio(
-                repo=DesignRepo(get_database().get_connection()),
-                generator=DesignGenerator(llm_client=_llm_client),
-                systems=DesignSystemRegistry(_design_content_dir),
-                templates=DesignTemplateRegistry(_design_content_dir),
-                workspace_dir=_design_workspace,
-            )
-            app.state.design_studio = design_studio
-            from backend.design import init_design_studio
+                mark_module(
+                    "design_studio",
+                    STATE_READY,
+                    {"configured": False, "skipped": "llm-not-configured"},
+                )
+            else:
+                design_studio = DesignStudio(
+                    repo=DesignRepo(get_database().get_connection()),
+                    generator=DesignGenerator(llm_client=_llm_client),
+                    systems=DesignSystemRegistry(_design_content_dir),
+                    templates=DesignTemplateRegistry(_design_content_dir),
+                    workspace_dir=_design_workspace,
+                )
+                app.state.design_studio = design_studio
+                from backend.design import init_design_studio
 
-            init_design_studio(design_studio)
-            _startup_mark("design_studio")
-            logger.info("[deferred] DesignStudio 装配完成")
-        except Exception:  # noqa: BLE001
+                init_design_studio(design_studio)
+                _startup_mark("design_studio")
+                logger.info("[deferred] DesignStudio 装配完成")
+                mark_module("design_studio", STATE_READY)
+        except Exception as exc:  # noqa: BLE001
             logger.exception("DesignStudio 装配失败（ignored）")
+            mark_module("design_studio", STATE_DEGRADED, {"detail": str(exc)})
             try:
                 get_database().get_connection().rollback()
             except Exception:
@@ -669,6 +823,7 @@ async def _deferred_startup_init(
         app.state.wake_scheduler.start()
         logger.info("[deferred] WakeScheduler 已启动（A4 Suspend-Resume）")
         _startup_mark("wake-scheduler")
+        mark_module("wake_scheduler", STATE_READY)
 
         # ── Gateway supervisor ──
         try:
@@ -679,8 +834,10 @@ async def _deferred_startup_init(
             _gateway_supervisor.start_enabled()
             _startup_mark("gateways")
             logger.info("[deferred] Gateway supervisor 已启动")
+            mark_module("gateways", STATE_READY)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[deferred] 网关 supervisor 初始化失败: %s", exc)
+            mark_module("gateways", STATE_DEGRADED, {"detail": str(exc)})
 
         # ── Wiki MCP Server ──
         try:
@@ -725,6 +882,7 @@ async def _deferred_startup_init(
             "[deferred] Multi-agent core 已装配（Planner + Router + HeartbeatMonitor）"
         )
         _startup_mark("multi-agent")
+        mark_module("multi_agent", STATE_READY)
 
         # ── Tag graph 异步构建 ──
         if getattr(app.state, "memory_adapter", None) is not None:
@@ -741,12 +899,14 @@ async def _deferred_startup_init(
                 )
 
         logger.info("[deferred] 所有非关键服务初始化完成")
+        _finalize_pending_modules("deferred init complete")
 
     except asyncio.CancelledError:
         logger.warning("[deferred] 延迟初始化被取消（shutdown）")
         raise
     except Exception:
         logger.exception("[deferred] 延迟初始化异常（不影响已运行的服务）")
+        _finalize_pending_modules("deferred init failed")
 
 
 @asynccontextmanager
@@ -755,6 +915,13 @@ async def lifespan(app: FastAPI):
     # Local desktop capability: resolve the token before serving any sensitive route.
     # The value is intentionally never logged or returned by the health endpoint.
     initialize_local_auth_token()
+
+    # Progressive readiness（2026-11-16）：声明全部已知模块为 pending，
+    # /health/ready 据此计算 L1/L2/L3 与 warmup 进度。先重置：同一进程内
+    # 二次进入 lifespan（测试/进程内重启）不得继承上一轮的终态。
+    reset_startup_status()
+    declare_all_modules()
+    mark_module("database", STATE_WARMING)
 
     # 捕获主事件循环：_wire_scheduler_executor 需要它把协程调度到 lifespan 所在的
     # 线程执行；APScheduler 后台线程通过 run_coroutine_threadsafe 跨过来。
@@ -857,6 +1024,9 @@ async def lifespan(app: FastAPI):
             file=sys.stderr,
             flush=True,
         )
+    # DB 就绪 = 迁移/回填/种子完成，会话/设置/模型目录路由全部可用（L1）。
+    mark_module("database", STATE_READY)
+    mark_module("sessions", STATE_READY, {"routes": "mounted"})
 
     # ---------------------------------------------------------------
     # Task 4 / Gap A — wire memory lifecycle hooks + evolution scheduler.
@@ -887,7 +1057,9 @@ async def lifespan(app: FastAPI):
     app.state.lifecycle = lifecycle
     # Gap E (Task 5) — cache the MemoryPort adapter so the by-turn / profile /
     # summary endpoints don't rebuild (and re-init the VectorStore) per request.
+    mark_module("memory", STATE_WARMING)
     app.state.memory_port = MemoryAdapter(get_memory_manager())
+    mark_module("memory", STATE_READY)
     logger.info("MemoryLifecycleManager 已绑定 HookRegistry")
     if __name__ == "__main__":
         print(  # noqa: T201
@@ -1175,7 +1347,10 @@ async def lifespan(app: FastAPI):
                 flush=True,
             )
 
-        app.state.chat_service = _build_chat_service(lifecycle=lifecycle)
+        mark_module("chat_service", STATE_WARMING)
+        app.state.chat_service = _build_chat_service(
+            lifecycle=lifecycle, memory_port=app.state.memory_port
+        )
         app.dependency_overrides[get_chat_service] = lambda: app.state.chat_service
         # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
         # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
@@ -1217,6 +1392,7 @@ async def lifespan(app: FastAPI):
             API_MODE,
         )
     except Exception as _cs_err:  # noqa: BLE001 — 诊断: 不得让 ChatService 失败静默
+        mark_module("chat_service", STATE_FAILED, {"detail": str(_cs_err)})
         import traceback
 
         print(  # noqa: T201
@@ -1227,6 +1403,8 @@ async def lifespan(app: FastAPI):
         traceback.print_exc(file=sys.stderr)
         sys.stderr.flush()
         raise
+    mark_module("chat_service", STATE_READY)
+    _mark_llm_configured()
     if __name__ == "__main__":
         print(  # noqa: T201
             f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s ChatService assembled",
@@ -1273,6 +1451,13 @@ async def lifespan(app: FastAPI):
     _deferred_task.cancel()
     with suppress(asyncio.CancelledError):
         await _deferred_task
+    # Progressive readiness：deferred 内创建的 MCP 状态观察任务独立于
+    # deferred 本身，shutdown 时显式取消（避免遗留轮询）。
+    _mcp_status_task = getattr(app.state, "mcp_status_task", None)
+    if _mcp_status_task is not None:
+        _mcp_status_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _mcp_status_task
 
     # 关闭时清理
     # Round 6 / Round 16: 统一停止网关轮询线程（daemon 兜底，显式停更干净）
@@ -1664,6 +1849,7 @@ app.include_router(build_wake_router(get_chat_service), prefix="/api/v1")
 
 # Todo personal task management
 app.include_router(build_todo_router(get_todo_service), prefix="/api/v1")
+app.include_router(build_asr_router(), prefix="/api/v1")
 
 # M3: MCP multi-server management (status / servers CRUD)
 app.include_router(mcp_router, prefix="/api/v1")
@@ -1727,6 +1913,16 @@ async def health_proof(request: Request):
 async def health_check():
     """Return a machine-readable build and process ownership envelope."""
     return {"status": "ok", **_build_health_metadata()}
+
+
+@app.get("/health/ready")
+async def health_ready():
+    """Progressive readiness snapshot: per-module warmup state.
+
+    Read-only in-memory view (no IO) so it can be polled alongside /health
+    during cold start; see backend/services/startup_status.py for layering.
+    """
+    return get_startup_status().snapshot()
 
 
 # ── Web mode: serve static frontend files ────────────────────────────────────

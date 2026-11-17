@@ -127,11 +127,11 @@ export function createMarkdownComponents(opts: MarkdownComponentsOptions): Compo
       );
     },
 
-    img: ({ src, alt }) =>
+    img: ({ src, alt, title }) =>
       useRichBlocks ? (
-        <MarkdownImage src={src} alt={alt} />
+        <MarkdownImage src={src} alt={alt} title={title} />
       ) : (
-        <img src={src} alt={alt || ''} loading="lazy" />
+        <img src={src} alt={alt || ''} title={title} loading="lazy" />
       ),
 
     table: ({ children }) => <MarkdownTable maxHeight={tableMaxHeight}>{children}</MarkdownTable>,

@@ -52,12 +52,14 @@ async def process_pending(project_root: Path, limit: int = 1) -> Dict[str, Any]:
     queue.recover_stale_processing()
     llm = _load_llm_config()
     embedding = _load_embedding_config()
-    if llm is None or embedding is None:
+    if llm is None:
         return {
             "processed": [],
             "remaining": queue.get_status_summary(),
-            "error": "LLM 或 embedding 模型未配置",
+            "error": "LLM 模型未配置",
         }
+    if embedding is None:
+        logger.info("wiki queue: embedding not configured; ingest will skip vectorization")
 
     # 按项目设置路由 ingest 模型与推理模式
     ctx = make_task_llm_context(
@@ -71,9 +73,9 @@ async def process_pending(project_root: Path, limit: int = 1) -> Dict[str, Any]:
         llm_base_url=llm["base_url"],
         llm_api_key=llm["api_key"],
         llm_model=ctx.model,
-        embed_base_url=embedding["base_url"],
-        embed_api_key=embedding["api_key"],
-        embed_model=embedding["model"],
+        embed_base_url=embedding["base_url"] if embedding else "",
+        embed_api_key=embedding["api_key"] if embedding else "",
+        embed_model=embedding["model"] if embedding else "",
     )
     processed: List[Dict[str, Any]] = []
 

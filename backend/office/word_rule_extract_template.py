@@ -177,10 +177,16 @@ def extract_template_candidates(
                 )
 
     if any(section.get("has_page_number_field") for section in sections):
+        page_number_params: Dict[str, Any] = {"required": True}
+        for section in sections:
+            fmt = section.get("page_number_format")
+            if fmt:
+                page_number_params["format"] = fmt
+                break
         add_candidate(
             candidates,
             "page.page_number",
-            {"required": True},
+            page_number_params,
             0.9,
             source,
             excerpt,
@@ -202,10 +208,12 @@ def extract_template_candidates(
 
     _extract_heading_styles(profile, candidates, source, excerpt)
     _extract_special_styles(profile, candidates, source, excerpt)
+    _extract_caption_sequence(profile, candidates, source, excerpt)
     return candidates
 
 
 _HEADING_RE = re.compile(r"^heading\s+(\d+)$", re.IGNORECASE)
+_CAPTION_RE = re.compile(r"^(图|表)(\d+)")
 
 _SPECIAL_STYLE_KEYWORDS: Dict[str, str] = {
     "作者": "作者",
@@ -222,6 +230,57 @@ _SPECIAL_STYLE_KEYWORDS: Dict[str, str] = {
     "Header": "页眉",
 }
 
+_PARAGRAPH_FIELDS = (
+    "alignment",
+    "line_spacing",
+    "line_spacing_pt",
+    "space_before_pt",
+    "space_after_pt",
+    "first_line_indent_pt",
+    "left_indent_pt",
+)
+
+
+def _extract_paragraph_format(
+    style: Dict[str, Any],
+    style_label: str,
+    candidates: List[RawCandidate],
+    source: str,
+) -> None:
+    """从样式数据中提取段落格式并生成 style.paragraph 规则。"""
+    params: Dict[str, Any] = {"style": style_label}
+    for field_name in _PARAGRAPH_FIELDS:
+        value = style.get(field_name)
+        if value is None:
+            continue
+        if field_name in ("first_line_indent_pt", "left_indent_pt"):
+            params[field_name.replace("_pt", "_cm")] = round(float(value) * PT_TO_CM, 2)
+        elif field_name.endswith("_pt"):
+            params[field_name] = round(float(value), 1)
+        else:
+            params[field_name] = value
+
+    if len(params) > 1:
+        details = []
+        if params.get("alignment"):
+            details.append(f"对齐={params['alignment']}")
+        if params.get("line_spacing"):
+            details.append(f"行距={params['line_spacing']}倍")
+        if params.get("line_spacing_pt"):
+            details.append(f"行距={params['line_spacing_pt']}pt")
+        if params.get("space_before_pt"):
+            details.append(f"段前={params['space_before_pt']}pt")
+        if params.get("space_after_pt"):
+            details.append(f"段后={params['space_after_pt']}pt")
+        add_candidate(
+            candidates,
+            "style.paragraph",
+            params,
+            0.85,
+            source,
+            f"{style_label} 段落格式: {', '.join(details)}",
+        )
+
 
 def _extract_heading_styles(
     profile: Dict[str, Any],
@@ -229,7 +288,7 @@ def _extract_heading_styles(
     source: str,
     excerpt: str,
 ) -> None:
-    """为 Heading 1-9 样式生成独立的 style.font 规则。"""
+    """为 Heading 1-9 样式生成 style.font 和 style.paragraph 规则。"""
     styles = profile.get("styles", [])
     heading_levels: List[Tuple[int, Dict[str, Any]]] = []
 
@@ -255,6 +314,7 @@ def _extract_heading_styles(
                 source,
                 f"Heading {level} 样式: {style.get('font_east_asia', '?')}, {style.get('size_pt', '?')}pt",
             )
+        _extract_paragraph_format(style, f"Heading {level}", candidates, source)
 
     if heading_levels:
         levels = [level for level, _ in heading_levels]
@@ -274,7 +334,7 @@ def _extract_special_styles(
     source: str,
     excerpt: str,
 ) -> None:
-    """为模板中的特殊样式（作者、摘要、图题、表题、参考文献等）生成 style.font 规则。"""
+    """为模板中的特殊样式（作者、摘要、图题、表题、参考文献等）生成 style.font 和 style.paragraph 规则。"""
     styles = profile.get("styles", [])
     seen: Set[str] = set()
 
@@ -300,6 +360,37 @@ def _extract_special_styles(
                 source,
                 f"{label} 样式: {style.get('font_east_asia', '?')}, {style.get('size_pt', '?')}pt",
             )
+        _extract_paragraph_format(style, label, candidates, source)
+
+
+def _extract_caption_sequence(
+    profile: Dict[str, Any],
+    candidates: List[RawCandidate],
+    source: str,
+    excerpt: str,
+) -> None:
+    """从模板段落中检测图/表题注编号，产出 content.caption_sequence 规则。"""
+    found_labels: Set[str] = set()
+    for paragraph in profile.get("paragraphs", []):
+        text = str(paragraph.get("text") or "").strip()
+        if not text:
+            continue
+        match = _CAPTION_RE.match(text)
+        if match:
+            found_labels.add(match.group(1))
+
+    if not found_labels:
+        return
+
+    ordered = [label for label in ("图", "表") if label in found_labels]
+    add_candidate(
+        candidates,
+        "content.caption_sequence",
+        {"labels": ordered},
+        0.9,
+        source,
+        f"模板中检测到题注标签: {', '.join(ordered)}",
+    )
 
 
 __all__ = ["extract_template_candidates"]

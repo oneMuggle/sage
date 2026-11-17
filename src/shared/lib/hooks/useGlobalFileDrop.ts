@@ -1,21 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * P2 (2026-11-04): 全局文件拖放事件名。
- *
- * 页面级（Chat / Welcome）的 drop 监听器在捕获阶段拦截落在 composer 之外的
- * 拖放，派发该 CustomEvent；composer 组件（ChatInput / WelcomeInputCard）
- * 监听后把文件交给各自的 useFileUpload，与输入卡内 drop 行为完全一致。
+ * 文件拖放事件名。页面级 hook（useGlobalFileDrop）在 drop 时派发，
+ * composer 组件（ChatInput / WelcomeInputCard）监听后把文件交给各自的
+ * useFileUpload —— 这是文件进入附件列表的**唯一通道**。
  */
 export const COMPOSER_DROP_EVENT = 'sage:composer-drop';
-
-export interface GlobalFileDropOptions {
-  /**
-   * composer 根容器的 CSS 选择器 —— 落在该容器内的 drop 交由 composer 自己的
-   * React `onDrop` 处理（保留已有的输入卡高亮反馈），本 hook 只接管容器外的拖放。
-   */
-  composerSelector: string;
-}
 
 /** 判断拖拽事件是否携带文件（纯文本拖拽不拦截，保留浏览器默认行为）。 */
 function carriesFiles(e: DragEvent): boolean {
@@ -25,69 +15,78 @@ function carriesFiles(e: DragEvent): boolean {
 }
 
 /**
- * 页面级全局拖放。
+ * 页面级全局拖放（Chat 页与新对话页共用）。
  *
- * - 在 document 捕获阶段监听 dragenter/dragleave/dragover/drop，
- *   使"把文件拖到页面任意位置"都能被接收（对标 ChatGPT / Claude 的整页拖放）。
- * - 落在 `composerSelector` 内的 drop 不拦截，交给 composer 自己的 onDrop。
- * - 落在容器外的 drop 派发 {@link COMPOSER_DROP_EVENT}，由 composer 消费。
+ * 2026-11-15 重写：本 hook 是拖放的唯一入口，不再区分 composer 内/外 ——
+ * 任何含文件的 drop 都 preventDefault 并派发 {@link COMPOSER_DROP_EVENT}。
+ * 旧实现按 composerSelector 分流 + 捕获阶段 stopPropagation，当 drop 目标是
+ * 输入卡内覆盖层（不在 textarea 内）时 composer 的 React onDrop 永不执行，
+ * `isDragOver` 无人复位，遮罩卡死且阻断输入。
  *
- * @returns `isDragOver` —— 当前是否有含文件的拖拽悬停在页面上（用于全局遮罩）。
+ * 复位路径：drop / dragend / 拖出窗口（dragleave 且 relatedTarget 为 null）
+ * 一律清零，避免取消拖拽（Esc、拖出后松手）留下遮罩。
  */
-export function useGlobalFileDrop({ composerSelector }: GlobalFileDropOptions): {
-  isDragOver: boolean;
-} {
+export function useGlobalFileDrop(): { isDragOver: boolean } {
   const [isDragOver, setIsDragOver] = useState(false);
   // dragenter/dragleave 在嵌套元素间会成对冒泡，用计数器抵消子元素带来的
   // 误增误减，避免遮罩闪烁。
-  const dragCounterRef = useRef(0);
+  const dragDepthRef = useRef(0);
+  // dragenter 建立拖拽会话：dragleave 时 dataTransfer 在部分 Chromium 版本
+  // 不可靠，不能每次现查 types —— 用会话标志判断"本次拖拽是否含文件"。
+  const fileSessionRef = useRef(false);
 
   useEffect(() => {
+    const reset = () => {
+      dragDepthRef.current = 0;
+      fileSessionRef.current = false;
+      setIsDragOver(false);
+    };
+
     const onDragEnter = (e: DragEvent) => {
       if (!carriesFiles(e)) return;
       e.preventDefault();
-      dragCounterRef.current += 1;
-      if (dragCounterRef.current === 1) setIsDragOver(true);
+      fileSessionRef.current = true;
+      dragDepthRef.current += 1;
+      if (dragDepthRef.current === 1) setIsDragOver(true);
     };
     const onDragLeave = (e: DragEvent) => {
-      if (!carriesFiles(e)) return;
-      e.preventDefault();
-      dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
-      if (dragCounterRef.current === 0) setIsDragOver(false);
+      if (!fileSessionRef.current) return;
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+      // relatedTarget 为 null = 指针离开了整个窗口 —— 计数器已不可信，直接复位。
+      if (e.relatedTarget === null || dragDepthRef.current === 0) reset();
     };
     const onDragOver = (e: DragEvent) => {
-      if (!carriesFiles(e)) return;
+      if (!carriesFiles(e) && !fileSessionRef.current) return;
+      // 必须 preventDefault，浏览器才会把元素识别为可放置目标并触发 drop。
       e.preventDefault();
     };
     const onDrop = (e: DragEvent) => {
-      if (!carriesFiles(e)) return;
-      // drop 完成时浏览器不会再为 drop target 触发 dragleave —— 任何 drop 分支
-      // 都要重置计数器与遮罩状态，否则计数器 ≥1，遮罩会卡在页面上。
-      dragCounterRef.current = 0;
-      setIsDragOver(false);
-      const composer = document.querySelector(composerSelector);
-      if (composer && e.target && composer.contains(e.target as Node)) {
-        // composer 内的 drop 由 composer 自己的 React onDrop 处理；这里放行。
+      if (!carriesFiles(e)) {
+        reset();
         return;
       }
+      // drop 完成时浏览器不会再为 drop target 触发 dragleave —— 无条件复位。
       e.preventDefault();
-      e.stopPropagation();
       const files = Array.from(e.dataTransfer?.files ?? []);
+      reset();
       if (files.length === 0) return;
       window.dispatchEvent(new CustomEvent(COMPOSER_DROP_EVENT, { detail: { files } }));
     };
+    const onDragEnd = () => reset();
 
     document.addEventListener('dragenter', onDragEnter, true);
     document.addEventListener('dragleave', onDragLeave, true);
     document.addEventListener('dragover', onDragOver, true);
     document.addEventListener('drop', onDrop, true);
+    window.addEventListener('dragend', onDragEnd);
     return () => {
       document.removeEventListener('dragenter', onDragEnter, true);
       document.removeEventListener('dragleave', onDragLeave, true);
       document.removeEventListener('dragover', onDragOver, true);
       document.removeEventListener('drop', onDrop, true);
+      window.removeEventListener('dragend', onDragEnd);
     };
-  }, [composerSelector]);
+  }, []);
 
   return { isDragOver };
 }

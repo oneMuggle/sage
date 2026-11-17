@@ -16,6 +16,7 @@ import type React from 'react';
 import { AttachmentUpload } from '../../features/send-message/AttachmentUpload';
 import { deliveryModeFromKey } from '../../features/send-message/deliveryMode';
 import type { DeliveryMode } from '../../features/send-message/deliveryMode';
+import { CHAT_DOCUMENT_ACCEPT, CHAT_IMAGE_ACCEPT } from '../../shared/lib/chatAttachmentFormats';
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
 import { useI18n } from '../../shared/lib/i18n';
 
@@ -128,11 +129,6 @@ export interface InputCardProps {
     apiUrl: string;
   }) => void;
 
-  // Drag & drop
-  onDrop?: (e: React.DragEvent) => void;
-  onDragOver?: (e: React.DragEvent) => void;
-  isDragOver?: boolean;
-
   // U13: 剪贴板粘贴图片
   onPaste?: (e: React.ClipboardEvent) => void;
 
@@ -206,10 +202,7 @@ function InputCardInner({
   onImageSelect,
   onFileSelect,
   onAudioAttachment,
-  onDrop,
-  onDragOver,
   onPaste,
-  isDragOver = false,
   showSlashMenu = false,
   slashCommands = [],
   slashSelectedIndex = 0,
@@ -435,17 +428,7 @@ function InputCardInner({
   };
 
   return (
-    <div
-      className="px-4 py-2.5 border-t border-border bg-surface relative"
-      onDrop={onDrop}
-      onDragOver={onDragOver}
-    >
-      {isDragOver && (
-        <div className="absolute inset-0 bg-primary/10 border-2 border-dashed border-primary rounded-radius-md flex items-center justify-center z-10">
-          <p className="text-primary font-medium">{t('chat.drop_files')}</p>
-        </div>
-      )}
-
+    <div className="px-4 py-2.5 border-t border-border bg-surface relative">
       {orchModeBar}
 
       {images.length > 0 && (
@@ -688,7 +671,7 @@ function InputCardInner({
         <input
           type="file"
           id="chat-input-image"
-          accept="image/*"
+          accept={CHAT_IMAGE_ACCEPT}
           multiple
           className="hidden"
           onChange={onImageSelect}
@@ -698,7 +681,7 @@ function InputCardInner({
         <input
           type="file"
           id="chat-input-file"
-          accept=".txt,.md,.csv,.pdf,.docx,.xlsx,.json,.yaml,.yml,.xml,.html,.css,.py,.js,.ts,.jsx,.tsx,.java,.go,.rs,.sh,.bash,.bat,.sql,.log,.ini,.cfg,.conf,.toml"
+          accept={CHAT_DOCUMENT_ACCEPT}
           multiple
           className="hidden"
           onChange={onFileSelect}

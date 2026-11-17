@@ -3,9 +3,15 @@
  */
 
 import { clsx } from 'clsx';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
+import {
+  deleteOverride,
+  getEffective,
+  setOverride,
+} from '../../entities/model-catalog/api';
 import { ROUTING_TASK_TYPES } from '../../entities/routing/taskType';
 import {
   TASK_TYPE_LABELS,
@@ -149,6 +155,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
       ) : (
         <ChatEndpointReadOnly endpointName={chatEndpointName} />
       )}
+      <VisionCapabilityOverride selection={chatModel} />
       <ModelSelector
         label={t('settings.models.vision_model')}
         desc={t('settings.models.vision_model_desc')}
@@ -530,6 +537,106 @@ function ContextLengthSetting({
       <span className="text-ui-2xs text-muted" data-testid="settings-context-length-resolved">
         → {formatTokens(value)} ({value.toLocaleString()} tokens)
       </span>
+    </div>
+  );
+}
+
+type VisionOverrideValue = 'auto' | 'supported' | 'unsupported';
+
+/**
+ * 对话模型视觉能力的三态覆盖。
+ *
+ * 自动 = 不写 override，按 catalog / 端点发现启发式判定；
+ * 支持 / 不支持 = 写入 catalog override（capabilities.vision），立即影响聊天页。
+ */
+function VisionCapabilityOverride({ selection }: { selection: ModelSelection }) {
+  const { t } = useI18n();
+  const [revision, setRevision] = useState(0);
+  const [hasOverride, setHasOverride] = useState(false);
+  const [vision, setVision] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const endpointId = selection.endpointId;
+  const modelId = selection.modelId;
+
+  const load = useCallback(async () => {
+    if (!endpointId || !modelId) return;
+    setLoading(true);
+    try {
+      const effective = await getEffective(endpointId, modelId);
+      setRevision(effective?.revision ?? 0);
+      setHasOverride(
+        effective?.provenance?.['capabilities.vision'] === 'user_override',
+      );
+      const value = effective?.capabilities?.vision;
+      setVision(typeof value === 'boolean' ? value : null);
+    } catch {
+      setRevision(0);
+      setHasOverride(false);
+      setVision(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [endpointId, modelId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (!endpointId || !modelId) return null;
+
+  const value: VisionOverrideValue =
+    vision === null ? 'auto' : vision ? 'supported' : 'unsupported';
+
+  const handleChange = async (next: VisionOverrideValue): Promise<void> => {
+    setSaving(true);
+    try {
+      if (next === 'auto') {
+        if (hasOverride) {
+          await deleteOverride(endpointId, modelId, revision);
+        }
+      } else {
+        await setOverride(
+          endpointId,
+          modelId,
+          { capabilities: { vision: next === 'supported' } },
+          revision,
+        );
+      }
+      toast.success(t('settings.models.vision_capability_saved'));
+      await load();
+    } catch {
+      toast.error(t('settings.models.vision_capability_failed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-text">
+          {t('settings.models.vision_capability')}
+        </div>
+        <p className="text-xs text-muted mt-0.5">
+          {t('settings.models.vision_capability_desc')}
+        </p>
+      </div>
+      <select
+        aria-label={t('settings.models.vision_capability')}
+        className="shrink-0 px-2 py-1.5 rounded-radius-sm border border-border bg-bg text-sm text-text disabled:opacity-50"
+        value={value}
+        disabled={loading || saving}
+        onChange={(event) =>
+          void handleChange(event.target.value as VisionOverrideValue)
+        }
+      >
+        <option value="auto">{t('settings.models.vision_capability_auto')}</option>
+        <option value="supported">{t('settings.models.vision_capability_supported')}</option>
+        <option value="unsupported">
+          {t('settings.models.vision_capability_unsupported')}
+        </option>
+      </select>
     </div>
   );
 }

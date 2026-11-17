@@ -28,7 +28,7 @@ import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
 import { orchRunControlClient } from '../shared/api/orchRunControlClient';
 import { useBackendReadyTick } from '../shared/lib/backendReadySignal';
 // RD20 (round43): 历史 run → 任务板恢复映射。
-import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
+import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/chatAttachmentFormats';
 import { useGlobalFileDrop } from '../shared/lib/hooks/useGlobalFileDrop';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
@@ -116,11 +116,9 @@ export function Chat() {
   const [tempChatSessions, setTempChatSessions] = useSessionMemoryPause(currentSessionId);
   const { t } = useI18n();
   const [orchMode, setOrchMode] = useState<string>('auto');
-  // P2 (2026-11-04): 全局拖放 —— 用户在页面任意位置拖入文件都触发 overlay，
-  // drop 后派发到当前 composer（ChatInput 监听 sage:composer-drop）。
-  const { isDragOver } = useGlobalFileDrop({
-    composerSelector: '[data-testid="chat-input"]',
-  });
+  // 2026-11-15: 全局拖放唯一入口 —— 任意位置拖入文件都触发整页遮罩，
+  // drop 后统一派发 sage:composer-drop（ChatInput 消费）。
+  const { isDragOver } = useGlobalFileDrop();
 
   // 崩溃恢复）后长任务输出不再丢失。内部有会话级去重守卫。
   useEffect(() => {
@@ -311,6 +309,7 @@ export function Chat() {
         pdf: 'application/pdf',
         docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       };
       const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
       const imageEntries = (options?.images ?? [])

@@ -11,6 +11,7 @@ import pytest
 
 from backend.data.migrations.runner import (
     MIGRATIONS,
+    _v18_normalize_millisecond_timestamps,
     applied_versions,
     ensure_version_table,
     register_migration,
@@ -112,11 +113,29 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
 
     db = Database(db_path=str(tmp_path / "fresh.db"))
     try:
-        db.init_db()  # v1-v13 自动注册（runner.py 模块级）
+        db.init_db()  # v1-v18 自动注册（runner.py 模块级）
         versions = applied_versions(db.get_connection())
-        # v1 基线 + v2-v13 迁移（v11 非破坏压缩回填；main 分支编号）
+        # v1 基线 + v2-v19 迁移（v18 归一化历史秒级时间戳；v19 浏览器动作审计）
         assert versions == {
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
         }
         # schema_version 表已建（账本就绪）
     finally:
@@ -211,22 +230,63 @@ def test_v17_office_rules_tables() -> None:
         conn.close()
 
 
-def test_v18_browser_actions_table_and_index() -> None:
-    """v18：建 browser_action_log 表与会话索引，重复执行幂等。"""
+def test_v18_normalizes_legacy_seconds_to_milliseconds(setup_test_db):
+    """历史秒级时间戳归一为毫秒；evolution_log 保持秒。"""
+    db = setup_test_db
+    conn = db.get_connection()
+    now_s = 1_700_000_000
+    conn.execute(
+        "INSERT INTO sessions (id, title, created_at, updated_at, last_message_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("sess-legacy", "legacy", now_s, now_s, now_s),
+    )
+    conn.execute(
+        "INSERT INTO memories_episodic (id, content, created_at) VALUES (?, ?, ?)",
+        ("mem-legacy", "legacy memory", now_s),
+    )
+    conn.execute(
+        "INSERT INTO evolution_log "
+        "(id, evolution_type, description, status, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("evo-legacy", "memory_pruning", "legacy", "success", now_s),
+    )
+    conn.commit()
+
+    _v18_normalize_millisecond_timestamps(conn)
+    _v18_normalize_millisecond_timestamps(conn)  # 幂等
+
+    session_ts = conn.execute(
+        "SELECT created_at FROM sessions WHERE id = 'sess-legacy'"
+    ).fetchone()[0]
+    memory_ts = conn.execute(
+        "SELECT created_at FROM memories_episodic WHERE id = 'mem-legacy'"
+    ).fetchone()[0]
+    evolution_ts = conn.execute(
+        "SELECT created_at FROM evolution_log WHERE id = 'evo-legacy'"
+    ).fetchone()[0]
+
+    assert session_ts == now_s * 1000
+    assert memory_ts == now_s * 1000
+    # evolution_log 按设计保持秒，不能被迁移误放大
+    assert evolution_ts == now_s
+
+
+def test_v19_browser_actions_table_and_index() -> None:
+    """v19：建 browser_action_log 表与会话索引，重复执行幂等。"""
     import sqlite3
 
     from backend.data.migrations.runner import (
         MIGRATIONS,
-        _v18_browser_actions,
+        _v19_browser_actions,
     )
 
-    assert (18, "browser_actions") in [(v, name) for v, name, _fn in MIGRATIONS]
+    assert (19, "browser_actions") in [(v, name) for v, name, _fn in MIGRATIONS]
 
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     try:
-        _v18_browser_actions(conn)
-        _v18_browser_actions(conn)  # idempotent
+        _v19_browser_actions(conn)
+        _v19_browser_actions(conn)  # idempotent
 
         tables = {
             row["name"]

@@ -25,6 +25,7 @@ import { HarnessDashboard } from '../../widgets/harness/HarnessDashboard';
 
 import { AuditExportTab } from './AuditExportTab';
 import { BasicTab } from './BasicTab';
+import { ComponentsTab } from './ComponentsTab';
 import { FeedbackTab } from './FeedbackTab';
 import { GlobalRulesTab } from './GlobalRulesTab';
 import { McpTab } from './McpTab';
@@ -56,6 +57,7 @@ export type SettingsTabKey =
   | 'remote-workspaces'
   | 'usage-stats'
   | 'updates'
+  | 'components'
   | 'runtime'
   | 'evolution'
   | 'harness'
@@ -196,6 +198,13 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
     labelKey: 'settings.tab.updates',
     group: 'maintenance',
     render: () => <UpdatesTab />,
+  },
+  {
+    key: 'components',
+    labelKey: 'settings.tab.components',
+    group: 'maintenance',
+    // 内网离线组件包（.sagepkg）：UI 主入口；SageDoctor 保留兜底入口。
+    render: () => <ComponentsTab />,
   },
   {
     key: 'runtime',

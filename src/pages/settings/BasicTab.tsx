@@ -20,6 +20,7 @@ import { ContextTurnLimitSelect } from './ContextTurnLimitSelect';
 import { DemoModeSection } from './DemoModeSection';
 import { FontSettingsSection } from './FontSettingsSection';
 import { ResetDefaultsSection } from './ResetDefaultsSection';
+import { ThemeModeSelect } from './ThemeModeSelect';
 import { ThemeSelector } from './ThemeSelector';
 import { SettingRow, Toggle } from './components';
 
@@ -341,6 +342,7 @@ export function BasicTab() {
     <div className="space-y-6">
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.basic.theme')}</h3>
+        <ThemeModeSelect />
         <ThemeSelector />
       </section>
       <section>

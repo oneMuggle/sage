@@ -47,6 +47,10 @@ vi.mock('../ThemeSelector', () => ({
   ThemeSelector: () => <div data-testid="theme-selector-stub" />,
 }));
 
+vi.mock('../ThemeModeSelect', () => ({
+  ThemeModeSelect: () => <div data-testid="theme-mode-select-stub" />,
+}));
+
 vi.mock('../../../entities/font/fontStorage', () => ({
   loadFontSettings: async () => ({
     fontUi: 'inter',

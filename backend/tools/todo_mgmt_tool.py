@@ -105,6 +105,20 @@ class AddTodoTool(_TodoServiceMixin, BaseTool):
                         "type": "string",
                         "description": "5 字段 cron 表达式（可选）",
                     },
+                    "parent_id": {
+                        "type": "integer",
+                        "description": "父待办 ID（创建子任务时提供，最多两级）",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": '多标签（如 ["工作","论文"]，最多 10 个）',
+                    },
+                    "reminder_offsets": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "自定义提醒档位：到期前多少分钟提醒（如 [1440,60,10]）",
+                    },
                 },
                 "required": ["title"],
             },
@@ -122,6 +136,9 @@ class AddTodoTool(_TodoServiceMixin, BaseTool):
                 priority=kwargs.get("priority", "medium"),
                 project_tag=kwargs.get("project_tag"),
                 recurrence_rule=kwargs.get("recurrence_rule"),
+                parent_id=kwargs.get("parent_id"),
+                tags=kwargs.get("tags"),
+                reminder_offsets=kwargs.get("reminder_offsets"),
             )
             return ToolResult(
                 success=True,
@@ -285,6 +302,20 @@ class UpdateTodoTool(_TodoServiceMixin, BaseTool):
                         "type": "string",
                         "enum": ["pending", "in_progress", "cancelled"],
                         "description": "状态",
+                    },
+                    "parent_id": {
+                        "type": "integer",
+                        "description": "父待办 ID（挂为子任务；最多两级）",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "多标签（覆盖原值；空数组清空）",
+                    },
+                    "reminder_offsets": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "自定义提醒档位（分钟；覆盖原值；空数组清空）",
                     },
                 },
                 "required": ["todo_id"],

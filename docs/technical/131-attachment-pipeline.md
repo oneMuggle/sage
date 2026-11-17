@@ -90,7 +90,7 @@ chat_stream_create → R37 注入段
 - 脚本/构建 `.sh .bash .bat .ps1 .sql .makefile .cmake .gradle`
 - 特殊命名 `.dockerfile .gitignore .properties`
 - 日志 `.log`
-- 二进制文档 `.pdf .docx .xlsx`
+- 二进制文档 `.pdf .docx .xlsx .pptx`
 
 图片后缀独立成表 `FALLBACK_IMAGE_SUFFIXES`（`.png .jpg .jpeg .webp .gif .bmp .svg`）；
 两者都不命中时回退 `AUDIO`（与历史行为一致）。
@@ -136,9 +136,31 @@ chat_stream_create → R37 注入段
 | `load_failed` | 附件不存在或读取抛错 |
 | `not_document(got=...)` | 类型不是 DOCUMENT（历史媒体被误判为 AUDIO 时可见） |
 | `not_utf8` | 内容不是有效 UTF-8 |
-| `extract_failed:<ExcType>` | pdf/docx/xlsx 解析抛错 |
+| `extract_failed:<ExcType>` | pdf/docx/xlsx/pptx 解析抛错 |
 | `empty_text` | 提取结果为空 |
 | `context_build_failed` | 上下文构建返回 None |
+
+#### 发送侧与上传侧共用同一分发表（2026-11-15）
+
+`chat_attachment_routes.extract_attachment_text(content, ext)` 现在是唯一的
+“扩展名 → 文本”入口：`pdf/docx/xlsx/pptx` 走对应二进制解析器，其余按 UTF-8 解码。
+`/chat/attachments` 上传接口、`/chat/attachments/{id}/text`、附件索引与
+`legacy_routes` 发送侧注入循环全部调用它；发送侧使用
+`extract_attachment_text_async`（线程池 + 30s `wait_for`），超时状态为
+`parse_timeout`。
+
+历史回归：发送侧曾只对 `pdf/docx` 调提取器，`xlsx` 落入 `bytes.decode("utf-8")`
+分支 → `UnicodeDecodeError` → 附件状态 `not_utf8`。本次修复后上传白名单
+`ALLOWED_DOC_EXTENSIONS` 与提取集合 `EXTRACTABLE_DOC_EXTENSIONS` 共用同一
+`frozenset`，新增格式只改一处。
+
+PPTX 提取按页输出：`[第N页] 标题`、正文段落、表格单元格（制表符分隔）与
+`[备注]`；纯图片幻灯片没有文字层时返回空文本，前端显示 `empty_text`。
+
+解析安全边界：docx/xlsx/pptx 解析前检查 zip 中央目录（成员数 ≤10,000、
+单成员与解压后总量均 ≤100MB，且拒绝负 size），上传/读取端点的解析在线程池
+执行并设 30s 墙钟上限；解析异常只回传通用文案，细节仅以 `error_type`
+记录到服务端日志。
 
 ### 4.3 状态的两个出口
 
@@ -213,17 +235,18 @@ interface AttachedFile {
 
 ## 7. P2：整页拖放
 
-### 7.1 共享 hook
+### 7.1 共享 hook（2026-11-15 起为唯一入口）
 
-新增 `src/shared/lib/hooks/useGlobalFileDrop.ts`，Chat 页与新对话页（Welcome）共用：
+`src/shared/lib/hooks/useGlobalFileDrop.ts`，Chat 页与新对话页（Welcome）共用：
 
 - 在 **document 捕获阶段**监听 `dragenter` / `dragleave` / `dragover` / `drop`，
-  使"把文件拖到页面任意位置"都能被接收（对标 ChatGPT / Claude 的整页拖放）；
-- 落在 `composerSelector` 内的 drop **不拦截**，交给 composer 自己的 React `onDrop`
-  （保留输入卡原有高亮反馈）；
-- 容器外的 drop 派发 `sage:composer-drop` CustomEvent，composer 消费后交给各自的
-  `useFileUpload`，与输入卡内 drop 行为完全一致；
-- `isDragOver` 驱动整页遮罩。
+  任何含文件的 drop 一律 `preventDefault()` 后派发 `sage:composer-drop`
+  CustomEvent，composer（`ChatInput` / `WelcomeInputCard`）消费后交给各自的
+  `useFileUpload` —— **不再区分 composer 内/外**，也不再有第二套 composer
+  局部拖放状态；
+- `isDragOver` 驱动整页遮罩（`pointer-events-none`，永不阻断输入）；
+- 复位路径：`drop` / `dragend` / 拖出窗口（`dragleave` 且 `relatedTarget` 为
+  `null`）一律清零。
 
 ### 7.2 两个容易踩的点
 
@@ -235,7 +258,19 @@ interface AttachedFile {
 ### 7.3 拖拽计数去抖
 
 `dragenter` / `dragleave` 在嵌套元素间成对冒泡，用计数器抵消子元素带来的误增误减，
-避免遮罩闪烁。
+避免遮罩闪烁。会话标志（dragenter 时置位）取代"每次现查 `dataTransfer.types`"——
+部分 Chromium 版本在 dragleave 时 `dataTransfer` 不可靠，现查会漏减计数。
+
+### 7.4 拖放遮罩卡死回归（2026-11-15）
+
+旧实现按 `composerSelector` 分流：卡外 drop 被捕获阶段 `stopPropagation` 拦截，
+卡内依赖 `InputCard` 自己的 React `onDrop` 复位局部 `isDragOver`。但卡内覆盖层
+（`absolute inset-0 z-10`）本身不在 textarea 内，drop 目标落在覆盖层时会被判为
+"卡外" → 全局拦截 + `stopPropagation` → 局部状态无人复位 → 遮罩永久停留且
+（覆盖层无 `pointer-events-none`）阻断输入。
+
+修复：删除 composer 局部拖放状态与遮罩（单一入口 + 单一状态），补 `dragend` /
+离开窗口复位；回归测试见 `ChatInput.globalDrop.test.tsx`。
 
 ## 8. 音频附件暂时隐藏
 
@@ -246,12 +281,14 @@ interface AttachedFile {
 
 | 层次 | 文件 | 覆盖 |
 | --- | --- | --- |
-| 后端单测 | `backend/tests/unit/test_media_store.py` | sidecar 读写往返、扩展名参数化、删除清理 |
+| 后端单测 | `backend/tests/unit/test_media_store.py` | sidecar 读写往返、扩展名参数化（含 .pptx）、删除清理 |
+| 后端单测 | `backend/tests/unit/test_r39_pdf_docx_extract.py` | pdf/docx/xlsx/pptx 上传与读取、统一分发表、zip 解压预算 |
 | 后端单测 | `backend/tests/unit/test_chat_attachment_text.py` | 真实 MediaStore 上传 → 读取链路（csv/py/json/ts/html/sql） |
 | 前端单测 | `src/features/send-message/__tests__/attachmentsProcessed.test.ts` | `attachments_processed` 事件消费 |
 | 前端单测 | `src/widgets/chat/__tests__/Message.clientMeta.test.tsx` | 气泡状态 chip 渲染 |
 | 前端单测 | `src/shared/lib/hooks/__tests__/useFileUpload.test.ts` | 预检各分支 + 状态流转 |
-| 前端单测 | `src/shared/lib/hooks/__tests__/useGlobalFileDrop.test.ts` | 整页拖放分发 / composer 内放行 / 遮罩状态 / 文本拖放忽略 / 卸载清理 |
+| 前端单测 | `src/shared/lib/hooks/__tests__/useGlobalFileDrop.test.ts` | 拖放唯一入口（含 composer 内）/ preventDefault / drop·dragend·离开窗口复位 / 文本拖放忽略 / 卸载清理 |
+| 前端单测 | `src/widgets/chat/__tests__/ChatInput.globalDrop.test.tsx` | 遮罩随 drop/取消消失、drop 落覆盖层与 textarea 均入列、指针穿透 |
 | 前端单测 | `src/widgets/chat/__tests__/ChatInput.composerDrop.test.tsx` | composer 消费 `sage:composer-drop` 的图片/文档分流 |
 
 ## 10. Win7 适配说明
@@ -264,6 +301,6 @@ interface AttachedFile {
 
 | 项 | 内容 |
 | --- | --- |
-| PDF 视觉通道 | 视觉模型下把 PDF 每页渲染成图片与文本提取并行发送；扫描件自动走本地 OCR |
+| PDF 视觉通道 | 已完成「页标记文本 + 图表抽取 + 内联引用」（见 §159）；剩余：视觉模型逐页读图与命中页低 DPI 复核 |
 | 上下文计量 | `ContextMeter` 显示附件占 token，超 100k 截断时给 inline 提示 |
 | 编排 / 插话路径 | planner 提示词注入附件概要；插话请求支持 `attachment_media_ids` 或明确告知不含附件 |

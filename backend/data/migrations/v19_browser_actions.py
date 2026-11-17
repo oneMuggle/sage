@@ -1,12 +1,12 @@
 # ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容
-"""v18：受控浏览器动作审计表（browser_action_log）。"""
+"""v19：受控浏览器动作审计表（browser_action_log）。"""
 
 from __future__ import annotations
 
 from typing import Any
 
 
-def _v18_browser_actions(conn: Any) -> None:
+def _v19_browser_actions(conn: Any) -> None:
     """Create browser_action_log table and session/ts index."""
     cursor = conn.cursor()
     cursor.execute(

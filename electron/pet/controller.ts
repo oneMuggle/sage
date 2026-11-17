@@ -45,8 +45,9 @@ import {
 } from './state';
 import { PetStatusServer, type StatusServerInfo } from './statusServer';
 import { mergeTaskReports, normalizeTaskReports } from './tasks';
-import { PetWindow } from './windows';
+import { resolveCompatContext, PetWindow } from './windows';
 import type {
+  PetCompatStatus,
   PetConfig,
   PetInstanceConfig,
   PetPackManifest,
@@ -212,6 +213,16 @@ export class PetController {
   getApiInfo(): StatusServerInfo {
     const info = this.statusServer?.getInfo() ?? { enabled: false, port: null };
     return { ...info, error: this.statusError };
+  }
+
+  /** Effective transparency capability for the settings page. */
+  getCompatStatus(): PetCompatStatus {
+    const context = resolveCompatContext();
+    return {
+      legacyWindows: context.legacyWindows,
+      dwmComposition: context.dwmComposition,
+      transparencyUnavailable: context.legacyWindows && !context.dwmComposition,
+    };
   }
 
   setConfig(patch: unknown): PetConfig {

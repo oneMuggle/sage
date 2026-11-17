@@ -201,3 +201,12 @@ export interface SettingRowProps {
 - 设置页是热点文件（近 10 次提交中 6 次涉及），后续改动先 rebase main；
 - 前端改动需 cherry-pick 到 `release/win7`，无 py38 适配，按分支各自跑
   architecture-baseline / coverage 门禁。
+
+### 主题模式三态开关（2026-11-16）
+
+「设置 → 基础 → 主题」新增 `ThemeModeSelect`：浅色 / 深色 / 跟随系统。
+模式复用 `ThemeProvider` 的 `mode` / `setMode`（localStorage `sage-theme` +
+后端偏好 `theme_mode`），`system` 态由 `prefers-color-scheme` 实时解析；
+配色画廊（预设 / 自定义 CSS 主题）与亮暗模式互相独立。`Ctrl+Shift+D` 与
+命令面板仍做二元切换（会固化为显式 `light`/`dark`），需要恢复跟随系统时
+用本开关选择「跟随系统」。

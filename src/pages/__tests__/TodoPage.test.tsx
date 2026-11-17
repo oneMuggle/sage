@@ -12,6 +12,7 @@
  * deterministically without going through the IPC layer.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Todo } from '../../shared/api/types';
@@ -27,6 +28,10 @@ const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
   loadSummary: vi.fn(),
   setParams: vi.fn(),
+  batchComplete: vi.fn(),
+  batchDelete: vi.fn(),
+  exportTodos: vi.fn(),
+  listTags: vi.fn(),
   state: {
     todos: [] as Todo[],
     loading: false,
@@ -34,6 +39,10 @@ const mocks = vi.hoisted(() => ({
     summary: null,
     params: {} as Record<string, unknown>,
   },
+}));
+
+vi.mock('../../shared/api/todoClient', () => ({
+  todoClient: { exportTodos: mocks.exportTodos, listTags: mocks.listTags },
 }));
 
 // Mock the zustand store hook so callers receive our controlled `state`.
@@ -52,6 +61,8 @@ vi.mock('../../entities/todo/todoStore', () => ({
       cancel: mocks.cancel,
       loadSummary: mocks.loadSummary,
       setParams: mocks.setParams,
+      batchComplete: mocks.batchComplete,
+      batchDelete: mocks.batchDelete,
     };
     return selector(merged);
   },
@@ -71,6 +82,22 @@ beforeEach(() => {
   mocks.cancel.mockResolvedValue({} as Todo);
   mocks.loadSummary.mockResolvedValue(undefined);
   mocks.setParams.mockResolvedValue(undefined);
+  mocks.batchComplete.mockResolvedValue({ completed: 1, missing: [] });
+  mocks.batchDelete.mockResolvedValue(1);
+  mocks.exportTodos.mockResolvedValue({
+    filename: 'sage-todos.md',
+    format: 'md',
+    content: '- [ ] 示例',
+  });
+  mocks.listTags.mockResolvedValue([]);
+  Object.defineProperty(URL, 'createObjectURL', {
+    writable: true,
+    value: vi.fn(() => 'blob:mock'),
+  });
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    writable: true,
+    value: vi.fn(),
+  });
 });
 
 afterEach(() => {
@@ -79,9 +106,11 @@ afterEach(() => {
 
 function renderPage() {
   return render(
-    <I18nProvider>
-      <TodoPage />
-    </I18nProvider>,
+    <MemoryRouter initialEntries={['/todos']}>
+      <I18nProvider>
+        <TodoPage />
+      </I18nProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -90,7 +119,7 @@ describe('TodoPage', () => {
     renderPage();
     expect(screen.getByRole('heading', { name: /待办事项/ })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/待办标题/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /添加|新建|创建/ })).toBeInTheDocument();
+    expect(screen.getByTestId('todo-submit')).toBeInTheDocument();
   });
 
   it('calls load on mount', () => {
@@ -119,11 +148,9 @@ describe('TodoPage', () => {
     renderPage();
     const input = screen.getByPlaceholderText(/待办标题/);
     fireEvent.change(input, { target: { value: '测试新待办' } });
-    fireEvent.click(screen.getByRole('button', { name: /添加|新建|创建/ }));
+    fireEvent.click(screen.getByTestId('todo-submit'));
     await waitFor(() => {
-      expect(mocks.create).toHaveBeenCalledWith(
-        expect.objectContaining({ title: '测试新待办' }),
-      );
+      expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ title: '测试新待办' }));
     });
   });
 
@@ -131,6 +158,104 @@ describe('TodoPage', () => {
     mocks.state.loading = true;
     renderPage();
     expect(screen.getByText(/加载|loading/i)).toBeInTheDocument();
+  });
+
+  it('debounces search input into a backend q param', async () => {
+    renderPage();
+    fireEvent.change(screen.getByPlaceholderText('搜索待办...'), {
+      target: { value: '周报' },
+    });
+    await waitFor(
+      () => {
+        expect(mocks.setParams).toHaveBeenCalledWith(expect.objectContaining({ q: '周报' }));
+      },
+      { timeout: 1500 },
+    );
+  });
+
+  it('batch complete uses the batch endpoint via the store', async () => {
+    mocks.state.todos = [makeTodo({ id: 11, title: '批量任务' })];
+    renderPage();
+    fireEvent.click(screen.getByLabelText('选择 批量任务'));
+    fireEvent.click(screen.getByRole('button', { name: '批量完成' }));
+    await waitFor(() => {
+      expect(mocks.batchComplete).toHaveBeenCalledWith([11]);
+    });
+  });
+
+  it('export button downloads via todoClient.exportTodos', async () => {
+    mocks.state.todos = [makeTodo({ id: 1, title: '导出任务' })];
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: '导出 Markdown' }));
+    await waitFor(() => {
+      expect(mocks.exportTodos).toHaveBeenCalledWith('md', true);
+    });
+  });
+
+  it('creates a subtask from a top-level row inline input', async () => {
+    mocks.state.todos = [makeTodo({ id: 1, title: '父任务' })];
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: '为 父任务 添加子任务' }));
+    const input = screen.getByTestId('todo-subtask-input');
+    fireEvent.change(input, { target: { value: '子任务' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => {
+      expect(mocks.create).toHaveBeenCalledWith({
+        title: '子任务',
+        parent_id: 1,
+      });
+    });
+  });
+
+  it('opens quick add with the N shortcut and creates a parsed todo', async () => {
+    renderPage();
+
+    fireEvent.keyDown(window, { key: 'n' });
+    const input = await screen.findByTestId('quick-add-input');
+    fireEvent.change(input, { target: { value: '明天下午3点 交报告 !高 #工作' } });
+    expect(screen.getByTestId('quick-add-preview').textContent).toContain('优先级 高');
+
+    fireEvent.click(screen.getByTestId('quick-add-submit'));
+
+    await waitFor(() => {
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: '交报告',
+          priority: 'high',
+          tags: ['工作'],
+          due_at: expect.stringMatching(/T15:00:00$/),
+        }),
+      );
+    });
+  });
+
+  it('switches the smart view via the toolbar', async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: '今天' }));
+
+    await waitFor(() => {
+      expect(mocks.setParams).toHaveBeenCalledWith(expect.objectContaining({ view: 'today' }));
+    });
+  });
+
+  it('submits reminder offsets chosen in the create form', async () => {
+    renderPage();
+
+    const titleInput = screen.getByPlaceholderText(/待办标题/);
+    fireEvent.focus(titleInput);
+    fireEvent.change(titleInput, { target: { value: '带提醒的任务' } });
+    fireEvent.click(screen.getByTestId('todo-reminder-60'));
+    fireEvent.click(screen.getByTestId('todo-submit'));
+
+    await waitFor(() => {
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: '带提醒的任务',
+          reminder_offsets: [60],
+        }),
+      );
+    });
   });
 });
 

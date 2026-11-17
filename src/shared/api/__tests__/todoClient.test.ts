@@ -67,6 +67,28 @@ describe('todoClient', () => {
     invokeMock.mockRejectedValueOnce(new Error('boom'));
     await expect(todoClient.list()).rejects.toThrow('boom');
   });
+
+  it('batchComplete / batchDelete / exportTodos map to their channels', async () => {
+    invokeMock.mockResolvedValue({ id: 1 });
+    await todoClient.batchComplete([1, 2]);
+    expect(invokeMock.mock.calls[0]).toEqual(['todo_batch_complete', { ids: [1, 2] }]);
+
+    await todoClient.batchDelete([3]);
+    expect(invokeMock.mock.calls[1]).toEqual(['todo_batch_delete', { ids: [3] }]);
+
+    await todoClient.exportTodos('md', true);
+    expect(invokeMock.mock.calls[2]).toEqual([
+      'todo_export',
+      { format: 'md', include_completed: true },
+    ]);
+  });
+
+  it('listTags() maps to todo_tags', async () => {
+    invokeMock.mockResolvedValueOnce([{ tag: '工作', count: 2 }]);
+    const tags = await todoClient.listTags();
+    expect(invokeMock).toHaveBeenCalledWith('todo_tags', {});
+    expect(tags).toEqual([{ tag: '工作', count: 2 }]);
+  });
 });
 
 describe('todoClient diagnostic formatters (Phase P113)', () => {

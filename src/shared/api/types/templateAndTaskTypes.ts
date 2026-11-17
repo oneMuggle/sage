@@ -398,6 +398,9 @@ export interface Todo {
   completed_at?: string | null;
   project_tag?: string | null;
   project_id?: string | null;
+  tags?: string[];
+  /** 自定义提醒档位：到期前多少分钟提醒（如 [1440, 60, 10]） */
+  reminder_offsets?: number[];
   is_recurring: boolean;
   recurrence_rule?: string | null;
   parent_id?: number | null;
@@ -412,6 +415,9 @@ export interface CreateTodoInput {
   priority?: TodoPriority;
   project_tag?: string;
   recurrence_rule?: string;
+  parent_id?: number;
+  tags?: string[];
+  reminder_offsets?: number[];
 }
 
 export interface UpdateTodoInput {
@@ -422,6 +428,9 @@ export interface UpdateTodoInput {
   project_tag?: string;
   status?: 'pending' | 'in_progress' | 'cancelled';
   recurrence_rule?: string;
+  parent_id?: number | null;
+  tags?: string[];
+  reminder_offsets?: number[];
 }
 
 export interface TodoSummary {
@@ -458,6 +467,32 @@ export interface TodoListParams {
   sort_order?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
+  /** 全文搜索关键词（后端 FTS5，LIKE 降级） */
+  q?: string;
+  /** 多标签精确过滤 */
+  tag?: string;
+  /** 智能视图：today=今天到期 / week=近 7 天 / all=未完成 / completed=已完成 */
+  view?: 'all' | 'today' | 'week' | 'completed';
+}
+
+export interface TodoTagCount {
+  tag: string;
+  count: number;
+}
+
+export interface TodoBatchCompleteResult {
+  completed: number;
+  missing: number[];
+}
+
+export interface TodoBatchDeleteResult {
+  deleted: number;
+}
+
+export interface TodoExportResult {
+  filename: string;
+  format: 'json' | 'md';
+  content: string;
 }
 
 export function auditTemplateAndTaskTypesGovernance(
@@ -473,9 +508,7 @@ export function auditTemplateAndTaskTypesGovernance(
   healthy: boolean;
 } {
   const todoPriority: TodoPriority =
-    state.todoPriority === 'high' || state.todoPriority === 'low'
-      ? state.todoPriority
-      : 'medium';
+    state.todoPriority === 'high' || state.todoPriority === 'low' ? state.todoPriority : 'medium';
   const todoStatus: TodoItemStatus =
     state.todoStatus === 'pending' ||
     state.todoStatus === 'in_progress' ||

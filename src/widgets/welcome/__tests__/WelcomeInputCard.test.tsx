@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { skillsApi } from '../../../shared/api';
+import { useGlobalFileDrop } from '../../../shared/lib/hooks/useGlobalFileDrop';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   WelcomeInputCard,
@@ -51,11 +52,17 @@ describe('WelcomeInputCard', () => {
 
   it('accepts drag-and-dropped files and forwards them as send options', async () => {
     const onSend = vi.fn();
-    renderWithI18n(<WelcomeInputCard placeholder="测试" onSend={onSend} />);
+    // 2026-11-15: 拖放入口统一到 useGlobalFileDrop —— drop 经全局 hook
+    // 派发 sage:composer-drop，输入卡只负责消费事件。
+    function Harness() {
+      useGlobalFileDrop();
+      return <WelcomeInputCard placeholder="测试" onSend={onSend} />;
+    }
+    renderWithI18n(<Harness />);
 
     const input = screen.getByRole('textbox');
     const file = new File(['hello'], 'report.pdf', { type: 'application/pdf' });
-    fireEvent.drop(input, { dataTransfer: { files: [file] } });
+    fireEvent.drop(input, { dataTransfer: { types: ['Files'], files: [file] } });
 
     // FileReader 异步读取完成后出现附件 chip
     await waitFor(() => expect(screen.getByText('report.pdf')).toBeInTheDocument());

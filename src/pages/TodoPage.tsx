@@ -3,29 +3,38 @@
  *
  * Notion-inspired design with:
  * - Enhanced creation form (description, priority, due date, project tag)
- * - Filter / Sort / Search toolbar
+ * - Filter / Sort / Search toolbar (search is server-side via FTS5, debounced)
  * - Inline editing (title, priority, due date)
- * - Hierarchical subtask rendering with progress bars
- * - Batch operations (select all, batch complete, batch delete)
+ * - Hierarchical subtask rendering with progress bars (+ inline subtask add)
+ * - Batch operations (select all, batch complete, batch delete via batch API)
+ * - Export to JSON / Markdown
+ * - Quick add with local natural-language parsing (N / 命令面板 / ?quickadd=1)
  *
  * State flows through zustand `entities/todo/todoStore`, IPC through
  * `shared/api/todoClient`. All CRUD delegated to store.
  */
-import { Check, Loader2, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Check, Download, Loader2, Trash2, Zap } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { useTodoStore } from '../entities/todo/todoStore';
+import { todoClient } from '../shared/api/todoClient';
 import type { Todo, TodoListParams, UpdateTodoInput } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
 import { PageHeader } from '../shared/ui';
 
 import { TodoCreateForm } from './todo/TodoCreateForm';
+import { TodoQuickAdd } from './todo/TodoQuickAdd';
 import { TodoRowEditor } from './todo/TodoRowEditor';
 import { TodoSubtaskTree } from './todo/TodoSubtaskTree';
 import { TodoToolbar } from './todo/TodoToolbar';
 
+/** 搜索输入防抖，避免每次按键都打后端 FTS。 */
+const SEARCH_DEBOUNCE_MS = 300;
+
 export function TodoPage() {
   const { t } = useI18n();
+  const [searchParams, setSearchParams] = useSearchParams();
   const todos = useTodoStore((s) => s.todos);
   const loading = useTodoStore((s) => s.loading);
   const error = useTodoStore((s) => s.error);
@@ -37,32 +46,58 @@ export function TodoPage() {
   const complete = useTodoStore((s) => s.complete);
   const cancel = useTodoStore((s) => s.cancel);
   const remove = useTodoStore((s) => s.delete);
+  const batchComplete = useTodoStore((s) => s.batchComplete);
+  const batchDelete = useTodoStore((s) => s.batchDelete);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [createBusy, setCreateBusy] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const lastSentQuery = useRef<string | undefined>(params.q);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Client-side search filter (backend doesn't support text search yet)
-  const filteredTodos = useMemo(() => {
-    if (!searchQuery.trim()) return todos;
-    const q = searchQuery.toLowerCase();
-    return todos.filter(
-      (todo) =>
-        todo.title.toLowerCase().includes(q) ||
-        (todo.description?.toLowerCase().includes(q) ?? false) ||
-        (todo.project_tag?.toLowerCase().includes(q) ?? false),
-    );
-  }, [todos, searchQuery]);
+  // 命令面板入口：/todos?quickadd=1 → 打开快速录入并清掉参数（避免刷新重开）。
+  useEffect(() => {
+    if (searchParams.get('quickadd') !== '1') return;
+    setQuickAddOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('quickadd');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  // 应用内快捷键：非输入状态下按 n 打开快速录入。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'n' && e.key !== 'N') return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      const target = e.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') return;
+      if (target?.isContentEditable) return;
+      e.preventDefault();
+      setQuickAddOpen(true);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // 搜索走后端 FTS：防抖后把 q 合入过滤参数。
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    const nextQ = trimmed || undefined;
+    if (nextQ === (lastSentQuery.current ?? undefined)) return;
+    const handle = window.setTimeout(() => {
+      lastSentQuery.current = nextQ;
+      void setParams({ ...params, q: nextQ });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery, params, setParams]);
 
   // Check if any subtasks exist to decide rendering mode
-  const hasSubtasks = useMemo(
-    () => filteredTodos.some((t) => t.parent_id != null),
-    [filteredTodos],
-  );
+  const hasSubtasks = useMemo(() => todos.some((todo) => todo.parent_id != null), [todos]);
 
   const handleParamsChange = useCallback(
     (newParams: TodoListParams) => {
@@ -78,6 +113,8 @@ export function TodoPage() {
       priority?: 'high' | 'medium' | 'low';
       due_at?: string;
       project_tag?: string;
+      tags?: string[];
+      reminder_offsets?: number[];
     }) => {
       setCreateBusy(true);
       try {
@@ -136,33 +173,45 @@ export function TodoPage() {
   }, []);
 
   const handleSelectAll = useCallback(() => {
-    if (selectedIds.size === filteredTodos.length) {
+    if (selectedIds.size === todos.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredTodos.map((t) => t.id)));
+      setSelectedIds(new Set(todos.map((t) => t.id)));
     }
-  }, [filteredTodos, selectedIds.size]);
+  }, [todos, selectedIds.size]);
 
   const handleBatchComplete = useCallback(async () => {
-    const ids = [...selectedIds];
-    for (const id of ids) {
-      const todo = filteredTodos.find((t) => t.id === id);
-      if (todo && todo.status !== 'completed') {
-        await complete(id);
-      }
-    }
+    if (selectedIds.size === 0) return;
+    await batchComplete([...selectedIds]);
     setSelectedIds(new Set());
-  }, [selectedIds, filteredTodos, complete]);
+  }, [selectedIds, batchComplete]);
 
   const handleBatchDelete = useCallback(async () => {
-    const ids = [...selectedIds];
-    for (const id of ids) {
-      await remove(id);
-    }
+    if (selectedIds.size === 0) return;
+    await batchDelete([...selectedIds]);
     setSelectedIds(new Set());
-  }, [selectedIds, remove]);
+  }, [selectedIds, batchDelete]);
 
-  const allSelected = filteredTodos.length > 0 && selectedIds.size === filteredTodos.length;
+  const handleExport = useCallback(async (format: 'json' | 'md') => {
+    const result = await todoClient.exportTodos(format, true);
+    const mime = format === 'json' ? 'application/json' : 'text/markdown';
+    const blob = new Blob([result.content], { type: `${mime};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = result.filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleAddSubtask = useCallback(
+    async (parentId: number, title: string) => {
+      await create({ title, parent_id: parentId });
+    },
+    [create],
+  );
+
+  const allSelected = todos.length > 0 && selectedIds.size === todos.length;
   const someSelected = selectedIds.size > 0;
 
   // Render function for TodoSubtaskTree
@@ -177,9 +226,18 @@ export function TodoPage() {
         onComplete={handleComplete}
         onCancel={handleCancel}
         onDelete={handleDelete}
+        onAddSubtask={todo.parent_id == null ? handleAddSubtask : undefined}
       />
     ),
-    [selectedIds, handleSelect, handleUpdate, handleComplete, handleCancel, handleDelete],
+    [
+      selectedIds,
+      handleSelect,
+      handleUpdate,
+      handleComplete,
+      handleCancel,
+      handleDelete,
+      handleAddSubtask,
+    ],
   );
 
   return (
@@ -187,13 +245,42 @@ export function TodoPage() {
       <PageHeader
         title={t('todos.title')}
         actions={
-          <div className="flex items-center gap-1.5 text-ui-xs text-text-muted">
-            {filteredTodos.length > 0 && (
+          <div className="flex items-center gap-2 text-ui-xs text-text-muted">
+            {todos.length > 0 && (
               <span>
-                {filteredTodos.filter((t) => t.status === 'completed').length}/
-                {filteredTodos.length} 已完成
+                {todos.filter((t) => t.status === 'completed').length}/{todos.length} 已完成
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => setQuickAddOpen(true)}
+              title="快速添加（快捷键 N）"
+              aria-label="快速添加"
+              className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
+            >
+              <Zap className="w-3 h-3" />
+              快速添加
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExport('md')}
+              title="导出 Markdown"
+              aria-label="导出 Markdown"
+              className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
+            >
+              <Download className="w-3 h-3" />
+              MD
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExport('json')}
+              title="导出 JSON"
+              aria-label="导出 JSON"
+              className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
+            >
+              <Download className="w-3 h-3" />
+              JSON
+            </button>
           </div>
         }
       />
@@ -246,13 +333,13 @@ export function TodoPage() {
           </div>
         )}
 
-        {!loading && filteredTodos.length === 0 && (
+        {!loading && todos.length === 0 && (
           <p className="text-text-muted text-center py-8" data-testid="todo-empty">
             {searchQuery ? '没有匹配的待办' : t('todos.empty')}
           </p>
         )}
 
-        {!loading && filteredTodos.length > 0 && (
+        {!loading && todos.length > 0 && (
           <>
             {/* Select all checkbox */}
             <div className="flex items-center gap-2 mb-1.5 px-1">
@@ -270,10 +357,10 @@ export function TodoPage() {
 
             {/* Todo list — hierarchical if subtasks exist, flat otherwise */}
             {hasSubtasks ? (
-              <TodoSubtaskTree todos={filteredTodos} renderTodo={renderTodo} />
+              <TodoSubtaskTree todos={todos} renderTodo={renderTodo} />
             ) : (
               <ul className="flex flex-col gap-1.5" data-testid="todo-page-list">
-                {filteredTodos.map((todo) => (
+                {todos.map((todo) => (
                   <TodoRowEditor
                     key={todo.id}
                     todo={todo}
@@ -283,6 +370,7 @@ export function TodoPage() {
                     onComplete={handleComplete}
                     onCancel={handleCancel}
                     onDelete={handleDelete}
+                    onAddSubtask={todo.parent_id == null ? handleAddSubtask : undefined}
                   />
                 ))}
               </ul>
@@ -290,6 +378,14 @@ export function TodoPage() {
           </>
         )}
       </div>
+
+      <TodoQuickAdd
+        isOpen={quickAddOpen}
+        onClose={() => setQuickAddOpen(false)}
+        onSubmit={async (input) => {
+          await create(input);
+        }}
+      />
     </div>
   );
 }

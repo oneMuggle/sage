@@ -8,6 +8,8 @@
  * 判定规则：非外链协议、非协议相对、且含有路径分隔符或已知文件扩展名。
  */
 
+import { defaultUrlTransform, type UrlTransform } from 'react-markdown';
+
 /** 本地文件扩展名白名单（与 feat/file-reference-preview 对齐） */
 const FILE_EXT_RE =
   /\.(md|markdown|mdx|txt|log|py|js|ts|tsx|jsx|rs|go|java|c|cpp|h|hpp|cs|rb|php|swift|kt|sh|bash|zsh|ps1|sql|html?|css|scss|yaml|yml|toml|ini|xml|png|jpe?g|gif|webp|svg|bmp|csv|tsv|json|pdf|docx|xlsx|pptx)$/i;
@@ -48,3 +50,30 @@ export function isLocalFilePathHref(href: string | undefined | null): href is st
   if (value.startsWith('//')) return false;
   return /[\\/]/.test(value) || FILE_EXT_RE.test(value);
 }
+
+/** 图片 src 放行的协议（2026-11-15：AI 内联图 / 本地裁图 / base64 图） */
+const SAFE_IMAGE_SCHEME_RE = /^(https?:|blob:|sage-file:|data:image\/)/i;
+/** 应用内绝对路径（/api/v1/media/... 等） */
+const APP_ABSOLUTE_RE = /^\/(?!\/)/;
+/** Windows 盘符路径（win7 桌面端常见） */
+const WINDOWS_DRIVE_RE = /^[A-Za-z]:[\\/]/;
+/** 任何节点都拦截的危险协议 */
+const DANGEROUS_SCHEME_RE = /^(javascript|vbscript|file|ftp):/i;
+
+/**
+ * react-markdown URL 消毒：图片源额外放行 data:image / sage-file / Windows
+ * 盘符 / 应用内绝对路径；链接沿用默认白名单。危险协议始终拦截。
+ */
+export const safeUrlTransform: UrlTransform = (url, key) => {
+  if (key === 'src') {
+    const value = (url ?? '').trim();
+    if (!value) return url;
+    if (DANGEROUS_SCHEME_RE.test(value)) return '';
+    if (SAFE_IMAGE_SCHEME_RE.test(value)) return url;
+    if (APP_ABSOLUTE_RE.test(value) || WINDOWS_DRIVE_RE.test(value)) return url;
+    // 无协议 = 相对路径，交给 MarkdownImage 按工作区拼接
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) return url;
+    return '';
+  }
+  return defaultUrlTransform(url);
+};

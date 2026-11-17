@@ -274,6 +274,9 @@ export const enChatAndSider = {
   // Task 9 (2026-10-15): vision model fallback UI
   'chat.vision_not_available':
     'Current chat model does not support vision. Please configure a vision model or switch to a vision-capable model',
+  'chat.vision_mark_supported': 'False alarm? Mark as vision-capable',
+  'chat.vision_mark_supported_success': 'Marked as vision-capable. You can upload images again.',
+  'chat.vision_mark_supported_failed': 'Failed to update. Please try again.',
   'chat.vision_fallback_info':
     'Images will be recognized by the vision model and converted to text descriptions',
   'chat.ocr_fallback_info':
@@ -428,12 +431,14 @@ export const enChatAndSider = {
   'settings.pet.sound_done': 'Completion sound',
   'settings.pet.compatibility': 'Compatibility mode',
   'settings.pet.compatibility_desc':
-    'Uses an opaque window without click-through on Win7 without Aero or in remote desktop sessions.',
+    'Off uses a transparent window (Windows 7 requires Aero/desktop composition); On uses an opaque window without click-through.',
   'settings.pet.compat.auto': 'Auto',
   'settings.pet.compat.on': 'On',
   'settings.pet.compat.off': 'Off',
   'settings.pet.compatibility_win7_hint':
-    'Note: Transparent windows may show black background on Windows 7. Consider enabling compatibility mode or using in-app mode.',
+    'If the desktop window turns black or the pet disappears, switch to Auto or On. Transparency requires Aero/desktop composition on Windows 7.',
+  'settings.pet.compatibility_no_dwm':
+    'Desktop composition (Aero) is off, so a transparent window is unavailable; the pet is shown in compatibility mode.',
   'settings.pet.reset_position': 'Reset position',
   'settings.pet.asset_notice':
     'Assets are from dsh-pet (MIT); the full asset pack ships with the installer.',
