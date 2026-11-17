@@ -11,15 +11,13 @@ vi.mock('../../../shared/api/todoClient', () => ({
     summary: vi.fn(),
     stats: vi.fn(),
     get: vi.fn(),
+    batchComplete: vi.fn(),
+    batchDelete: vi.fn(),
   },
 }));
 
 import { todoClient } from '../../../shared/api/todoClient';
-import {
-  buildTodoStoreAuditJson,
-  buildTodoStoreAuditSnapshot,
-  useTodoStore,
-} from '../todoStore';
+import { buildTodoStoreAuditJson, buildTodoStoreAuditSnapshot, useTodoStore } from '../todoStore';
 
 const client = todoClient as unknown as {
   list: ReturnType<typeof vi.fn>;
@@ -31,6 +29,8 @@ const client = todoClient as unknown as {
   summary: ReturnType<typeof vi.fn>;
   stats: ReturnType<typeof vi.fn>;
   get: ReturnType<typeof vi.fn>;
+  batchComplete: ReturnType<typeof vi.fn>;
+  batchDelete: ReturnType<typeof vi.fn>;
 };
 
 const sampleTodo = {
@@ -55,6 +55,8 @@ describe('useTodoStore', () => {
     client.summary.mockReset();
     client.stats.mockReset();
     client.get.mockReset();
+    client.batchComplete.mockReset();
+    client.batchDelete.mockReset();
   });
 
   afterEach(() => {
@@ -156,10 +158,30 @@ describe('useTodoStore', () => {
     expect(useTodoStore.getState().summary).toBe(fixture);
   });
 
+  it('batchComplete() calls the batch endpoint and reloads the list', async () => {
+    client.batchComplete.mockResolvedValueOnce({ completed: 2, missing: [] });
+    client.list.mockResolvedValueOnce({ items: [], total: 0, limit: 50, offset: 0 });
+
+    const result = await useTodoStore.getState().batchComplete([1, 2]);
+
+    expect(result).toEqual({ completed: 2, missing: [] });
+    expect(client.batchComplete).toHaveBeenCalledWith([1, 2]);
+    expect(client.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('batchDelete() returns the deleted count and reloads the list', async () => {
+    client.batchDelete.mockResolvedValueOnce({ deleted: 1 });
+    client.list.mockResolvedValueOnce({ items: [], total: 0, limit: 50, offset: 0 });
+
+    const deleted = await useTodoStore.getState().batchDelete([1]);
+
+    expect(deleted).toBe(1);
+    expect(client.batchDelete).toHaveBeenCalledWith([1]);
+    expect(client.list).toHaveBeenCalledTimes(1);
+  });
+
   it('exports todoStore audit snapshot and JSON helpers', () => {
-    expect(buildTodoStoreAuditSnapshot()).toBe(
-      'todos:0|pending:0|loading:no|err:no|summary:no',
-    );
+    expect(buildTodoStoreAuditSnapshot()).toBe('todos:0|pending:0|loading:no|err:no|summary:no');
     expect(
       buildTodoStoreAuditSnapshot({
         todoCount: 5,

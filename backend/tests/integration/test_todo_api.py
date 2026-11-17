@@ -121,6 +121,100 @@ def test_summary(client: TestClient):
     assert body["total_pending"] >= 2
 
 
+# --- 阶段 0：搜索 / 子任务 / 批量 / 导出 ---
+
+
+def test_create_subtask(client: TestClient):
+    parent = client.post("/api/v1/todos", json={"title": "父任务"}).json()
+    resp = client.post(
+        "/api/v1/todos", json={"title": "子任务", "parent_id": parent["id"]}
+    )
+    assert resp.status_code == 201
+    assert resp.json()["parent_id"] == parent["id"]
+
+
+def test_create_subtask_missing_parent_returns_400(client: TestClient):
+    resp = client.post(
+        "/api/v1/todos", json={"title": "孤儿", "parent_id": 99999}
+    )
+    assert resp.status_code == 400
+
+
+def test_update_rejects_third_level(client: TestClient):
+    parent = client.post("/api/v1/todos", json={"title": "父"}).json()
+    child = client.post(
+        "/api/v1/todos", json={"title": "子", "parent_id": parent["id"]}
+    ).json()
+    grandchild = client.post("/api/v1/todos", json={"title": "孙"}).json()
+
+    resp = client.put(
+        f"/api/v1/todos/{grandchild['id']}", json={"parent_id": child["id"]}
+    )
+    assert resp.status_code == 400
+
+
+def test_list_todos_q_search(client: TestClient):
+    client.post("/api/v1/todos", json={"title": "交周报API"})
+    client.post("/api/v1/todos", json={"title": "买牛奶"})
+
+    resp = client.get("/api/v1/todos", params={"q": "周报API"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert [item["title"] for item in body["items"]] == ["交周报API"]
+    assert body["total"] == 1
+
+
+def test_batch_complete(client: TestClient):
+    t1 = client.post("/api/v1/todos", json={"title": "批量A"}).json()
+    t2 = client.post("/api/v1/todos", json={"title": "批量B"}).json()
+
+    resp = client.post(
+        "/api/v1/todos/batch/complete", json={"ids": [t1["id"], t2["id"], 99999]}
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"completed": 2, "missing": [99999]}
+
+
+def test_batch_delete(client: TestClient):
+    t1 = client.post("/api/v1/todos", json={"title": "删A"}).json()
+
+    resp = client.post(
+        "/api/v1/todos/batch/delete", json={"ids": [t1["id"]]}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == 1
+    assert client.get(f"/api/v1/todos/{t1['id']}").status_code == 404
+
+
+def test_batch_rejects_empty_ids(client: TestClient):
+    resp = client.post("/api/v1/todos/batch/complete", json={"ids": []})
+    assert resp.status_code == 400
+
+
+def test_export_json(client: TestClient):
+    client.post("/api/v1/todos", json={"title": "导出JSON项"})
+
+    resp = client.get("/api/v1/todos/export", params={"format": "json"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["format"] == "json"
+    assert body["filename"].endswith(".json")
+    assert "导出JSON项" in body["content"]
+
+
+def test_export_markdown(client: TestClient):
+    client.post("/api/v1/todos", json={"title": "导出MD项"})
+
+    resp = client.get(
+        "/api/v1/todos/export",
+        params={"format": "md", "include_completed": "true"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["format"] == "md"
+    assert "- [ ] 导出MD项" in body["content"]
+
+
 def test_service_not_initialised_returns_503(raw_client: TestClient):
     """When init_todo_service() has not been called, endpoints return 503."""
     import backend.services.todo_service as todo_mod
