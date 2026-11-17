@@ -54,6 +54,9 @@ extraResources:
   # ci.yml "Verify packaged build-manifest.json" step).
   - from: "resources/build-manifest.json"
     to: "build-manifest.json"
+  # 组件包验签公钥（私钥不入库；CI 用 SAGE_COMPONENT_SIGNING_KEY 重写此文件）
+  - from: "resources/component-public-key.pem"
+    to: "component-public-key.pem"
   # CHANGELOG.md — 更新日志，供帮助页面显示
   - from: "CHANGELOG.md"
     to: "CHANGELOG.md"
@@ -113,6 +116,7 @@ extraResources:
       - "technical/135-specialist-asset-hub.md"
       - "technical/139-specialist-dm-group-chat.md"
       - "technical/148-sage-guide-specialist.md"
+      - "technical/161-offline-component-packs.md"
 
   # 本地 AI 模型（OCR + Embedding）—— 由 scripts/download-models.sh 下载。
   # 打包态后端通过 SAGE_BUNDLED_MODELS_DIR 环境变量定位；用户如在

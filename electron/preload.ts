@@ -21,6 +21,7 @@ import type { WindowControlsBridge } from '../src/shared/api/windowControlsClien
 import type {
   ArenaTokenElectronApiBridge,
   ArenaTokenStatus,
+  ComponentsElectronApiBridge,
   DiagnosticElectronApiBridge,
   FeedbackElectronApiBridge,
   FileElectronApiBridge,
@@ -261,6 +262,18 @@ const electronAPI = {
     /** 从本地磁盘导入 OCR 模型（打开目录选择对话框）。 */
     importLocalOcr: () => ipcRenderer.invoke('models:ocr:import-local'),
   },
+
+  /**
+   * 离线组件包（.sagepkg）管理桥 —— 委托 main 进程 components:* IPC。
+   * 导入/卸载进度经 api.listen('components:progress') 订阅。
+   */
+  components: {
+    list: () => ipcRenderer.invoke('components:list'),
+    scan: () => ipcRenderer.invoke('components:scan'),
+    pickAndImport: () => ipcRenderer.invoke('components:pick-and-import'),
+    importPath: (path: string) => ipcRenderer.invoke('components:import-path', path),
+    remove: (id: string) => ipcRenderer.invoke('components:remove', id),
+  } satisfies ComponentsElectronApiBridge,
 
   /**
    * P13 (2026-09-14): sage-file 工作区注册表 —— 渲染端绑定工作区时经此

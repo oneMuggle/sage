@@ -6,6 +6,7 @@ import { enChatAndSider } from './locales/en/chatAndSider';
 import { enChatDisplayMode } from './locales/en/chatDisplayMode';
 import { enChatPdfOcr } from './locales/en/chatPdfOcr';
 import { enChatSteerStaging } from './locales/en/chatSteerStaging';
+import { enComponents } from './locales/en/components';
 import { enContextMenu } from './locales/en/contextMenu';
 import { enDesign } from './locales/en/design';
 import { enGovernanceFiles } from './locales/en/governanceFiles';
@@ -26,6 +27,7 @@ export const en: Record<TranslationKey, string> = {
   ...enChatDisplayMode,
   ...enChatPdfOcr,
   ...enChatSteerStaging,
+  ...enComponents,
   ...enContextMenu,
   ...enDesign,
   ...enGovernanceFiles,

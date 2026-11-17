@@ -129,6 +129,31 @@ jobs:
         shell: bash
         run: bash scripts/download-models.sh
 
+      - name: Build offline component packs
+        shell: pwsh
+        env:
+          SAGE_COMPONENT_SIGNING_KEY: ${{ secrets.SAGE_COMPONENT_SIGNING_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SAGE_COMPONENT_SIGNING_KEY)) {
+            Write-Host "::warning::SAGE_COMPONENT_SIGNING_KEY not configured; skipping component packs"
+            exit 0
+          }
+          $keyPath = Join-Path $env:RUNNER_TEMP 'component-signing-key.pem'
+          Set-Content -Path $keyPath -Value $env:SAGE_COMPONENT_SIGNING_KEY -NoNewline
+          python -m pip install "cryptography==47.0.0"
+          python scripts/build-component-packs.py --all --key $keyPath --output release/components
+          if ($LASTEXITCODE -ne 0) { throw "component pack build failed" }
+          $publicKey = python scripts/build-component-packs.py --print-public-key --key $keyPath
+          if ($LASTEXITCODE -ne 0) { throw "component public key derivation failed" }
+          Set-Content -Path resources/component-public-key.pem -Value $publicKey -Encoding ascii
+
+      - name: Upload component packs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sage-components
+          path: release/components/*
+          if-no-files-found: warn
+
       - name: Build frontend + Electron
         run: npm run electron:build
 
@@ -215,6 +240,19 @@ jobs:
         shell: pwsh
         run: pwsh scripts/fetch-vcredist.ps1
 
+      - name: Inject component public key (Cython build)
+        shell: pwsh
+        env:
+          SAGE_COMPONENT_SIGNING_KEY: ${{ secrets.SAGE_COMPONENT_SIGNING_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SAGE_COMPONENT_SIGNING_KEY)) { exit 0 }
+          $keyPath = Join-Path $env:RUNNER_TEMP 'component-signing-key.pem'
+          Set-Content -Path $keyPath -Value $env:SAGE_COMPONENT_SIGNING_KEY -NoNewline
+          python -m pip install "cryptography==47.0.0"
+          $publicKey = python scripts/build-component-packs.py --print-public-key --key $keyPath
+          if ($LASTEXITCODE -ne 0) { throw "component public key derivation failed" }
+          Set-Content -Path resources/component-public-key.pem -Value $publicKey -Encoding ascii
+
       - name: Build Windows NSIS (Win7 LTS - Cython)
         # Override artifactName to add -cython suffix, distinguishing
         # this experimental build from the recommended Source version.
@@ -244,6 +282,12 @@ jobs:
         with:
           name: sage-setup-cython
           path: artifacts/cython
+      - name: Download component packs artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: sage-components
+          path: artifacts/components
       - name: Verify both installers downloaded
         run: |
           set -e
@@ -264,6 +308,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           files: |
             artifacts/**/*.exe
+            artifacts/components/**/*
           prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
           body: |
             ## Sage ${{ github.ref_name }} (Win7 LTS) — Windows 7 SP1 x64 ONLY
@@ -280,6 +325,8 @@ jobs:
             | --- | --- | --- |
             | `Sage-Setup-*-win7.exe` | 源码模式 | ✅ **推荐**，兼容性最佳，内网环境首选 |
             | `Sage-Setup-*-win7-cython.exe` | Cython 代码保护 | ⚠️ **实验性**，代码保护但有打包风险 |
+            | `embedding-bge-small-zh-*.sagepkg` | 离线组件包 | 可选；供核心安装包补装/修复，签名可在设置页「组件管理」导入 |
+            | `ocr-models-ppocr-*.sagepkg` | 离线组件包 | 可选；OCR 模型组件包 |
 
             如果不确定该选哪个，请优先使用源码模式（`-win7.exe`，无 `-cython` 后缀）。
 
