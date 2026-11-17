@@ -104,9 +104,16 @@ Sage 的「待办事项」已具备：SQLite `todos` 表、REST API（`/api/v1/t
 ### 3.5 导出
 
 - `GET /todos/export?format=json|md&include_completed=true|false`
-  → `Content-Disposition: attachment`；
+  → JSON envelope `{filename, format, content}`（IPC 管道统一 `res.json()`，
+  渲染层组装 Blob 触发下载；与初版"HTTP attachment"的差异：Electron IPC
+  无法透传二进制/文件头，envelope 方案对本地桌面端等价且更简单）；
 - JSON：`TodoOut` 数组；Markdown：带复选框与元数据的清单；
 - 前端 PageHeader 增加导出按钮，Blob 下载。
+
+> 实现备注：`todo_service.py` 触达 800 行架构棘轮上限后，未豁免而是按
+> 单一职责拆出 `backend/services/todo_fts.py`（FTS 同步/搜索）、
+> `todo_export.py`（导出）、`todo_recurrence.py`（循环实例），
+> 服务层保留委托与业务规则；测试同步拆出 `test_todo_service_phase0.py`。
 
 ### 3.6 兼容约束
 
@@ -117,15 +124,15 @@ Sage 的「待办事项」已具备：SQLite `todos` 表、REST API（`/api/v1/t
 
 ## 4. 实施步骤（阶段 0）
 
-- [ ] 步骤 0.1：`todos_fts` 表创建 + 幂等回填（database.py）
-- [ ] 步骤 0.2：TodoService 搜索（`search_ids`）+ create/update/delete FTS 同步 + LIKE 降级
-- [ ] 步骤 0.3：`q` 参数接入 list/count + API 测试
-- [ ] 步骤 0.4：重复任务生成（complete 时建下一实例）+ 单测
-- [ ] 步骤 0.5：`parent_id` 打通（API/服务/工具/校验）+ 单测
-- [ ] 步骤 0.6：批量端点 + 前端切换 + 测试
-- [ ] 步骤 0.7：导出端点 + 前端按钮 + 测试
-- [ ] 步骤 0.8：前端搜索改后端（防抖）+ 子任务创建入口 + vitest
-- [ ] 步骤 0.9：pytest / vitest / ruff / py38 兼容检查全绿，提交 PR
+- [x] 步骤 0.1：`todos_fts` 表创建 + 幂等回填（database.py）
+- [x] 步骤 0.2：TodoService 搜索（`todo_fts.match_ids`）+ create/update/delete FTS 同步 + LIKE 降级
+- [x] 步骤 0.3：`q` 参数接入 list/count + API 测试
+- [x] 步骤 0.4：重复任务生成（complete 时建下一实例）+ 单测
+- [x] 步骤 0.5：`parent_id` 打通（API/服务/工具/校验）+ 单测
+- [x] 步骤 0.6：批量端点 + 前端切换 + 测试
+- [x] 步骤 0.7：导出端点 + 前端按钮 + 测试
+- [x] 步骤 0.8：前端搜索改后端（防抖）+ 子任务创建入口 + vitest
+- [x] 步骤 0.9：pytest / vitest / ruff / py38 兼容检查全绿，提交 PR
 
 ### 阶段 1（后续 PR）
 

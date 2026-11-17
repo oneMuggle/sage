@@ -597,3 +597,4 @@ def test_update_unrelated_field_does_not_reset_latches(todo_service):
 
     todo_service.update_todo(created.id, title="New title", priority="high")
     assert todo_service.get_unfired_24h_reminders() == []
+

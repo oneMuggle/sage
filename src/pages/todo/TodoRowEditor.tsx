@@ -15,6 +15,7 @@ import {
   Copy,
   Flag,
   Pencil,
+  Plus,
   Trash2,
   X,
   XCircle,
@@ -40,6 +41,8 @@ interface TodoRowEditorProps {
   onComplete: (id: number) => Promise<void>;
   onCancel: (id: number) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
+  /** 仅顶层行提供：行内创建子任务（最多两级）。 */
+  onAddSubtask?: (parentId: number, title: string) => Promise<void>;
 }
 
 const PRIORITY_CYCLE: TodoPriority[] = ['low', 'medium', 'high'];
@@ -88,13 +91,19 @@ export function TodoRowEditor({
   onComplete,
   onCancel,
   onDelete,
+  onAddSubtask,
 }: TodoRowEditorProps) {
   const { t } = useI18n();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(todo.title);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [addingSubtask, setAddingSubtask] = useState(false);
+  const [subtaskDraft, setSubtaskDraft] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const subtaskInputRef = useRef<HTMLInputElement>(null);
   const datePickerRef = useRef<HTMLDivElement>(null);
+  // Enter 提交后、await 完成前若触发 blur，防止重复创建同一子任务。
+  const committingSubtask = useRef(false);
 
   const isDone = todo.status === 'completed';
   const isCancelled = todo.status === 'cancelled';
@@ -106,6 +115,10 @@ export function TodoRowEditor({
       titleInputRef.current.select();
     }
   }, [editingTitle]);
+
+  useEffect(() => {
+    if (addingSubtask) subtaskInputRef.current?.focus();
+  }, [addingSubtask]);
 
   useEffect(() => {
     if (!showDatePicker) return;
@@ -154,6 +167,34 @@ export function TodoRowEditor({
   const clearDueDate = () => {
     void onUpdate(todo.id, { due_at: undefined });
     setShowDatePicker(false);
+  };
+
+  const commitSubtask = useCallback(async () => {
+    if (committingSubtask.current) return;
+    const trimmed = subtaskDraft.trim();
+    if (!trimmed || !onAddSubtask) {
+      setAddingSubtask(false);
+      setSubtaskDraft('');
+      return;
+    }
+    committingSubtask.current = true;
+    try {
+      await onAddSubtask(todo.id, trimmed);
+      setSubtaskDraft('');
+      setAddingSubtask(false);
+    } finally {
+      committingSubtask.current = false;
+    }
+  }, [subtaskDraft, onAddSubtask, todo.id]);
+
+  const handleSubtaskKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      void commitSubtask();
+    } else if (e.key === 'Escape') {
+      setSubtaskDraft('');
+      setAddingSubtask(false);
+    }
   };
 
   const priorityConf = PRIORITY_DISPLAY[todo.priority];
@@ -241,158 +282,190 @@ export function TodoRowEditor({
   return (
     <ContextMenu items={menuItems} enabled={!editingTitle && !showDatePicker}>
       <li
-        className={`flex items-center gap-2 px-3 py-2 border border-border rounded-radius-sm group transition-colors ${
+        className={`flex flex-col px-3 py-2 border border-border rounded-radius-sm group transition-colors ${
           isInactive ? 'bg-bg-muted/20' : 'bg-surface hover:bg-bg-hover/30'
         } ${selected ? 'ring-1 ring-primary/30' : ''}`}
       >
-        {/* Checkbox */}
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={(e) => onSelect(todo.id, e.target.checked)}
-          className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer flex-shrink-0"
-          aria-label={`选择 ${todo.title}`}
-        />
+        <div className="flex items-center gap-2">
+          {/* Checkbox */}
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(e) => onSelect(todo.id, e.target.checked)}
+            className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer flex-shrink-0"
+            aria-label={`选择 ${todo.title}`}
+          />
 
-        {/* Status toggle */}
-        {!isInactive && (
-          <button
-            type="button"
-            onClick={() => void onComplete(todo.id)}
-            title="标记完成"
-            aria-label={`完成 ${todo.title}`}
-            className="w-5 h-5 flex items-center justify-center rounded-full border border-border hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 text-text-muted hover:text-green-600 flex-shrink-0"
-          >
-            <Check className="w-3 h-3 opacity-0 group-hover:opacity-100" />
-          </button>
-        )}
-        {isDone && (
-          <span className="w-5 h-5 flex items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 flex-shrink-0">
-            <Check className="w-3 h-3" />
-          </span>
-        )}
-        {isCancelled && (
-          <span className="w-5 h-5 flex items-center justify-center rounded-full bg-bg-muted text-text-muted flex-shrink-0">
-            <X className="w-3 h-3" />
-          </span>
-        )}
-
-        {/* Title (inline editable) */}
-        <div className="flex-1 min-w-0">
-          {editingTitle ? (
-            <input
-              ref={titleInputRef}
-              type="text"
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={commitTitle}
-              onKeyDown={handleTitleKeyDown}
-              className="w-full text-sm px-1 py-0.5 border border-primary rounded bg-background focus:outline-none"
-              data-testid="todo-title-edit-input"
-            />
-          ) : (
+          {/* Status toggle */}
+          {!isInactive && (
             <button
               type="button"
-              onClick={() => {
-                if (!isInactive) {
-                  setTitleDraft(todo.title);
-                  setEditingTitle(true);
-                }
-              }}
-              className={`text-sm text-left truncate w-full ${
-                isInactive ? 'line-through text-text-muted' : 'text-text'
-              } hover:text-primary cursor-text`}
-              title="点击编辑标题"
+              onClick={() => void onComplete(todo.id)}
+              title="标记完成"
+              aria-label={`完成 ${todo.title}`}
+              className="w-5 h-5 flex items-center justify-center rounded-full border border-border hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 text-text-muted hover:text-green-600 flex-shrink-0"
             >
-              {todo.title}
+              <Check className="w-3 h-3 opacity-0 group-hover:opacity-100" />
             </button>
           )}
-        </div>
+          {isDone && (
+            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 flex-shrink-0">
+              <Check className="w-3 h-3" />
+            </span>
+          )}
+          {isCancelled && (
+            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-bg-muted text-text-muted flex-shrink-0">
+              <X className="w-3 h-3" />
+            </span>
+          )}
 
-        {/* Description indicator */}
-        {todo.description && !editingTitle && (
-          <span className="text-ui-xs text-text-muted px-1" title={todo.description}>
-            📝
-          </span>
-        )}
-
-        {/* Priority badge (clickable to cycle) */}
-        <button
-          type="button"
-          onClick={cyclePriority}
-          title={`优先级：${priorityConf.label}（点击切换）`}
-          aria-label={`优先级 ${priorityConf.label}，点击切换`}
-          className={`flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded-full ${priorityConf.bg} ${priorityConf.color} hover:opacity-80 flex-shrink-0`}
-        >
-          {priorityConf.label}
-        </button>
-
-        {/* Due date (clickable to edit) */}
-        {todo.due_at && (
-          <div className="relative flex-shrink-0" ref={datePickerRef}>
-            <button
-              type="button"
-              onClick={() => setShowDatePicker(!showDatePicker)}
-              title="修改截止日期"
-              className={`flex items-center gap-1 px-1.5 py-0.5 text-ui-xs rounded-full border ${
-                new Date(todo.due_at) < new Date() && !isInactive
-                  ? 'border-red-300 bg-red-50 dark:bg-red-900/20 text-red-600'
-                  : 'border-border text-text-muted hover:border-primary'
-              }`}
-            >
-              <Calendar className="w-3 h-3" />
-              {formatDueDate(todo.due_at)}
-            </button>
-
-            {showDatePicker && (
-              <div className="absolute right-0 top-full mt-1 z-50 p-2 bg-surface border border-border rounded-radius-sm shadow-lg">
-                <input
-                  type="datetime-local"
-                  value={toLocalDatetimeValue(todo.due_at)}
-                  onChange={(e) => handleDueDateChange(e.target.value)}
-                  className="px-2 py-1 text-xs border border-border rounded bg-background focus:outline-none focus:border-primary"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={clearDueDate}
-                  className="mt-1 w-full text-ui-xs text-text-muted hover:text-red-600 py-0.5"
-                >
-                  清除日期
-                </button>
-              </div>
+          {/* Title (inline editable) */}
+          <div className="flex-1 min-w-0">
+            {editingTitle ? (
+              <input
+                ref={titleInputRef}
+                type="text"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={handleTitleKeyDown}
+                className="w-full text-sm px-1 py-0.5 border border-primary rounded bg-background focus:outline-none"
+                data-testid="todo-title-edit-input"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isInactive) {
+                    setTitleDraft(todo.title);
+                    setEditingTitle(true);
+                  }
+                }}
+                className={`text-sm text-left truncate w-full ${
+                  isInactive ? 'line-through text-text-muted' : 'text-text'
+                } hover:text-primary cursor-text`}
+                title="点击编辑标题"
+              >
+                {todo.title}
+              </button>
             )}
           </div>
-        )}
 
-        {/* Project tag */}
-        {todo.project_tag && (
-          <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 flex-shrink-0">
-            {todo.project_tag}
-          </span>
-        )}
+          {/* Description indicator */}
+          {todo.description && !editingTitle && (
+            <span className="text-ui-xs text-text-muted px-1" title={todo.description}>
+              📝
+            </span>
+          )}
 
-        {/* Cancel button (for active items) */}
-        {!isDone && !isCancelled && (
+          {/* Priority badge (clickable to cycle) */}
           <button
             type="button"
-            onClick={() => void onCancel(todo.id)}
-            title="取消待办"
-            aria-label={`取消 ${todo.title}`}
-            className="w-6 h-6 flex items-center justify-center text-text-muted hover:text-orange-600 hover:bg-bg-hover rounded opacity-0 group-hover:opacity-100 flex-shrink-0"
+            onClick={cyclePriority}
+            title={`优先级：${priorityConf.label}（点击切换）`}
+            aria-label={`优先级 ${priorityConf.label}，点击切换`}
+            className={`flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded-full ${priorityConf.bg} ${priorityConf.color} hover:opacity-80 flex-shrink-0`}
           >
-            <X className="w-3.5 h-3.5" />
+            {priorityConf.label}
           </button>
-        )}
 
-        {/* Delete (two-step) */}
-        <TwoStepDelete
-          onConfirm={() => void onDelete(todo.id)}
-          label={`删除 ${todo.title}`}
-          armedLabel="确认删除?"
-          data-testid={`todo-delete-${todo.id}`}
-          className="w-6 h-6 justify-center opacity-0 group-hover:opacity-100 flex-shrink-0"
-        />
+          {/* Due date (clickable to edit) */}
+          {todo.due_at && (
+            <div className="relative flex-shrink-0" ref={datePickerRef}>
+              <button
+                type="button"
+                onClick={() => setShowDatePicker(!showDatePicker)}
+                title="修改截止日期"
+                className={`flex items-center gap-1 px-1.5 py-0.5 text-ui-xs rounded-full border ${
+                  new Date(todo.due_at) < new Date() && !isInactive
+                    ? 'border-red-300 bg-red-50 dark:bg-red-900/20 text-red-600'
+                    : 'border-border text-text-muted hover:border-primary'
+                }`}
+              >
+                <Calendar className="w-3 h-3" />
+                {formatDueDate(todo.due_at)}
+              </button>
+
+              {showDatePicker && (
+                <div className="absolute right-0 top-full mt-1 z-50 p-2 bg-surface border border-border rounded-radius-sm shadow-lg">
+                  <input
+                    type="datetime-local"
+                    value={toLocalDatetimeValue(todo.due_at)}
+                    onChange={(e) => handleDueDateChange(e.target.value)}
+                    className="px-2 py-1 text-xs border border-border rounded bg-background focus:outline-none focus:border-primary"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={clearDueDate}
+                    className="mt-1 w-full text-ui-xs text-text-muted hover:text-red-600 py-0.5"
+                  >
+                    清除日期
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Project tag */}
+          {todo.project_tag && (
+            <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 flex-shrink-0">
+              {todo.project_tag}
+            </span>
+          )}
+
+          {/* Add subtask (top-level rows only) */}
+          {onAddSubtask && !isInactive && (
+            <button
+              type="button"
+              onClick={() => setAddingSubtask(true)}
+              title="添加子任务"
+              aria-label={`为 ${todo.title} 添加子任务`}
+              className="w-6 h-6 flex items-center justify-center text-text-muted hover:text-primary hover:bg-bg-hover rounded opacity-0 group-hover:opacity-100 flex-shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Cancel button (for active items) */}
+          {!isDone && !isCancelled && (
+            <button
+              type="button"
+              onClick={() => void onCancel(todo.id)}
+              title="取消待办"
+              aria-label={`取消 ${todo.title}`}
+              className="w-6 h-6 flex items-center justify-center text-text-muted hover:text-orange-600 hover:bg-bg-hover rounded opacity-0 group-hover:opacity-100 flex-shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Delete (two-step) */}
+          <TwoStepDelete
+            onConfirm={() => void onDelete(todo.id)}
+            label={`删除 ${todo.title}`}
+            armedLabel="确认删除?"
+            data-testid={`todo-delete-${todo.id}`}
+            className="w-6 h-6 justify-center opacity-0 group-hover:opacity-100 flex-shrink-0"
+          />
+        </div>
+
+        {/* Inline subtask creator */}
+        {addingSubtask && onAddSubtask && (
+          <div className="mt-1.5 pl-7 pr-1">
+            <input
+              ref={subtaskInputRef}
+              type="text"
+              value={subtaskDraft}
+              onChange={(e) => setSubtaskDraft(e.target.value)}
+              onBlur={() => void commitSubtask()}
+              onKeyDown={handleSubtaskKeyDown}
+              placeholder="子任务标题，回车创建，Esc 取消"
+              data-testid="todo-subtask-input"
+              className="w-full text-xs px-2 py-1 border border-primary rounded bg-background focus:outline-none"
+            />
+          </div>
+        )}
       </li>
     </ContextMenu>
   );
