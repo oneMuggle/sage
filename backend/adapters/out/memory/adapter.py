@@ -431,6 +431,7 @@ class MemoryAdapter:
         source_message_id: Optional[str] = None,
         memory_category: Optional[str] = None,
         agent_id: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> str:
         """存储记忆
 
@@ -470,8 +471,9 @@ class MemoryAdapter:
         # 统一分类（与 MemoryManager 共用模块级 classify_memory_type,消除规则漂移）
         memory_type = classify_memory_type("auto", importance, content)
 
-        # 构建元数据
-        metadata = {"session_id": session_id, "tags": tags or []}
+        # 构建元数据（main 无 win7 的 traceability 字段；
+        # 2026-11-17 记忆详情化：title 随 metadata/memorize 透传）
+        metadata = {"session_id": session_id, "tags": tags or [], "title": title}
 
         # P3 (Mem0 风格): 写入前冲突消解——NOOP 复用既有记忆 ID,
         # UPDATE 写新行并使旧行失效;返回 None 表示按 ADD 走原路径。
@@ -493,6 +495,7 @@ class MemoryAdapter:
             metadata=metadata,
             session_id=session_id,
             agent_id=agent_id,
+            title=title,
         )
 
         # 向量化存储（仅持久层记忆:工作记忆合成 id 不入向量库）

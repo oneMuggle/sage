@@ -3048,8 +3048,13 @@ from backend.api.legacy_memory_quality_routes import (
 )
 from backend.api.legacy_memory_routes import router as legacy_memory_routes_router
 
+# 2026-11-17 记忆详情化: PUT /memory/{id} 编辑端点独立成模块（保持
+# legacy_memory_routes.py 在 800 行架构红线内）。
+from backend.api.legacy_memory_update_routes import router as legacy_memory_update_routes_router
+
 router.include_router(legacy_memory_routes_router)
 router.include_router(legacy_memory_list_routes_router)
 router.include_router(legacy_memory_quality_routes_router)
 router.include_router(legacy_memory_feedback_routes_router)
+router.include_router(legacy_memory_update_routes_router)
 router.include_router(orch_routes_router)

@@ -67,6 +67,7 @@ class MemoryPort(Protocol):
         source_message_id: Optional[str] = None,
         memory_category: Optional[str] = None,
         agent_id: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> str:
         """存储记忆
 
@@ -87,6 +88,8 @@ class MemoryPort(Protocol):
                 cross_session_pattern — 由 extractor 决定）
             agent_id: M3-Task 4 新增；写入归该专家的私有层。
                 None = 共享层；'primary' = 默认助手私有；'specialist-x' = 专家私有。
+            title: 2026-11-17 记忆详情化新增；可读标题（LLM 提取或用户手填）。
+                None/空 → 存储层按内容确定性生成（derive_title）。
 
         Returns:
             str: 生成的记忆 ID,可用于后续检索或删除

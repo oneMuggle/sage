@@ -123,9 +123,10 @@ class TestMemoryAdapterStore:
             memory_type="episodic",
             importance=7,
             tags=["preference", "food"],
-            metadata={"session_id": "session-123", "tags": ["preference", "food"]},
+            metadata={"session_id": "session-123", "tags": ["preference", "food"], "title": None},
             session_id="session-123",
             agent_id=None,
+            title=None,
         )
         assert memory_id == "memory-id-123"
 

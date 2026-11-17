@@ -346,6 +346,7 @@ export const memoryApi = {
     tags?: string[],
     sessionId?: string,
     agentId?: string | null,
+    title?: string,
   ): Promise<MemorySaveResponse> {
     // 内容/标签原文直传: 记忆会进入 LLM 上下文并落库, 转义是数据污染
     // (XSS 由渲染层 React 转义负责, 不在此处处理)。
@@ -361,7 +362,35 @@ export const memoryApi = {
           tags: Array.isArray(tags) ? tags : [],
           sessionId: sessionId || null,
           agentId: agentId || null,
+          // 2026-11-17: 标题可选；空串/null 由后端按内容确定性生成。
+          title: title || null,
         });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 更新单条记忆（2026-11-17 记忆详情化）。
+   *
+   * 仅 episodic / semantic 行可编辑；成功时返回后端 enrich 后的完整记录，
+   * 调用方直接用它替换列表项，无需重新拉全量列表。
+   */
+  async updateMemory(
+    id: string,
+    patch: { content?: string; title?: string; tags?: string[]; importance?: number },
+  ): Promise<Memory> {
+    if (!id || typeof id !== 'string') {
+      throw new ApiException({
+        error: 'VALIDATION_ERROR',
+        message: '无效的记忆ID',
+        details: { memoryId: id },
+      });
+    }
+    return withRetry(async () => {
+      try {
+        return await invoke<Memory>('update_memory', { id, ...patch });
       } catch (error) {
         throw handleApiError(error);
       }

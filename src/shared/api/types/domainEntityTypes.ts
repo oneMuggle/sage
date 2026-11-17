@@ -66,6 +66,11 @@ export interface ProjectProfileResponse {
 export interface Memory {
   id: string;
   content: string;
+  /**
+   * 2026-11-17 记忆详情化：结构化标题（后端生成/用户手填）。
+   * 旧数据/旧后端可能为 null —— UI 用确定性推导兜底（memoryTitle.ts）。
+   */
+  title?: string;
   summary?: string;
   memory_type?: 'episodic' | 'semantic' | 'working' | 'session_summary';
   /** 该条记录归属的记忆层。Task 2 新增;step 6 扩展到 session_summary。 */
