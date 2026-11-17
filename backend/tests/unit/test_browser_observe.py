@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -251,3 +253,54 @@ def test_build_ref_expression_wraps_stale_guards_and_escapes_ref():
     # ref 以 JSON 字符串字面量注入（引号被正确转义）
     assert json.dumps('e"1') in expression
     assert expression.rstrip().endswith("})()")
+
+
+def _run_ref_guard(expression: str, element_js: str, names_js: str) -> Dict[str, Any]:
+    """在 node 中真实执行守卫 JS，返回其结果 dict（node 缺失则跳过）。"""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 不可用，无法执行 ref 守卫 JS 语义回归")
+    script = (
+        f"const el = {element_js};"
+        "const refs = (typeof el === 'undefined') ? {} : {e1: el};"
+        f"global.window = {{__SAGE_REFS__: refs, __SAGE_REF_NAMES__: ({names_js})}};"
+        f"process.stdout.write(JSON.stringify({expression}));"
+    )
+    completed = subprocess.run(
+        [node, "-e", script],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
+def _fake_element(connected: bool, attr: str) -> str:
+    """构造带 isConnected / data-sage-ref-name 取值的 DOM 元素 JS 字面量。"""
+    connected_js = "true" if connected else "false"
+    return (
+        "{isConnected:"
+        + connected_js
+        + ",getAttribute:(n)=>n==='data-sage-ref-name'?"
+        + repr(attr)
+        + ":null}"
+    )
+
+
+def test_ref_guard_accepts_empty_name_but_rejects_stale_variants():
+    """空名字不应误判；断连 / 名字不符 / registry 缺失才是 stale-ref。"""
+    action = "(function(){return{ok:true,info:'ok'};})()"
+    expression = build_ref_expression(action, "e1")
+    stale = {"ok": False, "info": "stale-ref"}
+
+    # 空名字（无 label/placeholder 的裸 input）在页面未变时必须可交互
+    assert _run_ref_guard(expression, _fake_element(True, ""), "{e1:''}") == {
+        "ok": True,
+        "info": "ok",
+    }
+    # 元素已从 DOM 断开
+    assert _run_ref_guard(expression, _fake_element(False, ""), "{e1:''}") == stale
+    # 页面变化导致同名位置的可访问名改变
+    assert _run_ref_guard(expression, _fake_element(True, "Changed"), "{e1:'Original'}") == stale
+    # registry 中不存在该 ref（重新快照前已被清理）
+    assert _run_ref_guard(expression, "undefined", "{}") == stale

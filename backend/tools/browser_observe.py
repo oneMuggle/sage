@@ -412,7 +412,7 @@ def build_ref_expression(action_js: str, ref: str) -> str:
         "if(!el){return{ok:false,info:'stale-ref'};}"
         "if(el.isConnected!==true){return{ok:false,info:'stale-ref'};}"
         "var __sageName=__sageNames[__sageRef];"
-        "if(!__sageName||el.getAttribute('data-sage-ref-name')!==__sageName)"
+        "if(el.getAttribute('data-sage-ref-name')!==__sageName)"
         "{return{ok:false,info:'stale-ref'};}"
         f"return {action_js};"
         "})()"
