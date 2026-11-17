@@ -9,29 +9,35 @@
  */
 
 /**
- * Convert a `data:` URL into a `blob:` URL. Throws on malformed input so
- * callers can downgrade gracefully (e.g. keep the structured preview).
+ * Decode a `data:` URL into a `Blob`. Throws on malformed input so callers
+ * can downgrade gracefully (e.g. keep the structured preview).
  *
- * The implementation parses the data URL by hand instead of `fetch()`-ing
- * it: jsdom (used by the test suite) and older Chromium builds handle
- * `fetch('data:…')` inconsistently, while the parser works identically in
+ * Parses the data URL by hand instead of `fetch()`-ing it: the packaged
+ * build injects a CSP whose `connect-src` deliberately omits `data:` (see
+ * `cspInjectionPlugin` in vite.config.ts), so `fetch('data:…')` is blocked
+ * in production while working in dev (no CSP). jsdom / older Chromium also
+ * handle `fetch('data:…')` inconsistently; the parser works identically in
  * Node / jsdom / the browser.
  */
-export async function dataUrlToBlobUrl(dataUrl: string): Promise<string> {
+export function dataUrlToBlob(dataUrl: string): Blob {
   const match = /^data:([^;,]*)(;base64)?,(.*)$/s.exec(dataUrl);
   if (!match) {
     throw new Error(`invalid data URL: ${dataUrl.slice(0, 60)}`);
   }
   const mime = match[1] || 'application/octet-stream';
-  const isBase64 = match[2] === ';base64';
-  const payload = match[3];
-  const binary = isBase64 ? atob(payload) : decodeURIComponent(payload);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  const blob = new Blob([bytes], { type: mime });
-  return URL.createObjectURL(blob);
+  const bytes =
+    match[2] === ';base64'
+      ? Uint8Array.from(atob(match[3]), (c) => c.charCodeAt(0))
+      : new TextEncoder().encode(decodeURIComponent(match[3]));
+  return new Blob([bytes], { type: mime });
+}
+
+/**
+ * Convert a `data:` URL into a `blob:` URL. Throws on malformed input so
+ * callers can downgrade gracefully (e.g. keep the structured preview).
+ */
+export async function dataUrlToBlobUrl(dataUrl: string): Promise<string> {
+  return URL.createObjectURL(dataUrlToBlob(dataUrl));
 }
 
 /** Revoke a blob URL only when the string actually looks like one. */
