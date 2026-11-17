@@ -401,6 +401,9 @@ export interface Todo {
   tags?: string[];
   /** 自定义提醒档位：到期前多少分钟提醒（如 [1440, 60, 10]） */
   reminder_offsets?: number[];
+  /** 来源（阶段 2）：如 chat + 会话 id */
+  source_type?: string | null;
+  source_ref?: string | null;
   is_recurring: boolean;
   recurrence_rule?: string | null;
   parent_id?: number | null;
@@ -418,6 +421,8 @@ export interface CreateTodoInput {
   parent_id?: number;
   tags?: string[];
   reminder_offsets?: number[];
+  source_type?: string;
+  source_ref?: string;
 }
 
 export interface UpdateTodoInput {
@@ -478,6 +483,22 @@ export interface TodoListParams {
 export interface TodoTagCount {
   tag: string;
   count: number;
+}
+
+/** 阶段 2：对话提炼候选（未落库，确认后批量创建）。 */
+export interface TodoExtractCandidate {
+  title: string;
+  due_at?: string | null;
+  priority?: TodoPriority | null;
+  tags: string[];
+}
+
+export interface TodoExtractResult {
+  candidates: TodoExtractCandidate[];
+}
+
+export interface TodoAiText {
+  content: string;
 }
 
 export interface TodoBatchCompleteResult {

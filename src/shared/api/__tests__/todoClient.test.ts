@@ -89,6 +89,28 @@ describe('todoClient', () => {
     expect(invokeMock).toHaveBeenCalledWith('todo_tags', {});
     expect(tags).toEqual([{ tag: '工作', count: 2 }]);
   });
+
+  it('extractFromSession / batchCreate / brief / weekly map to their channels', async () => {
+    invokeMock.mockResolvedValueOnce({ candidates: [{ title: '交报告', tags: [] }] });
+    const extracted = await todoClient.extractFromSession('s1');
+    expect(invokeMock.mock.calls[0]).toEqual(['todo_extract', { session_id: 's1' }]);
+    expect(extracted.candidates[0].title).toBe('交报告');
+
+    invokeMock.mockResolvedValueOnce({ items: [{ id: 1, title: 'A' }] });
+    const created = await todoClient.batchCreate([{ title: 'A' }]);
+    expect(invokeMock.mock.calls[1]).toEqual(['todo_batch_create', { items: [{ title: 'A' }] }]);
+    expect(created).toHaveLength(1);
+
+    invokeMock.mockResolvedValueOnce({ content: '• 建议' });
+    const brief = await todoClient.dailyBrief();
+    expect(invokeMock.mock.calls[2]).toEqual(['todo_brief', {}]);
+    expect(brief.content).toBe('• 建议');
+
+    invokeMock.mockResolvedValueOnce({ content: '## 回顾' });
+    const review = await todoClient.weeklyReview();
+    expect(invokeMock.mock.calls[3]).toEqual(['todo_weekly_review', {}]);
+    expect(review.content).toBe('## 回顾');
+  });
 });
 
 describe('todoClient diagnostic formatters (Phase P113)', () => {

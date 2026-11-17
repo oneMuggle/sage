@@ -53,6 +53,8 @@ _TODO_MODEL_FIELDS = (
     "project_id",
     "tags",
     "reminder_offsets",
+    "source_type",
+    "source_ref",
     "is_recurring",
     "recurrence_rule",
     "parent_id",
@@ -108,6 +110,8 @@ class Todo(BaseModel):
     project_id: Optional[str] = None  # TEXT — projects.id is a hex/uuid string
     tags: List[str] = Field(default_factory=list)
     reminder_offsets: List[int] = Field(default_factory=list)
+    source_type: Optional[str] = None
+    source_ref: Optional[str] = None
     is_recurring: bool = False
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
@@ -162,6 +166,8 @@ class TodoService:
         parent_id: Optional[int] = None,
         tags: Optional[List[str]] = None,
         reminder_offsets: Optional[List[int]] = None,
+        source_type: Optional[str] = None,
+        source_ref: Optional[str] = None,
     ) -> Todo:
         """Create a new todo and return the persisted row.
 
@@ -189,12 +195,13 @@ class TodoService:
         cursor = conn.execute(
             """INSERT INTO todos
                (title, description, due_at, priority, project_tag, project_id,
-                tags, reminder_offsets, is_recurring, recurrence_rule, parent_id,
-                created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                tags, reminder_offsets, source_type, source_ref, is_recurring,
+                recurrence_rule, parent_id, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (title, description, due_at, priority, project_tag, project_id,
              todo_tags.dump_tags(tags), _dump_reminder_offsets(reminder_offsets),
-             is_recurring, recurrence_rule, parent_id, now, now)
+             source_type, source_ref, is_recurring, recurrence_rule, parent_id,
+             now, now)
         )
         todo_id = cursor.lastrowid
         conn.commit()
@@ -672,6 +679,10 @@ class TodoService:
         return todo_stats.todo_stats(self.db)
 
     # --- batch operations ---
+
+    def create_many(self, items: List[Dict[str, Any]]) -> List[Todo]:
+        """批量创建（对话提炼确认后使用）。单条失败中断并抛出，交由调用方处理。"""
+        return [self.create_todo(**item) for item in items]
 
     def complete_many(self, ids: List[int]) -> Dict[str, Any]:
         """批量完成。返回 ``{completed, missing}``；缺失 id 不影响其余行。"""
