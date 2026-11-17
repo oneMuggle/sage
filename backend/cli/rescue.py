@@ -11,6 +11,7 @@
     python -m backend.cli.rescue security detect|stop|disable|restore|plan
     python -m backend.cli.rescue safe-mode status|set <0-3>|off
     python -m backend.cli.rescue allowlist [--output PATH]
+    python -m backend.cli.rescue components list|scan|verify|import|remove
 
 设计约束：
 
@@ -606,6 +607,36 @@ def _repl_crash_history() -> None:
         _print(f"读取失败: {exc}")
 
 
+def _repl_components() -> None:
+    from backend.cli import components as components_cli
+
+    while True:
+        _print()
+        _print("[1] 查看已安装组件")
+        _print("[2] 扫描组件包")
+        _print("[3] 导入 .sagepkg")
+        _print("[4] 卸载组件")
+        _print("[q] 返回")
+        choice = _ask("请选择")
+        if choice in ("q", ""):
+            return
+        try:
+            if choice == "1":
+                components_cli.main(["list"])
+            elif choice == "2":
+                components_cli.main(["scan"])
+            elif choice == "3":
+                path = _ask("组件包路径")
+                if path:
+                    components_cli.main(["import", path])
+            elif choice == "4":
+                component_id = _ask("组件 id")
+                if component_id:
+                    components_cli.main(["remove", component_id])
+        except Exception as exc:  # noqa: BLE001 — REPL 顶层：错误不退出菜单
+            _print(f"错误: {exc}")
+
+
 def repl() -> int:
     _banner()
     while True:
@@ -617,6 +648,7 @@ def repl() -> int:
         _print("[5] 生成管控软件放行清单")
         _print("[6] 处置遗留管控软件")
         _print("[7] 查看崩溃记录")
+        _print("[8] 管理离线组件包")
         _print("[q] 退出")
         choice = _ask("请选择")
         if choice in ("q", ""):
@@ -637,6 +669,8 @@ def repl() -> int:
                 _repl_security()
             elif choice == "7":
                 _repl_crash_history()
+            elif choice == "8":
+                _repl_components()
         except Exception as exc:
             _print(f"错误: {exc}")
 
@@ -707,8 +741,41 @@ def build_parser() -> argparse.ArgumentParser:
     p_safe.add_argument("action", choices=["status", "set", "off"])
     p_safe.add_argument("level", nargs="?", type=int, default=None)
 
+    p_comp = sub.add_parser("components", parents=[common], help="离线组件包管理")
+    p_comp.add_argument("action", choices=["list", "scan", "verify", "import", "remove"])
+    p_comp.add_argument("package", nargs="?", default=None)
+    p_comp.add_argument("--id", dest="component_id", default=None)
+    p_comp.add_argument("--dir", action="append", default=None)
+    p_comp.add_argument("--json", action="store_true", dest="as_json")
+
     sub.add_parser("shell", parents=[common], help="交互式 REPL（默认）")
     return parser
+
+
+def cmd_components(args: argparse.Namespace) -> int:
+    """Delegate to the standalone component CLI so both entry points share one core."""
+    from backend.cli import components as components_cli
+
+    argv: List[str] = [args.action]
+    if args.action in ("verify", "import"):
+        if not args.package:
+            _print("错误: 需要提供 .sagepkg 路径")
+            return 2
+        argv.append(args.package)
+    elif args.action == "remove":
+        target = args.component_id or args.package
+        if not target:
+            _print("错误: 需要提供组件 id")
+            return 2
+        argv.append(target)
+    elif args.action == "scan" and args.dir:
+        for directory in args.dir:
+            argv.extend(["--dir", directory])
+    if args.as_json:
+        argv.append("--json")
+    if args.yes:
+        argv.append("--yes")
+    return components_cli.main(argv)
 
 
 def main(argv: Optional[list] = None) -> int:
@@ -733,6 +800,8 @@ def main(argv: Optional[list] = None) -> int:
             return cmd_security(args)
         if command == "safe-mode":
             return cmd_safe_mode(args)
+        if command == "components":
+            return cmd_components(args)
     except Exception as exc:  # noqa: BLE001 — CLI 顶层兜底
         _print(f"错误: {exc}")
         return 2
