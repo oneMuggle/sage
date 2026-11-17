@@ -27,7 +27,11 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 }
 
 import { memoryApi } from '../../../shared/api';
-import { formatNewMemoryDraftJson, formatNewMemoryDraftMarkdown, NewMemoryModal } from '../NewMemoryModal';
+import {
+  formatNewMemoryDraftJson,
+  formatNewMemoryDraftMarkdown,
+  NewMemoryModal,
+} from '../NewMemoryModal';
 
 vi.mock('../../../shared/api', () => ({
   memoryApi: {
@@ -61,9 +65,7 @@ describe('NewMemoryModal (fix/security-perf-quickwins §1.3b g)', () => {
     const onClose = vi.fn();
     const onSaved = vi.fn();
 
-    render(
-      <NewMemoryModal isOpen onClose={onClose} onSaved={onSaved} />,
-    );
+    render(<NewMemoryModal isOpen onClose={onClose} onSaved={onSaved} />);
 
     // Fill content and save
     fireEvent.change(screen.getByLabelText('内容'), {
@@ -94,10 +96,16 @@ describe('NewMemoryModal (fix/security-perf-quickwins §1.3b g)', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
     await waitFor(() => {
+      // 2026-11-17: saveMemory 增加 tags/sessionId/agentId/title 可选参数，
+      // 弹窗只在用户填了标题时传 title（此处未填 → undefined）。
       expect(mockedSaveMemory).toHaveBeenCalledWith(
         'remember this',
         'episodic',
         5,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
       );
     });
     expect(onSaved).toHaveBeenCalledTimes(1);
@@ -106,8 +114,7 @@ describe('NewMemoryModal (fix/security-perf-quickwins §1.3b g)', () => {
     // CRITICAL: window.location.reload must NOT be called (the whole point
     // of the fix — we want a local refresh, not a full page reload).
     expect(
-      (window.location.reload as unknown as { mock: { calls: unknown[] } })
-        .mock.calls,
+      (window.location.reload as unknown as { mock: { calls: unknown[] } }).mock.calls,
     ).toHaveLength(0);
   });
 

@@ -1524,6 +1524,8 @@ async def extract_and_store_memory(
                     importance=fact.get("importance", 5),
                     tags=fact.get("tags", ["conversation"]),
                     agent_id=agent_id,
+                    # 2026-11-17 记忆详情化：LLM 提取的短标题随事实落库。
+                    title=fact.get("title"),
                 )
                 stored += 1
                 _ledger_record(mid, KIND_MEMORY, fact, "auto")

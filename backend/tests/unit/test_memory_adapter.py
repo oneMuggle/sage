@@ -130,9 +130,12 @@ class TestMemoryAdapterStore:
                 "source_turn_id": None,
                 "source_message_id": None,
                 "memory_category": None,
+                # 2026-11-17 记忆详情化：标题随 metadata/kwarg 透传
+                "title": None,
             },
             session_id="session-123",
             agent_id=None,
+            title=None,
         )
         assert memory_id == "memory-id-123"
 
