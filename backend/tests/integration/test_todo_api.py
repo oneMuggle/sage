@@ -511,3 +511,28 @@ def test_list_todos_view_completed(client: TestClient):
     titles = [item["title"] for item in resp.json()["items"]]
     assert "已完成视图" in titles
     assert "未完成视图" not in titles
+
+
+# --- 阶段 1b：自定义提醒档位 ---
+
+
+def test_create_todo_with_reminder_offsets(client: TestClient):
+    resp = client.post(
+        "/api/v1/todos",
+        json={"title": "提醒档位", "reminder_offsets": [60, 10]},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["reminder_offsets"] == [10, 60]
+
+
+def test_update_todo_reminder_offsets(client: TestClient):
+    todo_id = client.post(
+        "/api/v1/todos", json={"title": "改提醒档位"}
+    ).json()["id"]
+
+    resp = client.put(
+        f"/api/v1/todos/{todo_id}", json={"reminder_offsets": [30]}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["reminder_offsets"] == [30]

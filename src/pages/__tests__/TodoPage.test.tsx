@@ -238,6 +238,25 @@ describe('TodoPage', () => {
       expect(mocks.setParams).toHaveBeenCalledWith(expect.objectContaining({ view: 'today' }));
     });
   });
+
+  it('submits reminder offsets chosen in the create form', async () => {
+    renderPage();
+
+    const titleInput = screen.getByPlaceholderText(/待办标题/);
+    fireEvent.focus(titleInput);
+    fireEvent.change(titleInput, { target: { value: '带提醒的任务' } });
+    fireEvent.click(screen.getByTestId('todo-reminder-60'));
+    fireEvent.click(screen.getByTestId('todo-submit'));
+
+    await waitFor(() => {
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: '带提醒的任务',
+          reminder_offsets: [60],
+        }),
+      );
+    });
+  });
 });
 
 function makeTodo(overrides: Partial<Todo> = {}): Todo {

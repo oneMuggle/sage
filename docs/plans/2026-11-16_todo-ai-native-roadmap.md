@@ -140,8 +140,8 @@ Sage 的「待办事项」已具备：SQLite `todos` 表、REST API（`/api/v1/t
 - [x] 本地中文自然语言解析（日期/时间/优先级/标签）与预览确认（`parseQuickTodo`，纯规则无 LLM）
 - [x] `tags` 多标签字段与筛选（JSON 数组列 + `/todos/tags` 聚合 + 工具栏标签下拉；渲染层行内 chips）
 - [x] 智能视图：今天 / 近 7 天 / 全部 / 已完成（后端 `view` 参数，`todo_filters.py` 单一真相源）
-- [ ] 自定义提醒档位（`reminder_at` 列表 + 调度器扫描）— 阶段 1b
-- [ ] ASR 语音录入接入快速录入框 — 阶段 1b
+- [x] 自定义提醒档位（`reminder_offsets` 分钟数组 + `reminder_fired_offsets` 书签 + 调度器按档位扫描；创建表单多选 chips、行内铃铛计数）
+- [x] ASR 语音录入（`POST /api/v1/asr/transcribe`：base64 音频 → 临时文件 → `ASRCapability`；快速录入弹窗麦克风录音 60s 上限，未配置 ASR 返回 409）
 
 ### 阶段 2（后续 PR）
 
