@@ -365,6 +365,63 @@ def backfill_semantic_fts(conn: sqlite3.Connection, force: bool = False) -> None
         logger.warning("语义记忆 FTS 回填失败（搜索将降级为 LIKE）: %s", exc)
 
 
+# ==================== 待办 FTS5 索引 ====================
+# 与 memories_semantic_fts 同一模式：独立（存内容）FTS5 表 + jieba 分词文本 +
+# Python 侧显式同步（无触发器）。external-content 模式曾导致 malformed，
+# 不在此重复。rowid = todos.id，搜索走 MATCH 后回查主表。
+
+TODOS_FTS_TABLE = "todos_fts"
+
+
+def ensure_todos_fts_schema(conn: sqlite3.Connection) -> None:
+    """创建 todos_fts（幂等）。FTS5 不可用时静默降级为 LIKE 搜索。"""
+    try:
+        conn.execute(
+            f"CREATE VIRTUAL TABLE IF NOT EXISTS {TODOS_FTS_TABLE} "
+            "USING fts5(title, description)"
+        )
+        conn.commit()
+    except sqlite3.DatabaseError as exc:
+        logger.warning("todos FTS 表初始化失败（搜索将降级为 LIKE）: %s", exc)
+
+
+def backfill_todos_fts(conn: sqlite3.Connection, force: bool = False) -> None:
+    """幂等回填：把 todos 现有行同步进 todos_fts（jieba 分词）。
+
+    - force=False：仅当两表行数不一致时回填（正常启动快速跳过）；
+    - force=True：整体清空重填。
+
+    覆盖绕过 TodoService 直接写主表的路径。FTS 为非关键路径，
+    失败只记 warning，不影响主表数据与启动。
+    """
+    try:
+        cursor = conn.cursor()
+        if not force:
+            fts_count = cursor.execute(
+                f"SELECT count(*) FROM {TODOS_FTS_TABLE}"
+            ).fetchone()[0]
+            todo_count = cursor.execute("SELECT count(*) FROM todos").fetchone()[0]
+            if fts_count == todo_count:
+                return
+        cursor.execute(f"DELETE FROM {TODOS_FTS_TABLE}")
+        rows = cursor.execute(
+            "SELECT id, title, description FROM todos"
+        ).fetchall()
+        for row in rows:
+            cursor.execute(
+                f"INSERT INTO {TODOS_FTS_TABLE} (rowid, title, description) "
+                "VALUES (?, ?, ?)",
+                (
+                    row[0],
+                    _segment_for_index(row[1]),
+                    _segment_for_index(row[2]),
+                ),
+            )
+        conn.commit()
+    except sqlite3.DatabaseError as exc:
+        logger.warning("待办 FTS 回填失败（搜索将降级为 LIKE）: %s", exc)
+
+
 class Database:
     """SQLite 数据库管理"""
 
@@ -2373,6 +2430,10 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_todos_parent_id ON todos(parent_id)")
 
         conn.commit()
+
+        # 待办全文搜索 FTS5（独立存内容表 + jieba 分词；行数不一致时幂等回填）
+        ensure_todos_fts_schema(conn)
+        backfill_todos_fts(conn)
 
         # 定时任务表 (2026-10-16): 取代 scheduled_tasks.json。此前 JSON 无事务、
         # 无 WAL，文件损坏即全部任务丢失。所有时间字段为 epoch 毫秒 INTEGER，

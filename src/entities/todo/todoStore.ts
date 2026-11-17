@@ -4,6 +4,7 @@ import { todoClient } from '../../shared/api/todoClient';
 import type {
   CreateTodoInput,
   Todo,
+  TodoBatchCompleteResult,
   TodoListParams,
   TodoSummary,
   UpdateTodoInput,
@@ -22,6 +23,8 @@ interface TodoState {
   delete: (id: number) => Promise<void>;
   complete: (id: number) => Promise<Todo>;
   cancel: (id: number) => Promise<Todo>;
+  batchComplete: (ids: number[]) => Promise<TodoBatchCompleteResult>;
+  batchDelete: (ids: number[]) => Promise<number>;
   loadSummary: () => Promise<void>;
 }
 
@@ -84,6 +87,19 @@ export const useTodoStore = create<TodoState>((set, get) => ({
     const updated = await todoClient.cancel(id);
     set({ todos: get().todos.map((t) => (t.id === id ? updated : t)) });
     return updated;
+  },
+
+  // 批量操作走单次后端请求；完成后重载当前筛选，保证 total/排序与服务端一致。
+  async batchComplete(ids: number[]) {
+    const result = await todoClient.batchComplete(ids);
+    await get().load(get().params);
+    return result;
+  },
+
+  async batchDelete(ids: number[]) {
+    const result = await todoClient.batchDelete(ids);
+    await get().load(get().params);
+    return result.deleted;
   },
 
   async loadSummary() {

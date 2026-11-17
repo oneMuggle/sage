@@ -11,6 +11,9 @@
  *   todo_cancel    → POST   /api/v1/todos/{id}/cancel
  *   todo_summary   → GET    /api/v1/todos/summary
  *   todo_stats     → GET    /api/v1/todos/stats
+ *   todo_batch_complete → POST /api/v1/todos/batch/complete
+ *   todo_batch_delete   → POST /api/v1/todos/batch/delete
+ *   todo_export         → GET  /api/v1/todos/export
  *
  * All methods throw on IPC failure; callers wrap in try/catch and surface a
  * toast on failure.
@@ -19,6 +22,9 @@ import { invoke } from './desktopInvoke';
 import type {
   CreateTodoInput,
   Todo,
+  TodoBatchCompleteResult,
+  TodoBatchDeleteResult,
+  TodoExportResult,
   TodoListParams,
   TodoListResponse,
   TodoStats,
@@ -62,6 +68,21 @@ export const todoClient = {
   async stats(): Promise<TodoStats> {
     return invoke<TodoStats>('todo_stats', {});
   },
+
+  async batchComplete(ids: number[]): Promise<TodoBatchCompleteResult> {
+    return invoke<TodoBatchCompleteResult>('todo_batch_complete', { ids });
+  },
+
+  async batchDelete(ids: number[]): Promise<TodoBatchDeleteResult> {
+    return invoke<TodoBatchDeleteResult>('todo_batch_delete', { ids });
+  },
+
+  async exportTodos(format: 'json' | 'md', includeCompleted = false): Promise<TodoExportResult> {
+    return invoke<TodoExportResult>('todo_export', {
+      format,
+      include_completed: includeCompleted,
+    });
+  },
 };
 
 export function formatTodoListSummary(
@@ -101,6 +122,9 @@ export function auditTodoClientGovernance(): string {
         'cancel',
         'summary',
         'stats',
+        'batchComplete',
+        'batchDelete',
+        'exportTodos',
       ],
       sampleSummary: formatTodoListSummary({ items: [], total: 0, limit: 20, offset: 0 }),
     },
