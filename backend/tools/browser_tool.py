@@ -34,6 +34,7 @@ from backend.services.browser_control import (
 
 from .base import BaseTool, ToolResult, ToolSchema
 from .browser_cdp import (
+    RESERVED_BROWSER_ID,
     BrowserCDPError,
     BrowserSession,
     _list_page_targets,
@@ -269,6 +270,24 @@ def _browser_default_visible() -> bool:
     if raw is None:
         return True
     return str(raw).strip() != "0"
+
+
+def _has_user_browser_session() -> bool:
+    """manager 中是否存在任何非保留用户会话。
+
+    ``get(None) is None`` 同时表示「零个用户会话」和「≥2 个用户会话无法
+    免 id 解析」。后者若触发自动拉起只会弹出无法被解析的孤儿窗口，因此
+    自动拉起前须用 ``all_sessions()`` 过滤保留槽位（web_fetch 渲染池）后
+    判断是否真的为空。``all_sessions()`` 已持锁返回副本列表。
+    """
+    for session in get_browser_manager().all_sessions():
+        browser_id = session.browser_id or ""
+        if browser_id == RESERVED_BROWSER_ID:
+            continue
+        if browser_id.startswith(RESERVED_BROWSER_ID + "-"):
+            continue
+        return True
+    return False
 
 
 def _capture_step_thumbnail(session: BrowserSession) -> Optional[str]:
@@ -863,10 +882,11 @@ class BrowserNavigateTool(BaseTool):
             network_rejection = load_network_policy().check_host(url)
             if network_rejection:
                 return ToolResult(success=False, error=network_rejection)
-        # 可见受控浏览器（M3）：门禁全部通过且当前无默认会话时自动拉起。
+        # 可见受控浏览器（M3）：门禁全部通过且没有任何用户会话时自动拉起。
         # 自动拉起的会话即后续 _resolve_session 拿到的默认会话；显式
-        # browser_id 的解析失败保持原有报错语义。
-        if not browser_id and get_browser_manager().get(None) is None:
+        # browser_id 的解析失败保持原有报错语义。多会话 + 无 browser_id 属
+        # 歧义（get(None) 同样为 None），此时保持原多实例报错，不产生孤儿窗口。
+        if not browser_id and not _has_user_browser_session():
             try:
                 launch_browser(
                     headless=not _browser_default_visible(),

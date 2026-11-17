@@ -1549,6 +1549,36 @@ def test_navigate_skips_launch_when_session_exists(stubbed, monkeypatch):
     assert result.content["browser_meta"]["session_id"] == "b1"
 
 
+def test_navigate_multi_session_does_not_launch(autolaunch):
+    """多会话歧义 ≠ 零会话：保持原多实例报错，不拉起孤儿窗口。"""
+    manager = browser_cdp.get_browser_manager()
+    manager.register(_fake_session("b1"))
+    manager.register(_fake_session("b2"))
+    assert manager.get(None) is None  # get(None) 无法区分零会话与歧义
+
+    result = _tool(BrowserNavigateTool).execute(url="https://x/")
+
+    assert result.success is False
+    assert "必须传 browser_id" in result.error
+    assert autolaunch.launches == []
+    assert autolaunch.calls == []
+
+
+def test_navigate_launches_when_only_reserved_render_pool_slots(autolaunch, monkeypatch):
+    """render-pool 渲染槽位不算用户会话：仍应自动拉起并从新会话导航。"""
+    _patch_default_visible(monkeypatch, None)
+    autolaunch.results.extend(_NAV_RESULTS)
+    manager = browser_cdp.get_browser_manager()
+    manager.register(_fake_session(browser_cdp.RESERVED_BROWSER_ID))
+    manager.register(_fake_session(browser_cdp.RESERVED_BROWSER_ID + "-1"))
+
+    result = _tool(BrowserNavigateTool).execute(url="https://x/")
+
+    assert result.success is True
+    assert len(autolaunch.launches) == 1
+    assert result.content["browser_meta"]["session_id"] == "b-auto"
+
+
 def test_navigate_gate_rejection_does_not_launch(autolaunch, monkeypatch):
     monkeypatch.setattr(
         browser_tool,
