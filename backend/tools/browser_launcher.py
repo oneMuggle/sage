@@ -48,13 +48,8 @@ NEW_HEADLESS_MIN_MAJOR = 109
 EMBEDDED_EXECUTABLE = "(embedded)"
 
 
-def chromium_major_version(executable: str) -> Optional[int]:
-    """探测 Chromium 系浏览器大版本。
-
-    版本目录扫描优先（Chrome/Edge 在 exe 同级保留 ``X.Y.Z.W/`` 目录，
-    Windows 上 ``--version`` 不输出且会拉起浏览器窗口）；仅 POSIX 才回退
-    ``--version``。任何失败返回 None，由调用方决定默认行为。
-    """
+def _major_from_version_dirs(executable: str) -> Optional[int]:
+    """exe 同级 ``X.Y.Z.W/`` 版本目录的最大大版本号；无则 None（不 spawn 进程）。"""
     try:
         exe_dir = os.path.dirname(executable)
         versions = [
@@ -67,6 +62,19 @@ def chromium_major_version(executable: str) -> Optional[int]:
             return max(versions)
     except OSError:
         pass
+    return None
+
+
+def chromium_major_version(executable: str) -> Optional[int]:
+    """探测 Chromium 系浏览器大版本。
+
+    版本目录扫描优先（Chrome/Edge 在 exe 同级保留 ``X.Y.Z.W/`` 目录，
+    Windows 上 ``--version`` 不输出且会拉起浏览器窗口）；仅 POSIX 才回退
+    ``--version``。任何失败返回 None，由调用方决定默认行为。
+    """
+    major = _major_from_version_dirs(executable)
+    if major is not None:
+        return major
     if os.name == "nt":
         return None
     try:
@@ -84,8 +92,12 @@ def chromium_major_version(executable: str) -> Optional[int]:
 
 
 def headless_flag(executable: str) -> str:
-    """按内核版本选择无头开关：旧内核（< 109）回退旧无头模式。"""
-    major = chromium_major_version(executable)
+    """按内核版本选择无头开关：旧内核（< 109）回退旧无头模式。
+
+    每次启动命令构造都会调用，因此只做目录扫描（``--version`` 探测的
+    结果不允许在这里 spawn 子进程）；版本未知时保持现行默认新无头。
+    """
+    major = _major_from_version_dirs(executable)
     if major is not None and major < NEW_HEADLESS_MIN_MAJOR:
         return "--headless"
     return "--headless=new"
