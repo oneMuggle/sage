@@ -203,28 +203,72 @@ class BrowserSessionManager:
 
     def __init__(self) -> None:
         self._sessions: Dict[str, BrowserSession] = {}
+        # 上限判定是 check-then-act，登录任务线程与渲染池并发注册时需要串行化。
+        self._lock = threading.Lock()
+
+    def _counted_locked(self) -> int:
+        """按真实浏览器进程计的会话数。
+
+        EMBEDDED 与 Electron 共享同一个 Chromium 进程（见 ``_EmbeddedProcess``），
+        每开一个逻辑会话并不会多一个进程；EXTERNAL 是用户自己的标签页。
+        两者都不参与 ``MAX_BROWSER_SESSIONS`` 进程上限。
+        """
+        return sum(
+            1
+            for session in self._sessions.values()
+            if session.browser_type not in (BrowserType.EMBEDDED, BrowserType.EXTERNAL)
+        )
 
     def register(self, session: BrowserSession) -> None:
-        old = self._sessions.pop(session.browser_id, None)
-        if old is not None and old is not session:
-            # 固定 id 的池并发重建时曾会静默覆盖旧会话对象（连带其临时目录
-            # 永久遗留）——改为显式回收旧实例并留痕。
-            logger.warning(
-                "browser_id 冲突（%s）：回收旧实例 pid=%s",
-                session.browser_id,
-                getattr(old.process, "pid", None),
-            )
-            _terminate_session(old)
-        # The user-shared external tab is one logical session and must remain
-        # usable even when Sage's own Chrome/render sessions fill the cap.
-        if (
-            session.browser_id != EXTENSION_BROWSER_ID
-            and len(self._sessions) >= MAX_BROWSER_SESSIONS
-        ):
-            raise BrowserCDPError(
-                f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}，请先用 browser_close 关闭"
-            )
-        self._sessions[session.browser_id] = session
+        evicted: List[BrowserSession] = []
+        try:
+            with self._lock:
+                old = self._sessions.pop(session.browser_id, None)
+                if old is not None and old is not session:
+                    # 固定 id 的池并发重建时曾会静默覆盖旧会话对象（连带其临时目录
+                    # 永久遗留）——改为显式回收旧实例并留痕。
+                    logger.warning(
+                        "browser_id 冲突（%s）：回收旧实例 pid=%s",
+                        session.browser_id,
+                        getattr(old.process, "pid", None),
+                    )
+                    evicted.append(old)
+                # 已退出实例（用户关窗/崩溃）不占名额：注册前先回收，
+                # 否则「关掉浏览器后仍报已达上限」。
+                for stale_id, stale in list(self._sessions.items()):
+                    if not stale.is_alive():
+                        self._sessions.pop(stale_id, None)
+                        evicted.append(stale)
+                # 用户共享标签页与内置浏览器不需要新进程，不占进程名额。
+                needs_slot = (
+                    session.browser_id != EXTENSION_BROWSER_ID
+                    and session.browser_type != BrowserType.EMBEDDED
+                )
+                if needs_slot and self._counted_locked() >= MAX_BROWSER_SESSIONS:
+                    # 渲染池是懒重建的后台实例：为前台会话让位，下次渲染按需重建。
+                    # 内置池会话共享 Electron 单进程，不能个别回收（会误关其它标签页）。
+                    for pool_id in [
+                        bid
+                        for bid, pooled in list(self._sessions.items())
+                        if (
+                            bid == RESERVED_BROWSER_ID
+                            or bid.startswith(RESERVED_BROWSER_ID + "-")
+                        )
+                        and pooled.browser_type != BrowserType.EMBEDDED
+                    ]:
+                        if self._counted_locked() < MAX_BROWSER_SESSIONS:
+                            break
+                        evicted.append(self._sessions.pop(pool_id))
+                if needs_slot and self._counted_locked() >= MAX_BROWSER_SESSIONS:
+                    raise BrowserCDPError(
+                        f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}：请关闭 Sage 打开的"
+                        "浏览器窗口后重试（对话中可调用 browser_close 关闭实例）"
+                    )
+                self._sessions[session.browser_id] = session
+        finally:
+            # 进程终止可能较慢，统一放到锁外执行；抛上限错误时也让位结果生效。
+            for stale in evicted:
+                _terminate_session(stale)
 
     def get(self, browser_id: Optional[str]) -> Optional[BrowserSession]:
         """按 id 取会话；None → 优先用户共享的日常浏览器，其次唯一实例。
