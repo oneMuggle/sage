@@ -3,7 +3,8 @@
  * 去 script/iframe/object/embed/link 节点、javascript: 链接、on* 内联事件。
  */
 
-import { act, render } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
+import { renderAsync } from 'docx-preview';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { officeApi } from '../../../shared/api/officeApi';
@@ -12,10 +13,22 @@ import {
   DocxNativePreview,
   formatDocxPreviewMetaJson,
   formatDocxPreviewMetaMarkdown,
+  renderDocxDataUrl,
   sanitizeRenderedDocx,
 } from '../DocxNativePreview';
 
+// docx-preview 自身需要真实 OOXML 数据；这里只验证渲染入口的数据流，
+// 用假实现替换解析（真实渲染由打包 e2e / 手工验证覆盖）。
+vi.mock('docx-preview', () => ({
+  renderAsync: vi.fn(async (_blob: Blob, container: HTMLElement) => {
+    const p = document.createElement('p');
+    p.textContent = 'rendered';
+    container.appendChild(p);
+  }),
+}));
+
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -113,5 +126,50 @@ describe('DocxNativePreview — onError lifecycle', () => {
     });
 
     expect(onError).not.toHaveBeenCalled();
+  });
+});
+
+describe('renderDocxDataUrl — production CSP compatibility', () => {
+  it('decodes data: URLs locally without fetch (packaged CSP blocks fetch(data:))', async () => {
+    const fetchSpy = vi.fn(() => Promise.reject(new Error('refused by CSP')));
+    vi.stubGlobal('fetch', fetchSpy);
+    const container = document.createElement('div');
+
+    await renderDocxDataUrl(
+      container,
+      'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,aGVsbG8=',
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('rendered');
+    const [blob] = vi.mocked(renderAsync).mock.calls.at(-1)!;
+    expect(blob).toBeInstanceOf(Blob);
+    expect((blob as Blob).type).toBe(
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+  });
+});
+
+describe('DocxNativePreview — error detail', () => {
+  it('passes the failure detail to onError instead of swallowing it', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(officeApi, 'readWordData').mockResolvedValue({
+      ok: true,
+      data_url: 'not-a-data-url',
+    } as unknown as Awaited<ReturnType<typeof officeApi.readWordData>>);
+    const onError = vi.fn();
+
+    render(
+      <I18nProvider defaultLocale="zh">
+        <DocxNativePreview
+          workspacePath="/tmp/ws"
+          managedPath="/tmp/ws/office/word/doc-word/report.docx"
+          onError={onError}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    expect(onError.mock.calls[0][0]).toContain('invalid data URL');
   });
 });
