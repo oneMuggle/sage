@@ -1397,6 +1397,22 @@ def _pop_env_observations(session_id: Optional[str]) -> str:
         return ""
 
 
+def _store_supports_title(memory_port: Any) -> bool:
+    """探测 ``memory_port.store`` 是否接受 ``title`` 参数。
+
+    ``title`` 是 MemoryPort 协议外扩展（2026-11-17 记忆详情化）。历史实现 /
+    测试替身没有该参数，直接传会 TypeError 并让整轮提取静默失败。签名探测
+    失败（C 扩展、动态方法等）时保守返回 False —— 不传 title 只会损失一次
+    标题透传，写入本身照常进行。
+    """
+    try:
+        import inspect
+
+        return "title" in inspect.signature(memory_port.store).parameters
+    except (TypeError, ValueError):
+        return False
+
+
 async def extract_and_store_memory(
     memory_port: Optional[MemoryPort],
     extractor: Any,
@@ -1518,13 +1534,20 @@ async def extract_and_store_memory(
                     stored += 1
                     _ledger_record(pid, KIND_PROFILE, fact, "profile")
             else:
-                mid = await memory_port.store(
-                    content=fact["content"],
-                    session_id=session_id,
-                    importance=fact.get("importance", 5),
-                    tags=fact.get("tags", ["conversation"]),
-                    agent_id=agent_id,
-                )
+                # 2026-11-17 记忆详情化：title 是 MemoryPort.store 的协议外
+                # 扩展参数。旧实现/测试替身没有该参数时直接传会 TypeError，
+                # 被外层 except 吞掉后整轮提取静默失败（stored=0）。与
+                # store_profile 同款探测思路：先看签名是否接受再透传。
+                store_kwargs = {
+                    "content": fact["content"],
+                    "session_id": session_id,
+                    "importance": fact.get("importance", 5),
+                    "tags": fact.get("tags", ["conversation"]),
+                    "agent_id": agent_id,
+                }
+                if _store_supports_title(memory_port):
+                    store_kwargs["title"] = fact.get("title")
+                mid = await memory_port.store(**store_kwargs)
                 stored += 1
                 _ledger_record(mid, KIND_MEMORY, fact, "auto")
         if stored:

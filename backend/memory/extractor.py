@@ -10,6 +10,8 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+from backend.memory.title_text import derive_title
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -70,6 +72,8 @@ environment 类事实的直接来源）：
 
 以 JSON 数组格式输出，每项包含：
 - content: 事实内容（一句话，中文）
+- title: 事实的短标题（≤ 20 字，可独立概括内容，不要照抄整句；
+  例："用户偏好函数式编程"）
 - importance: 重要性 1-10（环境/版本类 8-10，偏好/身份类 7-9，普通事实 4-6）
 - category: user_pref / project_fact / decision / task_summary / cross_session_pattern / environment 之一
   （user_pref=用户偏好习惯；project_fact=项目/工作相关事实；decision=重要决策；
@@ -266,9 +270,14 @@ class MemoryExtractor:
         valid_facts = []
         for fact in facts:
             if isinstance(fact, dict) and "content" in fact:
+                fact_content = str(fact["content"])[:200]
+                # 2026-11-17 记忆详情化：LLM 给出的短标题优先；缺失时
+                # 确定性推导（不额外调用 LLM）。
+                fact_title = str(fact.get("title") or "").strip()[:60]
                 valid_facts.append(
                     {
-                        "content": str(fact["content"])[:200],
+                        "content": fact_content,
+                        "title": fact_title or derive_title(fact_content),
                         "importance": min(max(int(fact.get("importance", 5)), 1), 10),
                         # F4 — LLM may still emit the old vocabulary
                         # (preference/fact/goal/event) or an unknown category;
@@ -295,9 +304,11 @@ class MemoryExtractor:
             if keyword in user_message:
                 for sentence in user_message.replace("。", ".").split("."):
                     if keyword in sentence and len(sentence.strip()) > 5:
+                        content = f"用户{sentence.strip()}"
                         facts.append(
                             {
-                                "content": f"用户{sentence.strip()}",
+                                "content": content,
+                                "title": derive_title(content),
                                 "importance": 7,
                                 "category": self._categorize(sentence),
                                 "tags": ["preference"],

@@ -136,6 +136,7 @@
 | 160 | [启动分层就绪与后台自检](./160-startup-progressive-readiness.md) | L0–L3 分层就绪（StartupRegistry + `/health/ready`）+ MCP 后台发现（不阻塞 lifespan）+ 会话三态/防闪烁骨架 + 启动状态指示条 + last-run 启动瀑布（backend_spawned/ready/sessions_loaded） |
 | 161 | [内网离线组件包（.sagepkg）](./161-offline-component-packs.md) | 签名组件包 + 安全解包 + 设置页/SageDoctor 双入口 + win7 全量安装包保持不变 |
 | 162 | [受控浏览器使用](./162-controlled-browser-use.md) | 纯 CDP 浏览器工具面（10 个 `browser_*` 工具）+ 无障碍树快照 v2 / ref 协议 + 可见窗口 / 步骤时间线 / 暂停·接管状态机 + 站点策略·敏感动作确认·一次性指纹·注入警告 + 视觉兜底（临时图像 / OCR） |
+| 163 | [记忆页面详情化与结构化标题](./163-memory-page-detail.md) | 卡片可展开查看全文 + 结构化 `title` 列（LLM 提取 / 确定性推导 / 读取兜底）+ `PUT /memory/{id}` 单条编辑（FTS 重建与旧向量清理） |
 ---
 
 ## 核心章节（基础架构）

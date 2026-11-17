@@ -440,6 +440,7 @@ class MemoryAdapter:
         source_message_id: Optional[str] = None,
         memory_category: Optional[str] = None,
         agent_id: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> str:
         """存储记忆
 
@@ -487,6 +488,7 @@ class MemoryAdapter:
             "source_turn_id": source_turn_id,
             "source_message_id": source_message_id,
             "memory_category": memory_category,
+            "title": title,
         }
 
         # P3 (Mem0 风格): 写入前冲突消解——NOOP 复用既有记忆 ID,
@@ -509,6 +511,7 @@ class MemoryAdapter:
             metadata=metadata,
             session_id=session_id,
             agent_id=agent_id,
+            title=title,
         )
 
         # 向量化存储（仅持久层记忆:工作记忆合成 id 不入向量库）

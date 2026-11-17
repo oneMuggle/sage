@@ -22,6 +22,7 @@ from backend.memory import scope as memory_scope
 from backend.memory.auto_tag import derive_tags, normalize_tags
 from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
 from backend.memory.summary_text import truncate_summary
+from backend.memory.title_text import derive_title
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +178,7 @@ class EpisodicMemory:
         project_key: Optional[str] = None,
         supersedes_id: Optional[str] = None,
         agent_id: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> str:
         """
         保存情景记忆
@@ -225,17 +227,22 @@ class EpisodicMemory:
         if summary is None:
             summary = self._generate_summary(content)
 
+        # 2026-11-17 记忆详情化：标题缺省时确定性推导（不额外调 LLM）。
+        if not (title or "").strip():
+            title = derive_title(content)
+
         cursor.execute(
             """
             INSERT INTO memories_episodic
-            (id, content, summary, session_id, memory_type, importance, tags,
+            (id, content, title, summary, session_id, memory_type, importance, tags,
              created_at, is_valid, scope, project_key, supersedes_id,
              source_turn_id, source_message_id, memory_category, agent_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 memory_id,
                 content,
+                title,
                 summary,
                 session_id,
                 memory_type,
@@ -657,6 +664,95 @@ class EpisodicMemory:
                 logger.warning("向量索引失效清理失败 (memory_id=%s): %s", memory_id, exc)
         conn.commit()
         return invalidated
+
+    def update(
+        self,
+        memory_id: str,
+        content: Optional[str] = None,
+        title: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        importance: Optional[int] = None,
+        summary: Optional[str] = None,
+    ) -> bool:
+        """更新一条情景记忆（2026-11-17 记忆详情化）。
+
+        只更新显式传入的字段；``content`` 变更时 ``summary`` 默认重算、
+        ``title`` 缺省/留空时按（新）内容确定性生成。主表更新后同步 FTS
+        行并移除旧向量 —— 下一次检索/回填按新内容重嵌入，避免语义检索
+        命中过期内容。
+
+        Returns:
+            记忆存在（有效且未失效）且已更新为 True；否则 False。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        row = cursor.execute(
+            "SELECT content, title, summary, tags, importance FROM memories_episodic "
+            "WHERE id = ? AND is_valid = 1 AND invalid_at IS NULL",
+            (memory_id,),
+        ).fetchone()
+        if row is None:
+            return False
+
+        new_content = content if content is not None else row["content"]
+
+        # 标题语义：显式给出（非空白）→ 用用户标题；未给且内容已变 →
+        # 按新内容重推（旧标题通常描述的是旧内容）；未给且内容未变 →
+        # 保留既有标题，空白则兜底推导。
+        if title is None:
+            if content is not None:
+                new_title = derive_title(new_content)
+            else:
+                new_title = (row["title"] or "").strip() or derive_title(new_content)
+        else:
+            new_title = title.strip() or derive_title(new_content)
+
+        if summary is None:
+            new_summary = (
+                self._generate_summary(new_content)
+                if content is not None
+                else row["summary"]
+            )
+        else:
+            new_summary = summary
+
+        if tags is not None:
+            tag_list = normalize_tags(tags) or derive_tags(new_content)
+            new_tags = json.dumps(tag_list, ensure_ascii=False)
+        elif content is not None:
+            # 内容变更且未显式给标签 → 跟随新内容重推（与 save 缺省行为一致），
+            # 否则旧标签（可能直接来自旧内容）会让旧关键词继续命中检索。
+            tag_list = derive_tags(new_content)
+            new_tags = json.dumps(tag_list, ensure_ascii=False)
+        else:
+            new_tags = row["tags"]
+
+        if importance is not None:
+            new_importance = min(10, max(1, int(importance)))
+        else:
+            new_importance = row["importance"]
+
+        cursor.execute(
+            """
+            UPDATE memories_episodic
+            SET content = ?, title = ?, summary = ?, tags = ?, importance = ?
+            WHERE id = ?
+            """,
+            (new_content, new_title, new_summary, new_tags, new_importance, memory_id),
+        )
+        updated = cursor.rowcount > 0
+
+        if updated:
+            self._sync_fts_row(cursor, memory_id)
+            try:
+                cursor.execute(
+                    "DELETE FROM memories_vec WHERE memory_id = ?", (memory_id,)
+                )
+            except sqlite3.DatabaseError as exc:
+                logger.warning("向量索引失效清理失败 (memory_id=%s): %s", memory_id, exc)
+
+        conn.commit()
+        return updated
 
     def _update_access(self, memory_id: str) -> None:
         """
