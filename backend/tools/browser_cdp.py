@@ -127,11 +127,17 @@ def _discover_embedded_env() -> Optional[Dict[str, Any]]:
 
 
 def _get_user_browser_path() -> Optional[str]:
-    """从设置中读取用户配置的浏览器路径。"""
+    """从设置中读取用户配置的浏览器路径。
+
+    `(embedded)` 是设置页「Sage 内置浏览器」选项的哨兵值，不是文件路径，
+    需要原样返回交由发现链解析。
+    """
     try:
         from backend.data.settings_repo import SettingsRepository
 
         path = SettingsRepository().get("browser_path")
+        if path == EMBEDDED_EXECUTABLE:
+            return EMBEDDED_EXECUTABLE
         if path and Path(path).is_file():
             return path
     except Exception as exc:  # noqa: BLE001 — 设置读取失败时回退到平台发现

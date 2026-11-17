@@ -402,11 +402,12 @@ def set_browser_path(req: SetBrowserPathRequest) -> dict:
     from pathlib import Path
 
     from backend.data.settings_repo import SettingsRepository
+    from backend.tools.browser_cdp import EMBEDDED_EXECUTABLE
 
     path = req.path.strip()
 
-    # 验证路径（如果非空）
-    if path and not Path(path).is_file():
+    # 验证路径（如果非空）；`(embedded)` 是内置浏览器哨兵，不按文件校验
+    if path and path != EMBEDDED_EXECUTABLE and not Path(path).is_file():
         return {"success": False, "error": f"文件不存在: {path}"}
 
     repo = SettingsRepository()

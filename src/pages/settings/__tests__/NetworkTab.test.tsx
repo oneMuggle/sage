@@ -546,4 +546,20 @@ describe('NetworkTab render events metrics (R25)', () => {
 
     await waitFor(() => expect(screen.getByText(/未发现可用浏览器/)).toBeTruthy());
   });
+
+  it('offers the embedded browser as an option and selects it', async () => {
+    mocks.fetchBrowserList.mockResolvedValue({
+      browsers: [],
+      userConfigured: null,
+      embeddedAvailable: true,
+    });
+    renderTab();
+
+    await waitFor(() => expect(screen.getByTestId('embedded-browser-option')).toBeTruthy());
+    // 有内置兜底时不再显示「未发现可用浏览器」
+    expect(screen.queryByText(/未发现可用浏览器/)).toBeNull();
+
+    fireEvent.click(screen.getByTestId('embedded-browser-option'));
+    await waitFor(() => expect(mocks.setBrowserPath).toHaveBeenCalledWith('(embedded)'));
+  });
 });
