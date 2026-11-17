@@ -101,4 +101,31 @@ describe('EvolutionPanel 状态显示', () => {
     });
     expect(invokeMock).toHaveBeenCalledTimes(2);
   });
+
+  it('手动运行记忆反思并展示统计（游标不展示）', async () => {
+    invokeMock.mockResolvedValueOnce([makeLog()]);
+    invokeMock.mockResolvedValueOnce({
+      ok: true,
+      result: {
+        deduped: 2,
+        merged: 1,
+        consolidated: 0,
+        reflection_backlog_cursor_ms: 1234567890,
+      },
+    });
+    invokeMock.mockResolvedValueOnce([makeLog()]);
+
+    render(<EvolutionPanel />);
+    const button = await screen.findByTestId('evolution-run-memory_reflection');
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('scheduled_evolution_run', {
+        name: 'memory_reflection',
+      });
+    });
+    const result = await screen.findByTestId('evolution-run-result');
+    expect(result.textContent).toContain('deduped: 2');
+    expect(result.textContent).not.toContain('reflection_backlog_cursor_ms');
+  });
 });
