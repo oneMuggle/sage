@@ -56,6 +56,8 @@ def test_save_memory_forwards_session_id_and_returns_stable_envelope(monkeypatch
             "session_id": "session-1",
             "scope": None,
             "agent_id": None,
+            # 2026-11-17 记忆详情化：save 透传可选标题（此处未提供 → None）
+            "title": None,
         }
     ]
 

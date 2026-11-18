@@ -182,6 +182,7 @@ export const memoryRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/memory/save',
     // Body 字段: content (required), memory_type?, importance?, tags?
     // agent_id: 资产中心手动追加专家私有记忆（缺省 = 共享层）
+    // title: 2026-11-17 记忆详情化 —— 用户可手填标题（缺省由后端按内容生成）
     body: (a) => ({
       content: a.content,
       memory_type: a.memoryType,
@@ -189,6 +190,18 @@ export const memoryRoutes: Record<string, CommandRoute> = {
       tags: a.tags,
       ...(a.sessionId ? { session_id: a.sessionId } : {}),
       ...(a.agentId ? { agent_id: a.agentId } : {}),
+      ...(a.title ? { title: a.title } : {}),
+    }),
+  },
+  // 2026-11-17 记忆详情化：单条记忆编辑（内容/标题/标签/重要性）。
+  update_memory: {
+    method: 'PUT',
+    path: (a) => `/api/v1/memory/${encodeURIComponent(String(a?.id ?? ''))}`,
+    body: (a) => ({
+      ...(a.content !== undefined ? { content: a.content } : {}),
+      ...(a.title !== undefined ? { title: a.title } : {}),
+      ...(a.tags !== undefined ? { tags: a.tags } : {}),
+      ...(a.importance !== undefined ? { importance: a.importance } : {}),
     }),
   },
   // P0-2: 进化任务学到的偏好（preferences 表 pref_* 键）+ 画像快照刷新

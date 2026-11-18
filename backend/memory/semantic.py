@@ -29,6 +29,7 @@ from backend.memory import scope as memory_scope
 from backend.memory.auto_tag import derive_tags, normalize_tags
 from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
 from backend.memory.summary_text import truncate_summary
+from backend.memory.title_text import derive_title
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class SemanticMemory:
             CREATE TABLE IF NOT EXISTS memories_semantic (
                 id TEXT PRIMARY KEY,
                 content TEXT NOT NULL,
+                title TEXT,
                 summary TEXT,
                 tags TEXT DEFAULT '[]',
                 session_id TEXT,
@@ -111,6 +113,11 @@ class SemanticMemory:
             cursor.execute(
                 "ALTER TABLE memories_semantic ADD COLUMN agent_id TEXT"
             )
+        # 2026-11-17 记忆详情化：结构化标题（存量行为 NULL，读取时兜底推导）。
+        if "title" not in columns:
+            cursor.execute(
+                "ALTER TABLE memories_semantic ADD COLUMN title TEXT"
+            )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_semantic_session_created "
             "ON memories_semantic(session_id, created_at DESC)"
@@ -134,6 +141,7 @@ class SemanticMemory:
         project_key: Optional[str] = None,
         supersedes_id: Optional[str] = None,
         agent_id: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> str:
         """
         保存语义记忆
@@ -167,6 +175,10 @@ class SemanticMemory:
         if summary is None:
             summary = self._generate_summary(content)
 
+        # 2026-11-17 记忆详情化：标题缺省时确定性推导（不额外调 LLM）。
+        if not (title or "").strip():
+            title = derive_title(content)
+
         # 处理标签：显式标签优先；缺省时从内容自动派生（缓解标签稀疏，
         # 否则 TagCooccurrenceGraph 的共现矩阵几乎没有边）
         tag_list = normalize_tags(tags)
@@ -178,11 +190,11 @@ class SemanticMemory:
         cursor.execute(
             """
             INSERT INTO memories_semantic
-            (id, content, summary, tags, session_id, created_at, scope, project_key,
-             supersedes_id, agent_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, content, title, summary, tags, session_id, created_at, scope,
+             project_key, supersedes_id, agent_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-            (memory_id, content, summary, tags_json, session_id, now,
+            (memory_id, content, title, summary, tags_json, session_id, now,
              scope, project_key, supersedes_id, agent_id),
         )
 
@@ -699,6 +711,87 @@ class SemanticMemory:
 
         if updated:
             self._sync_fts_row(cursor, memory_id)
+
+        conn.commit()
+        return updated
+
+    def update(
+        self,
+        memory_id: str,
+        content: Optional[str] = None,
+        title: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        summary: Optional[str] = None,
+    ) -> bool:
+        """更新一条语义记忆（2026-11-17 记忆详情化）。
+
+        只更新显式传入的字段；``content`` 变更时 ``summary`` 默认重算、
+        ``title`` 缺省/留空时按（新）内容确定性生成。主表更新后同步 FTS
+        行并移除旧向量 —— 下一次检索/回填按新内容重嵌入，避免语义检索
+        命中过期内容。
+
+        Returns:
+            记忆存在且已更新为 True；已失效/不存在为 False。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        row = cursor.execute(
+            "SELECT content, title, summary, tags FROM memories_semantic "
+            "WHERE id = ? AND invalid_at IS NULL",
+            (memory_id,),
+        ).fetchone()
+        if row is None:
+            return False
+
+        new_content = content if content is not None else row["content"]
+
+        # 标题语义：显式给出（非空白）→ 用用户标题；未给且内容已变 →
+        # 按新内容重推；未给且内容未变 → 保留既有标题，空白则兜底推导。
+        if title is None:
+            if content is not None:
+                new_title = derive_title(new_content)
+            else:
+                new_title = (row["title"] or "").strip() or derive_title(new_content)
+        else:
+            new_title = title.strip() or derive_title(new_content)
+
+        if summary is None:
+            new_summary = (
+                self._generate_summary(new_content)
+                if content is not None
+                else row["summary"]
+            )
+        else:
+            new_summary = summary
+
+        if tags is not None:
+            tag_list = normalize_tags(tags) or derive_tags(new_content)
+            new_tags = json.dumps(tag_list, ensure_ascii=False)
+        elif content is not None:
+            # 内容变更且未显式给标签 → 跟随新内容重推（与 save 缺省行为一致）。
+            tag_list = derive_tags(new_content)
+            new_tags = json.dumps(tag_list, ensure_ascii=False)
+        else:
+            new_tags = row["tags"]
+
+        cursor.execute(
+            """
+            UPDATE memories_semantic
+            SET content = ?, title = ?, summary = ?, tags = ?
+            WHERE id = ?
+            """,
+            (new_content, new_title, new_summary, new_tags, memory_id),
+        )
+        updated = cursor.rowcount > 0
+
+        if updated:
+            self._sync_fts_row(cursor, memory_id)
+            try:
+                cursor.execute(
+                    "DELETE FROM memories_vec WHERE memory_id = ?", (memory_id,)
+                )
+            except sqlite3.DatabaseError as exc:
+                logger.warning("向量索引失效清理失败 (memory_id=%s): %s", memory_id, exc)
 
         conn.commit()
         return updated
