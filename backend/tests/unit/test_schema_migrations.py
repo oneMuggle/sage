@@ -115,7 +115,7 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
     try:
         db.init_db()  # v1-v18 自动注册（runner.py 模块级）
         versions = applied_versions(db.get_connection())
-        # v1 基线 + v2-v18 迁移（v18 归一化历史秒级时间戳）
+        # v1 基线 + v2-v19 迁移（v18 归一化历史秒级时间戳；v19 浏览器动作审计）
         assert versions == {
             1,
             2,
@@ -135,6 +135,7 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
             16,
             17,
             18,
+            19,
         }
         # schema_version 表已建（账本就绪）
     finally:
@@ -268,3 +269,53 @@ def test_v18_normalizes_legacy_seconds_to_milliseconds(setup_test_db):
     assert memory_ts == now_s * 1000
     # evolution_log 按设计保持秒，不能被迁移误放大
     assert evolution_ts == now_s
+
+
+def test_v19_browser_actions_table_and_index() -> None:
+    """v19：建 browser_action_log 表与会话索引，重复执行幂等。"""
+    import sqlite3
+
+    from backend.data.migrations.runner import (
+        MIGRATIONS,
+        _v19_browser_actions,
+    )
+
+    assert (19, "browser_actions") in [(v, name) for v, name, _fn in MIGRATIONS]
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    try:
+        _v19_browser_actions(conn)
+        _v19_browser_actions(conn)  # idempotent
+
+        tables = {
+            row["name"]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "browser_action_log" in tables
+
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(browser_action_log)")
+        }
+        assert {
+            "id",
+            "session_id",
+            "conversation_id",
+            "ts",
+            "domain",
+            "tool",
+            "action",
+            "target_ref",
+            "target_desc",
+            "result",
+            "approval",
+            "duration_ms",
+        } == columns
+
+        indexes = {
+            row["name"]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
+        }
+        assert "idx_browser_action_session" in indexes
+    finally:
+        conn.close()

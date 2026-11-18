@@ -122,6 +122,16 @@ class SettingsRepository:
             # 浏览器路径配置（用户手动指定 Chrome/Edge 路径，空 = 自动发现）。
             # 读取口径见 backend/tools/browser_cdp.py:discover_browser_executable
             "browser_path",
+            # 受控浏览器步骤缩略图开关（"1" 开 / "0" 关，缺省按开启）。
+            # 读取口径见 backend/tools/browser_tool.py:_step_thumbnails_enabled
+            "browser_step_thumbnails",
+            # 受控浏览器默认可见（"1" 可见 / "0" 无头，缺省按可见）。
+            # 读取口径见 backend/tools/browser_tool.py:_browser_default_visible
+            "browser_use_default_visible",
+            # 受控浏览器站点授权持久策略（JSON:
+            # {"example.com": {"mode": "allow"|"block", "updated_at": <ms>}}）。
+            # 读取/写入口径见 backend/services/browser_safety.py
+            "browser_site_policies",
         }
     )
 
