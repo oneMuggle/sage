@@ -23,9 +23,11 @@ import { invoke } from './desktopInvoke';
 import type {
   CreateTodoInput,
   Todo,
+  TodoAiText,
   TodoBatchCompleteResult,
   TodoBatchDeleteResult,
   TodoExportResult,
+  TodoExtractResult,
   TodoListParams,
   TodoListResponse,
   TodoStats,
@@ -73,6 +75,27 @@ export const todoClient = {
 
   async listTags(): Promise<TodoTagCount[]> {
     return invoke<TodoTagCount[]>('todo_tags', {});
+  },
+
+  /** 阶段 2：从会话提炼待办候选（不落库，确认后 batchCreate）。 */
+  async extractFromSession(sessionId: string, messageIds?: string[]): Promise<TodoExtractResult> {
+    return invoke<TodoExtractResult>('todo_extract', {
+      session_id: sessionId,
+      ...(messageIds && messageIds.length > 0 ? { message_ids: messageIds } : {}),
+    });
+  },
+
+  async batchCreate(items: CreateTodoInput[]): Promise<Todo[]> {
+    const result = await invoke<{ items: Todo[] }>('todo_batch_create', { items });
+    return result.items;
+  },
+
+  async dailyBrief(): Promise<TodoAiText> {
+    return invoke<TodoAiText>('todo_brief', {});
+  },
+
+  async weeklyReview(): Promise<TodoAiText> {
+    return invoke<TodoAiText>('todo_weekly_review', {});
   },
 
   async batchComplete(ids: number[]): Promise<TodoBatchCompleteResult> {

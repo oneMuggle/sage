@@ -145,10 +145,10 @@ Sage 的「待办事项」已具备：SQLite `todos` 表、REST API（`/api/v1/t
 
 ### 阶段 2（后续 PR）
 
-- [ ] 对话→待办提炼（选中消息/会话 → LLM structured output → 确认弹窗 → 批量创建 + `source_type`/`source_ref` 反向链接）
-- [ ] LLM 兜底 NL 解析（设置开关）
-- [ ] AI 每日简报（启动摘要 + LLM 三条重点建议，走既有通知通道）
-- [ ] 周回顾（定时任务生成摘要页/Tab）
+- [x] 对话→待办提炼：聊天头部「提取待办」→ `POST /todos/extract`（LLM 结构化输出、不落库）→ 候选确认弹窗（勾选/改标题）→ `POST /todos/batch/create`；`source_type/source_ref` 反向链接 + 行内「来自对话」标签
+- [ ] LLM 兜底 NL 解析（设置开关）— 暂缓：本地解析已覆盖主要场景，按需再加
+- [x] AI 每日简报：`GET /todos/brief`（启动摘要 → LLM 三条行动建议）+ TodoPage「简报」弹窗
+- [x] 周回顾：`GET /todos/weekly-review`（统计 + 完成/积压清单 → LLM Markdown 回顾）+ TodoPage「周回顾」弹窗
 
 ### 阶段 3（可选，按需再议）
 

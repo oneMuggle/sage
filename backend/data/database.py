@@ -2390,6 +2390,8 @@ class Database:
                 tags TEXT,
                 reminder_offsets TEXT,
                 reminder_fired_offsets TEXT,
+                source_type TEXT,
+                source_ref TEXT,
                 is_recurring INTEGER DEFAULT 0,
                 recurrence_rule TEXT,
                 parent_id INTEGER,
@@ -2417,10 +2419,18 @@ class Database:
 
         # Phase 1 (2026-11-17): todos.tags —— 多标签（JSON 数组字符串）。
         # Phase 1b: reminder_offsets / reminder_fired_offsets —— 自定义提醒档位
-        # （分钟数组）与已触发书签。旧库幂等补列；新库由上方 CREATE TABLE 带上。
+        # （分钟数组）与已触发书签。
+        # Phase 2: source_type / source_ref —— 待办来源（chat 会话反向链接）。
+        # 旧库幂等补列；新库由上方 CREATE TABLE 带上。
         cursor.execute("PRAGMA table_info(todos)")
         _todo_cols = {row[1] for row in cursor.fetchall()}
-        for _col in ("tags", "reminder_offsets", "reminder_fired_offsets"):
+        for _col in (
+            "tags",
+            "reminder_offsets",
+            "reminder_fired_offsets",
+            "source_type",
+            "source_ref",
+        ):
             if _col not in _todo_cols:
                 cursor.execute(f"ALTER TABLE todos ADD COLUMN {_col} TEXT")
                 conn.commit()

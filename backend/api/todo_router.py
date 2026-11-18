@@ -30,6 +30,8 @@ class CreateTodoIn(BaseModel):
     parent_id: Optional[int] = None
     tags: Optional[List[str]] = None
     reminder_offsets: Optional[List[int]] = None
+    source_type: Optional[str] = Field(default=None, max_length=32)
+    source_ref: Optional[str] = Field(default=None, max_length=200)
 
     class Config:
         extra = "forbid"
@@ -66,6 +68,8 @@ class TodoOut(BaseModel):
     project_id: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     reminder_offsets: List[int] = Field(default_factory=list)
+    source_type: Optional[str] = None
+    source_ref: Optional[str] = None
     is_recurring: bool
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
@@ -123,6 +127,40 @@ class ExportOut(BaseModel):
 class TagCountOut(BaseModel):
     tag: str
     count: int
+
+
+class ExtractTodosIn(BaseModel):
+    session_id: str = Field(min_length=1, max_length=200)
+    message_ids: Optional[List[str]] = None
+
+    class Config:
+        extra = "forbid"
+
+
+class ExtractCandidateOut(BaseModel):
+    title: str
+    due_at: Optional[str] = None
+    priority: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+
+
+class ExtractTodosOut(BaseModel):
+    candidates: List[ExtractCandidateOut]
+
+
+class BatchCreateIn(BaseModel):
+    items: List[CreateTodoIn]
+
+    class Config:
+        extra = "forbid"
+
+
+class BatchCreateOut(BaseModel):
+    items: List[TodoOut]
+
+
+class AiTextOut(BaseModel):
+    content: str
 
 
 def _todo_to_dict(todo: Todo) -> Dict[str, Any]:
@@ -223,6 +261,8 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
                 parent_id=payload.parent_id,
                 tags=payload.tags,
                 reminder_offsets=payload.reminder_offsets,
+                source_type=payload.source_type,
+                source_ref=payload.source_ref,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -263,6 +303,88 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
     ) -> Dict[str, Any]:
         _validate_batch_ids(payload.ids)
         return {"deleted": svc.delete_many(payload.ids)}
+
+    # --- 阶段 2：AI 能力（对话提炼 / 每日简报 / 周回顾） ---
+
+    @router.post("/todos/batch/create", response_model=BatchCreateOut)
+    def batch_create(
+        payload: BatchCreateIn, svc: TodoService = Depends(service_dep)
+    ) -> Dict[str, Any]:
+        if not payload.items:
+            raise HTTPException(status_code=400, detail="items 不能为空")
+        if len(payload.items) > 20:
+            raise HTTPException(status_code=400, detail="单次批量创建上限 20 条")
+        try:
+            created = svc.create_many(
+                [item.model_dump() for item in payload.items]
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"items": [_todo_to_dict(t) for t in created]}
+
+    @router.post("/todos/extract", response_model=ExtractTodosOut)
+    async def extract_todos(payload: ExtractTodosIn) -> Dict[str, Any]:
+        from backend.services import todo_ai
+
+        try:
+            candidates = await todo_ai.extract_todos(
+                session_id=payload.session_id, message_ids=payload.message_ids
+            )
+        except todo_ai.LLMNotConfiguredError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 — 上游 LLM 失败统一 502
+            logger.exception("todo extract failed")
+            raise HTTPException(
+                status_code=502, detail=f"待办提炼失败: {exc}"
+            ) from exc
+        return {"candidates": candidates}
+
+    @router.get("/todos/brief", response_model=AiTextOut)
+    async def daily_brief(
+        svc: TodoService = Depends(service_dep),
+    ) -> Dict[str, Any]:
+        from backend.services import todo_ai
+
+        try:
+            content = await todo_ai.generate_daily_brief(svc.get_startup_summary())
+        except todo_ai.LLMNotConfiguredError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("todo daily brief failed")
+            raise HTTPException(
+                status_code=502, detail=f"生成简报失败: {exc}"
+            ) from exc
+        return {"content": content}
+
+    @router.get("/todos/weekly-review", response_model=AiTextOut)
+    async def weekly_review(
+        svc: TodoService = Depends(service_dep),
+    ) -> Dict[str, Any]:
+        from backend.services import todo_ai
+
+        stats = svc.get_todo_stats()
+        completed = svc.list_todos(
+            status="completed",
+            include_completed=True,
+            limit=50,
+            sort_by="created_at",
+            sort_order="desc",
+        )
+        high_pending = svc.list_todos(priority="high", limit=20)
+        try:
+            content = await todo_ai.generate_weekly_review(
+                stats,
+                [t.title for t in completed],
+                [t.title for t in high_pending],
+            )
+        except todo_ai.LLMNotConfiguredError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("todo weekly review failed")
+            raise HTTPException(
+                status_code=502, detail=f"生成周回顾失败: {exc}"
+            ) from exc
+        return {"content": content}
 
     @router.get("/todos/{todo_id}", response_model=TodoOut)
     def get_todo(

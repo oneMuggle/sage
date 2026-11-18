@@ -337,6 +337,24 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/asr/transcribe',
   },
 
+  // 待办阶段 2：对话提炼 / 批量创建 / AI 简报 / 周回顾
+  todo_extract: {
+    method: 'POST',
+    path: () => '/api/v1/todos/extract',
+  },
+  todo_batch_create: {
+    method: 'POST',
+    path: () => '/api/v1/todos/batch/create',
+  },
+  todo_brief: {
+    method: 'GET',
+    path: () => '/api/v1/todos/brief',
+  },
+  todo_weekly_review: {
+    method: 'GET',
+    path: () => '/api/v1/todos/weekly-review',
+  },
+
   // custom CSS theme storage (themeCssClient)
   // Backend theme_router 挂在 /api/v1/theme (与其他 IPC 路由一致)
   theme_list: { method: 'GET', path: () => '/api/v1/theme/list' },

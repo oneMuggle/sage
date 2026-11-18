@@ -32,6 +32,8 @@ const mocks = vi.hoisted(() => ({
   batchDelete: vi.fn(),
   exportTodos: vi.fn(),
   listTags: vi.fn(),
+  dailyBrief: vi.fn(),
+  weeklyReview: vi.fn(),
   state: {
     todos: [] as Todo[],
     loading: false,
@@ -42,7 +44,12 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../shared/api/todoClient', () => ({
-  todoClient: { exportTodos: mocks.exportTodos, listTags: mocks.listTags },
+  todoClient: {
+    exportTodos: mocks.exportTodos,
+    listTags: mocks.listTags,
+    dailyBrief: mocks.dailyBrief,
+    weeklyReview: mocks.weeklyReview,
+  },
 }));
 
 // Mock the zustand store hook so callers receive our controlled `state`.
@@ -90,6 +97,8 @@ beforeEach(() => {
     content: '- [ ] 示例',
   });
   mocks.listTags.mockResolvedValue([]);
+  mocks.dailyBrief.mockResolvedValue({ content: '• 处理逾期项' });
+  mocks.weeklyReview.mockResolvedValue({ content: '## 完成情况' });
   Object.defineProperty(URL, 'createObjectURL', {
     writable: true,
     value: vi.fn(() => 'blob:mock'),
@@ -256,6 +265,15 @@ describe('TodoPage', () => {
         }),
       );
     });
+  });
+
+  it('opens the AI brief dialog from the header', async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByTestId('todo-ai-brief'));
+
+    expect(await screen.findByTestId('todo-ai-content')).toHaveTextContent('处理逾期项');
+    expect(mocks.dailyBrief).toHaveBeenCalledTimes(1);
   });
 });
 
