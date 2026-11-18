@@ -49,7 +49,7 @@ function PendingQueuePanelInner({
   return (
     <div
       data-testid="pending-queue"
-      className="mx-4 mb-1 rounded-t-radius-md border border-b-0 border-border bg-bg-secondary"
+      className="mx-4 mb-1 rounded-t-radius-md border border-b-0 border-border bg-bg-subtle"
     >
       <button
         type="button"

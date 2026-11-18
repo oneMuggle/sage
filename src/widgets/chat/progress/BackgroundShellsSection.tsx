@@ -45,7 +45,7 @@ export function BackgroundShellsSection() {
           <li key={shell.shell_id}>
             <button
               type="button"
-              className="w-full text-left rounded border border-border px-2 py-1 hover:bg-bg-secondary"
+              className="w-full text-left rounded border border-border px-2 py-1 hover:bg-bg-subtle"
               onClick={() =>
                 setOpenShellId((prev) => (prev === shell.shell_id ? null : shell.shell_id))
               }
