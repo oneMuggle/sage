@@ -1133,6 +1133,62 @@
       "controls": "Pillow 10.4.0 is the ceiling on Python 3.8 (fix is Pillow 13.0.0, requires Python >=3.11); no TIFF re-save path with untrusted metadata in the production path; upload size limits, MIME type validation; quarterly audit review through Win7 LTS EOL 2027-12-13",
       "exception": "temporary exception pending Win7 LTS EOL or upstream Pillow patch compatible with Python 3.8",
       "notes": "py38-ceiling: Pillow 10.4.0 is the ceiling on Python 3.8 for the Win7 LTS track. Heap buffer overflow saving TIFF with libtiff when tags override image size (ANT-2026-CS7N494P / CWE-787 memory-safety, high severity), published 2026-11-13. Fixed only in Pillow 13.0.0 (requires Python >=3.11). No Py3.8-compatible fix exists; Sage does not re-save untrusted third-party TIFFs with attacker-controlled metadata."
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "picomatch",
+      "package_version": "2.3.2",
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "advisory_url": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+      "affected_path": "node_modules/anymatch/node_modules/picomatch",
+      "actual_reachability": "build/test tooling only: picomatch is a transitive glob matcher pulled in by vite/vitest/tailwindcss/chokidar/anymatch trees; it processes developer-authored config globs, never runtime user input, and is absent from the shipped Electron app bundle",
+      "controls": "pinned lockfile; glob patterns originate from repository config, not user requests; dependency audit reviewed quarterly; upstream fix tracked (no fixed 2.x release exists; 4.x fix requires picomatch >4.0.7 and a separately tested dev-toolchain upgrade)",
+      "exception": "temporary exception pending a compatible upstream release and separately tested dev-toolchain upgrade",
+      "notes": "2026-11-18 triage: GHSA-fc5q-39xc-vjpf (ReDoS via single-branch repeated extglobs, CWE-1333) published upstream. npm reports no fixed version for the 2.x line (2.3.2 is terminal) and the 4.x line needs >4.0.7 (registry latest is 4.0.7 at triage time). Build-time only; re-evaluate by 2027-01-01."
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "picomatch",
+      "package_version": "2.3.2",
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "advisory_url": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+      "affected_path": "node_modules/micromatch/node_modules/picomatch",
+      "actual_reachability": "build/test tooling only: picomatch is a transitive glob matcher pulled in by vite/vitest/tailwindcss/chokidar/anymatch trees; it processes developer-authored config globs, never runtime user input, and is absent from the shipped Electron app bundle",
+      "controls": "pinned lockfile; glob patterns originate from repository config, not user requests; dependency audit reviewed quarterly; upstream fix tracked (no fixed 2.x release exists; 4.x fix requires picomatch >4.0.7 and a separately tested dev-toolchain upgrade)",
+      "exception": "temporary exception pending a compatible upstream release and separately tested dev-toolchain upgrade",
+      "notes": "2026-11-18 triage: GHSA-fc5q-39xc-vjpf (ReDoS via single-branch repeated extglobs, CWE-1333) published upstream. npm reports no fixed version for the 2.x line (2.3.2 is terminal) and the 4.x line needs >4.0.7 (registry latest is 4.0.7 at triage time). Build-time only; re-evaluate by 2027-01-01."
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "picomatch",
+      "package_version": "2.3.2",
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "advisory_url": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+      "affected_path": "node_modules/readdirp/node_modules/picomatch",
+      "actual_reachability": "build/test tooling only: picomatch is a transitive glob matcher pulled in by vite/vitest/tailwindcss/chokidar/anymatch trees; it processes developer-authored config globs, never runtime user input, and is absent from the shipped Electron app bundle",
+      "controls": "pinned lockfile; glob patterns originate from repository config, not user requests; dependency audit reviewed quarterly; upstream fix tracked (no fixed 2.x release exists; 4.x fix requires picomatch >4.0.7 and a separately tested dev-toolchain upgrade)",
+      "exception": "temporary exception pending a compatible upstream release and separately tested dev-toolchain upgrade",
+      "notes": "2026-11-18 triage: GHSA-fc5q-39xc-vjpf (ReDoS via single-branch repeated extglobs, CWE-1333) published upstream. npm reports no fixed version for the 2.x line (2.3.2 is terminal) and the 4.x line needs >4.0.7 (registry latest is 4.0.7 at triage time). Build-time only; re-evaluate by 2027-01-01."
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "picomatch",
+      "package_version": "4.0.7",
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "advisory_url": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+      "affected_path": "node_modules/picomatch",
+      "actual_reachability": "build/test tooling only: picomatch is a transitive glob matcher pulled in by vite/vitest/tailwindcss/chokidar/anymatch trees; it processes developer-authored config globs, never runtime user input, and is absent from the shipped Electron app bundle",
+      "controls": "pinned lockfile; glob patterns originate from repository config, not user requests; dependency audit reviewed quarterly; upstream fix tracked (no fixed 2.x release exists; 4.x fix requires picomatch >4.0.7 and a separately tested dev-toolchain upgrade)",
+      "exception": "temporary exception pending a compatible upstream release and separately tested dev-toolchain upgrade",
+      "notes": "2026-11-18 triage: GHSA-fc5q-39xc-vjpf (ReDoS via single-branch repeated extglobs, CWE-1333) published upstream. npm reports no fixed version for the 2.x line (2.3.2 is terminal) and the 4.x line needs >4.0.7 (registry latest is 4.0.7 at triage time). Build-time only; re-evaluate by 2027-01-01."
     }
   ]
 }
