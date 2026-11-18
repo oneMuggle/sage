@@ -140,9 +140,19 @@ def validate_policy(policy: Any, failures: list[str]) -> set[Key]:
 
 
 def package_identity_from_node(node: Any) -> str | None:
+    """Derive a package identity from a package-lock ``packages`` key.
+
+    Handles both top-level (``node_modules/react``) and nested
+    (``node_modules/foo/node_modules/react``) node_modules paths.  npm may
+    dedupe a shared dependency at the top level while transitive dependents
+    keep their own nested copy; audit reports reference these nested paths,
+    so they must resolve to the package they actually contain.
+    """
     if not isinstance(node, str) or not node.startswith("node_modules/"):
         return None
-    package = node[len("node_modules/"):]
+    # npm nests as ``node_modules/a/node_modules/b``; the identity is whatever
+    # follows the *last* node_modules/ segment (handles scopes too).
+    package = node.rsplit("node_modules/", 1)[-1]
     if not package or package.startswith("/"):
         return None
     if package.startswith("@"):
@@ -280,13 +290,23 @@ def npm_findings(
             continue
         lock_identities = {identities[node] for node in nodes}
         lock_versions = {versions[node] for node in nodes}
-        if lock_identities != {package} or len(lock_versions) != 1:
-            report_error(f"{path}: {package}: nodes must match package identity and version", failures)
+        if lock_identities != {package}:
+            report_error(f"{path}: {package}: nodes must match package identity", failures)
             continue
-        if item_version is not None and item_version.strip() not in lock_versions:
-            report_error(f"{path}: {package}: nodes must exist in package-lock and match version", failures)
-            continue
-        version = item_version.strip() if item_version is not None else next(iter(lock_versions))
+        if item_version is not None:
+            version = item_version.strip()
+            if lock_versions != {version}:
+                report_error(
+                    f"{path}: {package}: nodes must exist in package-lock and match version",
+                    failures,
+                )
+                continue
+        else:
+            # npm groups multi-version advisories (e.g. picomatch 2.x and 4.x
+            # both matching ``<=4.0.7``) into one item with no top-level
+            # version.  Nodes still resolve to one package; findings are keyed
+            # per node version so policy matching stays version-accurate.
+            version = None
         via = item.get("via")
         if not isinstance(via, list):
             report_error(f"{path}: {package}: via must be a list", failures)
@@ -320,7 +340,15 @@ def npm_findings(
                 has_valid_advisory = True
                 parseable_severities.add(severity)
                 if severity in {"high", "critical"}:
-                    findings.add(("npm", item_name, version, identifier, node))
+                    findings.add(
+                        (
+                            "npm",
+                            item_name,
+                            version if version is not None else versions[node],
+                            identifier,
+                            node,
+                        )
+                    )
         parsed_items[item_name] = (
             item_severity,
             {

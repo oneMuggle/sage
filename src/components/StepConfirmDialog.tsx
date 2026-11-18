@@ -52,7 +52,7 @@ export function StepConfirmDialog({ step, onConfirm }: StepConfirmDialogProps) {
       data-testid="step-confirm-dialog-overlay"
     >
       <div
-        className="bg-bg-card border rounded-lg shadow-lg max-w-lg w-full mx-4 p-6 space-y-4"
+        className="bg-surface-elevated border rounded-lg shadow-lg max-w-lg w-full mx-4 p-6 space-y-4"
         data-testid="step-confirm-dialog"
       >
         {/* Header */}

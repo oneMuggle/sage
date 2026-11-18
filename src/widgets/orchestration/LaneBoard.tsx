@@ -68,7 +68,7 @@ function LaneCard({ lane, onCancel, onSelect }: LaneCardProps) {
   return (
     <div
       data-testid={`lane-${lane.lane_id}`}
-      className="p-3 rounded-lg border border-border bg-bg-surface hover:border-border-hover transition-colors cursor-pointer"
+      className="p-3 rounded-lg border border-border bg-surface hover:border-border-hover transition-colors cursor-pointer"
       onClick={() => onSelect(lane.lane_id)}
     >
       <div className="flex items-center justify-between gap-1 mb-1">

@@ -256,7 +256,7 @@ export function PlanCard({
           </button>
           {showReasoning && (
             <pre
-              className="mt-1 text-xs whitespace-pre-wrap p-2 border rounded bg-bg-primary text-text-secondary"
+              className="mt-1 text-xs whitespace-pre-wrap p-2 border rounded bg-primary/10 text-text-secondary"
               data-testid="plan-reasoning"
             >
               {reasoning}

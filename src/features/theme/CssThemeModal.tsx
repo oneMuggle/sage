@@ -234,7 +234,7 @@ export function CssThemeModal({ open, onClose, initialTheme, onSaved }: CssTheme
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       maxLength={32}
-                      className="w-full px-3 py-2 border border-border rounded-radius-md bg-bg-base"
+                      className="w-full px-3 py-2 border border-border rounded-radius-md bg-bg"
                     />
                     {name.length > 32 && (
                       <p className="text-xs text-error mt-1">名称最多 32 字符</p>
