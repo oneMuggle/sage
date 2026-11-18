@@ -462,6 +462,183 @@ def test_rejects_package_lock_declared_name_mismatch(tmp_path):
     assert "not covered by policy" not in result.stdout
 
 
+def _npm_exception(package, version, advisory, path):
+    return {
+        "source": "npm",
+        "package": package,
+        "package_version": version,
+        "advisory": advisory,
+        "advisory_url": f"https://github.com/advisories/{advisory}",
+        "affected_path": path,
+        "actual_reachability": "test",
+        "controls": "test",
+        "owner": "Sage maintainers",
+        "review_by": "2099-01-01",
+    }
+
+
+def test_package_identity_from_node_handles_nested_paths():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("check_dependency_audit", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.package_identity_from_node("node_modules/react") == "react"
+    assert module.package_identity_from_node("node_modules/a/node_modules/b") == "b"
+    assert module.package_identity_from_node("node_modules/a/node_modules/@scope/pkg") == "@scope/pkg"
+    assert module.package_identity_from_node("node_modules/@scope/pkg") == "@scope/pkg"
+    assert module.package_identity_from_node("packages/local") is None
+
+
+def test_multi_version_npm_item_without_top_level_version(tmp_path):
+    # npm 会把多版本漏洞（picomatch 2.x + 4.x 都受 <=4.0.7 影响）合并成一条
+    # 无 version 字段的 item，nodes 跨顶层与嵌套路径。
+    advisory = "GHSA-aaaa-bbbb-cccc"
+    report = {
+        "metadata": {
+            "vulnerabilities": {"low": 0, "moderate": 0, "high": 1, "critical": 0}
+        },
+        "vulnerabilities": {
+            "picomatch": {
+                "name": "picomatch",
+                "severity": "high",
+                "nodes": [
+                    "node_modules/picomatch",
+                    "node_modules/anymatch/node_modules/picomatch",
+                ],
+                "via": [
+                    {
+                        "url": f"https://github.com/advisories/{advisory}",
+                        "severity": "high",
+                    }
+                ],
+            }
+        },
+    }
+    lock = package_lock_data()
+    lock["packages"]["node_modules/picomatch"] = {"version": "4.0.7"}
+    lock["packages"]["node_modules/anymatch/node_modules/picomatch"] = {"version": "2.3.2"}
+    policy = base_policy()
+    policy["exceptions"].extend(
+        [
+            _npm_exception("picomatch", "4.0.7", advisory, "node_modules/picomatch"),
+            _npm_exception(
+                "picomatch", "2.3.2", advisory, "node_modules/anymatch/node_modules/picomatch"
+            ),
+        ]
+    )
+    result = run_gate(
+        tmp_path,
+        policy=policy,
+        npm=report,
+        npm_prod=empty_npm(),
+        package_lock=lock,
+        NPM_AUDIT_ALL_OUTCOME="success",
+        NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_multi_version_item_keeps_per_version_policy_keys(tmp_path):
+    # 只覆盖顶层 4.0.7 时，嵌套 2.3.2 必须仍然报 not covered（证明 findings
+    # 按每个 node 的实际版本入 key，而不是任选一个版本）。
+    advisory = "GHSA-aaaa-bbbb-cccc"
+    report = {
+        "metadata": {
+            "vulnerabilities": {"low": 0, "moderate": 0, "high": 1, "critical": 0}
+        },
+        "vulnerabilities": {
+            "picomatch": {
+                "name": "picomatch",
+                "severity": "high",
+                "nodes": [
+                    "node_modules/picomatch",
+                    "node_modules/anymatch/node_modules/picomatch",
+                ],
+                "via": [
+                    {
+                        "url": f"https://github.com/advisories/{advisory}",
+                        "severity": "high",
+                    }
+                ],
+            }
+        },
+    }
+    lock = package_lock_data()
+    lock["packages"]["node_modules/picomatch"] = {"version": "4.0.7"}
+    lock["packages"]["node_modules/anymatch/node_modules/picomatch"] = {"version": "2.3.2"}
+    policy = base_policy()
+    policy["exceptions"].append(
+        _npm_exception("picomatch", "4.0.7", advisory, "node_modules/picomatch")
+    )
+    result = run_gate(
+        tmp_path,
+        policy=policy,
+        npm=report,
+        npm_prod=empty_npm(),
+        package_lock=lock,
+        NPM_AUDIT_ALL_OUTCOME="success",
+        NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 1
+    assert "package_version=2.3.2" in result.stdout
+    assert "node_modules/anymatch/node_modules/picomatch" in result.stdout
+
+
+def test_meta_chain_resolves_through_nested_node(tmp_path):
+    # picomatch 的直接 advisory 位于嵌套路径时，依赖它的 meta 漏洞
+    # （anymatch/vitest 等）必须能沿 chain 解析，而不是级联报错。
+    advisory = "GHSA-dddd-eeee-ffff"
+    report = {
+        "metadata": {
+            "vulnerabilities": {"low": 0, "moderate": 0, "high": 2, "critical": 0}
+        },
+        "vulnerabilities": {
+            "anymatch": {
+                "name": "anymatch",
+                "severity": "high",
+                "nodes": ["node_modules/anymatch"],
+                "via": ["picomatch"],
+            },
+            "picomatch": {
+                "name": "picomatch",
+                "severity": "high",
+                "nodes": ["node_modules/anymatch/node_modules/picomatch"],
+                "via": [
+                    {
+                        "url": f"https://github.com/advisories/{advisory}",
+                        "severity": "high",
+                    }
+                ],
+            },
+        },
+    }
+    lock = package_lock_data()
+    lock["packages"]["node_modules/anymatch"] = {"version": "3.1.3"}
+    lock["packages"]["node_modules/anymatch/node_modules/picomatch"] = {"version": "2.3.2"}
+    policy = base_policy()
+    policy["exceptions"].append(
+        _npm_exception(
+            "picomatch",
+            "2.3.2",
+            advisory,
+            "node_modules/anymatch/node_modules/picomatch",
+        )
+    )
+    result = run_gate(
+        tmp_path,
+        policy=policy,
+        npm=report,
+        npm_prod=empty_npm(),
+        package_lock=lock,
+        NPM_AUDIT_ALL_OUTCOME="success",
+        NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "lacks a matching valid advisory" not in result.stdout
+
+
 def test_report_error_escapes_github_workflow_commands(capsys):
     import importlib.util
 
