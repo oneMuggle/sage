@@ -142,7 +142,11 @@ def validate_policy(policy: Any, failures: list[str]) -> set[Key]:
 def package_identity_from_node(node: Any) -> str | None:
     if not isinstance(node, str) or not node.startswith("node_modules/"):
         return None
-    package = node[len("node_modules/"):]
+    # 嵌套副本（hoist 失败或版本冲突）：取最后一个 node_modules/ 之后的
+    # 包名。例： node_modules/anymatch/node_modules/picomatch → picomatch。
+    # npm audit 会把同名包的多个副本合并成一条 advisory、列出全部 node
+    # 路径；若只认顶层路径，任何嵌套副本都会导致 high/critical 无法核对。
+    package = node.rsplit("node_modules/", 1)[-1]
     if not package or package.startswith("/"):
         return None
     if package.startswith("@"):
@@ -280,13 +284,15 @@ def npm_findings(
             continue
         lock_identities = {identities[node] for node in nodes}
         lock_versions = {versions[node] for node in nodes}
-        if lock_identities != {package} or len(lock_versions) != 1:
-            report_error(f"{path}: {package}: nodes must match package identity and version", failures)
+        # 同名包可有多个副本（顶层 4.0.7 + 嵌套 2.3.2）；npm audit 合并为
+        # 一条 advisory 并列出全部 node。findings 必须按节点各自的 lockfile
+        # 版本生成，否则嵌套副本永远无法被策略覆盖。
+        if lock_identities != {package}:
+            report_error(f"{path}: {package}: nodes must match package identity", failures)
             continue
         if item_version is not None and item_version.strip() not in lock_versions:
             report_error(f"{path}: {package}: nodes must exist in package-lock and match version", failures)
             continue
-        version = item_version.strip() if item_version is not None else next(iter(lock_versions))
         via = item.get("via")
         if not isinstance(via, list):
             report_error(f"{path}: {package}: via must be a list", failures)
@@ -320,7 +326,7 @@ def npm_findings(
                 has_valid_advisory = True
                 parseable_severities.add(severity)
                 if severity in {"high", "critical"}:
-                    findings.add(("npm", item_name, version, identifier, node))
+                    findings.add(("npm", item_name, versions[node], identifier, node))
         parsed_items[item_name] = (
             item_severity,
             {
