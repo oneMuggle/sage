@@ -26,7 +26,7 @@ function PendingSteerPanelInner({ items = [], onCancel }: PendingSteerPanelProps
   return (
     <div
       data-testid="pending-steer"
-      className="mx-4 mb-1 rounded-t-radius-md border border-b-0 border-border bg-bg-secondary"
+      className="mx-4 mb-1 rounded-t-radius-md border border-b-0 border-border bg-bg-subtle"
     >
       <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-text-secondary">
         <MessageSquarePlus className="w-3.5 h-3.5" />
