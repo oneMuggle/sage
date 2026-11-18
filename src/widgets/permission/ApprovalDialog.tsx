@@ -404,7 +404,7 @@ export function ApprovalDialog() {
                 maxLength={500}
                 rows={2}
                 placeholder={t('permission.deny_reason.placeholder')}
-                className="w-full text-xs rounded border border-border bg-bg-input p-2 focus:border-primary focus:outline-none placeholder:text-muted resize-none"
+                className="w-full text-xs rounded border border-border bg-bg p-2 focus:border-primary focus:outline-none placeholder:text-muted resize-none"
               />
               <p className="text-ui-xs text-muted">{t('permission.deny_reason.hint')}</p>
             </div>

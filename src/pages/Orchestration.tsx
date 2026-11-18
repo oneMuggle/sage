@@ -149,7 +149,7 @@ export function Orchestration() {
               onChange={(e) => setGoal(e.target.value)}
               placeholder={t('orchestration.goal_placeholder')}
               aria-label={t('orchestration.goal_placeholder')}
-              className="flex-1 px-3 py-1.5 text-sm bg-bg-surface border border-border rounded-radius-sm focus:outline-none focus:border-primary"
+              className="flex-1 px-3 py-1.5 text-sm bg-surface border border-border rounded-radius-sm focus:outline-none focus:border-primary"
             />
             <button
               type="submit"

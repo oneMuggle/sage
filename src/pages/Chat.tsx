@@ -695,7 +695,7 @@ export function Chat() {
                   type="button"
                   onClick={scrollToLatest}
                   aria-label="滚动到最新消息"
-                  className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-bg-elevated border border-border shadow-lg hover:bg-bg-hover transition-colors"
+                  className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-surface-elevated border border-border shadow-lg hover:bg-bg-hover transition-colors"
                 >
                   <ChevronDown className="w-4 h-4 text-text-secondary" />
                 </button>

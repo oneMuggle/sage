@@ -203,7 +203,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
               placeholder={
                 isGit ? '输入新分支名回车创建 worktree，或过滤下方列表…' : '当前目录不是 git 仓库'
               }
-              className="w-full text-xs bg-bg-input border border-border rounded-radius-sm px-2 py-1.5 outline-none focus:border-primary"
+              className="w-full text-xs bg-bg border border-border rounded-radius-sm px-2 py-1.5 outline-none focus:border-primary"
             />
           </div>
 
