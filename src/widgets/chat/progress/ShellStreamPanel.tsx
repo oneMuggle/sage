@@ -83,7 +83,7 @@ export function ShellStreamPanel({ shellId, onClose }: ShellStreamPanelProps) {
       {error && <div className="text-xs text-error">{error}</div>}
       <pre
         data-testid="shell-stream-output"
-        className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all text-ui-2xs bg-bg-secondary rounded p-2"
+        className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all text-ui-2xs bg-bg-subtle rounded p-2"
       >
         {output || '等待输出…'}
       </pre>

@@ -419,7 +419,7 @@ export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
           <div
             role="tooltip"
             data-testid="usage-trend-tooltip"
-            className={`pointer-events-none absolute z-10 w-56 rounded-radius-sm border border-border bg-bg-elevated p-2.5 text-ui-xs shadow-lg ${tooltipAlignClass}`}
+            className={`pointer-events-none absolute z-10 w-56 rounded-radius-sm border border-border bg-surface-elevated p-2.5 text-ui-xs shadow-lg ${tooltipAlignClass}`}
             style={{ left: `${activeXPercent}%`, top: '4px' }}
           >
             <div className="mb-1.5 font-medium text-text" data-testid="usage-tooltip-period">

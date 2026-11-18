@@ -32,7 +32,7 @@ export function RecapCard({ recap, onDismiss }: RecapCardProps) {
       className="mx-4 my-2 rounded-radius border border-border bg-bg-subtle overflow-hidden"
     >
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-bg-elevated border-b border-border">
+      <div className="flex items-center gap-2 px-3 py-2 bg-surface-elevated border-b border-border">
         <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
         <span className="text-sm font-medium text-text-primary">{t('recap.title')}</span>
         <button

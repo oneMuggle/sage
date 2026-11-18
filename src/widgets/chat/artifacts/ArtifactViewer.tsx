@@ -250,10 +250,10 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             <div className="flex flex-col h-full" data-testid="artifact-edit-codemirror">
               {/* R3 批次 B: textarea → CodeMirror（行号 + 语法高亮编辑），
                   value/onChange 与乐观并发 hash 保存逻辑完全兼容 */}
-              <div className="flex-1 min-h-0 border border-border rounded overflow-auto bg-bg-input">
+              <div className="flex-1 min-h-0 border border-border rounded overflow-auto bg-bg">
                 <Suspense
                   fallback={
-                    <pre className="h-full overflow-auto bg-bg-input p-3 text-code font-mono leading-relaxed">
+                    <pre className="h-full overflow-auto bg-bg p-3 text-code font-mono leading-relaxed">
                       {editContent}
                     </pre>
                   }

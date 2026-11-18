@@ -122,7 +122,7 @@ export function ArtifactRow({
         {canOpenDelivery && (
           <button
             type="button"
-            className="p-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-primary shrink-0 transition-colors"
+            className="p-1.5 rounded hover:bg-bg-hover text-text-secondary hover:text-primary shrink-0 transition-colors"
             title="打开交付工作台（格式质检 / 排版修复 / 前后对比）"
             aria-label={`打开 ${artifact.name} 交付工作台`}
             data-testid={`artifact-open-delivery-${artifact.id}`}
