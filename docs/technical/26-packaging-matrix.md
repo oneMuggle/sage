@@ -101,6 +101,7 @@ chmod +x Sage-${version}.AppImage
 | `v0.5.0-rc.1` | main | (无) | `Sage-Setup-0.5.0-rc.1.exe` |
 | `v0.5.0` | main | (无) | `Sage-Setup-0.5.0.exe` |
 | `v0.5.0-alpha.1-win7` | release/win7 | `-win7` | `Sage-Setup-0.5.0-alpha.1-win7.exe` |
+| `v0.5.0-alpha.1-win7` | release/win7 | `-win7` (core) | `Sage-Setup-0.5.0-alpha.1-win7-core.exe`（不含内置模型） |
 | `v0.5.0-beta.1-win7` | release/win7 | `-win7` | `Sage-Setup-0.5.0-beta.1-win7.exe` |
 | `v0.5.0-rc.1-win7` | release/win7 | `-win7` | `Sage-Setup-0.5.0-rc.1-win7.exe` |
 | `v0.5.0-win7` | release/win7 | `-win7` | `Sage-Setup-0.5.0-win7.exe` |
