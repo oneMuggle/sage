@@ -84,7 +84,7 @@ export function ResearchSummaryCard({
   };
 
   return (
-    <div className="border rounded-lg p-4 bg-bg-card space-y-4" data-testid="research-summary-card">
+    <div className="border rounded-lg p-4 bg-surface space-y-4" data-testid="research-summary-card">
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
