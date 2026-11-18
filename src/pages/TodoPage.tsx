@@ -13,7 +13,7 @@
  * State flows through zustand `entities/todo/todoStore`, IPC through
  * `shared/api/todoClient`. All CRUD delegated to store.
  */
-import { Check, Download, Loader2, Trash2, Zap } from 'lucide-react';
+import { Check, Download, Loader2, Sparkles, Trash2, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -23,6 +23,7 @@ import type { Todo, TodoListParams, UpdateTodoInput } from '../shared/api/types'
 import { useI18n } from '../shared/lib/i18n';
 import { PageHeader } from '../shared/ui';
 
+import { TodoAiDialog } from './todo/TodoAiDialog';
 import { TodoCreateForm } from './todo/TodoCreateForm';
 import { TodoQuickAdd } from './todo/TodoQuickAdd';
 import { TodoRowEditor } from './todo/TodoRowEditor';
@@ -53,6 +54,7 @@ export function TodoPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [createBusy, setCreateBusy] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [aiDialog, setAiDialog] = useState<null | 'brief' | 'weekly'>(null);
   const lastSentQuery = useRef<string | undefined>(params.q);
 
   useEffect(() => {
@@ -253,6 +255,27 @@ export function TodoPage() {
             )}
             <button
               type="button"
+              onClick={() => setAiDialog('brief')}
+              title="AI 今日简报"
+              aria-label="AI 简报"
+              data-testid="todo-ai-brief"
+              className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
+            >
+              <Sparkles className="w-3 h-3" />
+              简报
+            </button>
+            <button
+              type="button"
+              onClick={() => setAiDialog('weekly')}
+              title="周回顾"
+              aria-label="周回顾"
+              data-testid="todo-ai-weekly"
+              className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
+            >
+              周回顾
+            </button>
+            <button
+              type="button"
               onClick={() => setQuickAddOpen(true)}
               title="快速添加（快捷键 N）"
               aria-label="快速添加"
@@ -385,6 +408,12 @@ export function TodoPage() {
         onSubmit={async (input) => {
           await create(input);
         }}
+      />
+
+      <TodoAiDialog
+        isOpen={aiDialog !== null}
+        mode={aiDialog ?? 'brief'}
+        onClose={() => setAiDialog(null)}
       />
     </div>
   );

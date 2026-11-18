@@ -1276,5 +1276,14 @@ describe('agent_* IPC commands', () => {
       expect(COMMAND_ROUTES.asr_transcribe.method).toBe('POST');
       expect(COMMAND_ROUTES.asr_transcribe.path({})).toBe('/api/v1/asr/transcribe');
     });
+
+    it('stage-2 ai routes map to their endpoints', () => {
+      expect(COMMAND_ROUTES.todo_extract.method).toBe('POST');
+      expect(COMMAND_ROUTES.todo_extract.path({})).toBe('/api/v1/todos/extract');
+      expect(COMMAND_ROUTES.todo_batch_create.path({})).toBe('/api/v1/todos/batch/create');
+      expect(COMMAND_ROUTES.todo_brief.method).toBe('GET');
+      expect(COMMAND_ROUTES.todo_brief.path({})).toBe('/api/v1/todos/brief');
+      expect(COMMAND_ROUTES.todo_weekly_review.path({})).toBe('/api/v1/todos/weekly-review');
+    });
   });
 });

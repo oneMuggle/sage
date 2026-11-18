@@ -1,4 +1,6 @@
+import { ListChecks } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { WorkspaceSwitcher } from '../../features/workspace';
@@ -13,6 +15,7 @@ import { WorkspaceBranchPicker } from '../../widgets/chat/WorkspaceBranchPicker'
 import { DisplayModeSwitch } from './DisplayModeSwitch';
 import { SessionSessionMenu } from './SessionSessionMenu';
 import { SessionSettingsMenu } from './SessionSettingsMenu';
+import { TodoExtractDialog } from './TodoExtractDialog';
 
 export interface ChatHeaderBarProps {
   workspacePath?: string | null;
@@ -47,6 +50,7 @@ export function ChatHeaderBar({
 }: ChatHeaderBarProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const [extractOpen, setExtractOpen] = useState(false);
 
   return (
     <div
@@ -102,6 +106,19 @@ export function ChatHeaderBar({
           </select>
         </div>
         <DisplayModeSwitch sessionId={currentSessionId} />
+        {/* 阶段 2：从当前对话提取待办 */}
+        <button
+          type="button"
+          onClick={() => setExtractOpen(true)}
+          disabled={!currentSessionId}
+          title="从当前对话提取待办"
+          aria-label="提取待办"
+          data-testid="chat-extract-todos"
+          className="flex items-center gap-1 px-2 py-1 text-ui-xs border rounded-radius-sm border-border bg-surface text-text-secondary hover:border-primary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <ListChecks className="w-3.5 h-3.5" />
+          提取待办
+        </button>
         {/* UI 优化 2026-10-14: 会话级设置收纳进齿轮浮层 */}
         <SessionSettingsMenu sessionId={currentSessionId} />
         {/* UI 优化 2026-10-14: 新对话/新话题/临时聊天合并进 + 下拉菜单 */}
@@ -120,6 +137,12 @@ export function ChatHeaderBar({
           unseenCount={unseenArtifactCount}
         />
       </div>
+
+      <TodoExtractDialog
+        isOpen={extractOpen}
+        sessionId={currentSessionId ?? ''}
+        onClose={() => setExtractOpen(false)}
+      />
     </div>
   );
 }
