@@ -274,7 +274,7 @@ export function PlanApprovalBar({
                 disabled={recommendedExecutionMode === 'ask_user' && modeOverride === null}
                 className={`px-2 py-1 text-xs rounded font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
                   effectiveMode === 'single'
-                    ? 'bg-primary text-bg-inv'
+                    ? 'bg-primary text-text-inverse'
                     : 'bg-primary/20 text-primary border border-primary'
                 }`}
                 onClick={handleApprove}
@@ -287,7 +287,7 @@ export function PlanApprovalBar({
                 disabled={recommendedExecutionMode === 'ask_user' && modeOverride === null}
                 className={`px-2 py-1 text-xs rounded font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
                   effectiveMode === 'multi'
-                    ? 'bg-primary text-bg-inv'
+                    ? 'bg-primary text-text-inverse'
                     : 'border border-primary text-primary'
                 }`}
                 title="将计划拆解为并行子任务卡，经 PlanCard 审阅后由子代理并行执行"

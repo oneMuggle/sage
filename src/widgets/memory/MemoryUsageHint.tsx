@@ -71,7 +71,7 @@ export function MemoryUsageHint() {
           onClick={handleDismiss}
           aria-label="关闭提示"
           title="关闭后不再自动显示"
-          className="text-text-tertiary hover:text-text transition-colors"
+          className="text-text-muted hover:text-text transition-colors"
         >
           <X className="w-4 h-4" />
         </button>

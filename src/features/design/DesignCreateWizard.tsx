@@ -90,13 +90,13 @@ export function DesignCreateWizard({ onCancel, onCreated }: DesignCreateWizardPr
                 className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${
                   index <= step
                     ? 'border-accent text-accent'
-                    : 'border-border text-text-tertiary'
+                    : 'border-border text-text-muted'
                 }`}
               >
                 {index < step ? <Check className="w-3 h-3" /> : index + 1}
               </span>
               <span className={index === step ? 'text-text' : undefined}>{t(key)}</span>
-              {index < STEP_KEYS.length - 1 && <span className="text-text-tertiary">/</span>}
+              {index < STEP_KEYS.length - 1 && <span className="text-text-muted">/</span>}
             </li>
           ))}
         </ol>
@@ -113,7 +113,7 @@ export function DesignCreateWizard({ onCancel, onCreated }: DesignCreateWizardPr
                     className={`rounded-lg border p-4 text-left text-ui-sm transition ${
                       kind === option
                         ? 'border-accent bg-accent/5 text-text'
-                        : 'border-border hover:bg-surface-hover'
+                        : 'border-border hover:bg-bg-hover'
                     }`}
                     onClick={() => handleKindChange(option)}
                   >
@@ -128,7 +128,7 @@ export function DesignCreateWizard({ onCancel, onCreated }: DesignCreateWizardPr
             <section>
               <p className="text-ui-sm text-text-secondary">{t('design.wizard.systemHint')}</p>
               {systems.length === 0 ? (
-                <p className="mt-3 text-ui-sm text-text-tertiary">{t('design.wizard.noOptions')}</p>
+                <p className="mt-3 text-ui-sm text-text-muted">{t('design.wizard.noOptions')}</p>
               ) : (
                 <ul className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
                   {systems.map((system) => (
@@ -138,7 +138,7 @@ export function DesignCreateWizard({ onCancel, onCreated }: DesignCreateWizardPr
                         className={`w-full rounded-md border p-3 text-left text-ui-sm transition ${
                           systemId === system.id
                             ? 'border-accent bg-accent/5'
-                            : 'border-border hover:bg-surface-hover'
+                            : 'border-border hover:bg-bg-hover'
                         }`}
                         onClick={() => setSystemId(system.id)}
                       >
@@ -158,7 +158,7 @@ export function DesignCreateWizard({ onCancel, onCreated }: DesignCreateWizardPr
             <section>
               <p className="text-ui-sm text-text-secondary">{t('design.wizard.templateHint')}</p>
               {kindTemplates.length === 0 ? (
-                <p className="mt-3 text-ui-sm text-text-tertiary">{t('design.wizard.noOptions')}</p>
+                <p className="mt-3 text-ui-sm text-text-muted">{t('design.wizard.noOptions')}</p>
               ) : (
                 <ul className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
                   {kindTemplates.map((template) => (
@@ -168,7 +168,7 @@ export function DesignCreateWizard({ onCancel, onCreated }: DesignCreateWizardPr
                         className={`w-full rounded-md border p-3 text-left text-ui-sm transition ${
                           templateId === template.id
                             ? 'border-accent bg-accent/5'
-                            : 'border-border hover:bg-surface-hover'
+                            : 'border-border hover:bg-bg-hover'
                         }`}
                         onClick={() => setTemplateId(template.id)}
                       >
@@ -222,7 +222,7 @@ export function DesignCreateWizard({ onCancel, onCreated }: DesignCreateWizardPr
         <div className="mt-4 flex items-center justify-between">
           <button
             type="button"
-            className="px-3 py-1.5 rounded-md text-ui-sm hover:bg-surface-hover"
+            className="px-3 py-1.5 rounded-md text-ui-sm hover:bg-bg-hover"
             onClick={() => (step === 0 ? onCancel() : setStep(step - 1))}
             disabled={submitting}
           >

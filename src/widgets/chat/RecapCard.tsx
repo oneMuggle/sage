@@ -34,7 +34,7 @@ export function RecapCard({ recap, onDismiss }: RecapCardProps) {
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 bg-surface-elevated border-b border-border">
         <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
-        <span className="text-sm font-medium text-text-primary">{t('recap.title')}</span>
+        <span className="text-sm font-medium text-text">{t('recap.title')}</span>
         <button
           type="button"
           data-testid="recap-card-dismiss"
@@ -54,7 +54,7 @@ export function RecapCard({ recap, onDismiss }: RecapCardProps) {
           expanded={expanded.progress}
           onToggle={() => toggle('progress')}
         >
-          <p className="text-sm text-text-primary leading-relaxed">{recap.progress}</p>
+          <p className="text-sm text-text leading-relaxed">{recap.progress}</p>
         </Section>
 
         {recap.decisions.length > 0 && (
@@ -67,7 +67,7 @@ export function RecapCard({ recap, onDismiss }: RecapCardProps) {
           >
             <ul className="space-y-1">
               {recap.decisions.map((d, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-text-primary">
+                <li key={i} className="flex items-start gap-2 text-sm text-text">
                   <span className="text-success mt-0.5 flex-shrink-0">•</span>
                   <span>{d}</span>
                 </li>
@@ -86,7 +86,7 @@ export function RecapCard({ recap, onDismiss }: RecapCardProps) {
           >
             <ol className="space-y-1 list-decimal list-inside">
               {recap.nextSteps.map((s, i) => (
-                <li key={i} className="text-sm text-text-primary">
+                <li key={i} className="text-sm text-text">
                   {s}
                 </li>
               ))}
@@ -104,7 +104,7 @@ export function RecapCard({ recap, onDismiss }: RecapCardProps) {
           >
             <ul className="space-y-1">
               {recap.openQuestions.map((q, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-text-primary">
+                <li key={i} className="flex items-start gap-2 text-sm text-text">
                   <span className="text-warning mt-0.5 flex-shrink-0">?</span>
                   <span>{q}</span>
                 </li>
@@ -149,7 +149,7 @@ function Section({
           {label}
         </span>
         {count !== undefined && (
-          <span className="text-xs text-text-tertiary bg-bg-subtle px-1.5 rounded-radius-sm">
+          <span className="text-xs text-text-muted bg-bg-subtle px-1.5 rounded-radius-sm">
             {count}
           </span>
         )}

@@ -204,8 +204,8 @@ export function WorkspaceSwitcher({
     ? t(HEALTH_LABEL_KEYS[healthKey] ?? 'workspace.switcher.health.unknown')
     : null;
   const dotClass = healthKey
-    ? (HEALTH_DOT_CLASS[healthKey] ?? 'bg-text-tertiary')
-    : 'bg-text-tertiary';
+    ? (HEALTH_DOT_CLASS[healthKey] ?? 'bg-text-muted')
+    : 'bg-text-muted';
   const isScratch = currentSource === 'scratch';
 
   const handleCopyWorkspacePath = useCallback(async () => {
@@ -281,7 +281,7 @@ export function WorkspaceSwitcher({
             {stageLabel && (
               <span
                 data-testid="workspace-switcher-stage-badge"
-                className="shrink-0 rounded bg-surface px-1 py-0.5 text-ui-2xs text-text-tertiary border border-border/60"
+                className="shrink-0 rounded bg-surface px-1 py-0.5 text-ui-2xs text-text-muted border border-border/60"
               >
                 {stageLabel}
               </span>
@@ -316,7 +316,7 @@ export function WorkspaceSwitcher({
               <div className="truncate text-xs text-text" title={workspacePath}>
                 {workspacePath}
               </div>
-              <div className="mt-1 flex items-center gap-2 text-ui-xs text-text-tertiary">
+              <div className="mt-1 flex items-center gap-2 text-ui-xs text-text-muted">
                 <span
                   data-testid="workspace-switcher-health-dot-detail"
                   aria-hidden="true"
@@ -335,7 +335,7 @@ export function WorkspaceSwitcher({
               )}
             </div>
 
-            <div className="px-3 pt-2 pb-1 text-ui-xs uppercase tracking-wide text-text-tertiary">
+            <div className="px-3 pt-2 pb-1 text-ui-xs uppercase tracking-wide text-text-muted">
               {t('workspace.switcher.switchTo')}
             </div>
 
@@ -346,7 +346,7 @@ export function WorkspaceSwitcher({
             )}
 
             {!busy && (projects?.length ?? 0) === 0 && (
-              <div className="px-3 py-2 text-xs text-text-tertiary">
+              <div className="px-3 py-2 text-xs text-text-muted">
                 {t('workspace.switcher.noProjects')}
               </div>
             )}
@@ -367,7 +367,7 @@ export function WorkspaceSwitcher({
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-text">{project.name}</span>
-                    <span className="block truncate text-ui-xs text-text-tertiary">{project.path}</span>
+                    <span className="block truncate text-ui-xs text-text-muted">{project.path}</span>
                   </span>
                   {samePath(project.path, workspacePath) && (
                     <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />

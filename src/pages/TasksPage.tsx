@@ -9,7 +9,7 @@ export function TasksPage() {
   const { t } = useI18n();
   return (
     <div className="h-full flex flex-col">
-      <header className="px-6 py-4 border-b border-ui-border">
+      <header className="px-6 py-4 border-b border-border">
         <h1 className="text-lg font-medium text-text">{t('taskCenter.page.title')}</h1>
         <p className="mt-1 text-ui-sm text-muted">{t('taskCenter.page.subtitle')}</p>
       </header>

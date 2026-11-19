@@ -206,7 +206,7 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
   const wikiOnlyHint = lastResult != null && lastResult.wiki == null;
 
   return (
-    <div className="rounded-lg border border-line-subtle bg-surface-raised p-4 space-y-3">
+    <div className="rounded-lg border border-line bg-surface-elevated p-4 space-y-3">
       <div>
         <h4 className="text-sm font-medium text-primary">{t('settings.zotero.sync.title')}</h4>
         <p className="mt-1 text-xs text-faint">{t('settings.zotero.sync.desc')}</p>
@@ -250,7 +250,7 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
         <button
           type="button"
           data-testid="zotero-sync-rebuild"
-          className="rounded border border-line-subtle bg-surface px-3 py-1.5 text-sm text-secondary hover:text-primary disabled:opacity-50"
+          className="rounded border border-line bg-surface px-3 py-1.5 text-sm text-secondary hover:text-primary disabled:opacity-50"
           disabled={!connected || busy}
           onClick={() => void handleSync(true)}
         >
@@ -319,7 +319,7 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
       )}
 
       {/* Wiki tag config */}
-      <div className="border-t border-line-subtle pt-3">
+      <div className="border-t border-line pt-3">
         <label className="mb-1 block text-xs font-medium text-secondary" htmlFor="zotero-wiki-tag">
           {t('settings.zotero.wiki_tag.label')}
         </label>
@@ -327,7 +327,7 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
           <input
             id="zotero-wiki-tag"
             type="text"
-            className="flex-1 rounded border border-line-subtle bg-surface px-3 py-1.5 text-sm text-primary placeholder:text-faint/60 focus:border-accent focus:outline-none"
+            className="flex-1 rounded border border-line bg-surface px-3 py-1.5 text-sm text-primary placeholder:text-faint/60 focus:border-accent focus:outline-none"
             placeholder={DEFAULT_WIKI_TAG}
             value={wikiTag}
             onChange={(e) => {
@@ -351,7 +351,7 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
       </div>
 
       {/* Wiki project binding */}
-      <div className="border-t border-line-subtle pt-3">
+      <div className="border-t border-line pt-3">
         <label
           className="mb-1 block text-xs font-medium text-secondary"
           htmlFor="zotero-wiki-project"
@@ -363,7 +363,7 @@ export function ZoteroSyncPanel({ connected }: ZoteroSyncPanelProps) {
             id="zotero-wiki-project"
             data-testid="zotero-wiki-project-input"
             type="text"
-            className="flex-1 rounded border border-line-subtle bg-surface px-3 py-1.5 text-sm text-primary placeholder:text-faint/60 focus:border-accent focus:outline-none"
+            className="flex-1 rounded border border-line bg-surface px-3 py-1.5 text-sm text-primary placeholder:text-faint/60 focus:border-accent focus:outline-none"
             placeholder={t('settings.zotero.wiki_project.placeholder')}
             value={wikiProjectPath}
             onChange={(e) => {

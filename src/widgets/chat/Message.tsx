@@ -847,7 +847,7 @@ function MessageComponent({
                     {skill.triggers_matched.map((trigger, idx) => (
                       <span
                         key={idx}
-                        className="px-1 py-0.5 rounded bg-bg-hover text-text-tertiary text-ui-xs"
+                        className="px-1 py-0.5 rounded bg-bg-hover text-text-muted text-ui-xs"
                       >
                         {trigger}
                       </span>

@@ -48,7 +48,7 @@ function eventColor(event: RunEvent): string {
   const t = event.event_type;
   if (t.includes('succeeded') || t.includes('completed')) return 'text-green-600';
   if (t.includes('failed') || t.includes('error')) return 'text-red-500';
-  if (t.includes('cancelled')) return 'text-text-tertiary';
+  if (t.includes('cancelled')) return 'text-text-muted';
   if (t.includes('retrying') || t.includes('blocked')) return 'text-amber-500';
   if (t.includes('running') || t.includes('started')) return 'text-primary';
   return 'text-text-secondary';
@@ -83,7 +83,7 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
 
   if (visible.length === 0) {
     return (
-      <div className="text-xs text-text-tertiary py-2" data-testid="event-timeline-empty">
+      <div className="text-xs text-text-muted py-2" data-testid="event-timeline-empty">
         暂无事件
       </div>
     );
@@ -103,7 +103,7 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
             data-testid={`event-timeline-item-${event.event_id}`}
             className="flex items-start gap-2 px-2 py-0.5 text-xs hover:bg-bg-hover rounded"
           >
-            <span className="text-text-tertiary shrink-0 w-16 tabular-nums">
+            <span className="text-text-muted shrink-0 w-16 tabular-nums">
               {formatTimeOfDay(event.occurred_at)}
             </span>
             <span
@@ -118,7 +118,7 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
             <span className={`shrink-0 ${eventColor(event)}`}>{eventLabel(event.event_type)}</span>
             {preview && <span className="text-text-secondary truncate">{preview}</span>}
             {event.entity.step_id && isStepEvent(event) && (
-              <span className="text-text-tertiary text-ui-xs shrink-0">
+              <span className="text-text-muted text-ui-xs shrink-0">
                 #{event.entity.step_id.slice(0, 8)}
               </span>
             )}
@@ -126,7 +126,7 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
         );
       })}
       {events.length > maxEvents && (
-        <div className="text-xs text-text-tertiary px-2 py-1">
+        <div className="text-xs text-text-muted px-2 py-1">
           … 省略 {events.length - maxEvents} 条更早的事件
         </div>
       )}

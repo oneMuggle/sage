@@ -212,7 +212,7 @@ export function CreateGoalModal({ isOpen, onClose }: CreateGoalModalProps) {
 
         {/* 条件配置面板（仅 CONDITIONAL 模式显示） */}
         {triggerMode === 'conditional' && (
-          <div className="space-y-3 p-3 bg-surface-secondary rounded-lg border border-border">
+          <div className="space-y-3 p-3 bg-bg-subtle rounded-lg border border-border">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-text">执行条件</label>
               <select

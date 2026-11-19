@@ -135,7 +135,7 @@ export function ContextMeter({ sessionId, refreshKey = 0, placement = 'top' }: C
     <span className="relative shrink-0" ref={panelRef}>
       <button
         type="button"
-        className="flex items-center gap-1.5 text-ui-2xs text-text-secondary hover:text-text-primary"
+        className="flex items-center gap-1.5 text-ui-2xs text-text-secondary hover:text-text"
         title={title}
         aria-expanded={open}
         data-testid="context-meter"
@@ -156,7 +156,7 @@ export function ContextMeter({ sessionId, refreshKey = 0, placement = 'top' }: C
           data-testid="context-meter-popover"
         >
           <span className="mb-2 flex items-center justify-between gap-1.5">
-            <span className="text-xs font-medium text-text-primary">
+            <span className="text-xs font-medium text-text">
               上下文占用 {formatTokens(used)} / {formatTokens(windowTokens)} tokens（
               {Math.round(pct * 100)}%）
               {usage.last_model ? ` · ${usage.last_model}` : ''}
@@ -264,7 +264,7 @@ function ContextSourceRow({ source }: { source: ContextSource }) {
         type="button"
         aria-expanded={open}
         data-testid={`context-meter-source-toggle-${source.key}`}
-        className="flex w-full items-center justify-between gap-2 py-0.5 text-left text-ui-2xs text-text-secondary hover:text-text-primary"
+        className="flex w-full items-center justify-between gap-2 py-0.5 text-left text-ui-2xs text-text-secondary hover:text-text"
         onClick={() => setOpen((v) => !v)}
       >
         <span className="flex min-w-0 items-center gap-1.5">
@@ -339,7 +339,7 @@ export function ContextSourceList({ sources }: { sources?: ContextSource[] | nul
   return (
     <span className="mt-2 block border-t border-border pt-2" data-testid="context-meter-sources">
       <span className="mb-1 flex items-center justify-between gap-1.5">
-        <span className="text-ui-2xs font-medium text-text-primary">
+        <span className="text-ui-2xs font-medium text-text">
           上一轮请求的来源分类（非内容验真）
         </span>
         <span className="flex items-center gap-1 shrink-0"></span>

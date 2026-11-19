@@ -134,7 +134,7 @@ export function NavGroup({
             aria-expanded={!collapsed}
             aria-label={`${label} ${collapsed ? '展开' : '折叠'}`}
             data-testid={`sidebar-nav-group-toggle-${groupKey}`}
-            className="flex items-center justify-center w-10 h-6 mx-auto my-0.5 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
+            className="flex items-center justify-center w-10 h-6 mx-auto my-0.5 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
           >
             <Chevron className="w-3 h-3" aria-hidden="true" />
             <span className="sr-only">

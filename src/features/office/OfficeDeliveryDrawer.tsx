@@ -249,7 +249,7 @@ export function OfficeDeliveryDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="text-text-tertiary hover:text-text-primary ml-1"
+            className="text-text-muted hover:text-text ml-1"
             data-testid="drawer-close"
             aria-label={t('office.delivery.close')}
           >
@@ -261,12 +261,12 @@ export function OfficeDeliveryDrawer({
       <div className="flex-1 overflow-y-auto">
         {/* Lint section */}
         <div className="px-4 py-3 border-b border-border">
-          <div className="text-xs text-text-tertiary mb-2">{t('office.delivery.lint')}</div>
+          <div className="text-xs text-text-muted mb-2">{t('office.delivery.lint')}</div>
           {lintState === 'loading' && (
-            <div className="text-xs text-text-tertiary">{t('orchestration.loading')}</div>
+            <div className="text-xs text-text-muted">{t('orchestration.loading')}</div>
           )}
           {lintState === 'skipped' && (
-            <div className="text-xs text-text-tertiary" data-testid="lint-skipped">
+            <div className="text-xs text-text-muted" data-testid="lint-skipped">
               {t('office.delivery.lintSkipped')}
             </div>
           )}
@@ -301,7 +301,7 @@ export function OfficeDeliveryDrawer({
                   {t('office.delivery.warnings').replace('{n}', String(lint.warning_count))}
                 </span>
               </div>
-              <div className="text-xs text-text-tertiary mb-1">
+              <div className="text-xs text-text-muted mb-1">
                 {t('office.delivery.rulesChecked').replace('{n}', String(lint.checked_rules.length))}
               </div>
               {lint.issues.length > 0 && (
@@ -317,7 +317,7 @@ export function OfficeDeliveryDrawer({
                       </span>{' '}
                       <span className="text-text-secondary">{issue.message}</span>
                       {issue.fix_hint !== '' && (
-                        <span className="text-text-tertiary truncate block" title={issue.fix_hint}>
+                        <span className="text-text-muted truncate block" title={issue.fix_hint}>
                           {issue.fix_hint}
                         </span>
                       )}
@@ -326,7 +326,7 @@ export function OfficeDeliveryDrawer({
                 </ul>
               )}
               {lint.issues.length > ISSUES_DISPLAY_CAP && (
-                <div className="text-xs text-text-tertiary mt-1">
+                <div className="text-xs text-text-muted mt-1">
                   {t('office.delivery.moreIssues').replace(
                     '{n}',
                     String(lint.issues.length - ISSUES_DISPLAY_CAP),
@@ -343,7 +343,7 @@ export function OfficeDeliveryDrawer({
                       String(repairReport.repaired_rules.length),
                     )}
                   </div>
-                  <div className="text-xs text-text-tertiary">
+                  <div className="text-xs text-text-muted">
                     {t('office.delivery.repairOutput').replace(
                       '{path}',
                       repairReport.output_path.split(/[\\/]/).pop() || repairReport.output_path,
@@ -388,9 +388,9 @@ export function OfficeDeliveryDrawer({
 
         {/* Preview section */}
         <div className="px-4 py-3 border-b border-border">
-          <div className="text-xs text-text-tertiary mb-2">{t('office.delivery.preview')}</div>
+          <div className="text-xs text-text-muted mb-2">{t('office.delivery.preview')}</div>
           {previewFailed ? (
-            <div className="text-xs text-text-tertiary" data-testid="preview-failed">
+            <div className="text-xs text-text-muted" data-testid="preview-failed">
               {t('office.delivery.previewFailed')}
             </div>
           ) : (

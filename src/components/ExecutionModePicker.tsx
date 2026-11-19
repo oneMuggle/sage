@@ -77,7 +77,7 @@ export function ExecutionModePicker({
         <button
           type="button"
           onClick={onClose}
-          className="w-full mt-4 px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
+          className="w-full mt-4 px-4 py-2 text-sm text-text-secondary hover:text-text transition-colors"
         >
           取消（保留 plan 待审阅）
         </button>

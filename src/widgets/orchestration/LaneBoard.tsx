@@ -72,7 +72,7 @@ function LaneCard({ lane, onCancel, onSelect }: LaneCardProps) {
       onClick={() => onSelect(lane.lane_id)}
     >
       <div className="flex items-center justify-between gap-1 mb-1">
-        <span className="font-mono text-xs text-text-tertiary truncate">{lane.lane_id}</span>
+        <span className="font-mono text-xs text-text-muted truncate">{lane.lane_id}</span>
         <span className="flex items-center gap-1 shrink-0">
           {source === 'subagent' && (
             <span
@@ -98,7 +98,7 @@ function LaneCard({ lane, onCancel, onSelect }: LaneCardProps) {
       <div className="text-sm text-text-secondary mb-1 truncate">
         {t('orchestration.lane.task')} {lane.task_id}
       </div>
-      <div className="flex items-center justify-between text-xs text-text-tertiary">
+      <div className="flex items-center justify-between text-xs text-text-muted">
         <span>
           {t('orchestration.lane.agent')} {lane.agent_id ?? t('orchestration.heartbeat.none')}
         </span>
@@ -180,11 +180,11 @@ function Column({ title, lanes, onCancel, onSelect }: ColumnProps) {
     <div className="flex-1 min-w-0">
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-medium text-sm">{title}</h3>
-        <span className="text-xs text-text-tertiary">{lanes.length}</span>
+        <span className="text-xs text-text-muted">{lanes.length}</span>
       </div>
       <div className="space-y-2">
         {lanes.length === 0 ? (
-          <div className="text-xs text-text-tertiary text-center py-4">
+          <div className="text-xs text-text-muted text-center py-4">
             {t('orchestration.column.empty')}
           </div>
         ) : (

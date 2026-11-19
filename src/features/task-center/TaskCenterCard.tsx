@@ -119,7 +119,7 @@ export function TaskCenterCard({ entry, actions, compact = false }: TaskCenterCa
           {!compact && <span className="text-ui-2xs text-muted shrink-0">{sourceLabel}</span>}
           {entry.percent != null ? (
             <div
-              className="h-1 flex-1 max-w-[120px] rounded-full bg-ui-border overflow-hidden"
+              className="h-1 flex-1 max-w-[120px] rounded-full bg-border overflow-hidden"
               role="progressbar"
               aria-valuenow={entry.percent}
               aria-valuemin={0}

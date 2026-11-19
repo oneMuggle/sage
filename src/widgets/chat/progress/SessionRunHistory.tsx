@@ -55,7 +55,7 @@ export function SessionRunHistory({ sessionId, onSelectRun, excludeRunId }: Sess
       <button
         type="button"
         data-testid="run-history-toggle"
-        className="text-xs text-text-tertiary hover:text-text-secondary px-2 py-0.5"
+        className="text-xs text-text-muted hover:text-text-secondary px-2 py-0.5"
         onClick={() => setOpen(true)}
       >
         ▸ 历史编排
@@ -70,7 +70,7 @@ export function SessionRunHistory({ sessionId, onSelectRun, excludeRunId }: Sess
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
-          className="text-xs text-text-tertiary hover:text-text-secondary"
+          className="text-xs text-text-muted hover:text-text-secondary"
           onClick={() => setOpen(false)}
         >
           ▾ 历史编排
@@ -78,9 +78,9 @@ export function SessionRunHistory({ sessionId, onSelectRun, excludeRunId }: Sess
         <div className="flex items-center gap-1">
         </div>
       </div>
-      {loading && <div className="text-xs text-text-tertiary py-1">加载中…</div>}
+      {loading && <div className="text-xs text-text-muted py-1">加载中…</div>}
       {!loading && runs.length === 0 && (
-        <div className="text-xs text-text-tertiary py-1">暂无编排记录</div>
+        <div className="text-xs text-text-muted py-1">暂无编排记录</div>
       )}
       {filteredRuns.map((run) => {
         const done = run.tasks.filter((t) => t.status === 'done').length;
@@ -113,17 +113,17 @@ export function SessionRunHistory({ sessionId, onSelectRun, excludeRunId }: Sess
               {(run.original_request ?? '').slice(0, 60) || run.run_id}
             </span>
             {total > 0 && (
-              <span className="text-text-tertiary shrink-0">
+              <span className="text-text-muted shrink-0">
                 {done}/{total}
               </span>
             )}
             {/* RD24: 消耗统计 */}
             {totalTokens > 0 && (
-              <span className="text-text-tertiary shrink-0" data-testid={`run-history-tokens-${run.run_id}`}>
+              <span className="text-text-muted shrink-0" data-testid={`run-history-tokens-${run.run_id}`}>
                 {totalTokens.toLocaleString()} tokens
               </span>
             )}
-            <span className="text-text-tertiary shrink-0 text-ui-xs">
+            <span className="text-text-muted shrink-0 text-ui-xs">
               {formatRelative(run.created_at)}
             </span>
           </button>

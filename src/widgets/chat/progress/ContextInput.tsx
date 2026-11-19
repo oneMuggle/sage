@@ -139,7 +139,7 @@ export function ContextInput({
       className="px-4 py-3 border-t border-border bg-bg-muted"
       data-testid="context-input"
     >
-      <div className="text-xs text-text-tertiary mb-2">追加信息</div>
+      <div className="text-xs text-text-muted mb-2">追加信息</div>
 
       <div className="flex items-center gap-2 mb-2">
         <label className="text-xs text-text-secondary" htmlFor="ctx-message-type">
@@ -186,7 +186,7 @@ export function ContextInput({
       />
       <div className="flex items-center justify-between mt-1">
         <span
-          className={`text-ui-xs ${overLimit ? 'text-error' : 'text-text-tertiary'}`}
+          className={`text-ui-xs ${overLimit ? 'text-error' : 'text-text-muted'}`}
         >
           {byteLength.toLocaleString()} / {CONTENT_MAX_BYTES.toLocaleString()} bytes
         </span>
@@ -212,7 +212,7 @@ export function ContextInput({
         >
           {state.message}
           {state.contextId && (
-            <span className="ml-2 text-text-tertiary">
+            <span className="ml-2 text-text-muted">
               ({state.contextId.slice(0, 16)})
             </span>
           )}

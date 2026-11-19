@@ -151,7 +151,7 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
     <div className="relative">
       <button
         type="button"
-        className="p-1.5 rounded-md text-muted hover:text-text hover:bg-surface-hover transition-colors disabled:opacity-50"
+        className="p-1.5 rounded-md text-muted hover:text-text hover:bg-bg-hover transition-colors disabled:opacity-50"
         title="上传音频文件"
         disabled={uploading}
         onClick={() => inputRef.current?.click()}
