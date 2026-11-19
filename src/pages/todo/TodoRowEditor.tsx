@@ -13,6 +13,7 @@ import {
   Calendar,
   Check,
   CheckCircle2,
+  Clock3,
   Copy,
   Flag,
   Pencil,
@@ -44,6 +45,8 @@ interface TodoRowEditorProps {
   onDelete: (id: number) => Promise<void>;
   /** 仅顶层行提供：行内创建子任务（最多两级）。 */
   onAddSubtask?: (parentId: number, title: string) => Promise<void>;
+  /** 阶段 3：稍后提醒（due_at 后移 N 分钟）。 */
+  onSnooze?: (id: number, minutes: number) => Promise<void>;
 }
 
 const PRIORITY_CYCLE: TodoPriority[] = ['low', 'medium', 'high'];
@@ -93,6 +96,7 @@ export function TodoRowEditor({
   onCancel,
   onDelete,
   onAddSubtask,
+  onSnooze,
 }: TodoRowEditorProps) {
   const { t } = useI18n();
   const [editingTitle, setEditingTitle] = useState(false);
@@ -248,6 +252,30 @@ export function TodoRowEditor({
           ],
         },
       );
+      if (onSnooze) {
+        items.push({
+          id: 'todo-snooze',
+          label: '稍后提醒',
+          icon: Clock3,
+          submenu: [
+            {
+              id: 'todo-snooze-10',
+              label: '10 分钟后',
+              onSelect: () => void onSnooze(todo.id, 10),
+            },
+            {
+              id: 'todo-snooze-60',
+              label: '1 小时后',
+              onSelect: () => void onSnooze(todo.id, 60),
+            },
+            {
+              id: 'todo-snooze-1440',
+              label: '明天',
+              onSelect: () => void onSnooze(todo.id, 24 * 60),
+            },
+          ],
+        });
+      }
     }
     items.push(
       {
@@ -442,6 +470,28 @@ export function TodoRowEditor({
               data-testid={`todo-source-${todo.id}`}
             >
               来自对话
+            </span>
+          )}
+
+          {/* 专家归属（阶段 3） */}
+          {todo.specialist_id && (
+            <span
+              className="px-1.5 py-0.5 text-ui-xs rounded-full bg-purple-50 dark:bg-purple-900/20 text-purple-600 flex-shrink-0"
+              title={`专家专属：${todo.specialist_id}`}
+              data-testid={`todo-specialist-${todo.id}`}
+            >
+              @{todo.specialist_id}
+            </span>
+          )}
+
+          {/* 推迟次数（阶段 3；≥2 次提示容易拖延） */}
+          {(todo.snooze_count ?? 0) >= 2 && (
+            <span
+              className="flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 flex-shrink-0"
+              title={`已推迟 ${todo.snooze_count} 次`}
+              data-testid={`todo-snooze-badge-${todo.id}`}
+            >
+              <Clock3 className="w-3 h-3" />×{todo.snooze_count}
             </span>
           )}
 

@@ -147,3 +147,34 @@ def todo_stats(db: Any) -> Dict[str, Any]:
         "due_today": due_today,
         "completed_today": completed_today,
     }
+
+
+def completion_heatmap(db: Any, days: int = 91) -> Dict[str, Any]:
+    """按日聚合完成数（GitHub 风格热力图，最近 ``days`` 天，含今天）。
+
+    返回 ``{"days": [{"date": "YYYY-MM-DD", "count": n}, ...], "total": n, "max": n}``；
+    区间内无完成记录的日期补 0，保证前端网格完整。
+    """
+    span = max(7, min(int(days), 366))
+    today = datetime.now().date()
+    start = today - timedelta(days=span - 1)
+
+    conn = db.get_connection()
+    rows = conn.execute(
+        "SELECT DATE(completed_at) AS day, COUNT(*) AS n FROM todos "
+        "WHERE status = 'completed' AND completed_at IS NOT NULL "
+        "AND DATE(completed_at) >= ? GROUP BY day",
+        (start.isoformat(),),
+    ).fetchall()
+    counts = {row["day"]: row["n"] for row in rows}
+
+    series = []
+    day = start
+    while day <= today:
+        key = day.isoformat()
+        series.append({"date": key, "count": int(counts.get(key, 0))})
+        day += timedelta(days=1)
+
+    total = sum(item["count"] for item in series)
+    max_count = max((item["count"] for item in series), default=0)
+    return {"days": series, "total": total, "max": max_count}

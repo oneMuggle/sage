@@ -25,6 +25,7 @@ interface TodoState {
   cancel: (id: number) => Promise<Todo>;
   batchComplete: (ids: number[]) => Promise<TodoBatchCompleteResult>;
   batchDelete: (ids: number[]) => Promise<number>;
+  snooze: (id: number, minutes: number) => Promise<Todo>;
   loadSummary: () => Promise<void>;
 }
 
@@ -100,6 +101,12 @@ export const useTodoStore = create<TodoState>((set, get) => ({
     const result = await todoClient.batchDelete(ids);
     await get().load(get().params);
     return result.deleted;
+  },
+
+  async snooze(id: number, minutes: number) {
+    const updated = await todoClient.snooze(id, minutes);
+    set({ todos: get().todos.map((t) => (t.id === id ? updated : t)) });
+    return updated;
   },
 
   async loadSummary() {

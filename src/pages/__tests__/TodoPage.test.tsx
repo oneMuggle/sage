@@ -34,6 +34,8 @@ const mocks = vi.hoisted(() => ({
   listTags: vi.fn(),
   dailyBrief: vi.fn(),
   weeklyReview: vi.fn(),
+  heatmap: vi.fn(),
+  snooze: vi.fn(),
   state: {
     todos: [] as Todo[],
     loading: false,
@@ -49,7 +51,13 @@ vi.mock('../../shared/api/todoClient', () => ({
     listTags: mocks.listTags,
     dailyBrief: mocks.dailyBrief,
     weeklyReview: mocks.weeklyReview,
+    heatmap: mocks.heatmap,
+    snooze: mocks.snooze,
   },
+}));
+
+vi.mock('../../shared/api/agentsApi', () => ({
+  agentsApi: { list: vi.fn().mockResolvedValue([]) },
 }));
 
 // Mock the zustand store hook so callers receive our controlled `state`.
@@ -70,6 +78,7 @@ vi.mock('../../entities/todo/todoStore', () => ({
       setParams: mocks.setParams,
       batchComplete: mocks.batchComplete,
       batchDelete: mocks.batchDelete,
+      snooze: mocks.snooze,
     };
     return selector(merged);
   },
@@ -99,6 +108,12 @@ beforeEach(() => {
   mocks.listTags.mockResolvedValue([]);
   mocks.dailyBrief.mockResolvedValue({ content: '• 处理逾期项' });
   mocks.weeklyReview.mockResolvedValue({ content: '## 完成情况' });
+  mocks.heatmap.mockResolvedValue({
+    days: [{ date: '2026-11-18', count: 2 }],
+    total: 2,
+    max: 2,
+  });
+  mocks.snooze.mockResolvedValue({} as Todo);
   Object.defineProperty(URL, 'createObjectURL', {
     writable: true,
     value: vi.fn(() => 'blob:mock'),
@@ -274,6 +289,20 @@ describe('TodoPage', () => {
 
     expect(await screen.findByTestId('todo-ai-content')).toHaveTextContent('处理逾期项');
     expect(mocks.dailyBrief).toHaveBeenCalledTimes(1);
+  });
+
+  it('toggles the completion heatmap', async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByTestId('todo-heatmap-toggle'));
+
+    expect(await screen.findByTestId('todo-heatmap')).toBeInTheDocument();
+    expect(mocks.heatmap).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('todo-heatmap-toggle'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('todo-heatmap')).not.toBeInTheDocument();
+    });
   });
 });
 
