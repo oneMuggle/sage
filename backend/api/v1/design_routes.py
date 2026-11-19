@@ -349,6 +349,22 @@ async def restore_artifact(project_id: str, artifact_id: str):
 
 
 # ---------------------------------------------------------------------------
+# GET /design/projects/:project_id/messages — iteration history
+# ---------------------------------------------------------------------------
+
+
+@router.get("/projects/{project_id}/messages")
+async def list_messages(project_id: str):
+    """Return persisted iteration messages, oldest first."""
+    studio = _require_studio()
+    try:
+        messages = studio.list_messages(project_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    return [m.model_dump() for m in messages]
+
+
+# ---------------------------------------------------------------------------
 # POST /design/projects/:project_id/generate (SSE)
 # ---------------------------------------------------------------------------
 

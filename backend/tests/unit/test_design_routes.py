@@ -364,6 +364,32 @@ class TestDesignRoutes:
         assert fetched.status_code == 200
         assert fetched.json()["html_content"] == "<html>1</html>"
 
+    async def test_list_messages_after_iterate(self, studio):
+        """迭代后 GET messages 返回持久化的用户/助手消息。"""
+        from backend.main import app
+
+        project = studio.create_project(kind="prototype", brief="msg")
+        studio.add_artifact(project.id, "<html/>", title="Base")
+        await studio.iterate(project.id, "warmer accent")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.get(
+                    f"/api/v1/design/projects/{project.id}/messages",
+                )
+
+        assert resp.status_code == 200
+        messages = resp.json()
+        assert messages[0]["role"] == "user"
+        assert messages[0]["content"] == "warmer accent"
+        assert messages[-1]["role"] == "assistant"
+
     async def test_create_project_invalid_kind(self, studio):
         from backend.main import app
 

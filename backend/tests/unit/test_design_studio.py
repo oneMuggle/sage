@@ -312,3 +312,20 @@ class TestDesignStudio:
         artifact = studio.add_artifact(p1.id, "<html/>", title="x")
         with pytest.raises(DesignProjectNotFoundError):
             studio.restore_artifact(p2.id, artifact.id)
+
+    @pytest.mark.asyncio()
+    async def test_iterate_records_messages(self, studio):
+        """每次迭代持久化用户反馈与对应的产物版本。"""
+        project = studio.create_project(kind="prototype", brief="iterate me")
+        first = studio.add_artifact(project.id, "<html/>", title="Base")
+        await studio.iterate(project.id, "darker palette")
+        messages = studio.list_messages(project.id)
+        assert messages[0].role == "user"
+        assert messages[0].content == "darker palette"
+        assert messages[-1].role == "assistant"
+        assert messages[-1].artifact_version > first.version
+        assert messages[-1].artifact_id
+
+    def test_list_messages_unknown_project_raises(self, studio):
+        with pytest.raises(DesignProjectNotFoundError):
+            studio.list_messages("missing-project")

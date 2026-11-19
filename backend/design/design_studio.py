@@ -21,6 +21,7 @@ from backend.design.errors import (
 )
 from backend.design.generator import DesignGenerator
 from backend.design.lint import DesignLinter
+from backend.design.messages_store import IterationMessage, MessageStore
 from backend.design.models import (
     DesignArtifact,
     DesignProject,
@@ -68,6 +69,7 @@ class DesignStudio:
         self._workspace = workspace_dir
         self._craft_rules = craft_rules
         self._lint_retry = lint_retry
+        self._messages = MessageStore(workspace_dir / "design")
         self._version_lock = threading.Lock()
 
     def _resolve_template_for_kind(
@@ -177,6 +179,11 @@ class DesignStudio:
     def get_artifact(self, artifact_id: str) -> DesignArtifact:
         """Fetch one artifact (including HTML content) by ID."""
         return self._repo.get_artifact(artifact_id)
+
+    def list_messages(self, project_id: str) -> List[IterationMessage]:
+        """List persisted iteration messages for a project."""
+        self._repo.get_project(project_id)
+        return self._messages.list(project_id)
 
     def restore_artifact(
         self, project_id: str, artifact_id: str,
@@ -378,6 +385,11 @@ class DesignStudio:
                 )
 
             self._repo.update_project_status(project_id, "complete")
+            self._messages.append(
+                project_id, "assistant", artifact.title,
+                artifact_id=artifact.id,
+                artifact_version=artifact.version,
+            )
             return artifact
 
         except asyncio.CancelledError:
@@ -404,6 +416,7 @@ class DesignStudio:
         )
 
         self._repo.update_project_status(project_id, "generating")
+        self._messages.append(project_id, "user", feedback)
 
         try:
             # C1: delegate LLM call to bridge loop.
@@ -463,6 +476,11 @@ class DesignStudio:
                 )
 
             self._repo.update_project_status(project_id, "complete")
+            self._messages.append(
+                project_id, "assistant", artifact.title,
+                artifact_id=artifact.id,
+                artifact_version=artifact.version,
+            )
             return artifact
 
         except asyncio.CancelledError:
