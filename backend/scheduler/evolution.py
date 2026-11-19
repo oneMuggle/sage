@@ -595,18 +595,20 @@ class PreferenceLearningTask(BaseEvolutionTask):
         conn.commit()
 
         # P0-2：同步写入 user_profile，让学到的偏好真正进 system prompt
-        # （hermes 冻结语义：add() 只更新 DB + 内存 _entries，不调 invalidate()，
-        # 下次会话启动才刷新快照 —— 保 prefix cache）
+        # 用全局单例（与进程共享，不构造局部实例避免快照分裂）；upsert 走
+        # 结构化维度覆盖（dimension=key），新偏好自动 supersedes 旧偏好。
         try:
-            from backend.memory.user_profile import UserProfileStore
+            from backend.memory.user_profile import get_user_profile
 
-            profile_store = UserProfileStore(self.db)
-            profile_store.load()
+            profile_store = get_user_profile(self.db)
             for key, value in preferences.items():
-                profile_store.add(
+                profile_store.upsert(
                     content=format_preference(key, value),
                     category="preference",
                     importance=6,
+                    source="evolution",
+                    evidence_session_id=None,
+                    dimension=key,
                 )
         except Exception as exc:  # noqa: BLE001 — 偏好写 user_profile 是旁路，不阻断主流程
             logger.warning(f"偏好写入 user_profile 失败（旁路）: {exc}")
