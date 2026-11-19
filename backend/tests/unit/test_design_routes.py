@@ -390,6 +390,36 @@ class TestDesignRoutes:
         assert messages[0]["content"] == "warmer accent"
         assert messages[-1]["role"] == "assistant"
 
+    async def test_export_zip_inline_returns_base64(self, studio):
+        """inline=True 时导出结果以 base64 返回，前端可直接下载。"""
+        import base64
+
+        from backend.main import app
+
+        project = studio.create_project(kind="prototype", brief="zip me")
+        studio.add_artifact(
+            project.id, "<html><body>x</body></html>", title="Z",
+        )
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    f"/api/v1/design/projects/{project.id}/export",
+                    json={"format": "zip", "inline": True},
+                )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["filename"].endswith(".zip")
+        assert base64.b64decode(body["content_base64"])[:2] == b"PK"
+
     async def test_create_project_invalid_kind(self, studio):
         from backend.main import app
 

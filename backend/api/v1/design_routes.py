@@ -18,6 +18,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from typing import Optional
@@ -86,6 +87,7 @@ class ExportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     format: str = "html"
+    inline: bool = False
 
 
 class OutlineRequest(BaseModel):
@@ -531,6 +533,19 @@ async def export_artifact(  # noqa: PLR0911 — 每个校验门一个返回是�
                 status_code=500,
                 content={"detail": result.error or "Export failed"},
             )
+
+        if req.inline and req.format != "html" and result.file_path:
+            from pathlib import Path as _Path
+
+            path = _Path(result.file_path)
+            return {
+                "ok": True,
+                "format": result.format,
+                "filename": path.name,
+                "content_base64": base64.b64encode(
+                    path.read_bytes()
+                ).decode("ascii"),
+            }
 
         return result.model_dump()
 
