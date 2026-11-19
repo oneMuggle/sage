@@ -283,6 +283,9 @@ class TestBrowserCookiesTool:
         def _fake_cdp(session_, method, params=None, target_id=None):
             if method == "Target.getTargets":
                 return {"targetInfos": []}
+            if method == "Runtime.evaluate":
+                # 站点复检：空 URL → 跳过策略检查，继续导出
+                return {"result": {"value": ""}}
             assert method == "Network.getCookies"
             return {
                 "cookies": [
