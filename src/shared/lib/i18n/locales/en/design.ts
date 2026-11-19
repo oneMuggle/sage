@@ -69,7 +69,7 @@ export const enDesign = {
   'design.export.zip': 'ZIP',
   'design.export.html': 'HTML',
   'design.export.running': 'Exporting…',
-  'design.export.success': 'Exported: {path}',
+  'design.export.success': 'Downloaded {name}',
   'design.export.failed': 'Export failed: {error}',
   'design.export.needsArtifact': 'Generate an artifact before exporting',
 };

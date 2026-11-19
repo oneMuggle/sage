@@ -72,7 +72,7 @@ export const zhDesign = {
   'design.export.zip': 'ZIP',
   'design.export.html': 'HTML',
   'design.export.running': '导出中…',
-  'design.export.success': '导出成功：{path}',
+  'design.export.success': '已下载 {name}',
   'design.export.failed': '导出失败：{error}',
   'design.export.needsArtifact': '生成产物后才能导出',
 };
