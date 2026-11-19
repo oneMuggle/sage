@@ -311,3 +311,43 @@ async def test_failed_tool_dict_content_keeps_browser_meta_in_envelope():
     assert payload["error"].startswith("needs_confirmation: ")
     assert payload["content"]["browser_meta"]["session_id"] == "b1"
     assert payload["content"]["browser_meta"]["action"] == "navigate"
+
+
+@pytest.mark.asyncio()
+async def test_non_browser_tool_dict_failure_has_no_json_envelope():
+    """I2：非浏览器工具失败（content 为 dict 但无 browser_meta）不应包 JSON 信封。
+
+    信封收窄后只保留浏览器工具（browser_meta 存在）的结构化 content，
+    避免 office_update 等普通工具的失败历史被 JSON 膨胀。
+    """
+    tool_call = _make_tool_call("call_office", name="office_update")
+    agent = SageAgent()
+    from backend.tools.permissions import PermissionDecision
+
+    agent._check_permission = MagicMock(
+        return_value=PermissionDecision(allowed=True, needs_approval=False, reason="test")
+    )
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(
+        side_effect=[
+            _make_response(content="", tool_calls=[tool_call]),
+            _make_response(content="更新失败"),
+        ]
+    )
+    _patch_tool_registry(
+        agent,
+        success=False,
+        content={"doc_id": "d1", "reason": "invalid_range"},
+        error="office_update: 范围非法",
+    )
+
+    events = await _collect_events(agent, [{"role": "user", "content": "改文档"}])
+
+    observing = [e for e in events if e.state == AgentState.OBSERVING]
+    assert observing, [e.state for e in events]
+    result = observing[0].tool_result
+    assert result.is_error is True
+    # 普通错误串，而不是 {"success": false, "error": ..., "content": {...}}
+    assert "office_update: 范围非法" in result.content
+    assert not result.content.lstrip().startswith("{")
+

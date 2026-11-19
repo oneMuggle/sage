@@ -260,6 +260,33 @@ def _meta_error(
     return _meta_result(result, session, action)
 
 
+def _current_page_site_block(
+    session: BrowserSession, action: str
+) -> Optional[ToolResult]:
+    """复检当前页面域名；命中 block 站点策略时返回拦截结果，否则 None。
+
+    CDP 读不到 URL 时放行：复检失败不阻断主流程。
+    """
+    try:
+        href_result = cdp_command(
+            session, "Runtime.evaluate", {"expression": "location.href"}
+        )
+    except BrowserCDPError:
+        return None
+    current_url = str((href_result.get("result") or {}).get("value") or "")
+    if not current_url:
+        return None
+    domain = (urlsplit(current_url).hostname or "").lower()
+    if not domain or _safety_check_site(session.browser_id, current_url) != "block":
+        return None
+    return _meta_result(
+        ToolResult(success=False, error=f"site_blocked: 当前页面已被禁止 {domain}"),
+        session,
+        action,
+        url=current_url,
+    )
+
+
 def _step_thumbnails_enabled() -> bool:
     """步骤缩略图开关；读取失败 / 缺省一律按开启处理。"""
     try:
@@ -380,6 +407,7 @@ def _site_access_gate(
         )
     verdict = _safety_check_site(session.browser_id, url)
     if verdict == "block":
+        get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
         _record_browser_audit(
             session,
             "browser_navigate",
@@ -2004,6 +2032,11 @@ class BrowserScreenshotTool(BaseTool):
             blocked = _blocked_by_control(session, "browser_screenshot")
             if blocked is not None:
                 return blocked
+            # I1 补强：截图前复检当前页面域名，命中 block 策略时拒绝。
+            # 防止 navigate 后页面已被禁、但截图仍可读内容的漏洞。
+            blocked_site = _current_page_site_block(session, "screenshot")
+            if blocked_site is not None:
+                return blocked_site
             if bool(full_page):
                 try:
                     result = cdp_command(
@@ -2586,6 +2619,12 @@ class BrowserCookiesTool(BaseTool):
             blocked = _blocked_by_control(gate_session, "browser_cookies")
             if blocked is not None:
                 return blocked
+            # I1 补强：export 动作实际读取当前页 cookie，需复检域名是否在 block 策略中。
+            # list/delete/set_header 不碰浏览器页面，跳过。
+            if action == "export":
+                blocked_site = _current_page_site_block(gate_session, "cookies")
+                if blocked_site is not None:
+                    return blocked_site
 
         if action == "set_header":
             from .credential_vault import save_header_credential
