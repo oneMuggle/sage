@@ -347,9 +347,16 @@ class MemoryAdapter:
         episodic: List[dict] = []
         semantic: List[dict] = []
         # 4.1 持久用户画像（USER.md 概念）——冻结快照条目（char 受限），
-        #     不依赖本轮检索命中（hermes 冻结快照语义）
+        #     不依赖本轮检索命中（hermes 冻结快照语义）。
+        #     有 session_id 时取该会话的冻结切面：新会话首轮即见最新画像，
+        #     已开会话保持启动时刻的切面（保 prefix cache）。
         if self.user_profile is not None:
-            core_profile = self.user_profile.get_core_items()
+            profile_store = (
+                self.user_profile.get_snapshot_for(session_id)
+                if session_id
+                else self.user_profile
+            )
+            core_profile = profile_store.get_core_items()
         # 4.1b 项目画像（P2）：仅当会话绑定了工作区（current_project_key
         #      非空）时取该项目的冻结快照；未绑定恒为空。
         if current_project_key:
@@ -605,7 +612,13 @@ class MemoryAdapter:
                 tags=[category],
             )
         try:
-            pid = self.user_profile.add(content, category=category, importance=importance)
+            pid = self.user_profile.upsert(
+                content,
+                category=category,
+                importance=importance,
+                source="per_turn",
+                evidence_session_id=session_id,
+            )
             return pid or ""
         except Exception as exc:  # noqa: BLE001 - best-effort 契约
             logger.warning(f"User profile store failed: {exc}")
