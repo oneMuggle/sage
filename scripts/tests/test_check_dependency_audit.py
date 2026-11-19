@@ -666,3 +666,102 @@ def test_report_error_escapes_github_workflow_commands(capsys):
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Validate dependency-audit reports" in result.stdout
+
+
+def _nested_duplicate_fixture():
+    """picomatch 顶层 4.0.7 + anymatch 嵌套副本 2.3.2 的最小复现。"""
+    lock = {
+        "lockfileVersion": 3,
+        "packages": {
+            "": {"name": "sage", "version": "1.0.0"},
+            "node_modules/picomatch": {"version": "4.0.7"},
+            "node_modules/anymatch": {"version": "3.1.3"},
+            "node_modules/anymatch/node_modules/picomatch": {"version": "2.3.2"},
+        },
+    }
+    report = {
+        "metadata": {
+            "vulnerabilities": {"low": 0, "moderate": 0, "high": 2, "critical": 0}
+        },
+        "vulnerabilities": {
+            "anymatch": {
+                "name": "anymatch",
+                "severity": "high",
+                "nodes": ["node_modules/anymatch"],
+                "via": ["picomatch"],
+            },
+            "picomatch": {
+                "name": "picomatch",
+                "severity": "high",
+                "nodes": [
+                    "node_modules/picomatch",
+                    "node_modules/anymatch/node_modules/picomatch",
+                ],
+                "via": [
+                    {
+                        "url": "https://github.com/advisories/GHSA-nest-nest-nest",
+                        "severity": "high",
+                    }
+                ],
+            },
+        },
+    }
+    return lock, report
+
+
+def _nested_policy_entry(version: str, path: str):
+    return {
+        "source": "npm",
+        "package": "picomatch",
+        "package_version": version,
+        "advisory": "GHSA-nest-nest-nest",
+        "advisory_url": "https://github.com/advisories/GHSA-nest-nest-nest",
+        "affected_path": path,
+        "actual_reachability": "dev only",
+        "controls": "test control",
+        "owner": "Sage maintainers",
+        "review_by": "2099-01-01",
+    }
+
+
+def test_allows_nested_duplicate_per_node_policy(tmp_path):
+    lock, report = _nested_duplicate_fixture()
+    policy = {
+        "default_action": "fail",
+        "exceptions": [
+            _nested_policy_entry("4.0.7", "node_modules/picomatch"),
+            _nested_policy_entry(
+                "2.3.2", "node_modules/anymatch/node_modules/picomatch"
+            ),
+        ],
+    }
+    result = run_gate(
+        tmp_path,
+        policy=policy,
+        npm=report,
+        npm_prod=empty_npm(),
+        package_lock=lock,
+        NPM_AUDIT_ALL_OUTCOME="success",
+        NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_rejects_nested_duplicate_missing_policy_entry(tmp_path):
+    lock, report = _nested_duplicate_fixture()
+    policy = {
+        "default_action": "fail",
+        "exceptions": [_nested_policy_entry("4.0.7", "node_modules/picomatch")],
+    }
+    result = run_gate(
+        tmp_path,
+        policy=policy,
+        npm=report,
+        npm_prod=empty_npm(),
+        package_lock=lock,
+        NPM_AUDIT_ALL_OUTCOME="success",
+        NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 1
+    assert "not covered by policy" in result.stdout
+    assert "node_modules/anymatch/node_modules/picomatch" in result.stdout

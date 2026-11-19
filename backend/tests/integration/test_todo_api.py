@@ -536,3 +536,86 @@ def test_update_todo_reminder_offsets(client: TestClient):
 
     assert resp.status_code == 200
     assert resp.json()["reminder_offsets"] == [30]
+
+
+# --- 阶段 2：批量创建 / 对话提炼 / 简报 / 周回顾 ---
+
+
+def test_batch_create_with_source(client: TestClient):
+    resp = client.post(
+        "/api/v1/todos/batch/create",
+        json={
+            "items": [
+                {"title": "提炼A", "source_type": "chat", "source_ref": "session-x"},
+                {"title": "提炼B"},
+            ]
+        },
+    )
+
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert [item["title"] for item in items] == ["提炼A", "提炼B"]
+    assert items[0]["source_type"] == "chat"
+    assert items[0]["source_ref"] == "session-x"
+
+
+def test_batch_create_rejects_empty_items(client: TestClient):
+    resp = client.post("/api/v1/todos/batch/create", json={"items": []})
+    assert resp.status_code == 400
+
+
+def test_extract_route_returns_candidates(client: TestClient, monkeypatch):
+    from backend.services import todo_ai
+
+    async def fake_extract(session_id, message_ids=None):
+        return [
+            {"title": "交报告", "due_at": None, "priority": "high", "tags": ["工作"]}
+        ]
+
+    monkeypatch.setattr(todo_ai, "extract_todos", fake_extract)
+
+    resp = client.post("/api/v1/todos/extract", json={"session_id": "s1"})
+
+    assert resp.status_code == 200
+    assert resp.json()["candidates"][0]["title"] == "交报告"
+
+
+def test_extract_route_maps_unconfigured_llm_to_503(client: TestClient, monkeypatch):
+    from backend.services import todo_ai
+
+    async def fake_extract(session_id, message_ids=None):
+        raise todo_ai.LLMNotConfiguredError("LLM 未配置")
+
+    monkeypatch.setattr(todo_ai, "extract_todos", fake_extract)
+
+    resp = client.post("/api/v1/todos/extract", json={"session_id": "s1"})
+
+    assert resp.status_code == 503
+
+
+def test_daily_brief_route(client: TestClient, monkeypatch):
+    from backend.services import todo_ai
+
+    async def fake_brief(summary):
+        return "• 建议"
+
+    monkeypatch.setattr(todo_ai, "generate_daily_brief", fake_brief)
+
+    resp = client.get("/api/v1/todos/brief")
+
+    assert resp.status_code == 200
+    assert resp.json()["content"] == "• 建议"
+
+
+def test_weekly_review_route(client: TestClient, monkeypatch):
+    from backend.services import todo_ai
+
+    async def fake_review(stats, completed, pending):
+        return "## 回顾"
+
+    monkeypatch.setattr(todo_ai, "generate_weekly_review", fake_review)
+
+    resp = client.get("/api/v1/todos/weekly-review")
+
+    assert resp.status_code == 200
+    assert resp.json()["content"] == "## 回顾"

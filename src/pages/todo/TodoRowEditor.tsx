@@ -434,6 +434,17 @@ export function TodoRowEditor({
             </span>
           )}
 
+          {/* 来源（阶段 2：对话提炼反向链接） */}
+          {todo.source_type === 'chat' && (
+            <span
+              className="px-1.5 py-0.5 text-ui-xs rounded-full bg-primary/10 text-primary flex-shrink-0"
+              title={`来自对话 ${todo.source_ref ?? ''}`}
+              data-testid={`todo-source-${todo.id}`}
+            >
+              来自对话
+            </span>
+          )}
+
           {/* 自定义提醒档位（有配置时显示） */}
           {(todo.reminder_offsets?.length ?? 0) > 0 && (
             <span
