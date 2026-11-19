@@ -23,7 +23,7 @@ import { sessionApi } from '../shared/api/sessionApi';
 import { worktreeApi, type BranchEntry, type SessionWorktree } from '../shared/api/worktreeApi';
 import { useGlobalFileDrop } from '../shared/lib/hooks/useGlobalFileDrop';
 import { useI18n, type TranslationKey } from '../shared/lib/i18n';
-import { useStore } from '../shared/lib/store';
+import { useStore, type Session } from '../shared/lib/store';
 import { AssistantRecommendations } from '../widgets/welcome/AssistantRecommendations';
 import { AUTO_MODEL_ID, type ModelOption } from '../widgets/welcome/ModelPicker';
 import type { ProjectOption } from '../widgets/welcome/ProjectPicker';
@@ -107,7 +107,7 @@ export function formatWelcomePageJson(params: {
 export function Welcome() {
   const { locale, t } = useI18n();
   const navigate = useNavigate();
-  const { createSession, setCurrentSessionId } = useStore();
+  const { createSession, setCurrentSessionId, addSession } = useStore();
   const { settings } = useSettings();
 
   const phrases = locale === 'zh' ? PLACEHOLDER_PHRASES_ZH : PLACEHOLDER_PHRASES_EN;
@@ -300,7 +300,13 @@ export function Welcome() {
   // 工作区文件（AtFileMenu → fileSearchClient → workspace_search_files）。
   // 因此 `@` 菜单激活时懒创建一个会话并绑定项目/最近工作区；提交时复用，
   // 避免为同一条消息创建两个会话。
-  const draftSessionRef = useRef<{ projectId: string | null; sessionId: string } | null>(null);
+  // 2026-11-19 实时排序：缓存 session 对象，提交时写入 store 侧栏列表，
+  // 避免项目绑定路径只建库不写 store、要等流末全量刷新才出现。
+  const draftSessionRef = useRef<{
+    projectId: string | null;
+    sessionId: string;
+    session?: Session;
+  } | null>(null);
   const draftPromiseRef = useRef<Promise<string | null> | null>(null);
   // 2026-10-29 修复: 用 generation 计数器取消「换项目后仍在飞行中」的旧创建请求,
   // 避免旧 promise resolve 时覆盖 `setCurrentSessionId(null)` 把 UI 指到错误项目。
@@ -313,12 +319,18 @@ export function Welcome() {
     const generation = ++draftGenerationRef.current;
     const creation = (async () => {
       try {
-        const sessionId = projectId
-          ? (await projectApi.createSession(projectId)).session.id
-          : await createSession();
+        let sessionId: string;
+        let created: Session | undefined;
+        if (projectId) {
+          const result = await projectApi.createSession(projectId);
+          sessionId = result.session.id;
+          created = result.session;
+        } else {
+          sessionId = await createSession();
+        }
         // 创建期间用户已切换项目 → 丢弃本次结果, 让新项目的 ensureDraftSession 重新创建。
         if (draftGenerationRef.current !== generation) return null;
-        draftSessionRef.current = { projectId, sessionId };
+        draftSessionRef.current = { projectId, sessionId, session: created };
         setCurrentSessionId(sessionId);
         return sessionId;
       } catch (error) {
@@ -372,19 +384,26 @@ export function Welcome() {
         // 1. Reuse the draft session created on `@` activation when it matches
         //    the target project; otherwise create a fresh one (with project
         //    binding if selected).
+        //    2026-11-19 实时排序：拿到的 Session 对象写入 store，避免项目绑定
+        //    路径只建库不写 store，侧栏要等流末全量刷新才出现新会话。
         const draft = draftSessionRef.current;
         let sessionId: string;
+        let createdSession: Session | undefined;
         if (draft && draft.projectId === (effectiveProjectId ?? null)) {
           sessionId = draft.sessionId;
+          createdSession = draft.session;
+        } else if (effectiveProjectId) {
+          const result = await projectApi.createSession(effectiveProjectId);
+          sessionId = result.session.id;
+          createdSession = result.session;
         } else {
-          sessionId = effectiveProjectId
-            ? (await projectApi.createSession(effectiveProjectId)).session.id
-            : // 2026-11-04 (fix/skip-workspace-binding): effectiveProjectId === null
-              // 表示用户在新会话页明确选择"不绑定项目"，传 skipBinding=true 跳过工作区解析链。
-              // 语义对齐主流 AI 应用 (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
-              await createSession(effectiveProjectId === null);
+          // 2026-11-04 (fix/skip-workspace-binding): effectiveProjectId === null
+          // 表示用户在新会话页明确选择"不绑定项目"，传 skipBinding=true 跳过工作区解析链。
+          // 语义对齐主流 AI 应用 (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
+          sessionId = await createSession(effectiveProjectId === null);
         }
         draftSessionRef.current = null;
+        if (createdSession) addSession(createdSession);
 
         // 2. Create worktree if selected
         if (worktreeMode === 'new' && worktreeBranch) {
@@ -424,6 +443,7 @@ export function Welcome() {
     },
     [
       createSession,
+      addSession,
       setCurrentSessionId,
       navigate,
       projectId,
