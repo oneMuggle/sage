@@ -2439,6 +2439,8 @@ class Database:
                 reminder_fired_offsets TEXT,
                 source_type TEXT,
                 source_ref TEXT,
+                specialist_id TEXT,
+                snooze_count INTEGER DEFAULT 0,
                 is_recurring INTEGER DEFAULT 0,
                 recurrence_rule TEXT,
                 parent_id INTEGER,
@@ -2468,19 +2470,29 @@ class Database:
         # Phase 1b: reminder_offsets / reminder_fired_offsets —— 自定义提醒档位
         # （分钟数组）与已触发书签。
         # Phase 2: source_type / source_ref —— 待办来源（chat 会话反向链接）。
+        # Phase 3: specialist_id —— 专家专属待办；snooze_count —— 推迟次数。
         # 旧库幂等补列；新库由上方 CREATE TABLE 带上。
         cursor.execute("PRAGMA table_info(todos)")
         _todo_cols = {row[1] for row in cursor.fetchall()}
+        _added = False
         for _col in (
             "tags",
             "reminder_offsets",
             "reminder_fired_offsets",
             "source_type",
             "source_ref",
+            "specialist_id",
         ):
             if _col not in _todo_cols:
                 cursor.execute(f"ALTER TABLE todos ADD COLUMN {_col} TEXT")
-                conn.commit()
+                _added = True
+        if "snooze_count" not in _todo_cols:
+            cursor.execute(
+                "ALTER TABLE todos ADD COLUMN snooze_count INTEGER DEFAULT 0"
+            )
+            _added = True
+        if _added:
+            conn.commit()
 
         # 待办全文搜索 FTS5（独立存内容表 + jieba 分词；行数不一致时幂等回填）
         ensure_todos_fts_schema(conn)

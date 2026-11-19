@@ -152,9 +152,9 @@ Sage 的「待办事项」已具备：SQLite `todos` 表、REST API（`/api/v1/t
 
 ### 阶段 3（可选，按需再议）
 
-- [ ] 项目/专家专属待办
-- [ ] 完成热力图
-- [ ] snooze 行为统计与智能建议
+- [x] 项目/专家专属待办：`todos.specialist_id`（幂等迁移）+ `?specialist_id=` 过滤 + 创建表单专家选择器 + 工具栏专家过滤 + 行内 `@专家` chip；agent 工具支持
+- [x] 完成热力图：`GET /todos/heatmap?days=91`（按日聚合完成数，todo_stats.completion_heatmap）+ TodoPage「热力图」开关（GitHub 风格 13 周网格）
+- [x] snooze 行为统计与智能建议：`POST /todos/{id}/snooze`（due_at 后移、snooze_count 自增、提醒书签自动重置，todo_insights 模块）+ 行内「稍后提醒」子菜单（10 分钟/1 小时/明天）+ ≥2 次推迟徽标 + 周回顾纳入拖延统计
 
 ## 5. 风险评估与依赖
 

@@ -610,7 +610,7 @@ def test_daily_brief_route(client: TestClient, monkeypatch):
 def test_weekly_review_route(client: TestClient, monkeypatch):
     from backend.services import todo_ai
 
-    async def fake_review(stats, completed, pending):
+    async def fake_review(stats, completed, pending, snoozed=None):
         return "## 回顾"
 
     monkeypatch.setattr(todo_ai, "generate_weekly_review", fake_review)
@@ -619,3 +619,63 @@ def test_weekly_review_route(client: TestClient, monkeypatch):
 
     assert resp.status_code == 200
     assert resp.json()["content"] == "## 回顾"
+
+
+# --- 阶段 3：专家归属 / snooze / 热力图 ---
+
+
+def test_create_todo_with_specialist_and_filter(client: TestClient):
+    client.post(
+        "/api/v1/todos", json={"title": "专家A", "specialist_id": "writer"}
+    )
+    client.post("/api/v1/todos", json={"title": "专家B", "specialist_id": "coder"})
+
+    resp = client.get("/api/v1/todos", params={"specialist_id": "writer"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert [item["title"] for item in body["items"]] == ["专家A"]
+    assert body["items"][0]["specialist_id"] == "writer"
+    assert body["total"] == 1
+
+
+def test_snooze_endpoint(client: TestClient):
+    due = (datetime.now() + timedelta(minutes=30)).isoformat()
+    todo = client.post(
+        "/api/v1/todos", json={"title": "推迟我", "due_at": due}
+    ).json()
+
+    resp = client.post(
+        f"/api/v1/todos/{todo['id']}/snooze", json={"minutes": 60}
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["snooze_count"] == 1
+    assert body["due_at"] != due
+
+
+def test_snooze_endpoint_validates_minutes(client: TestClient):
+    todo = client.post("/api/v1/todos", json={"title": "T"}).json()
+    resp = client.post(
+        f"/api/v1/todos/{todo['id']}/snooze", json={"minutes": 0}
+    )
+    assert resp.status_code == 422
+
+
+def test_snooze_missing_todo_returns_404(client: TestClient):
+    resp = client.post("/api/v1/todos/99999/snooze", json={"minutes": 10})
+    assert resp.status_code == 404
+
+
+def test_heatmap_endpoint(client: TestClient):
+    done = client.post("/api/v1/todos", json={"title": "热力图完成"}).json()
+    client.post(f"/api/v1/todos/{done['id']}/complete")
+
+    resp = client.get("/api/v1/todos/heatmap", params={"days": 7})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["days"]) == 7
+    assert body["total"] >= 1
+    assert body["max"] >= 1

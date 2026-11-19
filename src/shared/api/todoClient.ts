@@ -28,6 +28,7 @@ import type {
   TodoBatchDeleteResult,
   TodoExportResult,
   TodoExtractResult,
+  TodoHeatmapResult,
   TodoListParams,
   TodoListResponse,
   TodoStats,
@@ -111,6 +112,16 @@ export const todoClient = {
       format,
       include_completed: includeCompleted,
     });
+  },
+
+  /** 阶段 3：完成热力图（最近 N 天按日聚合完成数）。 */
+  async heatmap(days: number = 91): Promise<TodoHeatmapResult> {
+    return invoke<TodoHeatmapResult>('todo_heatmap', { days });
+  },
+
+  /** 阶段 3：推迟提醒（due_at 后移 N 分钟，snooze_count 自增）。 */
+  async snooze(id: number, minutes: number): Promise<Todo> {
+    return invoke<Todo>('todo_snooze', { id, minutes });
   },
 };
 

@@ -1285,5 +1285,16 @@ describe('agent_* IPC commands', () => {
       expect(COMMAND_ROUTES.todo_brief.path({})).toBe('/api/v1/todos/brief');
       expect(COMMAND_ROUTES.todo_weekly_review.path({})).toBe('/api/v1/todos/weekly-review');
     });
+
+    it('stage-3 heatmap / snooze routes', () => {
+      expect(COMMAND_ROUTES.todo_heatmap.method).toBe('GET');
+      expect(COMMAND_ROUTES.todo_heatmap.path({})).toBe('/api/v1/todos/heatmap?days=91');
+      expect(COMMAND_ROUTES.todo_heatmap.path({ days: 30 })).toBe('/api/v1/todos/heatmap?days=30');
+      expect(COMMAND_ROUTES.todo_snooze.method).toBe('POST');
+      expect(COMMAND_ROUTES.todo_snooze.path({ id: 7 })).toBe('/api/v1/todos/7/snooze');
+      expect(COMMAND_ROUTES.todo_snooze.body?.({ id: 7, minutes: 60 })).toEqual({
+        minutes: 60,
+      });
+    });
   });
 });

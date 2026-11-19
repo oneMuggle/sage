@@ -32,6 +32,7 @@ class CreateTodoIn(BaseModel):
     reminder_offsets: Optional[List[int]] = None
     source_type: Optional[str] = Field(default=None, max_length=32)
     source_ref: Optional[str] = Field(default=None, max_length=200)
+    specialist_id: Optional[str] = Field(default=None, max_length=100)
 
     class Config:
         extra = "forbid"
@@ -50,6 +51,7 @@ class UpdateTodoIn(BaseModel):
     parent_id: Optional[int] = None
     tags: Optional[List[str]] = None
     reminder_offsets: Optional[List[int]] = None
+    specialist_id: Optional[str] = Field(default=None, max_length=100)
 
     class Config:
         extra = "forbid"
@@ -70,6 +72,8 @@ class TodoOut(BaseModel):
     reminder_offsets: List[int] = Field(default_factory=list)
     source_type: Optional[str] = None
     source_ref: Optional[str] = None
+    specialist_id: Optional[str] = None
+    snooze_count: int = 0
     is_recurring: bool
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
@@ -163,6 +167,24 @@ class AiTextOut(BaseModel):
     content: str
 
 
+class HeatmapDayOut(BaseModel):
+    date: str
+    count: int
+
+
+class HeatmapOut(BaseModel):
+    days: List[HeatmapDayOut]
+    total: int
+    max: int
+
+
+class SnoozeIn(BaseModel):
+    minutes: int = Field(ge=1, le=7 * 24 * 60)
+
+    class Config:
+        extra = "forbid"
+
+
 def _todo_to_dict(todo: Todo) -> Dict[str, Any]:
     return todo.model_dump()
 
@@ -205,6 +227,7 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
         view: Optional[str] = Query(
             default=None, pattern="^(all|today|week|completed)$"
         ),
+        specialist_id: Optional[str] = Query(default=None, max_length=100),
         svc: TodoService = Depends(service_dep),
     ) -> Dict[str, Any]:
         # ``status=all`` is the documented escape hatch for the
@@ -224,6 +247,7 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
             q=q,
             tag=tag,
             view=view,
+            specialist_id=specialist_id,
         )
         # ``total`` is the number of rows matching the filters, NOT the length
         # of this page — a ``?limit=2`` response must still report the full
@@ -236,6 +260,7 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
             q=q,
             tag=tag,
             view=view,
+            specialist_id=specialist_id,
         )
         return {
             "items": [_todo_to_dict(t) for t in items],
@@ -263,6 +288,7 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
                 reminder_offsets=payload.reminder_offsets,
                 source_type=payload.source_type,
                 source_ref=payload.source_ref,
+                specialist_id=payload.specialist_id,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -371,11 +397,13 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
             sort_order="desc",
         )
         high_pending = svc.list_todos(priority="high", limit=20)
+        snoozed = svc.get_most_snoozed(5)
         try:
             content = await todo_ai.generate_weekly_review(
                 stats,
                 [t.title for t in completed],
                 [t.title for t in high_pending],
+                [f"{t.title}（推迟 {t.snooze_count} 次）" for t in snoozed],
             )
         except todo_ai.LLMNotConfiguredError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -385,6 +413,26 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
                 status_code=502, detail=f"生成周回顾失败: {exc}"
             ) from exc
         return {"content": content}
+
+    # --- 阶段 3：完成热力图 / snooze ---
+
+    @router.get("/todos/heatmap", response_model=HeatmapOut)
+    def heatmap(
+        days: int = Query(default=91, ge=7, le=366),
+        svc: TodoService = Depends(service_dep),
+    ) -> Dict[str, Any]:
+        return svc.completion_heatmap(days=days)
+
+    @router.post("/todos/{todo_id}/snooze", response_model=TodoOut)
+    def snooze_todo(
+        todo_id: int,
+        payload: SnoozeIn,
+        svc: TodoService = Depends(service_dep),
+    ) -> Dict[str, Any]:
+        todo = svc.snooze_todo(todo_id, payload.minutes)
+        if todo is None:
+            raise HTTPException(status_code=404, detail="todo not found")
+        return _todo_to_dict(todo)
 
     @router.get("/todos/{todo_id}", response_model=TodoOut)
     def get_todo(

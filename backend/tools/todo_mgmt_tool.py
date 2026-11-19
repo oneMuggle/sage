@@ -119,6 +119,10 @@ class AddTodoTool(_TodoServiceMixin, BaseTool):
                         "items": {"type": "integer"},
                         "description": "自定义提醒档位：到期前多少分钟提醒（如 [1440,60,10]）",
                     },
+                    "specialist_id": {
+                        "type": "string",
+                        "description": "专家专属待办的专家 ID（可选，如 primary）",
+                    },
                 },
                 "required": ["title"],
             },
@@ -139,6 +143,7 @@ class AddTodoTool(_TodoServiceMixin, BaseTool):
                 parent_id=kwargs.get("parent_id"),
                 tags=kwargs.get("tags"),
                 reminder_offsets=kwargs.get("reminder_offsets"),
+                specialist_id=kwargs.get("specialist_id"),
             )
             return ToolResult(
                 success=True,
@@ -316,6 +321,10 @@ class UpdateTodoTool(_TodoServiceMixin, BaseTool):
                         "type": "array",
                         "items": {"type": "integer"},
                         "description": "自定义提醒档位（分钟；覆盖原值；空数组清空）",
+                    },
+                    "specialist_id": {
+                        "type": "string",
+                        "description": "专家归属（覆盖原值；null 清空）",
                     },
                 },
                 "required": ["todo_id"],
