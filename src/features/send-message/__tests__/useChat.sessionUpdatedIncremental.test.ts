@@ -141,4 +141,17 @@ describe('useChat — session_updated 增量刷新 (2026-11-05)', () => {
     // 事件一次 + finishStream 一次
     expect(loadSessionsSpy).toHaveBeenCalledTimes(2);
   });
+
+  // 2026-11-19 实时排序：run_started 事件应原地置顶，不再走全量刷新
+  it('run_started 事件原地标记 running 并置顶，不做全量会话重载', async () => {
+    seedSession('旧标题');
+    await sendWithSessionUpdated({
+      type: 'session_updated',
+      subtype: 'run_started',
+    });
+    const session = useStore.getState().sessions.find((s) => s.id === SESSION_ID);
+    expect(session?.run_status).toBe('running');
+    // 仅 finishStream 兜底一次；run_started 不再走全量 loadSessions
+    expect(loadSessionsSpy).toHaveBeenCalledTimes(1);
+  });
 });

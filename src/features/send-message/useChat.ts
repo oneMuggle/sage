@@ -428,6 +428,9 @@ export function useChat() {
       });
 
       markStreamActive(sid, { streamId: null, cancel: null, finish: null });
+      // 2026-11-19 实时排序：运行开始即本地置顶（后端 run_started 事件 +
+      // 流末 loadSessions() 对账）。不等待首个事件，发送瞬间侧栏就应重排。
+      useStore.getState().markSessionRunning(sid);
       setError(null);
       setErrorSessionId(null);
 
@@ -769,6 +772,10 @@ export function useChat() {
               if (evt.type === 'session_updated') {
                 if (evt.subtype === 'title_updated' && typeof evt.title === 'string') {
                   useStore.getState().updateSession(sid, { title: evt.title });
+                } else if (evt.subtype === 'run_started') {
+                  // 2026-11-19 实时排序：运行开始原地置顶，不做全量重载
+                  // （SQL 已按 run_status 排序，此前缺的只是运行期间的刷新信号）。
+                  useStore.getState().markSessionRunning(sid);
                 } else {
                   // 其它 session_updated 子类型仍走全量刷新
                   void useStore.getState().loadSessions(true);
