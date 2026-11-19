@@ -56,6 +56,14 @@ export const zhDesign = {
   'design.detail.send': '发送修改',
   'design.detail.sending': '修改中…',
   'design.detail.version': 'v{version}',
+  'design.detail.tabIterate': '修改',
+  'design.detail.tabHistory': '版本',
+  'design.detail.previewing': '正在预览 v{version}（只读）',
+  'design.detail.backToLatest': '返回最新',
+  'design.version.preview': '预览',
+  'design.version.restore': '恢复',
+  'design.version.empty': '还没有版本',
+  'design.version.restored': '已恢复为新版本',
 
   // 导出
   'design.export.title': '导出',
