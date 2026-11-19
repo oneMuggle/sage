@@ -77,13 +77,13 @@ main.py (lifespan)
 - 正文开头的 H1 若重复 `name` 会被剥离，避免 prompt 中出现重复标题。
 - 空 frontmatter（`---\n---`）→ 使用文件名 stem 作为 id。
 
-## 6. 内容清单（2026-11-11 扩充后）
+## 6. 内容清单（2026-11-19 校准,以磁盘为准）
 
 | 类型 | 数量 | 条目 |
 |------|------|------|
-| 设计系统 | 7 | corporate, minimal, editorial, tech-dark, academic, startup, data-report |
-| Deck 模板 | 5 | pitch-deck, editorial-magazine, swiss-grid, tech-sharing, weekly-report |
-| 原型模板 | 4 | landing-page, dashboard, pricing, docs-page |
+| 设计系统 | 17 | academic, airbnb, apple, bento, cafe, canva, cisco, claude, clickhouse, cloudflare-kumo, coinbase, corporate, data-report, editorial, minimal, startup, tech-dark |
+| Deck 模板 | 13 | course-module, editorial-magazine, graphify-dark-graph, hermes-cyber-terminal, knowledge-arch-blueprint, obsidian-claude-gradient, pitch-deck, presenter-mode-reveal, product-launch, swiss-grid, tech-sharing, weekly-report, xhs-white-editorial |
+| 原型模板 | 4 | dashboard, docs-page, landing-page, pricing |
 | Craft 规范 | 5 | 见上表 |
 
 ## 7. 扩展方式
@@ -216,24 +216,37 @@ if not report.ok:
 
 失败降级顺序：python-pptx 映射 → LibreOffice 转换 → 返回明确错误（两者皆不可用时）。
 
-## 11. 前端设计工作台（2026-11-13 新增）
+## 11. 前端设计工作台（2026-11-19 重构）
 
 页面 `/design`（`src/pages/DesignStudio.tsx`），侧栏「工具」组入口：
 
 | 层 | 文件 | 职责 |
 |---|---|---|
-| 类型 | `src/entities/design/types.ts` | `DesignSystem` / `DesignTemplate` / `DesignProject` / `DesignArtifact` / `DesignProjectDetail` |
-| API | `src/entities/design/designApi.ts` | `backendRequest` 封装；generate/iterate 以 `responseType: 'text'` 读取 SSE 并解析 `complete` / `error` 事件 |
-| Store | `src/entities/design/designStore.ts` | 元数据、项目列表、当前项目/产物、生成与迭代状态 |
-| 页面 | `src/pages/DesignStudio.tsx` | 列表 / 向导 / 详情三视图切换 |
-| 特性 | `src/features/design/*` | 项目卡片网格、4 步创建向导、生成视图（`HtmlPreviewHost` 预览 + 迭代聊天）、导出面板 |
+| 类型 | `src/entities/design/types.ts` | `DesignSystem` / `DesignTemplate` / `DesignProject` / `DesignArtifact` / `DesignProjectDetail` / `CreateProjectInput` / `DesignArtifactSummary` / `IterationMessage` |
+| API | `src/entities/design/designApi.ts` | `backendRequest` 封装；createProject（可选参数）、listArtifacts / getArtifact / restoreArtifact / listMessages、exportArtifact（inline）；generate/iterate 解析 SSE `complete` / `error` 事件 |
+| Store | `src/entities/design/designStore.ts` | 元数据、项目列表、当前项目/产物、版本列表、预览版本、迭代消息、生成与迭代状态 |
+| 页面 | `src/pages/DesignStudio.tsx` | 列表 / 单屏创作器 / 详情三视图切换 |
+| 特性 | `src/features/design/*` | 项目卡片网格、`DesignCreateComposer` 单屏创建、生成视图（`HtmlPreviewHost` 预览 + 迭代/版本双 Tab）、`DesignVersionPanel`、导出面板 |
+
+创建链路：
+
+- `DesignCreateComposer` 只要求 brief；意图 presets（演示稿 / 周报 / 落地页 / 看板 / 定价页）预填 kind 与模板，「高级选项」才显示项目名、类型、设计系统、模板。
+- 后端 `CreateProjectRequest` 的 `name / kind / system_id / template_id` 均可省略：`DesignStudio.create_project` 按「内置默认 ID → 同类首个 → brief 首行派生项目名」回退，缺模板等失败在创建阶段显式报错。
+
+详情链路：
+
+- 右栏双 Tab：「修改」（迭代聊天）与「版本」（`DesignVersionPanel`）。
+- 版本列表来自 `GET /design/projects/{id}/artifacts`；「预览」调用单版本端点并显示只读横幅；「恢复」调用 restore 端点，服务端把旧 HTML 作为新版本追加（`DesignStudio.restore_artifact`，不经过 LLM）。
+- 迭代历史持久化在 `<workspace>/design/<project_id>/messages.json`（`backend/design/messages_store.py`），`iterate()` 记录 user / assistant 两条消息；记录失败仅告警，不影响生成主流程。
+
+导出：
+
+- `POST /design/projects/{id}/export` 增加 `inline: true`，PDF / PPTX / ZIP 以 base64 返回，前端 Blob 直接下载；HTML 仍走 `html_content`。
 
 要点：
 
-- 生成/迭代端点是 SSE，Electron IPC relay 会等响应完成后以 text 返回，前端一次性解析；UI 在等待期间显示生成中状态
-- 预览复用 `HtmlPreviewHost` 的 sandbox 隔离（桌面端 `sage-preview://`，Web/测试回落 `srcDoc`）
-- 导出面板支持 PDF / PPTX / ZIP / HTML；HTML 走浏览器 Blob 下载，其余显示后端落盘路径
-- 版本历史暂以当前版本徽章呈现（后端尚未暴露产物列表端点）
+- 生成/迭代端点仍是 SSE，Electron IPC relay 会等响应完成后以 text 返回；流式进度为后续里程碑。
+- 预览复用 `HtmlPreviewHost` 的 sandbox 隔离（桌面端 `sage-preview://`，Web/测试回落 `srcDoc`）。
 
 ## 12. Office 融合与 Live Artifact（2026-11-13 新增）
 

@@ -15,10 +15,13 @@ from backend.design.async_bridge import run_sync
 from backend.design.craft_loader import CraftRuleRegistry
 from backend.design.errors import (
     DesignProjectNotFoundError,
+    DesignSystemNotFoundError,
     DesignTemplateKindMismatchError,
+    DesignTemplateNotFoundError,
 )
 from backend.design.generator import DesignGenerator
 from backend.design.lint import DesignLinter
+from backend.design.messages_store import IterationMessage, MessageStore
 from backend.design.models import (
     DesignArtifact,
     DesignProject,
@@ -29,6 +32,21 @@ from backend.design.systems import DesignSystemRegistry
 from backend.design.templates import DesignTemplateRegistry
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_SYSTEM_IDS = ("minimal", "corporate")
+_DEFAULT_TEMPLATE_IDS = {
+    "deck": ("pitch-deck", "weekly-report"),
+    "prototype": ("landing-page", "dashboard", "pricing", "docs-page"),
+}
+
+
+def _derive_project_name(brief: str) -> str:
+    """From the brief's first non-empty line, capped at 24 chars."""
+    for line in (brief or "").splitlines():
+        cleaned = line.strip().lstrip("#-*> ").strip()
+        if cleaned:
+            return cleaned[:24]
+    return "Untitled design"
 
 
 class DesignStudio:
@@ -51,6 +69,7 @@ class DesignStudio:
         self._workspace = workspace_dir
         self._craft_rules = craft_rules
         self._lint_retry = lint_retry
+        self._messages = MessageStore(workspace_dir / "design")
         self._version_lock = threading.Lock()
 
     def _resolve_template_for_kind(
@@ -71,25 +90,56 @@ class DesignStudio:
             )
         return template
 
+    def _default_system_id(self) -> str:
+        """Pick the preferred built-in system, else the first available."""
+        available = {s.id for s in self._systems.list_systems()}
+        if not available:
+            raise DesignSystemNotFoundError("No design systems are available")
+        for candidate in _DEFAULT_SYSTEM_IDS:
+            if candidate in available:
+                return candidate
+        return sorted(available)[0]
+
+    def _default_template_id(self, kind: str) -> str:
+        """Pick a preferred template for the kind, else the first available."""
+        available = [t.id for t in self._templates.list_templates_by_kind(kind)]
+        if not available:
+            raise DesignTemplateNotFoundError(
+                f"No templates are available for kind '{kind}'"
+            )
+        for candidate in _DEFAULT_TEMPLATE_IDS.get(kind, ()):
+            if candidate in available:
+                return candidate
+        return available[0]
+
     def create_project(
         self,
-        name: str,
-        kind: str,
-        system_id: str,
-        template_id: str,
-        brief: str,
+        name: Optional[str] = None,
+        kind: str = "deck",
+        system_id: Optional[str] = None,
+        template_id: Optional[str] = None,
+        brief: str = "",
     ) -> DesignProject:
-        """Create a new design project."""
-        self._systems.get_system(system_id)
-        self._resolve_template_for_kind(template_id, kind)
+        """Create a new design project.
+
+        ``system_id``, ``template_id`` and ``name`` are optional: when
+        omitted they are resolved to server-side defaults so the caller can
+        create a project from a single brief.
+        """
+        resolved_system = system_id or self._default_system_id()
+        resolved_template = template_id or self._default_template_id(kind)
+        resolved_name = (name or "").strip() or _derive_project_name(brief)
+
+        self._systems.get_system(resolved_system)
+        self._resolve_template_for_kind(resolved_template, kind)
 
         now = datetime.now(timezone.utc)  # noqa: UP017
         return self._repo.create_project(
             id=str(uuid.uuid4()),
-            name=name,
+            name=resolved_name,
             kind=kind,
-            system_id=system_id,
-            template_id=template_id,
+            system_id=resolved_system,
+            template_id=resolved_template,
             brief=brief,
             created_at=now,
             updated_at=now,
@@ -120,6 +170,59 @@ class DesignStudio:
     def get_latest_artifact(self, project_id: str) -> Optional[DesignArtifact]:
         """Return the newest artifact of a project, or None when none exist."""
         return self._repo.get_latest_artifact(project_id)
+
+    def list_artifacts(self, project_id: str) -> List[DesignArtifact]:
+        """List all artifact versions of a project, oldest first."""
+        self._repo.get_project(project_id)
+        return self._repo.list_artifacts(project_id)
+
+    def get_artifact(self, artifact_id: str) -> DesignArtifact:
+        """Fetch one artifact (including HTML content) by ID."""
+        return self._repo.get_artifact(artifact_id)
+
+    def list_messages(self, project_id: str) -> List[IterationMessage]:
+        """List persisted iteration messages for a project."""
+        self._repo.get_project(project_id)
+        return self._messages.list(project_id)
+
+    def _record_message(
+        self,
+        project_id: str,
+        role: str,
+        content: str,
+        *,
+        artifact_id: Optional[str] = None,
+        artifact_version: Optional[int] = None,
+    ) -> None:
+        """Best-effort message persistence — never fails generation."""
+        try:
+            self._messages.append(
+                project_id, role, content,
+                artifact_id=artifact_id,
+                artifact_version=artifact_version,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to persist design message for project %s",
+                project_id,
+                exc_info=True,
+            )
+
+    def restore_artifact(
+        self, project_id: str, artifact_id: str,
+    ) -> DesignArtifact:
+        """Append a copy of an old artifact as a new version (no LLM call)."""
+        self._repo.get_project(project_id)
+        source = self._repo.get_artifact(artifact_id)
+        if source.project_id != project_id:
+            raise DesignProjectNotFoundError(
+                f"Artifact {artifact_id} does not belong to project "
+                f"{project_id}"
+            )
+        return self.add_artifact(
+            project_id, source.html_content,
+            title=source.title, kind=source.kind,
+        )
 
     def add_artifact(
         self,
@@ -305,6 +408,11 @@ class DesignStudio:
                 )
 
             self._repo.update_project_status(project_id, "complete")
+            self._record_message(
+                project_id, "assistant", artifact.title,
+                artifact_id=artifact.id,
+                artifact_version=artifact.version,
+            )
             return artifact
 
         except asyncio.CancelledError:
@@ -331,6 +439,7 @@ class DesignStudio:
         )
 
         self._repo.update_project_status(project_id, "generating")
+        self._record_message(project_id, "user", feedback)
 
         try:
             # C1: delegate LLM call to bridge loop.
@@ -390,6 +499,11 @@ class DesignStudio:
                 )
 
             self._repo.update_project_status(project_id, "complete")
+            self._record_message(
+                project_id, "assistant", artifact.title,
+                artifact_id=artifact.id,
+                artifact_version=artifact.version,
+            )
             return artifact
 
         except asyncio.CancelledError:
