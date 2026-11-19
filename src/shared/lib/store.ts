@@ -6,9 +6,8 @@ import type { GenerationStats, MessageDisplayMeta, MessageSource, RagCitation } 
 export type { MessageSource } from '../api/types';
 import { clientLogger } from '../log/client';
 
-import { sortSessions } from './sessionOrder';
-
 import { markBootStageOnce } from './bootStages';
+import { sortSessions } from './sessionOrder';
 import { suppressStartupSessionRestore } from './startupRestoreGuard';
 
 // Re-export API modules for convenience
