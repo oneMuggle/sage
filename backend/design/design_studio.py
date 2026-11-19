@@ -185,6 +185,29 @@ class DesignStudio:
         self._repo.get_project(project_id)
         return self._messages.list(project_id)
 
+    def _record_message(
+        self,
+        project_id: str,
+        role: str,
+        content: str,
+        *,
+        artifact_id: Optional[str] = None,
+        artifact_version: Optional[int] = None,
+    ) -> None:
+        """Best-effort message persistence — never fails generation."""
+        try:
+            self._messages.append(
+                project_id, role, content,
+                artifact_id=artifact_id,
+                artifact_version=artifact_version,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to persist design message for project %s",
+                project_id,
+                exc_info=True,
+            )
+
     def restore_artifact(
         self, project_id: str, artifact_id: str,
     ) -> DesignArtifact:
@@ -385,7 +408,7 @@ class DesignStudio:
                 )
 
             self._repo.update_project_status(project_id, "complete")
-            self._messages.append(
+            self._record_message(
                 project_id, "assistant", artifact.title,
                 artifact_id=artifact.id,
                 artifact_version=artifact.version,
@@ -416,7 +439,7 @@ class DesignStudio:
         )
 
         self._repo.update_project_status(project_id, "generating")
-        self._messages.append(project_id, "user", feedback)
+        self._record_message(project_id, "user", feedback)
 
         try:
             # C1: delegate LLM call to bridge loop.
@@ -476,7 +499,7 @@ class DesignStudio:
                 )
 
             self._repo.update_project_status(project_id, "complete")
-            self._messages.append(
+            self._record_message(
                 project_id, "assistant", artifact.title,
                 artifact_id=artifact.id,
                 artifact_version=artifact.version,
