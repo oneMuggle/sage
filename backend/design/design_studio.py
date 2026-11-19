@@ -169,6 +169,31 @@ class DesignStudio:
         """Return the newest artifact of a project, or None when none exist."""
         return self._repo.get_latest_artifact(project_id)
 
+    def list_artifacts(self, project_id: str) -> List[DesignArtifact]:
+        """List all artifact versions of a project, oldest first."""
+        self._repo.get_project(project_id)
+        return self._repo.list_artifacts(project_id)
+
+    def get_artifact(self, artifact_id: str) -> DesignArtifact:
+        """Fetch one artifact (including HTML content) by ID."""
+        return self._repo.get_artifact(artifact_id)
+
+    def restore_artifact(
+        self, project_id: str, artifact_id: str,
+    ) -> DesignArtifact:
+        """Append a copy of an old artifact as a new version (no LLM call)."""
+        self._repo.get_project(project_id)
+        source = self._repo.get_artifact(artifact_id)
+        if source.project_id != project_id:
+            raise DesignProjectNotFoundError(
+                f"Artifact {artifact_id} does not belong to project "
+                f"{project_id}"
+            )
+        return self.add_artifact(
+            project_id, source.html_content,
+            title=source.title, kind=source.kind,
+        )
+
     def add_artifact(
         self,
         project_id: str,

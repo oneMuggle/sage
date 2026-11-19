@@ -291,3 +291,24 @@ class TestDesignStudio:
         with pytest.raises(DesignTemplateNotFoundError):
             studio.create_project(brief="no deck templates here")
         assert studio.list_projects() == []
+
+    def test_restore_artifact_appends_new_version(self, studio):
+        """恢复旧版本 = 以旧 HTML 追加一个新版本，不经过 LLM。"""
+        project = studio.create_project(kind="prototype", brief="restore me")
+        first = studio.add_artifact(project.id, "<html>v1</html>", title="One")
+        second = studio.add_artifact(
+            project.id, "<html>v2</html>", title="Two",
+        )
+        restored = studio.restore_artifact(project.id, first.id)
+        assert restored.version == second.version + 1
+        assert restored.html_content == "<html>v1</html>"
+        versions = [a.version for a in studio.list_artifacts(project.id)]
+        assert versions == [1, 2, 3]
+
+    def test_restore_artifact_rejects_foreign_project(self, studio):
+        """不能把别的项目的产物恢复到当前项目下。"""
+        p1 = studio.create_project(kind="prototype", brief="a")
+        p2 = studio.create_project(kind="prototype", brief="b")
+        artifact = studio.add_artifact(p1.id, "<html/>", title="x")
+        with pytest.raises(DesignProjectNotFoundError):
+            studio.restore_artifact(p2.id, artifact.id)

@@ -290,6 +290,65 @@ async def delete_project(project_id: str):
 
 
 # ---------------------------------------------------------------------------
+# GET /design/projects/:project_id/artifacts — version history
+# ---------------------------------------------------------------------------
+
+
+@router.get("/projects/{project_id}/artifacts")
+async def list_artifacts(project_id: str):
+    """Return artifact version summaries (no HTML payload), oldest first."""
+    studio = _require_studio()
+    try:
+        artifacts = studio.list_artifacts(project_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    return [
+        {
+            "id": a.id,
+            "project_id": a.project_id,
+            "version": a.version,
+            "title": a.title,
+            "kind": a.kind,
+            "created_at": a.created_at.isoformat(),
+        }
+        for a in artifacts
+    ]
+
+
+@router.get("/projects/{project_id}/artifacts/{artifact_id}")
+async def get_artifact(project_id: str, artifact_id: str):
+    """Return one artifact with its full HTML content."""
+    studio = _require_studio()
+    try:
+        studio.get_project(project_id)
+        artifact = studio.get_artifact(artifact_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    if artifact.project_id != project_id:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "detail": (
+                    f"Artifact {artifact_id} does not belong to project "
+                    f"{project_id}"
+                ),
+            },
+        )
+    return artifact.model_dump()
+
+
+@router.post("/projects/{project_id}/artifacts/{artifact_id}/restore")
+async def restore_artifact(project_id: str, artifact_id: str):
+    """Restore an old artifact by appending it as a new version."""
+    studio = _require_studio()
+    try:
+        artifact = studio.restore_artifact(project_id, artifact_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    return artifact.model_dump()
+
+
+# ---------------------------------------------------------------------------
 # POST /design/projects/:project_id/generate (SSE)
 # ---------------------------------------------------------------------------
 

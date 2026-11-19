@@ -325,6 +325,45 @@ class TestDesignRoutes:
         assert body["template_id"] == "test-page"
         assert body["name"] == "only brief"
 
+    async def test_artifact_history_and_restore(self, studio):
+        """版本列表不含 HTML，恢复旧版本生成新版本。"""
+        from backend.main import app
+
+        project = studio.create_project(kind="prototype", brief="history")
+        first = studio.add_artifact(
+            project.id, "<html>1</html>", title="One",
+        )
+        studio.add_artifact(project.id, "<html>2</html>", title="Two")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                listing = await client.get(
+                    f"/api/v1/design/projects/{project.id}/artifacts",
+                )
+                restored = await client.post(
+                    f"/api/v1/design/projects/{project.id}/artifacts/"
+                    f"{first.id}/restore",
+                )
+                fetched = await client.get(
+                    f"/api/v1/design/projects/{project.id}/artifacts/"
+                    f"{first.id}",
+                )
+
+        assert listing.status_code == 200
+        assert [a["version"] for a in listing.json()] == [1, 2]
+        assert "html_content" not in listing.json()[0]
+        assert restored.status_code == 200
+        assert restored.json()["version"] == 3
+        assert restored.json()["html_content"] == "<html>1</html>"
+        assert fetched.status_code == 200
+        assert fetched.json()["html_content"] == "<html>1</html>"
+
     async def test_create_project_invalid_kind(self, studio):
         from backend.main import app
 
