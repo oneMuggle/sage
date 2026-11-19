@@ -35,6 +35,7 @@ from backend.tools import browser_cdp, browser_observe, browser_tool, web_render
 from backend.tools.browser_cdp import BrowserSession, BrowserSessionManager
 from backend.tools.browser_tool import (
     BrowserCloseTool,
+    BrowserCookiesTool,
     BrowserDownloadsTool,
     BrowserInteractTool,
     BrowserLaunchTool,
@@ -324,6 +325,12 @@ def stubbed(monkeypatch):
     calls: List[Dict[str, Any]] = []
 
     def _fake_cdp(session_, method, params=None, target_id=None):
+        # 截图/cookies 的站点复检会读当前页 URL；默认给空 URL（跳过站点检查），
+        # 不占用测试队列，避免打乱既有用例的 CDP 结果序列。
+        if method == "Runtime.evaluate" and (params or {}).get(
+            "expression"
+        ) == "location.href":
+            return {"result": {"value": ""}}
         calls.append({"method": method, "params": params or {}, "target": target_id})
         return _fake_cdp.results.pop(0)
 
@@ -1725,7 +1732,8 @@ def test_navigate_blocked_site_returns_site_blocked(stubbed, monkeypatch):
     assert result.success is False
     assert result.error.startswith("site_blocked: ")
     assert "blocked.example" in result.error
-    assert get_browser_control().get_state("b1") is BrowserControlState.AGENT
+    # I1 修复：block 分支必须置 PAUSED，阻止后续截图/cookies 访问被禁页面
+    assert get_browser_control().get_state("b1") is BrowserControlState.PAUSED
     assert stubbed.calls == []
 
 
@@ -1916,7 +1924,8 @@ def test_navigate_redirect_to_blocked_site_is_stopped(stubbed, monkeypatch):
     assert result.content["browser_meta"]["action"] == "navigate"
     # 导航已发生（Page.navigate 在拦截前执行），但不得当作成功返回
     assert "Page.navigate" in [call["method"] for call in stubbed.calls]
-    assert get_browser_control().get_state("b1") is BrowserControlState.AGENT
+    # I1 修复：重定向命中 block 策略时同样置 PAUSED
+    assert get_browser_control().get_state("b1") is BrowserControlState.PAUSED
 
 
 def test_navigate_redirect_to_unknown_site_requires_confirmation(stubbed, monkeypatch):
@@ -2204,7 +2213,97 @@ def test_screenshot_full_page_falls_back_when_unsupported(stubbed, tmp_path, mon
     assert result.success is True
     assert result.content["full_page"] is False
     assert "回退" in result.content["full_page_note"]
-    assert calls[0]["captureBeyondViewport"] is True
+    # 首个 captureBeyondViewport 调用必须是全页请求（之前的 Runtime.evaluate 是站点复检）
+    capture_calls = [c for c in calls if "captureBeyondViewport" in c]
+    assert capture_calls
+    assert capture_calls[0]["captureBeyondViewport"] is True
+
+
+def test_screenshot_on_blocked_current_url_returns_site_blocked(stubbed, tmp_path, monkeypatch):
+    """I1 补强：截图前复检当前页面域名，命中 block 策略时拒绝。"""
+    monkeypatch.setattr(
+        browser_tool,
+        "_safety_check_site",
+        lambda sid, url: "block" if "blocked.example" in url else "allow",
+    )
+    calls: List[Dict[str, Any]] = []
+
+    def _cdp(session_, method, params=None, target_id=None):
+        calls.append({"method": method, "params": params or {}})
+        if method == "Runtime.evaluate":
+            return {"result": {"value": "https://blocked.example/secret"}}
+        return {"data": base64.b64encode(b"\x89PNG fake").decode()}
+
+    monkeypatch.setattr(browser_tool, "cdp_command", _cdp)
+
+    result = BrowserScreenshotTool(
+        policy=ToolPolicy(workspace_root=str(tmp_path))
+    ).execute(browser_id="b1", path="shot.png")
+
+    assert result.success is False
+    assert result.error.startswith("site_blocked: ")
+    assert "blocked.example" in result.error
+    # 不应发起真正的截图 CDP 调用
+    assert "Page.captureScreenshot" not in [c["method"] for c in calls]
+
+
+def test_screenshot_url_unavailable_does_not_block(stubbed, tmp_path, monkeypatch):
+    """Runtime.evaluate 抛错时不阻断截图主流程。"""
+    png = base64.b64encode(b"\x89PNG fake").decode()
+
+    def _cdp(session_, method, params=None, target_id=None):
+        if method == "Runtime.evaluate":
+            raise browser_tool.BrowserCDPError("no target")
+        return {"data": png}
+
+    monkeypatch.setattr(browser_tool, "cdp_command", _cdp)
+    result = BrowserScreenshotTool(
+        policy=ToolPolicy(workspace_root=str(tmp_path))
+    ).execute(browser_id="b1", path="shot.png")
+    assert result.success is True
+
+
+def test_cookies_export_on_blocked_current_url_returns_site_blocked(stubbed, monkeypatch):
+    """I1 补强：export 读取当前页 cookie 前须复检域名，命中 block 时拒绝。"""
+    monkeypatch.setattr(
+        browser_tool,
+        "_safety_check_site",
+        lambda sid, url: "block" if "blocked.example" in url else "allow",
+    )
+    calls: List[str] = []
+
+    def _cdp(session_, method, params=None, target_id=None):
+        calls.append(method)
+        if method == "Runtime.evaluate":
+            return {"result": {"value": "https://blocked.example/secret"}}
+        return {"cookies": []}
+
+    monkeypatch.setattr(browser_tool, "cdp_command", _cdp)
+
+    result = _tool(BrowserCookiesTool).execute(action="export", browser_id="b1")
+
+    assert result.success is False
+    assert result.error.startswith("site_blocked: ")
+    assert "blocked.example" in result.error
+    # 不应真正读取 cookie
+    assert "Network.getCookies" not in calls
+
+
+def test_cookies_list_skips_site_check(stubbed, monkeypatch):
+    """list 不碰浏览器页面，不应触发站点检查。"""
+    called: List[str] = []
+
+    def _check(sid, url):
+        called.append(url)
+        return "block"
+
+    monkeypatch.setattr(browser_tool, "_safety_check_site", _check)
+
+    result = _tool(BrowserCookiesTool).execute(action="list", browser_id="b1")
+
+    # list 只列档案，不使用当前页面，因此不会站点检查
+    assert called == []
+    assert result.success is True
 
 
 def test_interact_upload_requires_workspace(stubbed, tmp_path):

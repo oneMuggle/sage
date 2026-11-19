@@ -3254,7 +3254,10 @@ class SageAgent:
                                                         ensure_ascii=False,
                                                         default=_json_default,
                                                     )
-                                                elif isinstance(failure_content, dict):
+                                                elif (
+                                                    isinstance(failure_content, dict)
+                                                    and "browser_meta" in failure_content
+                                                ):
                                                     # C1：失败结果若带结构化 content
                                                     # （典型：浏览器工具的 browser_meta），
                                                     # 用 JSON 信封保留 content，模型与持久化
