@@ -6,6 +6,7 @@ import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
 import { BrowserExtensionSection } from './BrowserExtensionSection';
 import { BrowserSettingsSection } from './BrowserSettingsSection';
+import { BrowserUseSection } from './BrowserUseSection';
 import { SiteSessionsSection } from './SiteSessionsSection';
 import { SettingRow } from './components';
 
@@ -544,6 +545,7 @@ export function NetworkTab() {
       {/* P0 登录体验：默认只展示「已登录的网站」，技术配置折叠进高级 */}
       <SiteSessionsSection />
       <BrowserSettingsSection />
+      <BrowserUseSection />
       <BrowserExtensionSection />
     </div>
   );

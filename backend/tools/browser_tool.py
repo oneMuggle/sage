@@ -9,7 +9,7 @@ browser_ws）—— 不经 Playwright（Win7 兼容 + 零新依赖）。
 - ``browser_launch`` EXEC（启动子进程，INTERACTIVE 先审批）；
 - ``browser_navigate`` EXTERNAL（拉取网络内容，最严门禁、逐次审批）；
 - ``browser_snapshot`` / ``browser_screenshot`` READ；
-- ``browser_interact`` / ``browser_close`` WRITE_LOCAL。
+- ``browser_interact`` / ``browser_close`` / ``browser_tabs`` WRITE_LOCAL。
 
 全部工具 ``is_blocking=True``：CDP 走阻塞 socket I/O，必须卸载到
 executor 线程执行（同时规避在事件循环线程内做同步 socket 的死锁面）。
@@ -19,6 +19,7 @@ v1 面向 coder（executor 边界）；导航仅允许 http/https/about/data。
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
 import time
@@ -26,12 +27,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
+from backend.data import browser_action_repo
 from backend.domain.risk import RiskClass
+from backend.services import browser_safety
+from backend.services.browser_control import (
+    BrowserControlState,
+    get_browser_control,
+)
 
 from .base import BaseTool, ToolResult, ToolSchema
 from .browser_cdp import (
+    RESERVED_BROWSER_ID,
     BrowserCDPError,
     BrowserSession,
+    _list_page_targets,
     browser_downloads_root,
     cdp_command,
     get_browser_manager,
@@ -44,14 +53,21 @@ from .browser_events import (
     list_download_dir,
     start_download_tracking,
 )
+from .browser_observe import (
+    SNAPSHOT_HARD_COLLECT_CAP,
+    SNAPSHOT_INTERACTIVE_MAX_DEFAULT,
+    STALE_REF_ERROR,
+    STALE_REF_INFO,
+    build_ref_expression,
+    build_snapshot_expression,
+    parse_key_combo,
+    parse_snapshot_payload,
+)
 from .file_tool import _record_artifact_safely
 from .network_config import load_network_policy
 from .web_render import wait_page_ready
 
 logger = logging.getLogger(__name__)
-
-#: 页面文本快照上限（字节，超出截断）
-SNAPSHOT_TEXT_CAP = 30 * 1024
 
 #: localStorage 快照 JSON 上限（字节；超限视为异常页面，不保存）
 LOCAL_STORAGE_CAP = 512 * 1024
@@ -59,7 +75,67 @@ LOCAL_STORAGE_CAP = 512 * 1024
 #: 允许的 URL scheme（file:// 可读本地文件 → 坚决拒绝；javascript: 注入面）
 _ALLOWED_SCHEMES = frozenset({"http", "https", "about", "data"})
 
-_VALID_ACTIONS = ("click", "type", "press", "scroll")
+_VALID_ACTIONS = (
+    "click",
+    "type",
+    "press",
+    "scroll",
+    "select",
+    "hover",
+    "check",
+    "uncheck",
+    "upload",
+)
+
+#: 视觉注入的截图约束（data URL 上限 1.5MB / 宽 1568px）
+SCREENSHOT_VISION_MAX_BYTES = 1536 * 1024
+SCREENSHOT_VISION_MAX_WIDTH = 1568
+
+_VALID_SNAPSHOT_MODES = ("interactive", "text", "full")
+
+#: 合成 KeyboardEvent 的 keyCode 映射（按主键查表；单字母/数字走 ord）。
+_KEY_CODES = {
+    "Enter": 13,
+    "Escape": 27,
+    "Tab": 9,
+    "Space": 32,
+    " ": 32,
+    "Backspace": 8,
+    "Delete": 46,
+    "Home": 36,
+    "End": 35,
+    "PageUp": 33,
+    "PageDown": 34,
+    "ArrowUp": 38,
+    "ArrowDown": 40,
+    "ArrowLeft": 37,
+    "ArrowRight": 39,
+}
+
+_VALID_TAB_ACTIONS = ("list", "create", "switch", "close")
+
+#: 控制门禁错误文案（前缀是前端/提示逻辑的契约，不可改名）
+_CONTROL_PAUSED_ERROR = (
+    "user_paused: 用户已暂停浏览器操作；请在用户恢复后继续（可先向用户确认）"
+)
+_CONTROL_TAKEOVER_ERROR = (
+    "user_takeover: 用户正在手动操作浏览器；请等待用户归还控制后重新 browser_snapshot"
+)
+
+#: 步骤缩略图开关的 settings key（缺省按开启）
+_SETTINGS_KEY_STEP_THUMBNAILS = "browser_step_thumbnails"
+
+#: 默认可见性开关的 settings key（缺省按可见）
+_SETTINGS_KEY_DEFAULT_VISIBLE = "browser_use_default_visible"
+
+#: 会截步骤缩略图的动作（snapshot/screenshot 不截：降开销、防递归）
+_THUMBNAIL_ACTIONS = ("navigate", "interact", "tabs")
+
+#: 受控浏览器每会话最近一次的页面信息（navigate/snapshot/interact/tabs 更新）
+_LAST_PAGE: Dict[str, Dict[str, str]] = {}
+
+#: 受控浏览器每会话最近一次快照的登录墙判断
+_LAST_LOGIN_WALL: Dict[str, bool] = {}
 
 
 def _error(exc: BrowserCDPError) -> ToolResult:
@@ -69,6 +145,444 @@ def _error(exc: BrowserCDPError) -> ToolResult:
 def _resolve_session(browser_id: Optional[str]) -> BrowserSession:
     """统一入口：解析会话并把 BrowserCDPError 归一为带提示的错误。"""
     return get_browser_manager().require(browser_id)
+
+
+# ---------------------------------------------------------------------------
+# 控制面门禁 + 步骤元数据（M3）
+# ---------------------------------------------------------------------------
+
+
+def _control_state(session: BrowserSession) -> BrowserControlState:
+    """读取会话控制状态（未知会话默认 agent）。"""
+    return get_browser_control().get_state(session.browser_id)
+
+
+def _blocked_by_control(
+    session: BrowserSession, tool_name: str
+) -> Optional[ToolResult]:
+    """控制门禁：paused / user_takeover 时返回带 browser_meta 的拦截结果；agent 放行。"""
+    state = _control_state(session)
+    # 失败结果同样附步骤元数据：前端时间线需要展示“在哪一步被拦”
+    action = tool_name.replace("browser_", "", 1)
+    if state is BrowserControlState.PAUSED:
+        logger.info(
+            "%s 被控制门禁拦截: session=%s state=paused", tool_name, session.browser_id
+        )
+        return _meta_result(
+            ToolResult(success=False, error=_CONTROL_PAUSED_ERROR), session, action
+        )
+    if state is BrowserControlState.USER_TAKEOVER:
+        logger.info(
+            "%s 被控制门禁拦截: session=%s state=user_takeover",
+            tool_name,
+            session.browser_id,
+        )
+        return _meta_result(
+            ToolResult(success=False, error=_CONTROL_TAKEOVER_ERROR), session, action
+        )
+    return None
+
+
+def _remember_page(session: BrowserSession, url: str, title: str) -> None:
+    """记录会话最近一次页面信息（供失败结果 / 后续动作兜底）。"""
+    if not session.browser_id or not (url or title):
+        return
+    _LAST_PAGE[session.browser_id] = {"url": url or "", "title": title or ""}
+
+
+def _cached_page(session: BrowserSession) -> Tuple[str, str]:
+    cached = _LAST_PAGE.get(session.browser_id) or {}
+    return str(cached.get("url") or ""), str(cached.get("title") or "")
+
+
+def _detect_login_wall(elements: Any) -> bool:
+    """快照元素里存在角色 textbox 且类型 password 的输入框 → 疑似登录墙。"""
+    if not isinstance(elements, list):
+        return False
+    return any(
+        isinstance(item, dict)
+        and item.get("role") == "textbox"
+        and item.get("type") == "password"
+        for item in elements
+    )
+
+
+def _browser_meta(
+    session: BrowserSession,
+    action: str,
+    url: str = "",
+    title: str = "",
+    target_ref: str = "",
+    target_name: str = "",
+    screenshot_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """构造工具结果上的 ``browser_meta``（前端时间线 / Electron 面板消费）。"""
+    cached_url, cached_title = _cached_page(session)
+    return {
+        "session_id": session.browser_id,
+        "action": action,
+        "url": url or cached_url,
+        "title": title or cached_title,
+        "target_ref": target_ref,
+        "target_name": target_name,
+        "login_wall": bool(_LAST_LOGIN_WALL.get(session.browser_id, False)),
+        "screenshot_path": screenshot_path,
+    }
+
+
+def _with_meta(content: Any, session: BrowserSession, action: str, **fields: Any) -> Dict[str, Any]:
+    """给 content 附 browser_meta；content 非 dict 时包成 ``{"result": ...}``。"""
+    meta = _browser_meta(session, action, **fields)
+    if isinstance(content, dict):
+        merged = dict(content)
+        merged["browser_meta"] = meta
+        return merged
+    return {"result": content, "browser_meta": meta}
+
+
+def _meta_result(result: ToolResult, session: BrowserSession, action: str, **fields: Any) -> ToolResult:
+    """复制 ToolResult 并附 browser_meta（不改动 output 语义）。"""
+    return ToolResult(
+        success=result.success,
+        content=_with_meta(result.content, session, action, **fields),
+        error=result.error,
+        output=result.output,
+    )
+
+
+def _meta_error(
+    exc: BrowserCDPError, session: Optional[BrowserSession], action: str
+) -> ToolResult:
+    """CDP 错误附 browser_meta；会话尚未解析（解析失败）时保持裸错误。"""
+    result = _error(exc)
+    if session is None:
+        return result
+    return _meta_result(result, session, action)
+
+
+def _step_thumbnails_enabled() -> bool:
+    """步骤缩略图开关；读取失败 / 缺省一律按开启处理。"""
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get(_SETTINGS_KEY_STEP_THUMBNAILS)
+    except Exception:  # noqa: BLE001 — 设置读取失败不阻断浏览器动作
+        return True
+    if raw is None:
+        return True
+    return str(raw).strip().lower() not in ("0", "false", "off", "no")
+
+
+def _browser_default_visible() -> bool:
+    """受控浏览器默认是否可见；读取失败 / 缺省按可见（"1"）处理。
+
+    仅显式 ``"0"`` 才切到无头（与设置页语义一致）；其它值一律按可见。
+    """
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get(_SETTINGS_KEY_DEFAULT_VISIBLE)
+    except Exception:  # noqa: BLE001 — 设置读取失败不阻断浏览器动作
+        return True
+    if raw is None:
+        return True
+    return str(raw).strip() != "0"
+
+
+def _has_user_browser_session() -> bool:
+    """manager 中是否存在任何非保留用户会话。
+
+    ``get(None) is None`` 同时表示「零个用户会话」和「≥2 个用户会话无法
+    免 id 解析」。后者若触发自动拉起只会弹出无法被解析的孤儿窗口，因此
+    自动拉起前须用 ``all_sessions()`` 过滤保留槽位（web_fetch 渲染池）后
+    判断是否真的为空。``all_sessions()`` 已持锁返回副本列表。
+    """
+    for session in get_browser_manager().all_sessions():
+        browser_id = session.browser_id or ""
+        if browser_id == RESERVED_BROWSER_ID:
+            continue
+        if browser_id.startswith(RESERVED_BROWSER_ID + "-"):
+            continue
+        return True
+    return False
+
+
+def _capture_step_thumbnail(session: BrowserSession) -> Optional[str]:
+    """截当前页步骤缩略图到数据目录；任何失败静默返回 None。"""
+    if not _step_thumbnails_enabled():
+        return None
+    try:
+        result = cdp_command(session, "Page.captureScreenshot", {"format": "png"})
+        data = result.get("data")
+        if not data:
+            return None
+        png_bytes = base64.b64decode(data)
+        # 数据目录，绝不写工作区（避免污染 artifact/用户工程）
+        folder = browser_downloads_root().parent / "browser_steps" / session.browser_id
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / f"{int(time.time() * 1000)}.png"
+        target.write_bytes(png_bytes)
+        return str(target.resolve())
+    except Exception:  # noqa: BLE001 — 缩略图失败不影响工具结果
+        logger.debug(
+            "browser step thumbnail 失败: session=%s", session.browser_id, exc_info=True
+        )
+        return None
+
+
+# ---------------------------------------------------------------------------
+# 安全层接线（M4）：站点授权 / 敏感动作 / 元素元数据 / 审计
+# ---------------------------------------------------------------------------
+
+
+def _safety_check_site(session_id: str, url: str) -> str:
+    """站点判定薄包装（allow/confirm/block）；单测可替换为固定值。"""
+    return browser_safety.check_site(session_id, url)
+
+
+def _site_access_gate(
+    session: BrowserSession, url: str, domain: str, started: float
+) -> Optional[ToolResult]:
+    """M4 站点授权门禁：拒绝指纹 → 持久/会话策略 → block / confirm。
+
+    返回拦截结果（已写审计）或 None（放行）。导航落地域名与请求域名
+    不同（重定向/短链）时调用方用最终 URL 再调一次，避免 302 绕过。
+    """
+    if not domain:
+        return None
+    site_fingerprint = browser_safety.action_fingerprint(
+        "browser_navigate",
+        "site_access",
+        domain,
+        session_id=session.browser_id,
+    )
+    registry = browser_safety.get_confirmation_registry()
+    if registry.is_denied(site_fingerprint, session.browser_id):
+        # 用户拒绝后暂停会话：禁止页面继续被 snapshot/interact 读取。
+        get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
+        _record_browser_audit(
+            session,
+            "browser_navigate",
+            "navigate",
+            "blocked",
+            approval="denied",
+            domain=domain,
+            duration_ms=_elapsed_ms(started),
+        )
+        return _meta_result(
+            ToolResult(
+                success=False,
+                error="denied_by_user: 用户拒绝了访问该站点，请换一种方式或询问用户",
+            ),
+            session,
+            "navigate",
+            url=url,
+        )
+    verdict = _safety_check_site(session.browser_id, url)
+    if verdict == "block":
+        _record_browser_audit(
+            session,
+            "browser_navigate",
+            "navigate",
+            "blocked",
+            approval="none",
+            domain=domain,
+            duration_ms=_elapsed_ms(started),
+        )
+        return _meta_result(
+            ToolResult(success=False, error=f"site_blocked: 用户已禁止该站点 {domain}"),
+            session,
+            "navigate",
+            url=url,
+        )
+    if verdict == "confirm":
+        pending = registry.create(
+            session.browser_id,
+            "site_access",
+            code="site_access",
+            domain=domain,
+            description=f"访问站点 {domain}：{url}",
+            options=list(browser_safety.SITE_ACCESS_OPTIONS),
+            screenshot_path=_capture_step_thumbnail(session) or "",
+            fingerprint=site_fingerprint,
+        )
+        get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
+        _record_browser_audit(
+            session,
+            "browser_navigate",
+            "navigate",
+            "confirm_required",
+            approval="none",
+            domain=domain,
+            duration_ms=_elapsed_ms(started),
+        )
+        return _meta_result(
+            ToolResult(
+                success=False,
+                error=(
+                    f"needs_confirmation: {pending.id} 访问站点 {domain}"
+                    "（请在右栏浏览器面板确认）"
+                ),
+            ),
+            session,
+            "navigate",
+            url=url,
+        )
+    return None
+
+
+def _blocked_current_page(session: BrowserSession) -> Optional[Tuple[str, str]]:
+    """当前页面域名被持久策略禁止时返回 ``(domain, url)``，否则 None。
+
+    用于 snapshot/interact 的前置短路：即使导航门禁曾放行（例如策略在
+    会话中途被改写成 block），也不允许继续读取/操作被禁止的站点。
+    """
+    url, _title = _cached_page(session)
+    if not url:
+        return None
+    domain = browser_safety.domain_of(url)
+    if not domain:
+        return None
+    if _safety_check_site(session.browser_id, url) != "block":
+        return None
+    return domain, url
+
+
+def _site_blocked_result(session: BrowserSession, action: str) -> Optional[ToolResult]:
+    """当前页面被禁止时的统一 ``site_blocked:`` 结果（附带 browser_meta）。"""
+    blocked = _blocked_current_page(session)
+    if blocked is None:
+        return None
+    domain, url = blocked
+    return _meta_result(
+        ToolResult(success=False, error=f"site_blocked: 用户已禁止该站点 {domain}"),
+        session,
+        action,
+        url=url,
+    )
+
+
+def _read_target_metadata(
+    session: BrowserSession,
+    ref: str = "",
+    selector: str = "",
+    *,
+    use_focused: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """只读读取交互目标元数据（tag/role/name/type/placeholder）。
+
+    ref 优先、selector 回退；无定位且 ``use_focused``（press）时读取
+    当前焦点元素。失败或元素不存在返回 None（调用方用 text 参数兜底，
+    否则按 fail-closed 分类），不抛错、不产生页面副作用。
+    """
+    if not ref and not selector and not use_focused:
+        return None
+    if ref:
+        locator = f"(window.__SAGE_REFS__||{{}})[{json.dumps(str(ref))}]"
+    elif selector:
+        locator = f"document.querySelector({json.dumps(str(selector))})"
+    else:
+        locator = "(document.activeElement||document.body)"
+    # body/documentElement 永不取正文；宽泛容器（div/main/section… 且没有
+    # 交互角色）只取直接文本节点，避免整页/整块 innerText 进入 name →
+    # 审计/确认描述（I3）。focused 与非 focused 路径共用同一守卫。
+    name_source = (
+        "var name='';"
+        "var isBody=(el===document.body||el===document.documentElement);"
+        "var role=(el.getAttribute&&el.getAttribute('role'))||'';"
+        "var tag=(el.tagName||'').toUpperCase();"
+        "var broadRoles={generic:1,presentation:1,none:1,main:1,region:1,"
+        "document:1,group:1,list:1};"
+        "var broadTags={DIV:1,MAIN:1,SECTION:1,ARTICLE:1,NAV:1,FORM:1,"
+        "ASIDE:1,HEADER:1,FOOTER:1,UL:1,OL:1,TABLE:1,TBODY:1,TR:1,"
+        "BODY:1,HTML:1};"
+        "var isBroad=!!broadTags[tag]&&(!role||broadRoles[role]===1);"
+        "if(!isBody){"
+        "name=(el.getAttribute&&(el.getAttribute('aria-label')||''))||'';"
+        "if(!name){name=(el.getAttribute&&(el.getAttribute('title')||''))||'';}"
+        "if(!name&&el.labels&&el.labels.length){name=el.labels[0].textContent||'';}"
+        "if(!name){"
+        "if(!isBroad){name=el.innerText||el.textContent||'';}"
+        "else{var tn='';var kids=el.childNodes||[];"
+        "for(var i=0;i<kids.length&&tn.length<120;i++){"
+        "if(kids[i].nodeType===3){tn+=kids[i].nodeValue;}}"
+        "name=tn;}"
+        "}"
+        "}"
+    )
+    expression = (
+        "(function(){var el=" + locator + ";if(!el)return null;"
+        + name_source
+        + "return{tag:(el.tagName||'').toLowerCase(),"
+        "role:(el.getAttribute&&el.getAttribute('role'))||'',"
+        "name:String(name).trim().slice(0,120),"
+        "type:String((el.getAttribute&&el.getAttribute('type'))||'').toLowerCase(),"
+        "placeholder:String((el.getAttribute&&el.getAttribute('placeholder'))||'').slice(0,120)};"
+        "})()"
+    )
+    try:
+        value = _evaluate_json(session, expression, None)
+    except BrowserCDPError:
+        logger.debug("交互目标元数据读取失败", exc_info=True)
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _elapsed_ms(started: float) -> int:
+    """自 started（time.monotonic）以来的毫秒数；异常按 0。"""
+    try:
+        return max(0, int((time.monotonic() - started) * 1000))
+    except Exception:  # noqa: BLE001 — 审计耗时统计不得影响工具
+        return 0
+
+
+def _record_browser_audit(
+    session: Optional[BrowserSession],
+    tool: str,
+    action: str,
+    result: str,
+    *,
+    approval: str = "auto",
+    target_ref: str = "",
+    target_desc: str = "",
+    domain: str = "",
+    duration_ms: int = 0,
+) -> None:
+    """写一条动作审计；不落页面正文 / 输入值 / 凭据，失败静默。"""
+    try:
+        resolved_domain = domain
+        if not resolved_domain and session is not None:
+            resolved_domain = browser_safety.domain_of(_cached_page(session)[0])
+        browser_action_repo.record(
+            {
+                "session_id": session.browser_id if session is not None else "unknown",
+                "conversation_id": None,
+                "ts": int(time.time() * 1000),
+                "domain": resolved_domain,
+                "tool": tool,
+                "action": action,
+                "target_ref": target_ref or "",
+                "target_desc": (target_desc or "")[: browser_action_repo.MAX_TARGET_DESC],
+                "result": result,
+                "approval": approval,
+                "duration_ms": int(duration_ms),
+            }
+        )
+    except Exception:  # noqa: BLE001 — 审计失败不得影响工具结果
+        logger.debug("browser audit 记录失败", exc_info=True)
+
+
+def _snapshot_untrusted_text(content: Dict[str, Any]) -> str:
+    """从快照结果提取可扫描文本（text 正文优先，其次元素可访问名）。"""
+    text = content.get("text")
+    if isinstance(text, str) and text:
+        return text
+    elements = content.get("elements")
+    if isinstance(elements, list):
+        return " ".join(
+            str(item.get("name") or "") for item in elements if isinstance(item, dict)
+        )
+    return ""
 
 
 def validate_url(url: str) -> Optional[str]:
@@ -125,8 +639,9 @@ def _js_type(selector: str, value: str, clear: bool) -> str:
         "el.focus();"
         "const isContenteditable=el.isContentEditable;"
         "const proto=isContenteditable?HTMLElement.prototype:(el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype);"
-        "const setter=Object.getOwnPropertyDescriptor(proto,'value').set;"
-        f"setter.call(el,{json.dumps(value)});"
+        "const desc=isContenteditable?null:Object.getOwnPropertyDescriptor(proto,'value');"
+        "if(desc&&desc.set){desc.set.call(el," + json.dumps(value) + ");}"
+        "else{el.textContent=" + json.dumps(value) + ";}"
         "el.dispatchEvent(new Event('input',{bubbles:true}));"
         "el.dispatchEvent(new Event('change',{bubbles:true}));"
         f"return{{ok:true,info:'typed '+(el.value||el.textContent||'').length+' chars'+({json.dumps(' cleared-first' if clear else '')})}};"
@@ -134,15 +649,44 @@ def _js_type(selector: str, value: str, clear: bool) -> str:
     )
 
 
+def _key_event_options(key: str) -> str:
+    """构造 KeyboardEvent 初始化对象字面量（含组合键 modifier 标志）。"""
+    modifiers, main = parse_key_combo(key)
+    code = _KEY_CODES.get(main)
+    if code is None and len(main) == 1:
+        upper = main.upper()
+        if ("A" <= upper <= "Z") or ("0" <= upper <= "9"):
+            code = ord(upper)
+    key_code = code or 0
+    return (
+        "{key:"
+        + json.dumps(main)
+        + ",keyCode:"
+        + str(key_code)
+        + ",which:"
+        + str(key_code)
+        + ",ctrlKey:"
+        + ("true" if modifiers["ctrlKey"] else "false")
+        + ",shiftKey:"
+        + ("true" if modifiers["shiftKey"] else "false")
+        + ",altKey:"
+        + ("true" if modifiers["altKey"] else "false")
+        + ",metaKey:"
+        + ("true" if modifiers["metaKey"] else "false")
+        + ",bubbles:true,cancelable:true}"
+    )
+
+
 def _js_press(key: str) -> str:
+    """无定位目标时的按键：作用于当前焦点元素。"""
+    options = _key_event_options(key)
     return (
         "(function(){"
-        f"const k={json.dumps(key)};"
         "const el=document.activeElement||document.body;"
-        "const opts={key:k,keyCode:(k==='Enter'?13:k==='Escape'?27:k==='Tab'?9:0),bubbles:true};"
+        f"const opts={options};"
         "el.dispatchEvent(new KeyboardEvent('keydown',opts));"
         "el.dispatchEvent(new KeyboardEvent('keyup',opts));"
-        "return{ok:true,info:'pressed '+k};"
+        f"return{{ok:true,info:'pressed '+{json.dumps(key)}}};"
         "})()"
     )
 
@@ -152,6 +696,129 @@ def _js_scroll(amount: int) -> str:
         "(function(){"
         f"window.scrollBy(0,{int(amount)});"
         f"return{{ok:true,info:'scrolled to y='+window.scrollY}};"
+        "})()"
+    )
+
+
+#: 元素描述片段：调用方已把元素绑定为 ``el``，此处拼出 "TAG 可访问名"。
+_DESCRIBE_JS = (
+    "var __sageLabel=(el.getAttribute&&el.getAttribute('data-sage-ref-name'))"
+    "||(el.getAttribute&&el.getAttribute('aria-label'))"
+    "||(el.innerText||el.value||'');"
+    "var __sageDesc=String((el.tagName||'')+' '+String(__sageLabel).trim()).slice(0,120);"
+)
+
+
+def _js_on_selector(selector: str, action_js: str) -> str:
+    """把元素级片段包装成"按 CSS selector 定位后执行"。"""
+    return (
+        "(function(){"
+        f"const el=document.querySelector({json.dumps(selector)});"
+        "if(!el)return{ok:false,info:'not-found'};"
+        f"return {action_js};"
+        "})()"
+    )
+
+
+def _js_click_element() -> str:
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        "if(el.click){el.click();}else{el.dispatchEvent(new MouseEvent('click',{bubbles:true}));}"
+        + _DESCRIBE_JS
+        + "return{ok:true,info:'clicked '+__sageDesc};"
+        "})()"
+    )
+
+
+def _js_type_element(value: str, clear: bool) -> str:
+    cleared = json.dumps(" cleared-first" if clear else "")
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        "if(el.focus){el.focus();}"
+        f"const next={json.dumps(value)};"
+        "if(el.isContentEditable){el.textContent=next;}"
+        "else{"
+        "const proto=(el.tagName==='TEXTAREA')?HTMLTextAreaElement.prototype:(el.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype);"
+        "const desc=Object.getOwnPropertyDescriptor(proto,'value');"
+        "if(desc&&desc.set){desc.set.call(el,next);}else{el.value=next;}"
+        "}"
+        "el.dispatchEvent(new Event('input',{bubbles:true}));"
+        "el.dispatchEvent(new Event('change',{bubbles:true}));"
+        f"return{{ok:true,info:'typed '+(el.value||el.textContent||'').length+' chars'+{cleared}}};"
+        "})()"
+    )
+
+
+def _js_select_element(value: str) -> str:
+    """选择 <select> 的 option（value 或可见文本匹配），派发 input/change。"""
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        f"const want={json.dumps(value)};"
+        "let matched=false;"
+        "if((el.tagName||'').toUpperCase()==='SELECT'&&el.options){"
+        "for(let i=0;i<el.options.length;i++){"
+        "const option=el.options[i];"
+        "if(option.value===want||String(option.text||'').trim()===want){"
+        "el.value=option.value;matched=true;break;"
+        "}"
+        "}"
+        "}"
+        "if(!matched&&'value' in el){try{el.value=want;matched=true;}catch(err){}}"
+        "if(!matched)return{ok:false,info:'option-not-found'};"
+        "el.dispatchEvent(new Event('input',{bubbles:true}));"
+        "el.dispatchEvent(new Event('change',{bubbles:true}));"
+        "return{ok:true,info:'selected '+String(el.value)};"
+        "})()"
+    )
+
+
+def _js_hover_element() -> str:
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        "const rect=el.getBoundingClientRect();"
+        "const x=rect.left+rect.width/2;"
+        "const y=rect.top+rect.height/2;"
+        "el.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,cancelable:true,clientX:x,clientY:y}));"
+        "el.dispatchEvent(new MouseEvent('mouseenter',{bubbles:false,cancelable:true,clientX:x,clientY:y}));"
+        "el.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,cancelable:true,clientX:x,clientY:y}));"
+        + _DESCRIBE_JS
+        + "return{ok:true,info:'hover '+__sageDesc};"
+        "})()"
+    )
+
+
+def _js_set_checked_element(checked: bool) -> str:
+    flag = "true" if checked else "false"
+    label = "checked" if checked else "unchecked"
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        f"const want={flag};"
+        "if('checked' in el){el.checked=want;}"
+        "else if(el.setAttribute){el.setAttribute('aria-checked',want?'true':'false');}"
+        "el.dispatchEvent(new Event('input',{bubbles:true}));"
+        "el.dispatchEvent(new Event('change',{bubbles:true}));"
+        + _DESCRIBE_JS
+        + f"return{{ok:true,info:'{label} '+__sageDesc}};"
+        "})()"
+    )
+
+
+def _js_press_element(key: str) -> str:
+    """聚焦元素后派发组合键（先 focus，再 keydown/keyup）。"""
+    options = _key_event_options(key)
+    return (
+        "(function(){"
+        "el.scrollIntoView({block:'center'});"
+        "if(el.focus){el.focus();}"
+        f"const opts={options};"
+        "el.dispatchEvent(new KeyboardEvent('keydown',opts));"
+        "el.dispatchEvent(new KeyboardEvent('keyup',opts));"
+        f"return{{ok:true,info:'pressed '+{json.dumps(key)}}};"
         "})()"
     )
 
@@ -170,6 +837,249 @@ def _evaluate_json(session: BrowserSession, expression: str, target_id: Optional
     return (result.get("result") or {}).get("value")
 
 
+def _evaluate_element_object_id(
+    session: BrowserSession, expression: str, target_id: Optional[str] = None
+) -> str:
+    """Runtime.evaluate（returnByValue=False）→ 元素 objectId。
+
+    ``DOM.setFileInputFiles`` 必须拿到远端节点句柄（objectId），不能用
+    ``returnByValue`` 序列化元素。
+    """
+    result = cdp_command(
+        session,
+        "Runtime.evaluate",
+        {"expression": expression, "returnByValue": False},
+        target_id=target_id,
+    )
+    details = result.get("exceptionDetails")
+    if details:
+        raise BrowserCDPError(f"页面脚本执行失败: {json.dumps(details)[:300]}")
+    object_id = str((result.get("result") or {}).get("objectId") or "")
+    if not object_id:
+        raise BrowserCDPError("未找到上传目标元素（objectId 缺失）")
+    return object_id
+
+
+def _upload_lookup_js(ref: str, selector: str) -> str:
+    """上传目标元素的定位 JS 片段（ref 优先，selector 回退）。"""
+    if ref:
+        return "(window.__SAGE_REFS__||{})[" + json.dumps(str(ref)) + "]||null"
+    return "document.querySelector(" + json.dumps(str(selector)) + ")"
+
+
+def _build_upload_check_expression(ref: str, selector: str) -> str:
+    """校验上传目标存在、ref 未失效且为 ``input[type=file]``。"""
+    if ref:
+        guard = (
+            "var key=" + json.dumps(str(ref)) + ";"
+            "var el=(window.__SAGE_REFS__||{})[key]||null;"
+            "var names=window.__SAGE_REF_NAMES__||{};"
+            "if(!el||el.isConnected!==true)"
+            "{return{ok:false,reason:'stale-ref'};}"
+            "if(el.getAttribute('data-sage-ref-name')!==names[key])"
+            "{return{ok:false,reason:'stale-ref'};}"
+        )
+    else:
+        guard = (
+            "var el=document.querySelector(" + json.dumps(str(selector)) + ");"
+            "if(!el){return{ok:false,reason:'element_not_found'};}"
+        )
+    return (
+        "(function(){"
+        + guard
+        + "var tag=(el.tagName||'').toLowerCase();"
+        "var type=((el.getAttribute&&el.getAttribute('type'))||'').toLowerCase();"
+        "if(tag!=='input'||type!=='file')"
+        "{return{ok:false,reason:'not_file_input',tag:tag,type:type};}"
+        "return{ok:true};"
+        "})()"
+    )
+
+
+def _build_upload_element_expression(ref: str, selector: str) -> str:
+    """返回目标元素句柄的表达式（配合 ``returnByValue=False`` 取 objectId）。"""
+    return "(function(){return " + _upload_lookup_js(ref, selector) + ";})()"
+
+
+def _upload_file_to_input(
+    session: BrowserSession, ref: str, selector: str, file_path: Path
+) -> str:
+    """校验目标为 file input 后经 CDP 注入文件；返回可读成功信息。"""
+    check = _evaluate_json(session, _build_upload_check_expression(ref, selector), None)
+    if not isinstance(check, dict):
+        raise BrowserCDPError("上传目标校验结果异常（非 JSON）")
+    if not check.get("ok"):
+        reason = str(check.get("reason") or "")
+        if reason == STALE_REF_INFO:
+            raise BrowserCDPError(STALE_REF_ERROR)
+        if reason == "not_file_input":
+            raise BrowserCDPError(
+                "upload_target_not_file_input: 目标不是 input[type=file]"
+                f"（tag={check.get('tag') or '?'}, type={check.get('type') or '?'}）"
+            )
+        raise BrowserCDPError("upload_target_not_found: 未找到上传目标元素")
+    object_id = _evaluate_element_object_id(
+        session, _build_upload_element_expression(ref, selector)
+    )
+    cdp_command(
+        session,
+        "DOM.setFileInputFiles",
+        {"files": [str(file_path)], "objectId": object_id},
+        target_id=None,
+    )
+    return f"uploaded {file_path.name}"
+
+
+def _png_width(png_bytes: bytes) -> Optional[int]:
+    """从 PNG IHDR 读取宽度（无需 Pillow）；非 PNG 返回 None。"""
+    if len(png_bytes) < 24 or png_bytes[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    try:
+        return int.from_bytes(png_bytes[16:20], "big")
+    except Exception:  # noqa: BLE001 — 头损坏按未知宽度处理
+        return None
+
+
+def _build_screenshot_vision_payload(png_bytes: bytes) -> Dict[str, Any]:
+    """为视觉注入生成 data URL（≤1.5MB、宽 ≤1568px）。
+
+    Pillow 是可选依赖（随 OCR 引擎附带，不做硬依赖）：可用时按宽缩放到
+    1568px，PNG 仍超限再降级为 JPEG；不可用时只做尺寸检查，超限返回
+    ``vision_skipped: "too_large"``（调用方只回路径）。
+    """
+    data = png_bytes
+    mime = "image/png"
+    try:
+        from PIL import Image  # type: ignore
+    except Exception:  # noqa: BLE001 — Pillow 缺失按无缩放路径处理
+        Image = None  # type: ignore[assignment]
+    if Image is not None:
+        try:
+            with Image.open(io.BytesIO(png_bytes)) as source:
+                img = source
+                width, height = img.size
+                scale = 1.0
+                if width > SCREENSHOT_VISION_MAX_WIDTH:
+                    scale = SCREENSHOT_VISION_MAX_WIDTH / float(width)
+                best_png: Optional[bytes] = None
+                current_scale = scale
+                for _ in range(4):
+                    frame = img
+                    if current_scale < 1.0:
+                        frame = img.resize(
+                            (
+                                max(1, int(width * current_scale)),
+                                max(1, int(height * current_scale)),
+                            )
+                        )
+                    buf = io.BytesIO()
+                    frame.save(buf, format="PNG")
+                    candidate = buf.getvalue()
+                    best_png = candidate
+                    if len(candidate) <= SCREENSHOT_VISION_MAX_BYTES:
+                        break
+                    current_scale *= 0.75
+                if best_png is not None and len(best_png) <= SCREENSHOT_VISION_MAX_BYTES:
+                    data = best_png
+                    mime = "image/png"
+                else:
+                    # PNG 仍超限 → JPEG 质量阶梯（视觉 API 均接受）
+                    rgb = img.convert("RGB")
+                    if current_scale < 1.0:
+                        rgb = rgb.resize(
+                            (
+                                max(1, int(width * current_scale)),
+                                max(1, int(height * current_scale)),
+                            )
+                        )
+                    for quality in (85, 70, 55):
+                        buf = io.BytesIO()
+                        rgb.save(buf, format="JPEG", quality=quality, optimize=True)
+                        candidate = buf.getvalue()
+                        if len(candidate) <= SCREENSHOT_VISION_MAX_BYTES:
+                            data = candidate
+                            mime = "image/jpeg"
+                            break
+        except Exception:  # noqa: BLE001 — 压缩失败退回未缩放原图
+            data = png_bytes
+            mime = "image/png"
+
+    width = _png_width(data) if mime == "image/png" else None
+    if len(data) > SCREENSHOT_VISION_MAX_BYTES or (
+        width is not None and width > SCREENSHOT_VISION_MAX_WIDTH
+    ):
+        return {"vision_skipped": "too_large"}
+    encoded = base64.b64encode(data).decode("ascii")
+    return {
+        "image_data_url": f"data:{mime};base64,{encoded}",
+        "image_bytes": len(data),
+    }
+
+
+def _locate_tab(
+    pages: List[Dict[str, Any]], tab_id: str, index: Optional[int]
+) -> Dict[str, Any]:
+    """在 ``_list_page_targets`` 结果中定位标签页（tab_id 优先，其次 1-based index）。"""
+    if tab_id:
+        for info in pages:
+            if info.get("targetId") == tab_id:
+                return info
+        raise BrowserCDPError(f"未知 tab_id: {tab_id}")
+    if index is not None:
+        if index < 1 or index > len(pages):
+            raise BrowserCDPError(
+                f"index 超出范围: {index}（当前 {len(pages)} 个标签页）"
+            )
+        return pages[index - 1]
+    raise BrowserCDPError("需要 tab_id 或 index")
+
+
+def _interact_arg_error(
+    action: str,
+    selector: str,
+    text: str,
+    value: str,
+    key: str,
+    ref: str,
+    path: str = "",
+) -> Optional[str]:
+    """按动作返回参数错误文案；None 表示放行。"""
+    located = bool(ref or selector)
+    error: Optional[str] = None
+    if action not in _VALID_ACTIONS:
+        error = f"action 必须是 {', '.join(_VALID_ACTIONS)}"
+    elif action == "click":
+        if not located and not text:
+            error = "click 需要 ref、selector 或 text 之一"
+    elif action == "type":
+        if not located:
+            error = "type 需要 ref 或 selector"
+        elif not isinstance(value, str) or value == "":
+            error = "type 需要 value（输入内容）"
+    elif action == "select":
+        if not located:
+            error = "select 需要 ref 或 selector"
+        elif not isinstance(value, str) or value == "":
+            error = "select 需要 value（option 的 value 或文本）"
+    elif action == "upload":
+        if not located:
+            error = "upload 需要 ref 或 selector"
+        elif not (path or value):
+            error = "upload 需要 path（工作区内文件路径，也可复用 value）"
+    elif action in ("hover", "check", "uncheck"):
+        if not located:
+            error = f"{action} 需要 ref 或 selector"
+    elif action == "press":
+        if not isinstance(key, str) or not key:
+            error = "press 需要 key"
+    elif action == "scroll":
+        try:
+            int(value)
+        except (TypeError, ValueError):
+            error = "scroll 的 value 必须是整数像素"
+    return error
+
+
 def _validate_interact_args(
     kwargs: Dict[str, Any],
     action: str,
@@ -177,44 +1087,71 @@ def _validate_interact_args(
     text: str,
     value: str,
     key: str,
+    ref: str,
+    path: str = "",
 ) -> Optional[ToolResult]:
-    """browser_interact 参数校验；返回拒绝结果或 None（放行）。"""
+    """browser_interact 参数校验；返回拒绝结果或 None（放行）。
+
+    定位优先级 ref > selector > text：三者同时给出不报错（按优先级取用），
+    但 click/type/select/hover/check/uncheck 至少要有 ref 或 selector
+    （click 也可用 text）。upload 还需要 path（或复用 value）。
+    """
     if kwargs:
         return ToolResult(
             success=False,
             error=f"未知参数: {', '.join(sorted(kwargs))}",
         )
-    if action not in _VALID_ACTIONS:
-        return ToolResult(
-            success=False,
-            error=f"action 必须是 {', '.join(_VALID_ACTIONS)}",
-        )
-    if action in ("click", "type"):
-        return _validate_action_args(action, selector, text, value)
-    if action == "press" and not key:
-        return ToolResult(success=False, error="press 需要 key")
-    if action == "scroll":
-        try:
-            int(value)
-        except (TypeError, ValueError):
-            return ToolResult(success=False, error="scroll 的 value 必须是整数像素")
-    return None
+    error = _interact_arg_error(action, selector, text, value, key, ref, path)
+    return None if error is None else ToolResult(success=False, error=error)
 
 
-def _validate_action_args(
-    action: str, selector: str, text: str, value: str
-) -> Optional[ToolResult]:
-    """click / type 两个依赖定位参数的 action 的专项校验。"""
+def _expression_with_page_info(expression: str) -> str:
+    """把交互 JS 结果补上当前 url/title（保留原有 ok/info 字段）。"""
+    return (
+        "(function(){var __sage=(" + expression + ");"
+        "try{__sage.url=location.href;__sage.title=document.title;}catch(e){}"
+        "return __sage;})()"
+    )
+
+
+def _build_interact_expression(
+    action: str,
+    selector: str,
+    text: str,
+    value: str,
+    key: str,
+    clear: bool,
+    ref: str,
+) -> str:
+    """按定位优先级构造交互 JS（ref > selector > text，scroll 无定位）。"""
     if action == "click":
-        if not selector and not text:
-            return ToolResult(success=False, error="click 需要 selector 或 text 之一")
-        return None
-    if not selector:
-        return ToolResult(success=False, error="type 需要 selector")
-    if not isinstance(value, str):
-        return ToolResult(success=False, error="type 的 value 必须是字符串")
-    return None
-    return None
+        expression = (
+            build_ref_expression(_js_click_element(), ref)
+            if ref
+            else _js_click(selector=selector, text=text)
+        )
+        return _expression_with_page_info(expression)
+    if action == "scroll":
+        return _expression_with_page_info(_js_scroll(int(value)))
+    if action == "press" and not ref and not selector:
+        return _expression_with_page_info(_js_press(key))
+
+    if action == "type":
+        snippet = _js_type_element(value, bool(clear))
+    elif action == "select":
+        snippet = _js_select_element(value)
+    elif action == "hover":
+        snippet = _js_hover_element()
+    elif action == "check":
+        snippet = _js_set_checked_element(True)
+    elif action == "uncheck":
+        snippet = _js_set_checked_element(False)
+    else:  # press（有 ref 或 selector）
+        snippet = _js_press_element(key)
+
+    if ref:
+        return _expression_with_page_info(build_ref_expression(snippet, ref))
+    return _expression_with_page_info(_js_on_selector(selector, snippet))
 
 
 def _wait_page_settled(
@@ -403,14 +1340,46 @@ class BrowserNavigateTool(BaseTool):
             network_rejection = load_network_policy().check_host(url)
             if network_rejection:
                 return ToolResult(success=False, error=network_rejection)
+        # 可见受控浏览器（M3）：门禁全部通过且没有任何用户会话时自动拉起。
+        # 自动拉起的会话即后续 _resolve_session 拿到的默认会话；显式
+        # browser_id 的解析失败保持原有报错语义。多会话 + 无 browser_id 属
+        # 歧义（get(None) 同样为 None），此时保持原多实例报错，不产生孤儿窗口。
+        if not browser_id and not _has_user_browser_session():
+            try:
+                launch_browser(
+                    headless=not _browser_default_visible(),
+                    persistent=False,
+                    profile_name="",
+                )
+            except BrowserCDPError as exc:
+                return _error(exc)
+        session: Optional[BrowserSession] = None
+        started = time.monotonic()
         try:
             session = _resolve_session(browser_id or None)
+            blocked = _blocked_by_control(session, "browser_navigate")
+            if blocked is not None:
+                return blocked
+            # M4 站点授权：拒绝指纹优先（避免同一站点反复弹确认），
+            # 其次持久/会话策略；未知站点 → 待用户确认。
+            domain = browser_safety.domain_of(url)
+            gate = _site_access_gate(session, url, domain, started)
+            if gate is not None:
+                return gate
             if new_tab:
                 created = cdp_command(session, "Target.createTarget", {"url": url.strip()}).get(
                     "targetId"
                 )
                 if not created:
-                    return ToolResult(success=False, error="新标签页创建失败")
+                    return _meta_result(
+                        ToolResult(success=False, error="新标签页创建失败"),
+                        session,
+                        "navigate",
+                        url=url,
+                    )
+                # 与 browser_tabs create 对齐：新标签成为当前活动目标，
+                # 否则后续 ensure_page_target(None) 会落回旧标签页
+                session.active_target_id = created
                 _wait_page_settled(session, created, wait_for)
                 info = _evaluate_json(
                     session,
@@ -420,7 +1389,12 @@ class BrowserNavigateTool(BaseTool):
             else:
                 result = cdp_command(session, "Page.navigate", {"url": url.strip()})
                 if result.get("errorText"):
-                    return ToolResult(success=False, error=f"导航失败: {result['errorText']}")
+                    return _meta_result(
+                        ToolResult(success=False, error=f"导航失败: {result['errorText']}"),
+                        session,
+                        "navigate",
+                        url=url,
+                    )
                 _wait_page_settled(session, None, wait_for)
                 info = _evaluate_json(
                     session,
@@ -429,15 +1403,42 @@ class BrowserNavigateTool(BaseTool):
                 )
             page = json.loads(info) if isinstance(info, str) else {}
         except BrowserCDPError as exc:
-            return _error(exc)
-        return ToolResult(
-            success=True,
-            content={"url": page.get("url", url), "title": page.get("title", "")},
+            return _meta_error(exc, session, "navigate")
+        page_url = str(page.get("url") or url)
+        page_title = str(page.get("title") or "")
+        _remember_page(session, page_url, page_title)
+        # 302/短链/JS 跳转可能落到与请求不同的域名：对最终落地域名重跑
+        # 站点授权（block → site_blocked；confirm → 站点确认 + paused），
+        # 否则允许域名重定向到禁止域名即可绕过策略。
+        final_domain = browser_safety.domain_of(page_url)
+        if final_domain and final_domain != domain:
+            redirect_gate = _site_access_gate(session, page_url, final_domain, started)
+            if redirect_gate is not None:
+                return redirect_gate
+        thumbnail = _capture_step_thumbnail(session)
+        _record_browser_audit(
+            session,
+            "browser_navigate",
+            "navigate",
+            "ok",
+            domain=browser_safety.domain_of(page_url),
+            duration_ms=_elapsed_ms(started),
+        )
+        return _meta_result(
+            ToolResult(
+                success=True,
+                content={"url": page.get("url", url), "title": page.get("title", "")},
+            ),
+            session,
+            "navigate",
+            url=page_url,
+            title=page_title,
+            screenshot_path=thumbnail,
         )
 
 
 class BrowserSnapshotTool(BaseTool):
-    """读取当前页面：URL / 标题 / 可见文本（截断）。"""
+    """读取当前页面：无障碍树交互元素（带 ref）/ 文本正文。"""
 
     risk = RiskClass.READ
     is_blocking = True
@@ -446,50 +1447,123 @@ class BrowserSnapshotTool(BaseTool):
         return ToolSchema(
             name="browser_snapshot",
             description=(
-                "读取当前页面的 URL、标题与可见文本（上限 30KiB，超出标记"
-                " truncated）。这是浏览器'看页面'的主入口。"
+                "看页面主入口。默认 mode=interactive：返回当前页面可交互元素的"
+                "无障碍树列表（每个元素带 ref、role、可访问名与状态），交互工具"
+                "应优先用 ref 定位；动作后页面可能变化，应重新快照确认。"
+                "mode=text 只返回正文文本（上限 30KiB，超出标记 truncated）；"
+                "mode=full 同时返回元素与文本。可用 query 按 role/名称过滤，"
+                "max_nodes 限制返回节点数（1-500），include_offscreen 是否包含"
+                "视口外元素。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
+                    "mode": {
+                        "type": "string",
+                        "enum": ["interactive", "text", "full"],
+                        "description": "interactive（默认，带 ref 的元素列表）| text | full",
+                    },
+                    "max_nodes": {
+                        "type": "integer",
+                        "description": "最多返回节点数（默认 120，钳位 1-500）",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "按 role / 可访问名小写子串过滤",
+                    },
+                    "include_offscreen": {
+                        "type": "boolean",
+                        "description": "包含视口外元素（默认 false）",
+                    },
                     "browser_id": {"type": "string", "description": "单实例可省略"},
                 },
                 "required": [],
             },
         )
 
-    def execute(self, browser_id: str = "", **kwargs: Any) -> ToolResult:
+    def execute(  # noqa: PLR0911 — 门禁/校验各走独立早退分支，扁平更直读
+        self,
+        mode: str = "interactive",
+        max_nodes: int = SNAPSHOT_INTERACTIVE_MAX_DEFAULT,
+        query: str = "",
+        include_offscreen: bool = False,
+        browser_id: str = "",
+        **kwargs: Any,
+    ) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
-                error=f"未知参数: {', '.join(sorted(kwargs))}（合法参数: browser_id）",
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: mode, max_nodes, query, include_offscreen, browser_id）"
+                ),
             )
+        if mode not in _VALID_SNAPSHOT_MODES:
+            return ToolResult(
+                success=False,
+                error=f"mode 必须是 {', '.join(_VALID_SNAPSHOT_MODES)}",
+            )
+        session: Optional[BrowserSession] = None
         try:
             session = _resolve_session(browser_id or None)
-            expression = (
-                "JSON.stringify({url:location.href,title:document.title,"
-                f"text:(document.body&&document.body.innerText||'').slice(0,{SNAPSHOT_TEXT_CAP})}})"
+            blocked = _blocked_by_control(session, "browser_snapshot")
+            if blocked is not None:
+                return blocked
+            # I1：当前页面域名被持久策略禁止时，snapshot 不得读取页面内容
+            site_blocked = _site_blocked_result(session, "snapshot")
+            if site_blocked is not None:
+                return site_blocked
+            expression = build_snapshot_expression(
+                mode=mode,
+                max_collect=SNAPSHOT_HARD_COLLECT_CAP,
+                include_offscreen=bool(include_offscreen),
             )
-            info = _evaluate_json(session, expression, None)
+            payload = _evaluate_json(session, expression, None)
         except BrowserCDPError as exc:
-            return _error(exc)
-        if not isinstance(info, str):
-            return ToolResult(success=False, error="页面快照返回异常（非 JSON）")
-        page = json.loads(info)
-        text = page.get("text") or ""
-        return ToolResult(
-            success=True,
-            content={
-                "url": page.get("url", ""),
-                "title": page.get("title", ""),
-                "text": text,
-                "truncated": len(text) >= SNAPSHOT_TEXT_CAP,
-            },
+            return _meta_error(exc, session, "snapshot")
+        content = parse_snapshot_payload(
+            payload,
+            mode=mode,
+            max_nodes=max_nodes,
+            query=query,
+            include_offscreen=bool(include_offscreen),
+        )
+        if content.get("error"):
+            return _meta_result(
+                ToolResult(success=False, error=str(content["error"])), session, "snapshot"
+            )
+        # M4 注入告警：命中只标注 trust/injection_warning，保留原有字段，不阻断
+        injection_warning = browser_safety.scan_untrusted_text(
+            _snapshot_untrusted_text(content)
+        )
+        if injection_warning:
+            content["trust"] = "untrusted"
+            content["injection_warning"] = injection_warning
+        page_url = str(content.get("url") or "")
+        page_title = str(content.get("title") or "")
+        _remember_page(session, page_url, page_title)
+        # mode=text 不带元素列表 —— 保留上一次快照的登录墙判定，不误清
+        if "elements" in content:
+            _LAST_LOGIN_WALL[session.browser_id] = _detect_login_wall(content.get("elements"))
+        _record_browser_audit(
+            session,
+            "browser_snapshot",
+            mode,
+            "ok",
+            domain=browser_safety.domain_of(page_url),
+            target_desc=page_title,
+        )
+        return _meta_result(
+            ToolResult(success=True, content=content),
+            session,
+            "snapshot",
+            url=page_url,
+            title=page_title,
         )
 
 
 class BrowserInteractTool(BaseTool):
-    """点击 / 输入 / 按键 / 滚动（selector 或可见文本定位）。"""
+    """点击 / 输入 / 按键 / 滚动 / 选择 / 悬停 / 勾选（ref 优先）。"""
 
     risk = RiskClass.WRITE_LOCAL
     is_blocking = True
@@ -498,23 +1572,55 @@ class BrowserInteractTool(BaseTool):
         return ToolSchema(
             name="browser_interact",
             description=(
-                "与当前页面交互。action=click：selector 或 text（可见文本"
-                "精确匹配）；action=type：selector + value（React 兼容，可"
-                " clear=true 先清空）；action=press：key（Enter/Escape/Tab…"
-                "）；action=scroll：value 为像素（正下负上）。操作后建议 "
-                "browser_snapshot 确认效果。"
+                "与当前页面交互。首选 ref（browser_snapshot 返回的元素引用）；"
+                "也可用 selector（CSS）或 text（可见文本精确匹配）定位，优先级 "
+                "ref > selector > text。action=click | type | press | scroll | "
+                "select | hover | check | uncheck | upload。type 需 value（React "
+                "兼容，clear=true 先清空）；press 支持组合键（Control+A / "
+                "Shift+Tab / Meta+Enter）；select 的 value 为 option 的 value 或"
+                "文本；scroll 的 value 为像素（正下负上）；upload 需 path（仅允许"
+                "工作区内文件，目标须为 input[type=file]，且需用户确认）。操作后"
+                "请重新 browser_snapshot 确认效果（页面变化会使旧 ref 失效）。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "description": "click | type | press | scroll"},
-                    "selector": {"type": "string", "description": "CSS 选择器（click/type 用）"},
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "click",
+                            "type",
+                            "press",
+                            "scroll",
+                            "select",
+                            "hover",
+                            "check",
+                            "uncheck",
+                            "upload",
+                        ],
+                        "description": "要执行的动作",
+                    },
+                    "ref": {
+                        "type": "string",
+                        "description": "browser_snapshot 返回的元素引用（优先于 selector/text）",
+                    },
+                    "selector": {"type": "string", "description": "CSS 选择器（回退定位）"},
                     "text": {
                         "type": "string",
-                        "description": "按可见文本定位（click 用，selector 缺省时生效）",
+                        "description": "按可见文本定位（click 用，ref/selector 缺省时生效）",
                     },
-                    "value": {"type": "string", "description": "type 的输入内容 / scroll 的像素"},
-                    "key": {"type": "string", "description": "press 的键名"},
+                    "value": {
+                        "type": "string",
+                        "description": "type/select 的目标值 / scroll 的像素 / upload 的路径",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "upload 的文件路径（相对工作区，也可复用 value）",
+                    },
+                    "key": {
+                        "type": "string",
+                        "description": "press 的键名，支持组合键（如 Control+A）",
+                    },
                     "clear": {"type": "boolean", "description": "type 前先清空（默认 false）"},
                     "browser_id": {"type": "string", "description": "单实例可省略"},
                 },
@@ -522,7 +1628,7 @@ class BrowserInteractTool(BaseTool):
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911 — 每个校验/门禁路径独立 return，扁平更直读
         self,
         action: str = "",
         selector: str = "",
@@ -530,35 +1636,301 @@ class BrowserInteractTool(BaseTool):
         value: str = "",
         key: str = "",
         clear: bool = False,
+        ref: str = "",
         browser_id: str = "",
+        path: str = "",
         **kwargs: Any,
     ) -> ToolResult:
-        rejection = _validate_interact_args(kwargs, action, selector, text, value, key)
+        rejection = _validate_interact_args(
+            kwargs, action, selector, text, value, key, ref, path
+        )
         if rejection is not None:
             return rejection
 
-        if action == "click":
-            expression = _js_click(selector=selector, text=text)
-        elif action == "type":
-            expression = _js_type(selector, value, bool(clear))
-        elif action == "press":
-            expression = _js_press(key)
+        upload_file: Optional[Path] = None
+        expression = ""
+        if action == "upload":
+            root = self._policy.workspace_root
+            if not root:
+                return ToolResult(
+                    success=False, error="browser_interact upload 需要绑定工作区（workspace）"
+                )
+            raw_path = str(path or value)
+            candidate = Path(raw_path).expanduser()
+            if not candidate.is_absolute():
+                candidate = Path(root) / candidate
+            blocked = self._enforce_workspace(str(candidate))
+            if blocked is not None:
+                return blocked
+            resolved = candidate.resolve()
+            if not resolved.is_file():
+                return ToolResult(
+                    success=False, error=f"upload_file_not_found: {raw_path}"
+                )
+            upload_file = resolved
         else:
-            expression = _js_scroll(int(value))
-
+            expression = _build_interact_expression(
+                action, selector, text, value, key, bool(clear), ref
+            )
+        session: Optional[BrowserSession] = None
+        started = time.monotonic()
         try:
             session = _resolve_session(browser_id or None)
-            outcome = _evaluate_json(session, expression, None)
-        except BrowserCDPError as exc:
-            return _error(exc)
-        if not isinstance(outcome, dict):
-            return ToolResult(success=False, error="交互结果异常（非 JSON）")
-        if not outcome.get("ok"):
-            return ToolResult(
-                success=False,
-                error=f"交互未生效: {outcome.get('info', 'unknown')}（可用 browser_snapshot 查看页面结构）",
+            blocked = _blocked_by_control(session, "browser_interact")
+            if blocked is not None:
+                return blocked
+            # I1：当前页面域名被持久策略禁止时，交互不得作用于该页面
+            site_blocked = _site_blocked_result(session, "interact")
+            if site_blocked is not None:
+                return site_blocked
+            target_fields = {"target_ref": ref or selector, "target_name": text}
+            # M4 敏感动作：先取目标元数据再分类；hard_block 不允许用户放行。
+            # 仅 press Enter/Return 需要读焦点元素（触发默认提交/点击语义），
+            # 其他按键不产生副作用，省一次 Runtime.evaluate。
+            press_enter = (
+                action == "press" and str(key or "").strip().lower() in ("enter", "return")
             )
-        return ToolResult(success=True, content={"action": action, "info": outcome.get("info", "")})
+            target_meta = _read_target_metadata(
+                session, ref=ref, selector=selector, use_focused=press_enter
+            )
+            metadata_unavailable = target_meta is None and not text
+            if not target_meta and text:
+                target_meta = {"name": text}
+            verdict = browser_safety.classify_interact(
+                action,
+                target=target_meta,
+                value=value,
+                selector=selector,
+                key=key,
+                metadata_unavailable=metadata_unavailable,
+            )
+            cached_url, cached_title = _cached_page(session)
+            domain = browser_safety.domain_of(cached_url)
+            target_name = (
+                str(target_meta.get("name") or "") if isinstance(target_meta, dict) else ""
+            ) or text
+            # I2：批准指纹绑定会话；upload/select 额外绑定解析后的路径/目标值，
+            # 防止「批准上传 A」被重放为上传 B 或替换选项值。
+            approval_scope = ""
+            if action == "upload" and upload_file is not None:
+                approval_scope = str(upload_file)
+            elif action == "select":
+                approval_scope = str(value or "")
+            fingerprint = browser_safety.action_fingerprint(
+                "browser_interact",
+                action,
+                domain,
+                ref,
+                selector,
+                target_name,
+                session_id=session.browser_id,
+                scope=approval_scope,
+            )
+            registry = browser_safety.get_confirmation_registry()
+            audit_target = {
+                "target_ref": ref or selector,
+                "target_desc": target_name or cached_title,
+                "domain": domain,
+            }
+            approval = "auto"
+            if verdict.kind == "hard_block":
+                _record_browser_audit(
+                    session,
+                    "browser_interact",
+                    action,
+                    "blocked",
+                    approval="none",
+                    duration_ms=_elapsed_ms(started),
+                    **audit_target,
+                )
+                return _meta_result(
+                    ToolResult(
+                        success=False,
+                        error=(
+                            f"hard_blocked: {verdict.description}；请用户接管完成"
+                            "（browser_login 或控制面板接管）"
+                        ),
+                    ),
+                    session,
+                    "interact",
+                    **target_fields,
+                )
+            if verdict.kind == "confirm":
+                if not registry.consume_approval(fingerprint, session.browser_id):
+                    if registry.is_denied(fingerprint, session.browser_id):
+                        # 用户拒绝后暂停会话：被拒绝的页面/动作不得继续被读取。
+                        get_browser_control().set_state(
+                            session.browser_id, BrowserControlState.PAUSED
+                        )
+                        _record_browser_audit(
+                            session,
+                            "browser_interact",
+                            action,
+                            "blocked",
+                            approval="denied",
+                            duration_ms=_elapsed_ms(started),
+                            **audit_target,
+                        )
+                        return _meta_result(
+                            ToolResult(
+                                success=False,
+                                error="denied_by_user: 用户拒绝了该操作，请换一种方式或询问用户",
+                            ),
+                            session,
+                            "interact",
+                            **target_fields,
+                        )
+                    if action == "upload" and upload_file is not None:
+                        # 描述里带解析后的文件名，用户才能确认「传的是哪个文件」。
+                        description = (
+                            f"上传文件 {upload_file.name}"
+                            f"（{target_name or '文件输入框'} @ {cached_url}）"
+                        )
+                    else:
+                        description = (
+                            f"{verdict.description}（{target_name or action} @ {cached_url}）"
+                        )
+                    pending = registry.create(
+                        session.browser_id,
+                        "sensitive_action",
+                        code=verdict.code,
+                        domain=domain,
+                        description=description,
+                        options=list(browser_safety.SENSITIVE_ACTION_OPTIONS),
+                        screenshot_path=_capture_step_thumbnail(session) or "",
+                        fingerprint=fingerprint,
+                    )
+                    get_browser_control().set_state(
+                        session.browser_id, BrowserControlState.PAUSED
+                    )
+                    _record_browser_audit(
+                        session,
+                        "browser_interact",
+                        action,
+                        "confirm_required",
+                        approval="none",
+                        duration_ms=_elapsed_ms(started),
+                        **audit_target,
+                    )
+                    return _meta_result(
+                        ToolResult(
+                            success=False,
+                            error=(
+                                f"needs_confirmation: {pending.id} {pending.description}"
+                                "（请在右栏浏览器面板确认）"
+                            ),
+                        ),
+                        session,
+                        "interact",
+                        **target_fields,
+                    )
+                approval = "approved"
+            if action == "upload":
+                if upload_file is None:
+                    # 参数层已解析；-O 下 assert 会被移除，这里显式兜底。
+                    return ToolResult(success=False, error="upload_file_not_found: 未解析到上传文件")
+                info_text = _upload_file_to_input(session, ref, selector, upload_file)
+                page_url, page_title = _cached_page(session)
+                outcome = {
+                    "ok": True,
+                    "info": info_text,
+                    "url": page_url,
+                    "title": page_title,
+                }
+            else:
+                outcome = _evaluate_json(session, expression, None)
+        except BrowserCDPError as exc:
+            return _meta_error(exc, session, "interact")
+        if not isinstance(outcome, dict):
+            _record_browser_audit(
+                session,
+                "browser_interact",
+                action,
+                "error",
+                approval=approval,
+                duration_ms=_elapsed_ms(started),
+                **audit_target,
+            )
+            return _meta_result(
+                ToolResult(success=False, error="交互结果异常（非 JSON）"),
+                session,
+                "interact",
+                **target_fields,
+            )
+        page_url = str(outcome.get("url") or "")
+        page_title = str(outcome.get("title") or "")
+        if page_url or page_title:
+            _remember_page(session, page_url, page_title)
+        info = outcome.get("info", "")
+        if info == STALE_REF_INFO:
+            _record_browser_audit(
+                session,
+                "browser_interact",
+                action,
+                "error",
+                approval=approval,
+                duration_ms=_elapsed_ms(started),
+                **audit_target,
+            )
+            return _meta_result(
+                ToolResult(success=False, error=STALE_REF_ERROR),
+                session,
+                "interact",
+                url=page_url,
+                title=page_title,
+                **target_fields,
+            )
+        if not outcome.get("ok"):
+            _record_browser_audit(
+                session,
+                "browser_interact",
+                action,
+                "error",
+                approval=approval,
+                duration_ms=_elapsed_ms(started),
+                domain=domain or browser_safety.domain_of(page_url),
+                target_ref=ref or selector,
+                target_desc=target_name or page_title,
+            )
+            return _meta_result(
+                ToolResult(
+                    success=False,
+                    error=f"交互未生效: {info or 'unknown'}（可用 browser_snapshot 查看页面结构）",
+                ),
+                session,
+                "interact",
+                url=page_url,
+                title=page_title,
+                **target_fields,
+            )
+        # I1：点击链接 / JS 跳转可能把页面带到新域名；交互成功后按最终 URL
+        # 重跑站点门禁，避免「在允许站点点一个链接」绕过站点策略。
+        final_domain = browser_safety.domain_of(page_url)
+        if page_url and final_domain and final_domain != domain:
+            navigation_gate = _site_access_gate(session, page_url, final_domain, started)
+            if navigation_gate is not None:
+                return navigation_gate
+        thumbnail = _capture_step_thumbnail(session)
+        _record_browser_audit(
+            session,
+            "browser_interact",
+            action,
+            "ok",
+            approval=approval,
+            duration_ms=_elapsed_ms(started),
+            domain=domain or browser_safety.domain_of(page_url),
+            target_ref=ref or selector,
+            target_desc=target_name or page_title,
+        )
+        return _meta_result(
+            ToolResult(success=True, content={"action": action, "info": info}),
+            session,
+            "interact",
+            url=page_url,
+            title=page_title,
+            screenshot_path=thumbnail,
+            **target_fields,
+        )
 
 
 class BrowserScreenshotTool(BaseTool):
@@ -573,23 +1945,43 @@ class BrowserScreenshotTool(BaseTool):
             description=(
                 "截取当前页面为 PNG，保存到工作区（默认 "
                 "browser_screenshot_<时间戳>.png，可用 path 指定）。返回"
-                "文件路径，可用 read_file/预览面板查看。"
+                "文件路径，可用 read_file/预览面板查看。return_image=true 时"
+                "额外返回 data URL 供下一轮视觉识别（受 ≤1.5MB / 宽 ≤1568px "
+                "约束）；full_page=true 尝试整页截图（不支持时回退视口）。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "保存路径（相对工作区，可选）"},
+                    "return_image": {
+                        "type": "boolean",
+                        "description": "附带 image_data_url 供视觉模型看当前画面（默认 false）",
+                    },
+                    "full_page": {
+                        "type": "boolean",
+                        "description": "尝试整页截图（captureBeyondViewport，默认 false）",
+                    },
                     "browser_id": {"type": "string", "description": "单实例可省略"},
                 },
                 "required": [],
             },
         )
 
-    def execute(self, path: str = "", browser_id: str = "", **kwargs: Any) -> ToolResult:
+    def execute(  # noqa: PLR0911 — 多个早退错误分支更清晰
+        self,
+        path: str = "",
+        browser_id: str = "",
+        return_image: bool = False,
+        full_page: bool = False,
+        **kwargs: Any,
+    ) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
-                error=f"未知参数: {', '.join(sorted(kwargs))}（合法参数: path, browser_id）",
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: path, browser_id, return_image, full_page）"
+                ),
             )
         # 工作区检查在前（纯本地、便宜）；会话解析在后（可能打 CDP）
         root = self._policy.workspace_root
@@ -604,24 +1996,58 @@ class BrowserScreenshotTool(BaseTool):
         if blocked is not None:
             return blocked
 
+        session: Optional[BrowserSession] = None
+        full_page_ok = False
+        full_page_note = ""
         try:
             session = _resolve_session(browser_id or None)
-            result = cdp_command(session, "Page.captureScreenshot", {"format": "png"})
+            blocked = _blocked_by_control(session, "browser_screenshot")
+            if blocked is not None:
+                return blocked
+            if bool(full_page):
+                try:
+                    result = cdp_command(
+                        session,
+                        "Page.captureScreenshot",
+                        {"format": "png", "captureBeyondViewport": True},
+                    )
+                    full_page_ok = True
+                except BrowserCDPError:
+                    # embedded 桥的 capturePage 不支持全页 → 回退视口截图
+                    result = cdp_command(session, "Page.captureScreenshot", {"format": "png"})
+                    full_page_note = "整页截图不受支持，已回退为当前视口截图"
+            else:
+                result = cdp_command(session, "Page.captureScreenshot", {"format": "png"})
             png_bytes = base64.b64decode(result.get("data") or "")
         except BrowserCDPError as exc:
-            return _error(exc)
+            return _meta_error(exc, session, "screenshot")
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(png_bytes)
         except OSError as exc:
-            return ToolResult(success=False, error=f"截图写入失败: {exc}")
+            return _meta_result(
+                ToolResult(success=False, error=f"截图写入失败: {exc}"), session, "screenshot"
+            )
         try:
             _record_artifact_safely(str(target), len(png_bytes))
         except Exception:  # noqa: BLE001 — artifact 记录失败不影响截图
             logger.warning("browser_screenshot artifact 记录失败", exc_info=True)
-        return ToolResult(
-            success=True,
-            content={"path": str(target.resolve()), "bytes": len(png_bytes)},
+        resolved = str(target.resolve())
+        content: Dict[str, Any] = {"path": resolved, "bytes": len(png_bytes)}
+        if full_page:
+            content["full_page"] = full_page_ok
+            if full_page_note:
+                content["full_page_note"] = full_page_note
+        if bool(return_image):
+            vision = _build_screenshot_vision_payload(png_bytes)
+            content.update(vision)
+            if vision.get("image_data_url"):
+                content["attach_image_to_next_turn"] = True
+        return _meta_result(
+            ToolResult(success=True, content=content),
+            session,
+            "screenshot",
+            screenshot_path=resolved,
         )
 
 
@@ -672,6 +2098,17 @@ class BrowserCloseTool(BaseTool):
                 cdp_command(session, "Target.closeTarget", {"targetId": target_id})
             except BrowserCDPError as exc:
                 return _error(exc)
+            # 控制器裁定：browser_close 保持门禁豁免，但单标签关闭不得让
+            # Agent 借“关掉无关标签页”间接解除用户暂停/接管。因此仅当该
+            # 会话已无剩余页面目标时才复位控制面；整机关闭始终复位。
+            try:
+                has_remaining_pages = bool(_list_page_targets(session))
+            except BrowserCDPError:
+                # 无法确认剩余页面时保守保留控制状态（宁可不复位）
+                has_remaining_pages = True
+            if not has_remaining_pages:
+                get_browser_control().reset(session.browser_id)
+                browser_safety.reset_session(session.browser_id)
             return ToolResult(success=True, content={"closed": "target", "target_id": target_id})
 
         if getattr(session, "browser_type", None) == "external":
@@ -684,10 +2121,238 @@ class BrowserCloseTool(BaseTool):
 
         manager.remove(session.browser_id)
         _terminate_session(session)
+        # 控制面复位：关闭后不残留 paused/takeover，元数据缓存一并清理
+        get_browser_control().reset(session.browser_id)
+        browser_safety.reset_session(session.browser_id)
+        _LAST_PAGE.pop(session.browser_id, None)
+        _LAST_LOGIN_WALL.pop(session.browser_id, None)
         return ToolResult(
             success=True,
             content={"closed": "browser", "browser_id": session.browser_id},
         )
+
+
+class BrowserTabsTool(BaseTool):
+    """标签页管理：列出 / 新建 / 切换 / 关闭受控浏览器的标签页。"""
+
+    risk = RiskClass.WRITE_LOCAL
+    is_blocking = True
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="browser_tabs",
+            description=(
+                "管理受控浏览器的标签页。action=list 列出所有标签页（active "
+                "标记当前页）；create 新建标签页（url 可选，默认 about:blank）；"
+                "switch 按 tab_id 或 index（1-based）切换活动标签页；close 关闭"
+                "指定标签页。switch/create 之后，browser_snapshot / "
+                "browser_interact 等工具默认作用于活动标签页。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "list | create | switch | close",
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "create 时的目标 URL（默认 about:blank）",
+                    },
+                    "tab_id": {
+                        "type": "string",
+                        "description": "switch/close 的目标标签页 id",
+                    },
+                    "index": {
+                        "type": "integer",
+                        "description": "switch/close 备用：1-based 序号（与 tab_id 二选一）",
+                    },
+                    "browser_id": {"type": "string", "description": "单实例可省略"},
+                },
+                "required": ["action"],
+            },
+        )
+
+    def execute(  # noqa: PLR0911 — 每个拒绝路径独立 return，扁平更直读
+        self,
+        action: str = "",
+        url: str = "",
+        tab_id: str = "",
+        index: Optional[int] = None,
+        browser_id: str = "",
+        **kwargs: Any,
+    ) -> ToolResult:
+        if kwargs:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: action, url, tab_id, index, browser_id）"
+                ),
+            )
+        if action not in _VALID_TAB_ACTIONS:
+            return ToolResult(
+                success=False,
+                error=f"action 必须是 {', '.join(_VALID_TAB_ACTIONS)}",
+            )
+        if index is not None:
+            try:
+                index = int(index)
+            except (TypeError, ValueError):
+                return ToolResult(success=False, error="index 必须是正整数")
+        if action in ("switch", "close"):
+            if tab_id and index is not None:
+                return ToolResult(success=False, error="tab_id 与 index 只能二选一")
+            if not tab_id and index is None:
+                return ToolResult(success=False, error=f"{action} 需要 tab_id 或 index")
+        target_url = ""
+        if action == "create":
+            target_url = (url or "").strip() or "about:blank"
+            scheme_error = validate_url(target_url)
+            if scheme_error is not None:
+                return ToolResult(success=False, error=scheme_error)
+            # 与 browser_navigate 同口径：http/https 出网受网络模式门禁约束，
+            # 否则 create 可绕过离线/白名单模式。
+            if (urlsplit(target_url).scheme or "").lower() in ("http", "https"):
+                network_rejection = load_network_policy().check_host(target_url)
+                if network_rejection:
+                    return ToolResult(success=False, error=network_rejection)
+
+        session: Optional[BrowserSession] = None
+        started = time.monotonic()
+        try:
+            session = _resolve_session(browser_id or None)
+            blocked = _blocked_by_control(session, "browser_tabs")
+            if blocked is not None:
+                return blocked
+            if action == "list":
+                return _meta_result(self._list_tabs(session), session, "tabs")
+            if action == "create":
+                # I1：新建标签页同样是导航，必须先过站点授权门禁
+                # （block → site_blocked；confirm → 站点确认 + paused）。
+                create_domain = browser_safety.domain_of(target_url)
+                create_gate = _site_access_gate(session, target_url, create_domain, started)
+                if create_gate is not None:
+                    return create_gate
+                created = cdp_command(
+                    session, "Target.createTarget", {"url": target_url}
+                ).get("targetId")
+                if not created:
+                    return _meta_result(
+                        ToolResult(success=False, error="新标签页创建失败"),
+                        session,
+                        "tabs",
+                        url=target_url,
+                    )
+                session.active_target_id = created
+                _remember_page(session, target_url, "")
+                thumbnail = _capture_step_thumbnail(session)
+                return _meta_result(
+                    ToolResult(
+                        success=True,
+                        content={"tab_id": created, "url": target_url, "active": True},
+                    ),
+                    session,
+                    "tabs",
+                    url=target_url,
+                    title="",
+                    screenshot_path=thumbnail,
+                )
+
+            pages = _list_page_targets(session)
+            info = _locate_tab(pages, tab_id, index)
+            target = str(info.get("targetId") or "")
+            if action == "switch":
+                session.active_target_id = target
+                page_info = _evaluate_json(
+                    session,
+                    "JSON.stringify({url:location.href,title:document.title})",
+                    target,
+                )
+                if not isinstance(page_info, str):
+                    return _meta_result(
+                        ToolResult(success=False, error="页面信息返回异常（非 JSON）"),
+                        session,
+                        "tabs",
+                    )
+                try:
+                    page = json.loads(page_info)
+                except ValueError:
+                    return _meta_result(
+                        ToolResult(success=False, error="页面信息不是合法 JSON"),
+                        session,
+                        "tabs",
+                    )
+                if not isinstance(page, dict):
+                    return _meta_result(
+                        ToolResult(success=False, error="页面信息返回异常（非对象）"),
+                        session,
+                        "tabs",
+                    )
+                page_url = str(page.get("url") or "")
+                page_title = str(page.get("title") or "")
+                _remember_page(session, page_url, page_title)
+                thumbnail = _capture_step_thumbnail(session)
+                return _meta_result(
+                    ToolResult(
+                        success=True,
+                        content={
+                            "tab_id": target,
+                            "url": page.get("url", ""),
+                            "title": page.get("title", ""),
+                        },
+                    ),
+                    session,
+                    "tabs",
+                    url=page_url,
+                    title=page_title,
+                    screenshot_path=thumbnail,
+                )
+
+            cdp_command(session, "Target.closeTarget", {"targetId": target})
+            was_active = session.active_target_id == target
+            if was_active:
+                session.active_target_id = None
+            thumbnail = _capture_step_thumbnail(session)
+            return _meta_result(
+                ToolResult(
+                    success=True,
+                    content={
+                        "closed": target,
+                        "was_active": was_active,
+                        "remaining": max(len(pages) - 1, 0),
+                    },
+                ),
+                session,
+                "tabs",
+                screenshot_path=thumbnail,
+            )
+        except BrowserCDPError as exc:
+            return _meta_error(exc, session, "tabs")
+
+    @staticmethod
+    def _list_tabs(session: BrowserSession) -> ToolResult:
+        pages = _list_page_targets(session)
+        active_target_id = getattr(session, "active_target_id", None)
+        if active_target_id and any(
+            info.get("targetId") == active_target_id for info in pages
+        ):
+            active = active_target_id
+        else:
+            if active_target_id:
+                # 与 ensure_page_target 一致：跟踪的标签页已消失 → 清空跟踪
+                session.active_target_id = None
+            active = str(pages[0]["targetId"]) if pages else ""
+        tabs = [
+            {
+                "tab_id": info.get("targetId", ""),
+                "url": info.get("url", ""),
+                "title": info.get("title", ""),
+                "active": info.get("targetId") == active,
+            }
+            for info in pages
+        ]
+        return ToolResult(success=True, content={"tabs": tabs, "count": len(tabs)})
 
 
 class BrowserDownloadsTool(BaseTool):
@@ -744,10 +2409,14 @@ class BrowserDownloadsTool(BaseTool):
                     "（合法参数: browser_id, wait_for_complete, timeout）"
                 ),
             )
+        session: Optional[BrowserSession] = None
         try:
             session = _resolve_session(browser_id or None)
+            blocked = _blocked_by_control(session, "browser_downloads")
+            if blocked is not None:
+                return blocked
         except BrowserCDPError as exc:
-            return _error(exc)
+            return _meta_error(exc, session, "downloads")
         try:
             wait_seconds = float(timeout)
         except (TypeError, ValueError):
@@ -770,19 +2439,27 @@ class BrowserDownloadsTool(BaseTool):
                     items = list_download_dir(download_dir)
                     if not any(i["state"] == "inProgress" for i in items):
                         break
-            return ToolResult(
-                success=True,
-                content={
-                    "browser_id": session.browser_id,
-                    "download_dir": download_dir,
-                    "tracking": False,
-                    "downloads": items,
-                    "note": (
-                        "下载事件通道不可用"
-                        + (f"（{tracker.error}）" if tracker is not None and tracker.error else "")
-                        + "，以上为下载目录列举（.crdownload = 进行中）。"
-                    ),
-                },
+            return _meta_result(
+                ToolResult(
+                    success=True,
+                    content={
+                        "browser_id": session.browser_id,
+                        "download_dir": download_dir,
+                        "tracking": False,
+                        "downloads": items,
+                        "note": (
+                            "下载事件通道不可用"
+                            + (
+                                f"（{tracker.error}）"
+                                if tracker is not None and tracker.error
+                                else ""
+                            )
+                            + "，以上为下载目录列举（.crdownload = 进行中）。"
+                        ),
+                    },
+                ),
+                session,
+                "downloads",
             )
 
         completed_all = True
@@ -816,7 +2493,9 @@ class BrowserDownloadsTool(BaseTool):
                 "尚未观察到下载：先用 browser_interact 点击下载按钮 / 链接；"
                 "若链接是直接的文件 URL，也可改用 http_download。"
             )
-        return ToolResult(success=True, content=content)
+        return _meta_result(
+            ToolResult(success=True, content=content), session, "downloads"
+        )
 
 
 class BrowserCookiesTool(BaseTool):
@@ -896,6 +2575,17 @@ class BrowserCookiesTool(BaseTool):
             return ToolResult(
                 success=False, error=f"action 必须是 {', '.join(self._VALID_ACTIONS)}"
             )
+
+        # 控制门禁：能解析到会话时与其它浏览器工具同口径；纯凭据管理
+        # （无浏览器在跑）不因控制面受限。
+        try:
+            gate_session = _resolve_session(browser_id or None)
+        except BrowserCDPError:
+            gate_session = None
+        if gate_session is not None:
+            blocked = _blocked_by_control(gate_session, "browser_cookies")
+            if blocked is not None:
+                return blocked
 
         if action == "set_header":
             from .credential_vault import save_header_credential
@@ -1279,6 +2969,13 @@ class BrowserLoginTool(BaseTool):
         target_host = (parsed.hostname or "").lower()
         if not target_host:
             return ToolResult(success=False, error="无法从 url 解析出域名")
+        # I1：登录同样是导航；只应用站点策略的 block 部分（用户主动登录
+        # 未知站点保持允许，不做 confirm，避免登录流程被站点确认卡住）。
+        if _safety_check_site("", url) == "block":
+            return ToolResult(
+                success=False,
+                error=f"site_blocked: 用户已禁止该站点 {browser_safety.domain_of(url)}",
+            )
 
         # 检查是否已有活跃的登录浏览器（避免重复启动）
         manager = get_browser_manager()
@@ -1635,6 +3332,7 @@ __all__ = [
     "BrowserNavigateTool",
     "BrowserScreenshotTool",
     "BrowserSnapshotTool",
+    "BrowserTabsTool",
     "validate_url",
 ]
 
@@ -1649,4 +3347,5 @@ BROWSER_TOOL_NAMES = (
     "browser_downloads",
     "browser_close",
     "browser_login",
+    "browser_tabs",
 )

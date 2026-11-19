@@ -317,6 +317,38 @@ describe('RightPanel', () => {
       expect(fetchChangesSpy).toHaveBeenCalledWith('sB');
     });
   });
+
+  describe('M3 受控浏览器：AI 操作自动打开浏览器 Tab', () => {
+    it('新的 browser_* 调用触发 setTab(browser) 并打开面板', () => {
+      useRightPanelStore.setState({ open: false, tab: 'progress' });
+      const { rerender } = renderWithI18n(<RightPanel {...props} />);
+      rerender(
+        <RightPanel
+          {...props}
+          toolCalls={[
+            { id: 'c1', name: 'browser_navigate', args: { url: 'https://example.com/' } },
+          ]}
+        />,
+      );
+      expect(useRightPanelStore.getState().tab).toBe('browser');
+      expect(useRightPanelStore.getState().open).toBe(true);
+    });
+
+    it('localStorage 关闭自动打开时不触发', () => {
+      localStorage.setItem('sage.browser-panel-auto-open', '0');
+      const { rerender } = renderWithI18n(<RightPanel {...props} />);
+      rerender(
+        <RightPanel
+          {...props}
+          toolCalls={[
+            { id: 'c2', name: 'browser_navigate', args: { url: 'https://example.com/' } },
+          ]}
+        />,
+      );
+      expect(useRightPanelStore.getState().tab).toBe('progress');
+      expect(useRightPanelStore.getState().open).toBe(true);
+    });
+  });
 });
 
 // 对标 U1（ZCode ConversationTurnNavigator）：目录 Tab 顶部渲染轮次导航分组。

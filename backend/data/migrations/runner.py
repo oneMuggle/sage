@@ -31,6 +31,7 @@ import logging
 from typing import Any, Callable, List, Tuple
 
 from backend.data.migrations.v17_office_rules import _v17_office_rules
+from backend.data.migrations.v19_browser_actions import _v19_browser_actions
 
 logger = logging.getLogger(__name__)
 
@@ -588,6 +589,8 @@ def _v18_normalize_millisecond_timestamps(conn: Any) -> None:
 register_migration(
     18, "normalize_millisecond_timestamps", _v18_normalize_millisecond_timestamps
 )
+
+register_migration(19, "browser_actions", _v19_browser_actions)
 
 
 def ensure_version_table(conn: Any) -> None:

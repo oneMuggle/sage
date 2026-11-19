@@ -77,9 +77,11 @@ from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.browser_tool import (
     BrowserCloseTool,
     BrowserCookiesTool,
+    BrowserDownloadsTool,
     BrowserInteractTool,
     BrowserLaunchTool,
     BrowserNavigateTool,
+    BrowserScreenshotTool,
     BrowserSnapshotTool,
 )
 from backend.tools.download_tool import HttpDownloadTool
@@ -94,9 +96,11 @@ logger = logging.getLogger(__name__)
 
 # Delegation whitelist for sub-agents (Round 6 B2: 浏览器通道已并入——
 # launch/snapshot/interact/cookies/close 为本地或受审批操作，navigate 为
-# EXTERNAL 逐次审批且受网络模式门禁)。glob/grep/todo arrive with the M2
-# branch — do not reference them here. 实际注册边界见
-# build_readonly_tool_registry（未注册即不可见）。
+# EXTERNAL 逐次审批且受网络模式门禁)。2026-11-17 (M1 收尾): 补
+# browser_screenshot / browser_downloads（均为 READ，截图取证 + 等下载落盘）；
+# 不给 browser_tabs —— 多标签属主对话/researcher 的统筹职责，最小权限。
+# glob/grep/todo arrive with the M2 branch — do not reference them here.
+# 实际注册边界见 build_readonly_tool_registry（未注册即不可见）。
 SUBAGENT_TOOL_WHITELIST: Tuple[str, ...] = (
     "read_file",
     "list_dir",
@@ -108,6 +112,8 @@ SUBAGENT_TOOL_WHITELIST: Tuple[str, ...] = (
     "browser_navigate",
     "browser_snapshot",
     "browser_interact",
+    "browser_screenshot",
+    "browser_downloads",
     "browser_cookies",
     "browser_close",
 )
@@ -237,13 +243,16 @@ def build_readonly_tool_registry(
         registry.register(HttpDownloadTool(policy=policy, network_policy=network_policy))
     # Round 6 B2: 浏览器通道——navigate(EXTERNAL) 与 web_fetch 同口径受
     # fetch_enabled 门禁（OFFLINE 不暴露出网导航）；launch/snapshot/interact/
-    # cookies/close 为本地或受审批操作，无条件注册。风险审批与网络模式门禁
-    # 照常生效。
+    # screenshot/downloads/cookies/close 为本地或受审批操作，无条件注册。
+    # 风险审批与网络模式门禁照常生效。2026-11-17 (M1 收尾): 补 screenshot /
+    # downloads（均 READ）；tabs 不下放子代理（多标签归主对话/researcher）。
     if network_policy.fetch_enabled():
         registry.register(BrowserNavigateTool(policy=policy))
     registry.register(BrowserLaunchTool(policy=policy))
     registry.register(BrowserSnapshotTool(policy=policy))
     registry.register(BrowserInteractTool(policy=policy))
+    registry.register(BrowserScreenshotTool(policy=policy))
+    registry.register(BrowserDownloadsTool(policy=policy))
     registry.register(BrowserCookiesTool(policy=policy))
     registry.register(BrowserCloseTool(policy=policy))
     registry.register(MemorySearchTool(policy=policy))

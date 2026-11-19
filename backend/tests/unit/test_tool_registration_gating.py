@@ -62,6 +62,11 @@ def test_gating_applies_to_subagent_registry():
     assert "browser_navigate" not in names
     assert "browser_launch" in names
     assert "browser_snapshot" in names
+    # 2026-11-17 (M1 收尾): 截图/下载是本地 READ 工具，OFFLINE 也注册；
+    # browser_tabs 不下放子代理。
+    assert "browser_screenshot" in names
+    assert "browser_downloads" in names
+    assert "browser_tabs" not in names
 
 
 def test_subagent_registry_registers_browser_channel_online():
@@ -73,10 +78,14 @@ def test_subagent_registry_registers_browser_channel_online():
         "browser_navigate",
         "browser_snapshot",
         "browser_interact",
+        # 2026-11-17 (M1 收尾)
+        "browser_screenshot",
+        "browser_downloads",
         "browser_cookies",
         "browser_close",
     ):
         assert tool in names
+    assert "browser_tabs" not in names
     assert "read_file" in names
 
 

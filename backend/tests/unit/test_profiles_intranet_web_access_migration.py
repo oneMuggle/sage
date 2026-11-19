@@ -124,6 +124,8 @@ def test_default_seed_coder_uses_current_tool_names():
         "browser_downloads",
         "browser_close",
         "browser_login",
+        # 2026-11-17 (M1): BROWSER_TOOLS 新增多标签管理
+        "browser_tabs",
         # alpha.36 (Bug #5): 沙箱代码执行
         "repl",
         "execute_code",
@@ -168,8 +170,9 @@ def test_legacy_researcher_gets_http_download_appended(monkeypatch):
 
 
 def test_current_shape_researcher_untouched(monkeypatch):
-    """已是当前形状（含 http_download）→ 绝不再追加（防重复写入 + updated_at 抖动）。"""
-    current = ["web_search", "web_fetch", "http_download", "memory_search"]
+    """已是当前形状（含 http_download + 浏览器取证三件）→ 绝不再追加
+    （防重复写入 + updated_at 抖动）。"""
+    current = list(profiles._RESEARCHER_CURRENT_DEFAULT_TOOLS)
     stored = {
         "primary": {"id": "primary", "enabled": True, "tools": []},
         "researcher": {"id": "researcher", "enabled": True, "tools": list(current)},
@@ -190,10 +193,11 @@ def test_current_shape_researcher_untouched(monkeypatch):
 
 
 def test_legacy_primary_system_prompt_gets_upgraded(monkeypatch):
-    """旧 primary system_prompt（无委派提示）→ 升级到 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING。
+    """旧 primary system_prompt（无委派提示）→ 升级到 PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE。
 
     2026-09-03: chain migration 合并为单次 upsert, final state 是 WITH_WEB_ACCESS_ROUTING
-    (含直接 fetch/download 段 + 保留委派段)。"""
+    (含直接 fetch/download 段 + 保留委派段)。
+    2026-11-17 (M1 收尾): prompt 链末段再追加 WITH_BROWSER_USE，final state 顺延。"""
     stored = {
         "primary": {
             "id": "primary",
@@ -205,7 +209,7 @@ def test_legacy_primary_system_prompt_gets_upgraded(monkeypatch):
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE
 
 
 def test_customized_primary_system_prompt_untouched(monkeypatch):
@@ -226,22 +230,23 @@ def test_customized_primary_system_prompt_untouched(monkeypatch):
 
 
 def test_current_primary_system_prompt_untouched(monkeypatch):
-    """已是当前形状（含 web_access_routing 提示）→ 绝不再覆写（防重复写入 + updated_at 抖动）。
+    """已是当前形状（含 browser use 提示）→ 绝不再覆写（防重复写入 + updated_at 抖动）。
 
-    2026-09-03: '当前' 改为 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING；WITH_DELEGATION
-    已不再是 current, 见 test_primary_system_prompt_with_delegation_one_step_migration。"""
+    2026-11-17 (M1 收尾): '当前' 顺延为 PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE；
+    WITH_WEB_ACCESS_ROUTING 现在是上一代，见
+    test_primary_system_prompt_web_access_routing_migrates_to_browser_use。"""
     stored = {
         "primary": {
             "id": "primary",
             "enabled": True,
             "tools": [],
-            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING,
+            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE,
         },
     }
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE
     # 应只发生"已有 primary 不插入"的写入 —— 即没有针对 primary 的 upsert
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert primary_upserts == [], f"primary 不应被 upsert，但收到: {primary_upserts}"
@@ -278,7 +283,8 @@ def test_legacy_db_full_migration_chain(monkeypatch):
     assert "agent" in stored["primary"]["tools"]
     assert "todo_write" in stored["primary"]["tools"]
     # 2026-09-03: chain migration 合并, 终态是 WITH_WEB_ACCESS_ROUTING
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
+    # 2026-11-17 (M1 收尾): 链末追加 WITH_BROWSER_USE，终态顺延。
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE
 
     # researcher 应追加 http_download
     assert "http_download" in stored["researcher"]["tools"]
@@ -296,23 +302,32 @@ def test_default_seed_primary_includes_fetch_download():
     assert "http_download" in primary.tools
 
 
-def test_default_seed_primary_uses_web_access_routing_prompt():
-    """代码默认 primary system_prompt 升级为 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING。
+def test_default_seed_primary_uses_browser_use_prompt():
+    """代码默认 primary system_prompt 是 PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE。
 
     保留委派段（含 "委派" / "子代理"）— 复杂研究仍走 agent 工具委派。
-    新增直接 fetch/download 段 — 用户可见 LLM 行为, 便于分步指导。
+    保留直接 fetch/download 段 — 用户可见 LLM 行为, 便于分步指导。
+    2026-11-17 (M1 收尾): 新增 browser use 循环纪律 —— 工具面与提示一致。
     """
     primary = next(a for a in profiles.create_default_agents() if a.id == "primary")
-    assert primary.system_prompt == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
+    assert primary.system_prompt == profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE
     assert "委派" in primary.system_prompt or "子代理" in primary.system_prompt
-    # 直接 fetch/download 段必须新增
+    # 直接 fetch/download 段必须保留
     assert "web_fetch" in primary.system_prompt
     assert "http_download" in primary.system_prompt
+    # browser use 循环纪律必须存在
+    assert "浏览器使用" in primary.system_prompt
+    assert "browser_snapshot" in primary.system_prompt
+    assert "browser_tabs" in primary.system_prompt
+    assert "browser_downloads" in primary.system_prompt
+    # 旧段落原样保留（web access routing guidance）
+    assert "metadata.blockReason" in primary.system_prompt
+    assert "credential_domain" in primary.system_prompt
 
 
 def test_primary_system_prompt_legacy_two_step_chain_migration(monkeypatch):
     """DB system_prompt 是 _PRIMARY_SYSTEM_PROMPT_BEFORE_DELEGATION →
-    一气呵成升级到 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING (合并为单次 upsert)。
+    一气呵成升级到 PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE (合并为单次 upsert)。
     """
     stored = {
         "primary": {
@@ -325,7 +340,7 @@ def test_primary_system_prompt_legacy_two_step_chain_migration(monkeypatch):
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE
     # 链式合并: 仅 1 次 primary upsert (而不是 2 次)
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert len(primary_upserts) == 1, f"应有 1 次 upsert（链式合并），收到 {len(primary_upserts)}"
@@ -333,7 +348,7 @@ def test_primary_system_prompt_legacy_two_step_chain_migration(monkeypatch):
 
 def test_primary_system_prompt_with_delegation_one_step_migration(monkeypatch):
     """DB system_prompt 是 PRIMARY_SYSTEM_PROMPT_WITH_DELEGATION →
-    一步升级到 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING。
+    一步升级到 PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE。
     """
     stored = {
         "primary": {
@@ -346,7 +361,7 @@ def test_primary_system_prompt_with_delegation_one_step_migration(monkeypatch):
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert len(primary_upserts) == 1
 
@@ -366,7 +381,7 @@ def test_primary_system_prompt_fetch_direct_migrates_once(monkeypatch):
 
     profiles.ensure_default_agents()
 
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert len(primary_upserts) == 1
 
@@ -375,8 +390,8 @@ def test_primary_system_prompt_fetch_direct_migrates_once(monkeypatch):
     assert len(repo.upserts) == first_count
 
 
-def test_primary_system_prompt_already_web_access_routing_no_upsert(monkeypatch):
-    """DB system_prompt 已是 PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING → 0 upsert。"""
+def test_primary_system_prompt_web_access_routing_migrates_to_browser_use(monkeypatch):
+    """DB system_prompt 是 WITH_WEB_ACCESS_ROUTING → 追加 browser use 段（链末新跳）。"""
     stored = {
         "primary": {
             "id": "primary",
@@ -388,7 +403,25 @@ def test_primary_system_prompt_already_web_access_routing_no_upsert(monkeypatch)
     repo = FakeRepo(stored)
     monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
     profiles.ensure_default_agents()
-    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE
+    primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
+    assert len(primary_upserts) == 1
+
+
+def test_primary_system_prompt_already_browser_use_no_upsert(monkeypatch):
+    """DB system_prompt 已是 PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE → 0 upsert。"""
+    stored = {
+        "primary": {
+            "id": "primary",
+            "enabled": True,
+            "tools": [],
+            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE,
+        },
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+    assert stored["primary"]["system_prompt"] == profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE
     primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
     assert primary_upserts == [], f"primary 不应被 upsert，但收到: {primary_upserts}"
 
@@ -420,3 +453,129 @@ def test_default_agents_never_seed_plan_write():
     """代码默认种子不再含 plan_write（新生成的 DB 不会引入死工具）。"""
     for agent in profiles.create_default_agents():
         assert "plan_write" not in agent.tools, agent.id
+
+
+# ---------------------------------------------------------------------------
+# 2026-11-17 (M1 收尾): primary 浏览器工具组 + researcher 取证三件的存量迁移
+# ---------------------------------------------------------------------------
+
+#: 本任务新增进 primary 的浏览器工具（browser_login 早已在种子中）。
+_NEW_PRIMARY_BROWSER_TOOLS = (
+    "browser_navigate",
+    "browser_snapshot",
+    "browser_interact",
+    "browser_screenshot",
+    "browser_tabs",
+    "browser_downloads",
+    "browser_close",
+)
+
+
+def _previous_primary_default_shape():
+    """上一代 primary 默认形状 = 当前种子去掉本任务新增的浏览器工具。"""
+    new = set(_NEW_PRIMARY_BROWSER_TOOLS)
+    return [t for t in profiles._PRIMARY_CURRENT_DEFAULT_TOOLS if t not in new]
+
+
+def test_previous_default_primary_shape_gains_browser_tools(monkeypatch):
+    """上一代默认形状的 primary → 差集兜底段补齐浏览器工具组。
+
+    回归点：`_append_missing_tools` 的 subset 语义必须覆盖「旧默认形状 = 新
+    默认形状去掉新增项」这一场景（交集非空 → 追加缺失项，不得整体跳过）。
+    """
+    legacy = _previous_primary_default_shape()
+    # 前置条件：确实是真子集（交集非空、且确有缺失项）
+    assert set(legacy) < set(profiles._PRIMARY_CURRENT_DEFAULT_TOOLS)
+    assert not (set(legacy) & set(_NEW_PRIMARY_BROWSER_TOOLS))
+
+    stored = {
+        "primary": {
+            "id": "primary",
+            "enabled": True,
+            "tools": list(legacy),
+            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE,
+        },
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+
+    result = stored["primary"]["tools"]
+    for tool in _NEW_PRIMARY_BROWSER_TOOLS:
+        assert tool in result, f"存量 primary 未补上 {tool}"
+    # 原有顺序保留（新项追加到尾部，不重排用户既有白名单）
+    assert result[: len(legacy)] == legacy
+    # 无重复
+    assert len(result) == len(set(result))
+
+    # 幂等：第二次跑不再 upsert
+    first_count = len(repo.upserts)
+    profiles.ensure_default_agents()
+    assert len(repo.upserts) == first_count
+
+
+def test_custom_subset_whitelist_expands_per_append_semantics(monkeypatch):
+    """自定义白名单只有 read_file（默认项子集）→ 按差集段现有语义补齐全集。
+
+    这是 `_append_missing_tools` 的既定契约（交集非空即视作默认形状的子集），
+    不是本任务改变的行为；锁住它以免误以为「用户自定义白名单一律不动」。
+    """
+    stored = {
+        "primary": {"id": "primary", "enabled": True, "tools": ["read_file"]},
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+
+    result = stored["primary"]["tools"]
+    assert result[0] == "read_file"
+    assert set(profiles._PRIMARY_CURRENT_DEFAULT_TOOLS) <= set(result)
+
+
+def test_custom_superset_whitelist_untouched(monkeypatch):
+    """用户自定义超集（默认全集 + 私有项）→ 原样保留, 不 upsert。"""
+    superset = list(profiles._PRIMARY_CURRENT_DEFAULT_TOOLS) + ["user_extra_tool"]
+    stored = {
+        "primary": {
+            "id": "primary",
+            "enabled": True,
+            "tools": list(superset),
+            "system_prompt": profiles.PRIMARY_SYSTEM_PROMPT_WITH_BROWSER_USE,
+        },
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+
+    assert stored["primary"]["tools"] == superset
+    primary_upserts = [u for u in repo.upserts if u["id"] == "primary"]
+    assert primary_upserts == [], f"primary 不应被 upsert，但收到: {primary_upserts}"
+
+
+def test_previous_default_researcher_shape_gains_browser_evidence_tools(monkeypatch):
+    """上一代 researcher 默认形状（已有浏览器通道，缺截图/下载/标签）→ 差集补齐三件。"""
+    researcher = next(
+        a for a in profiles.create_default_agents() if a.id == "researcher"
+    )
+    added = {"browser_screenshot", "browser_downloads", "browser_tabs"}
+    legacy = [t for t in researcher.tools if t not in added]
+    assert added.isdisjoint(legacy)
+
+    stored = {
+        "researcher": {
+            "id": "researcher",
+            "enabled": True,
+            "tools": list(legacy),
+            "system_prompt": profiles.RESEARCHER_SYSTEM_PROMPT_WITH_WEB_ACCESS_ROUTING,
+        },
+    }
+    repo = FakeRepo(stored)
+    monkeypatch.setattr(profiles, "_repo_factory_for_tests", lambda: repo)
+    profiles.ensure_default_agents()
+
+    result = stored["researcher"]["tools"]
+    for tool in added:
+        assert tool in result, f"存量 researcher 未补上 {tool}"
+    # 原有项一字不动
+    for tool in legacy:
+        assert tool in result
