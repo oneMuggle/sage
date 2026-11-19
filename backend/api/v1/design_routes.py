@@ -49,14 +49,18 @@ router = APIRouter(prefix="/design", tags=["design"])
 
 
 class CreateProjectRequest(BaseModel):
-    """POST /design/projects body."""
+    """POST /design/projects body.
+
+    Only ``brief`` is required; the studio resolves missing name, kind,
+    system and template from defaults.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
-    kind: str
-    system_id: str
-    template_id: str
+    name: Optional[str] = None
+    kind: str = "deck"
+    system_id: Optional[str] = None
+    template_id: Optional[str] = None
     brief: str
 
 

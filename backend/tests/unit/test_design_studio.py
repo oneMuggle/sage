@@ -268,3 +268,26 @@ class TestDesignStudio:
         message = str(excinfo.value)
         assert "prototype" in message  # 请求的 kind
         assert "deck" in message  # 模板实际的 kind
+
+    def test_create_project_defaults_system_template_and_name(self, studio):
+        """只给 brief 时，系统/模板回退到注册表默认值，名称由 brief 推导。"""
+        project = studio.create_project(kind="prototype", brief="Q4 路线图演示稿")
+        assert project.system_id == "test"
+        assert project.template_id == "test-page"
+        assert project.kind == "prototype"
+        assert project.name == "Q4 路线图演示稿"
+
+    def test_create_project_derives_name_from_first_brief_line(self, studio):
+        """名称缺省取 brief 第一行，并剥掉 Markdown 前缀。"""
+        project = studio.create_project(
+            name="   ", kind="prototype", brief="# Heading line\nbody text",
+        )
+        assert project.name == "Heading line"
+
+    def test_create_project_defaults_fail_when_kind_has_no_template(
+        self, studio,
+    ):
+        """默认 kind=deck 但注册表没有 deck 模板时，建项目应明确报错。"""
+        with pytest.raises(DesignTemplateNotFoundError):
+            studio.create_project(brief="no deck templates here")
+        assert studio.list_projects() == []

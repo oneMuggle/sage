@@ -15,7 +15,9 @@ from backend.design.async_bridge import run_sync
 from backend.design.craft_loader import CraftRuleRegistry
 from backend.design.errors import (
     DesignProjectNotFoundError,
+    DesignSystemNotFoundError,
     DesignTemplateKindMismatchError,
+    DesignTemplateNotFoundError,
 )
 from backend.design.generator import DesignGenerator
 from backend.design.lint import DesignLinter
@@ -29,6 +31,21 @@ from backend.design.systems import DesignSystemRegistry
 from backend.design.templates import DesignTemplateRegistry
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_SYSTEM_IDS = ("minimal", "corporate")
+_DEFAULT_TEMPLATE_IDS = {
+    "deck": ("pitch-deck", "weekly-report"),
+    "prototype": ("landing-page", "dashboard", "pricing", "docs-page"),
+}
+
+
+def _derive_project_name(brief: str) -> str:
+    """From the brief's first non-empty line, capped at 24 chars."""
+    for line in (brief or "").splitlines():
+        cleaned = line.strip().lstrip("#-*> ").strip()
+        if cleaned:
+            return cleaned[:24]
+    return "Untitled design"
 
 
 class DesignStudio:
@@ -71,25 +88,56 @@ class DesignStudio:
             )
         return template
 
+    def _default_system_id(self) -> str:
+        """Pick the preferred built-in system, else the first available."""
+        available = {s.id for s in self._systems.list_systems()}
+        if not available:
+            raise DesignSystemNotFoundError("No design systems are available")
+        for candidate in _DEFAULT_SYSTEM_IDS:
+            if candidate in available:
+                return candidate
+        return sorted(available)[0]
+
+    def _default_template_id(self, kind: str) -> str:
+        """Pick a preferred template for the kind, else the first available."""
+        available = [t.id for t in self._templates.list_templates_by_kind(kind)]
+        if not available:
+            raise DesignTemplateNotFoundError(
+                f"No templates are available for kind '{kind}'"
+            )
+        for candidate in _DEFAULT_TEMPLATE_IDS.get(kind, ()):
+            if candidate in available:
+                return candidate
+        return available[0]
+
     def create_project(
         self,
-        name: str,
-        kind: str,
-        system_id: str,
-        template_id: str,
-        brief: str,
+        name: Optional[str] = None,
+        kind: str = "deck",
+        system_id: Optional[str] = None,
+        template_id: Optional[str] = None,
+        brief: str = "",
     ) -> DesignProject:
-        """Create a new design project."""
-        self._systems.get_system(system_id)
-        self._resolve_template_for_kind(template_id, kind)
+        """Create a new design project.
+
+        ``system_id``, ``template_id`` and ``name`` are optional: when
+        omitted they are resolved to server-side defaults so the caller can
+        create a project from a single brief.
+        """
+        resolved_system = system_id or self._default_system_id()
+        resolved_template = template_id or self._default_template_id(kind)
+        resolved_name = (name or "").strip() or _derive_project_name(brief)
+
+        self._systems.get_system(resolved_system)
+        self._resolve_template_for_kind(resolved_template, kind)
 
         now = datetime.now(timezone.utc)  # noqa: UP017
         return self._repo.create_project(
             id=str(uuid.uuid4()),
-            name=name,
+            name=resolved_name,
             kind=kind,
-            system_id=system_id,
-            template_id=template_id,
+            system_id=resolved_system,
+            template_id=resolved_template,
             brief=brief,
             created_at=now,
             updated_at=now,

@@ -303,6 +303,28 @@ class TestDesignRoutes:
         assert body["status"] == "draft"
         assert "id" in body
 
+    async def test_create_project_with_kind_and_brief_only(self, studio):
+        """只传 kind+brief 时，system/template/name 由服务端默认值补齐。"""
+        from backend.main import app
+
+        payload = {"kind": "prototype", "brief": "only brief"}
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    "/api/v1/design/projects", json=payload,
+                )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["system_id"] == "test-sys"
+        assert body["template_id"] == "test-page"
+        assert body["name"] == "only brief"
+
     async def test_create_project_invalid_kind(self, studio):
         from backend.main import app
 
