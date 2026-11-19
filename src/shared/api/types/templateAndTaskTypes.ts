@@ -404,6 +404,10 @@ export interface Todo {
   /** 来源（阶段 2）：如 chat + 会话 id */
   source_type?: string | null;
   source_ref?: string | null;
+  /** 专家归属（阶段 3）：agents.id；空表示全局待办 */
+  specialist_id?: string | null;
+  /** 推迟次数（阶段 3） */
+  snooze_count?: number;
   is_recurring: boolean;
   recurrence_rule?: string | null;
   parent_id?: number | null;
@@ -423,6 +427,7 @@ export interface CreateTodoInput {
   reminder_offsets?: number[];
   source_type?: string;
   source_ref?: string;
+  specialist_id?: string;
 }
 
 export interface UpdateTodoInput {
@@ -436,6 +441,7 @@ export interface UpdateTodoInput {
   parent_id?: number | null;
   tags?: string[];
   reminder_offsets?: number[];
+  specialist_id?: string | null;
 }
 
 export interface TodoSummary {
@@ -478,11 +484,37 @@ export interface TodoListParams {
   tag?: string;
   /** 智能视图：today=今天到期 / week=近 7 天 / all=未完成 / completed=已完成 */
   view?: 'all' | 'today' | 'week' | 'completed';
+  /** 专家过滤（阶段 3） */
+  specialist_id?: string;
 }
 
 export interface TodoTagCount {
   tag: string;
   count: number;
+}
+
+/** 阶段 3：热力图单日数据。 */
+export interface TodoHeatmapDay {
+  date: string;
+  count: number;
+}
+
+export interface TodoHeatmapResult {
+  days: TodoHeatmapDay[];
+  total: number;
+  max: number;
+}
+
+/** 阶段 3：热力图单日数据。 */
+export interface TodoHeatmapDay {
+  date: string;
+  count: number;
+}
+
+export interface TodoHeatmapResult {
+  days: TodoHeatmapDay[];
+  total: number;
+  max: number;
 }
 
 /** 阶段 2：对话提炼候选（未落库，确认后批量创建）。 */

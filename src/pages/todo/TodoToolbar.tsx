@@ -14,6 +14,8 @@ import type { TodoListParams, TodoPriority, TodoTagCount } from '../../shared/ap
 interface TodoToolbarProps {
   params: TodoListParams;
   searchQuery: string;
+  /** 阶段 3：可选专家列表（专家过滤）；空/未提供时不显示过滤。 */
+  specialists?: Array<{ id: string; name: string }>;
   onParamsChange: (params: TodoListParams) => void;
   onSearchChange: (query: string) => void;
 }
@@ -43,6 +45,7 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
 export function TodoToolbar({
   params,
   searchQuery,
+  specialists = [],
   onParamsChange,
   onSearchChange,
 }: TodoToolbarProps) {
@@ -66,6 +69,14 @@ export function TodoToolbar({
 
   const handleTagChange = (tag: string) => {
     const next: TodoListParams = { ...params, tag: tag || undefined };
+    onParamsChange(next);
+  };
+
+  const handleSpecialistChange = (specialistId: string) => {
+    const next: TodoListParams = {
+      ...params,
+      specialist_id: specialistId || undefined,
+    };
     onParamsChange(next);
   };
 
@@ -154,6 +165,24 @@ export function TodoToolbar({
           {tagOptions.map((opt) => (
             <option key={opt.tag} value={opt.tag}>
               #{opt.tag}（{opt.count}）
+            </option>
+          ))}
+        </select>
+      )}
+
+      {/* 专家过滤（阶段 3；无专家时不显示） */}
+      {specialists.length > 0 && (
+        <select
+          value={params.specialist_id ?? ''}
+          onChange={(e) => handleSpecialistChange(e.target.value)}
+          aria-label="按专家过滤"
+          data-testid="todo-specialist-filter"
+          className="rounded-radius-sm border border-border bg-surface px-2 py-1.5 text-xs text-text focus:outline-none focus:border-primary"
+        >
+          <option value="">全部专家</option>
+          {specialists.map((specialist) => (
+            <option key={specialist.id} value={specialist.id}>
+              {specialist.name}
             </option>
           ))}
         </select>

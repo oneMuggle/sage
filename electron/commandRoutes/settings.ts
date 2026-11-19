@@ -354,6 +354,21 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     method: 'GET',
     path: () => '/api/v1/todos/weekly-review',
   },
+  // 待办阶段 3：完成热力图 / snooze
+  todo_heatmap: {
+    method: 'GET',
+    path: (a) => `/api/v1/todos/heatmap?days=${Number(a?.days ?? 91)}`,
+  },
+  todo_snooze: {
+    method: 'POST',
+    path: (a) => `/api/v1/todos/${encodeURIComponent(String(a.id))}/snooze`,
+    // SnoozeIn 声明 extra="forbid" — id 在 URL 路径中，body 不能带 id。
+    body: (a) => {
+      const body: Record<string, unknown> = { ...a };
+      delete body.id;
+      return body;
+    },
+  },
 
   // custom CSS theme storage (themeCssClient)
   // Backend theme_router 挂在 /api/v1/theme (与其他 IPC 路由一致)

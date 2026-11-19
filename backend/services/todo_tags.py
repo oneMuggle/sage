@@ -63,3 +63,10 @@ def aggregate_tag_counts(rows: Iterable[Any]) -> List[Dict[str, Any]]:
         {"tag": tag, "count": count}
         for tag, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
     ]
+
+
+def aggregate_from_db(db: Any) -> List[Dict[str, Any]]:
+    """从数据库聚合全部待办的标签计数（list_tags 入口）。"""
+    conn = db.get_connection()
+    rows = conn.execute("SELECT tags FROM todos WHERE tags IS NOT NULL").fetchall()
+    return aggregate_tag_counts(rows)

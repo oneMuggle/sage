@@ -13,6 +13,7 @@ vi.mock('../../../shared/api/todoClient', () => ({
     get: vi.fn(),
     batchComplete: vi.fn(),
     batchDelete: vi.fn(),
+    snooze: vi.fn(),
   },
 }));
 
@@ -31,6 +32,7 @@ const client = todoClient as unknown as {
   get: ReturnType<typeof vi.fn>;
   batchComplete: ReturnType<typeof vi.fn>;
   batchDelete: ReturnType<typeof vi.fn>;
+  snooze: ReturnType<typeof vi.fn>;
 };
 
 const sampleTodo = {
@@ -57,6 +59,7 @@ describe('useTodoStore', () => {
     client.get.mockReset();
     client.batchComplete.mockReset();
     client.batchDelete.mockReset();
+    client.snooze.mockReset();
   });
 
   afterEach(() => {
@@ -178,6 +181,18 @@ describe('useTodoStore', () => {
     expect(deleted).toBe(1);
     expect(client.batchDelete).toHaveBeenCalledWith([1]);
     expect(client.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('snooze() replaces the matching todo with the returned one', async () => {
+    useTodoStore.setState({ todos: [sampleTodo] });
+    const snoozed = { ...sampleTodo, snooze_count: 1 };
+    client.snooze.mockResolvedValueOnce(snoozed);
+
+    const result = await useTodoStore.getState().snooze(1, 60);
+
+    expect(client.snooze).toHaveBeenCalledWith(1, 60);
+    expect(result.snooze_count).toBe(1);
+    expect(useTodoStore.getState().todos[0].snooze_count).toBe(1);
   });
 
   it('exports todoStore audit snapshot and JSON helpers', () => {
