@@ -126,6 +126,40 @@ describe('Welcome page', () => {
     expect(toastError).toHaveBeenCalled();
   });
 
+  it('项目绑定路径创建的新会话立即写入 store 列表', async () => {
+    const projectSession = {
+      id: 'project-session-id',
+      title: '新对话',
+      created_at: 0,
+      updated_at: Date.now(),
+      last_message_at: null,
+      message_count: 0,
+      is_pinned: false,
+    };
+    const projectApiModule = await import('../../shared/api/projectApi');
+    const projectSessionSpy = vi
+      .spyOn(projectApiModule.projectApi, 'createSession')
+      .mockResolvedValue({
+        project: { id: 'p1', name: 'P', path: '/tmp/p1' } as unknown as never,
+        session: projectSession as unknown as never,
+      } as never);
+    localStorage.setItem('welcomeProjectId', 'p1');
+    const addSessionMock = vi.fn();
+    const setState = useStore.setState as unknown as (partial: Record<string, unknown>) => void;
+    setState({ addSession: addSessionMock });
+
+    renderWelcome();
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'hello' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+
+    await waitFor(() => {
+      expect(addSessionMock).toHaveBeenCalledWith(projectSession);
+    });
+    projectSessionSpy.mockRestore();
+    localStorage.clear();
+  });
+
   it('formats and copies Welcome page summary as Markdown and JSON', () => {
     const md = formatWelcomePageMarkdown({
       locale: 'zh',
