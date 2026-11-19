@@ -202,13 +202,17 @@ def test_update_learned_preference_replaces_old_user_profile_entry(tmp_db, monke
         legacy_routes.LearnedPreferenceUpdate(key="pref_tone", value="casual")
     )
 
-    profile_rows = tmp_db.get_connection().execute(
-        "SELECT content FROM user_profile WHERE content LIKE '用户偏好 tone:%'"
+    active_rows = tmp_db.get_connection().execute(
+        "SELECT content, supersedes_id FROM user_profile "
+        "WHERE content LIKE '用户偏好 tone:%' "
+        "AND (invalidated_at = 0 OR invalidated_at IS NULL)"
     ).fetchall()
-    contents = [r["content"] for r in profile_rows]
-    # 只有最新的那条，旧的被替换
+    contents = [r["content"] for r in active_rows]
+    # 只有最新的那条，旧的被 supersedes（invalidated_at 标记）
     assert len(contents) == 1
     assert contents[0] == "用户偏好 tone: casual"
+    # 新行通过 supersedes_id 链到旧行（审计可追溯）
+    assert active_rows[0]["supersedes_id"] is not None
 
 
 # ---------- 路由：POST /memory/profile/refresh ----------
@@ -236,3 +240,62 @@ def test_refresh_user_profile_route_rebuilds_snapshot(tmp_db, monkeypatch):
     assert result["status"] == "ok"
     assert result["items_count"] >= 1
     assert "response_length" in store.get_snapshot()
+
+
+# ---------- 会话级快照刷新（阶段 1） ----------
+
+
+def test_new_session_sees_freshly_learned_preference(tmp_db, monkeypatch):
+    """新会话启动时立即看到刚学到的偏好；已开会话保持冻结（prefix cache）。"""
+    store = UserProfileStore(tmp_db)
+    store.load()
+    monkeypatch.setattr(
+        "backend.memory.user_profile.get_user_profile", lambda *a, **k: store
+    )
+    # 先预热一个"旧会话"，其快照应冻结在学习之前
+    store.preload_for_session("sess-old")
+    old_snapshot = store.get_snapshot_for("sess-old").get_snapshot()
+
+    _insert_user_message(tmp_db, "回答太短了，请详细一点")
+    PreferenceLearningTask(db=tmp_db, llm_client=None, config={}).run()
+
+    # 新会话拿到的快照包含刚学到的偏好
+    fresh = store.get_snapshot_for("sess-brand-new").get_snapshot()
+    assert "回复长度" in fresh
+    # 已开会话不受影响（冻结语义）
+    assert store.get_snapshot_for("sess-old").get_snapshot() == old_snapshot
+
+
+def test_conflicting_preferences_do_not_coexist(store_fixture_db, monkeypatch):
+    """同一维度的矛盾偏好：新条目 supersedes 旧条目，注入只见新条目。"""
+    db = store_fixture_db
+    store = UserProfileStore(db)
+    store.load()
+    monkeypatch.setattr(
+        "backend.memory.user_profile.get_user_profile", lambda *a, **k: store
+    )
+
+    store.upsert(
+        "用户偏好 回复长度: 详细", category="preference",
+        source="evolution", dimension="response_length",
+    )
+    store.upsert(
+        "用户偏好 回复长度: 简短", category="preference",
+        source="evolution", dimension="response_length",
+    )
+
+    active = store.list()
+    assert [e["content"] for e in active] == ["用户偏好 回复长度: 简短"]
+    assert active[0]["supersedes_id"] is not None
+
+    snapshot = store.get_snapshot_for("sess-brand-new").get_snapshot()
+    assert "简短" in snapshot
+    assert "详细" not in snapshot
+
+
+@pytest.fixture()
+def store_fixture_db(tmp_path):
+    db = Database(str(tmp_path / "pref_conflict.db"))
+    db.init_db()
+    yield db
+    db.close()

@@ -95,11 +95,15 @@ class TestProfileCrud:
         # 立即生效：快照包含新内容
         assert "GB/T 7714" in get_user_profile().get_snapshot()
 
-        # 重复 → 409
+        # 完全重复 → upsert 幂等：返回旧 id（HTTP 200），不新增条目
         r_dup = await client.post(
             f"{BASE}/profile", json={"content": "用户偏好用 GB/T 7714 引用格式"}
         )
-        assert r_dup.status_code == 409
+        assert r_dup.status_code == 200
+        dup_item = r_dup.json()["item"]
+        assert dup_item["id"] == item["id"]  # 同一条，bump last_confirmed_at
+        listing = (await client.get(f"{BASE}/profile")).json()["items"]
+        assert len(listing) == 1  # 条目数不变
 
         # 更新
         r_up = await client.put(
@@ -120,6 +124,36 @@ class TestProfileCrud:
         assert (await client.get(f"{BASE}/profile")).json()["items"] == []
         r_del2 = await client.delete(f"{BASE}/profile/{new_item['id']}")
         assert r_del2.status_code == 404
+
+    @pytest.mark.asyncio()
+    async def test_create_records_manual_source(self, client):
+        """手动 API 写入标记 source='manual'，且新行生效（invalidated_at=0）。"""
+        r = await client.post(
+            f"{BASE}/profile", json={"content": "用户偏好深色模式界面", "category": "preference"}
+        )
+        assert r.status_code == 200
+        item = r.json()["item"]
+        assert item["source"] == "manual"
+        assert item["invalidated_at"] == 0
+        assert item["evidence_session_id"] is None
+
+    @pytest.mark.asyncio()
+    async def test_update_preserves_dimension(self, client):
+        """PUT /profile 编辑应保留旧条目的 dimension，避免与进化路径产生平行维度行。"""
+        store = get_user_profile()
+        pid = store.upsert(
+            "用户偏好简洁回复",
+            category="preference",
+            dimension="response_length",
+        )
+        r = await client.put(
+            f"{BASE}/profile/{pid}",
+            json={"content": "用户偏好详细回复"},
+        )
+        assert r.status_code == 200
+        new_item = r.json()["item"]
+        assert new_item["content"] == "用户偏好详细回复"
+        assert new_item["dimension"] == "response_length"
 
     @pytest.mark.asyncio()
     async def test_update_missing(self, client):

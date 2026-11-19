@@ -950,6 +950,15 @@ class Database:
         # 持久化"关于用户的知识"（偏好 / 沟通风格 / 工作习惯 / 身份）,
         # 与通用记忆分离, 以冻结快照方式始终注入 system prompt。
         # category 取值: preference / communication_style / workflow_habit / identity
+        #   / goal / environment
+        #
+        # v2 治理列 (2026-11-18 fix/user-profile-memory-governance):
+        #   supersedes_id       — 旧行 id, 本条覆盖了它（冲突消解链）
+        #   invalidated_at      — 0 或 NULL 表示生效; >0 表示被覆盖的时间戳 ms
+        #   source              — 写入来源: per_turn / evolution / manual
+        #   evidence_session_id — 来源会话 id, 用于来源溯源
+        #   last_confirmed_at   — 最近一次被确认（重复命中）的时间戳 ms
+        #   dimension           — 结构化维度键（如 response_length），NULL 表示自由文本
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_profile (
                 id TEXT PRIMARY KEY,
@@ -957,7 +966,13 @@ class Database:
                 category TEXT NOT NULL DEFAULT 'preference',
                 importance INTEGER DEFAULT 5 CHECK (importance BETWEEN 1 AND 10),
                 created_at INTEGER NOT NULL,
-                updated_at INTEGER
+                updated_at INTEGER,
+                supersedes_id TEXT,
+                invalidated_at INTEGER,
+                source TEXT DEFAULT 'manual',
+                evidence_session_id TEXT,
+                last_confirmed_at INTEGER,
+                dimension TEXT
             )
         """)
         cursor.execute("""
@@ -967,6 +982,38 @@ class Database:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_user_profile_importance
             ON user_profile(importance DESC)
+        """)
+        # v2 治理列迁移 (2026-11-18 fix/user-profile-memory-governance):
+        # 老库 user_profile 表可能缺 supersedes_id / invalidated_at / source /
+        # evidence_session_id / last_confirmed_at / dimension 这些列；新库走
+        # CREATE TABLE 直接带上，老库用 ALTER ADD COLUMN 增量补。双进程防御：
+        # try/except 吞 "duplicate column name"。
+        # 必须在建 idx_user_profile_active 之前执行——部分索引引用 invalidated_at，
+        # 老库缺列时先建索引会直接抛 "no such column" 导致 init_db 失败。
+        cursor.execute("PRAGMA table_info(user_profile)")
+        _profile_columns = {row["name"] for row in cursor.fetchall()}
+        _profile_v2_cols = [
+            ("supersedes_id", "TEXT"),
+            ("invalidated_at", "INTEGER"),
+            ("source", "TEXT DEFAULT 'manual'"),
+            ("evidence_session_id", "TEXT"),
+            ("last_confirmed_at", "INTEGER"),
+            ("dimension", "TEXT"),
+        ]
+        for _col_name, _col_def in _profile_v2_cols:
+            if _col_name not in _profile_columns:
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE user_profile ADD COLUMN {_col_name} {_col_def}"
+                    )
+                    conn.commit()
+                except sqlite3.OperationalError:
+                    pass
+        # 仅含"生效中"条目的部分索引 —— get_core_items / list 走它避免全表扫
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_profile_active
+            ON user_profile(category, dimension)
+            WHERE invalidated_at = 0 OR invalidated_at IS NULL
         """)
 
         # 项目画像表 (P2 scope 轴: 项目级 "MEMORY.md")
