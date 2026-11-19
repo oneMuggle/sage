@@ -85,7 +85,7 @@ export function QuickActions({ tab, hasDocument, onCommand }: QuickActionsProps)
             data-testid={`office-ai-quick-${item.id}`}
             disabled={disabled}
             title={disabled ? needDocumentHint : undefined}
-            className="rounded-full border border-border px-2.5 py-1 text-xs hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            className="rounded-full border border-border px-2.5 py-1 text-xs hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
             onClick={() => onCommand(item.command)}
           >
             {t(item.labelKey)}

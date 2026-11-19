@@ -67,7 +67,7 @@ export function DesignExportPanel({ projectId, hasArtifact }: DesignExportPanelP
           type="button"
           disabled={!hasArtifact || running !== null}
           onClick={() => void handleExport(format)}
-          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-ui-xs hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-ui-xs hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {running === format ? (
             <Loader2 className="w-3 h-3 animate-spin" />

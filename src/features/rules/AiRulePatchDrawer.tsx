@@ -43,7 +43,7 @@ function DrawerHeader({
         </Dialog.Title>
         <p className="text-sm text-text-secondary">{t('rules.ai.subtitle')}</p>
         {focusEntry ? (
-          <p className="text-xs text-text-tertiary">
+          <p className="text-xs text-text-muted">
             {t('rules.ai.focusHint').replace(
               '{label}',
               `${focusEntry.sourceLabel} · ${focusEntry.category}`,
@@ -196,10 +196,10 @@ function DrawerBody({
       <ActionBar hook={hook} t={t} />
       <MessageArea error={hook.error} preview={hook.preview} applySummary={hook.applySummary} />
       {!hook.preview && !hook.error ? (
-        <p className="text-sm text-text-tertiary">{t('rules.ai.empty')}</p>
+        <p className="text-sm text-text-muted">{t('rules.ai.empty')}</p>
       ) : null}
       {hook.preview && hook.operations.length === 0 && !hook.preview.message ? (
-        <p className="text-sm text-text-tertiary" data-testid="ai-message">
+        <p className="text-sm text-text-muted" data-testid="ai-message">
           {t('rules.ai.noOperations')}
         </p>
       ) : null}

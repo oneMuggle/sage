@@ -233,7 +233,7 @@ export function ZoteroTab() {
       </div>
 
       {/* Status card */}
-      <div className="rounded-lg border border-line-subtle bg-surface-raised p-4">
+      <div className="rounded-lg border border-line bg-surface-elevated p-4">
         <div className="flex items-center gap-2">
           <span
             className={`inline-block h-2 w-2 rounded-full ${
@@ -259,7 +259,7 @@ export function ZoteroTab() {
                 { label: t('settings.zotero.stats.attachments'), value: status.stats.attachments },
               ] as const
             ).map(({ label, value }) => (
-              <div key={label} className="rounded border border-line-subtle bg-surface px-2 py-2">
+              <div key={label} className="rounded border border-line bg-surface px-2 py-2">
                 <div className="text-base font-semibold text-primary">{value.toLocaleString()}</div>
                 <div className="text-xs text-faint">{label}</div>
               </div>
@@ -283,7 +283,7 @@ export function ZoteroTab() {
           <input
             id="zotero-path"
             type="text"
-            className="flex-1 rounded border border-line-subtle bg-surface px-3 py-1.5 text-sm text-primary placeholder:text-faint/60 focus:border-accent focus:outline-none"
+            className="flex-1 rounded border border-line bg-surface px-3 py-1.5 text-sm text-primary placeholder:text-faint/60 focus:border-accent focus:outline-none"
             placeholder={t('settings.zotero.path.placeholder')}
             value={pathInput}
             onChange={(e) => {
@@ -322,7 +322,7 @@ export function ZoteroTab() {
               </label>
               <select
                 id="zotero-collection"
-                className="w-full rounded border border-line-subtle bg-surface px-3 py-1.5 text-sm text-primary focus:border-accent focus:outline-none"
+                className="w-full rounded border border-line bg-surface px-3 py-1.5 text-sm text-primary focus:border-accent focus:outline-none"
                 value={selectedCollectionKey ?? ''}
                 onChange={(e) => setSelectedCollectionKey(e.target.value || null)}
               >
@@ -342,7 +342,7 @@ export function ZoteroTab() {
           <div>
             <input
               type="text"
-              className="w-full rounded border border-line-subtle bg-surface px-3 py-1.5 text-sm text-primary placeholder:text-faint/60 focus:border-accent focus:outline-none"
+              className="w-full rounded border border-line bg-surface px-3 py-1.5 text-sm text-primary placeholder:text-faint/60 focus:border-accent focus:outline-none"
               placeholder={t('settings.zotero.search.placeholder')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -368,7 +368,7 @@ export function ZoteroTab() {
                   <button
                     key={tag}
                     type="button"
-                    className="rounded bg-surface-raised px-1.5 py-0.5 text-xs text-faint hover:text-accent hover:bg-accent/10 transition-colors"
+                    className="rounded bg-surface-elevated px-1.5 py-0.5 text-xs text-faint hover:text-accent hover:bg-accent/10 transition-colors"
                     onClick={() => setSelectedTag(tag)}
                   >
                     {tag}
@@ -383,7 +383,7 @@ export function ZoteroTab() {
                 <button
                   key={item.key}
                   type="button"
-                  className="w-full rounded border border-line-subtle bg-surface-raised px-3 py-2 text-left hover:border-accent/50 transition-colors"
+                  className="w-full rounded border border-line bg-surface-elevated px-3 py-2 text-left hover:border-accent/50 transition-colors"
                   onClick={() => handleSelectItem(item.key)}
                 >
                   <div className="text-sm text-primary line-clamp-1">{item.title}</div>
@@ -393,7 +393,7 @@ export function ZoteroTab() {
                     <span className="capitalize">{item.item_type}</span>
                   </div>
                   {selectedItem?.key === item.key && (
-                    <div className="mt-2 border-t border-line-subtle pt-2 text-xs text-secondary space-y-1">
+                    <div className="mt-2 border-t border-line pt-2 text-xs text-secondary space-y-1">
                       {itemLoading ? (
                         <p className="text-faint">…</p>
                       ) : (

@@ -47,7 +47,7 @@ export function SubagentLivePanel({ sessionId }: { sessionId: string | null | un
           aria-expanded={!collapsed}
           aria-label={collapsed ? '展开子代理实时进度' : '折叠子代理实时进度'}
           onClick={() => setCollapsed((v) => !v)}
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-text-tertiary hover:text-text hover:bg-bg-hover transition-colors"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-text-muted hover:text-text hover:bg-bg-hover transition-colors"
         >
           <span>{collapsed ? '展开' : '收起'}</span>
           <ChevronDown
@@ -60,7 +60,7 @@ export function SubagentLivePanel({ sessionId }: { sessionId: string | null | un
           {rows.map(({ item, live }) => (
             <li key={item.task_id} className="flex items-center gap-2 min-w-0">
               <span className="text-primary animate-pulse shrink-0">◐</span>
-              <span className="text-text-tertiary shrink-0">
+              <span className="text-text-muted shrink-0">
                 [{item.task_id} · {item.agent_id}]
               </span>
               <span className="text-text-secondary truncate">{live!.liveStep}</span>

@@ -106,7 +106,7 @@ export function ChatNoticeStack({ notices }: ChatNoticeStackProps) {
           data-testid="chat-notice-toggle"
           aria-expanded={expanded}
           onClick={() => setExpanded((v) => !v)}
-          className="w-full px-5 py-1 text-left text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover border-b border-border transition-colors"
+          className="w-full px-5 py-1 text-left text-xs text-text-secondary hover:text-text hover:bg-bg-hover border-b border-border transition-colors"
         >
           {expanded ? '收起其他提示' : `另有 ${rest.length} 条提示`}
         </button>

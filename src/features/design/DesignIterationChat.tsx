@@ -36,7 +36,7 @@ export function DesignIterationChat({ projectId }: DesignIterationChatProps) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 space-y-2">
-        <p className="text-ui-xs text-text-tertiary">{t('design.detail.iterationHint')}</p>
+        <p className="text-ui-xs text-text-muted">{t('design.detail.iterationHint')}</p>
         {history.map((entry, index) => (
           <div
             key={`${entry}-${index}`}
@@ -52,7 +52,7 @@ export function DesignIterationChat({ projectId }: DesignIterationChatProps) {
           </div>
         )}
         {!loading && currentArtifact && (
-          <p className="text-ui-xs text-text-tertiary">
+          <p className="text-ui-xs text-text-muted">
             {t('design.detail.version').replace('{version}', String(currentArtifact.version))}
           </p>
         )}

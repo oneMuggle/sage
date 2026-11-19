@@ -52,7 +52,7 @@ export function FloatingActionBar({
           type="button"
           data-testid={`office-floating-action-${action.kind}`}
           disabled={action.needsDocument && !canApply}
-          className="rounded px-2 py-1 text-xs hover:bg-surface-hover disabled:opacity-40"
+          className="rounded px-2 py-1 text-xs hover:bg-bg-hover disabled:opacity-40"
           onClick={() => onAction(action.kind)}
         >
           {t(action.labelKey)}
@@ -61,7 +61,7 @@ export function FloatingActionBar({
       <button
         type="button"
         data-testid="office-floating-action-dismiss"
-        className="rounded px-2 py-1 text-xs text-text-muted hover:bg-surface-hover"
+        className="rounded px-2 py-1 text-xs text-text-muted hover:bg-bg-hover"
         onClick={onDismiss}
       >
         {t('office.ai.selection.dismiss')}

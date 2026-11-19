@@ -380,7 +380,7 @@ export function ToolCallResult({ result }: { result: unknown }) {
   const isLarge = safeResult.length > 300;
 
   if (!isLarge) {
-    return <span className="text-text-primary break-all">{safeResult}</span>;
+    return <span className="text-text break-all">{safeResult}</span>;
   }
 
   return (

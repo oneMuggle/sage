@@ -23,7 +23,7 @@ function statusClass(status: DesignProject['status']): string {
     case 'error':
       return 'bg-red-500/10 text-red-600';
     default:
-      return 'bg-surface-hover text-text-secondary';
+      return 'bg-bg-hover text-text-secondary';
   }
 }
 
@@ -60,7 +60,7 @@ export function DesignProjectsList({ onOpen }: DesignProjectsListProps) {
         <p className="text-red-500">{error}</p>
         <button
           type="button"
-          className="px-3 py-1.5 rounded-md border border-border hover:bg-surface-hover"
+          className="px-3 py-1.5 rounded-md border border-border hover:bg-bg-hover"
           onClick={() => void loadProjects()}
         >
           {t('design.retry')}
@@ -72,7 +72,7 @@ export function DesignProjectsList({ onOpen }: DesignProjectsListProps) {
   if (projects.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
-        <LayoutTemplate className="w-8 h-8 text-text-tertiary" />
+        <LayoutTemplate className="w-8 h-8 text-text-muted" />
         <p className="text-ui-md font-medium text-text">{t('design.empty.title')}</p>
         <p className="text-ui-sm text-text-secondary max-w-md">{t('design.empty.hint')}</p>
       </div>
@@ -97,7 +97,7 @@ export function DesignProjectsList({ onOpen }: DesignProjectsListProps) {
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') onOpen(project.id);
               }}
-              className="group h-full rounded-lg border border-border bg-surface p-4 text-left hover:border-accent/50 hover:bg-surface-hover transition-colors cursor-pointer"
+              className="group h-full rounded-lg border border-border bg-surface p-4 text-left hover:border-accent/50 hover:bg-bg-hover transition-colors cursor-pointer"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -115,7 +115,7 @@ export function DesignProjectsList({ onOpen }: DesignProjectsListProps) {
               <p className="mt-3 line-clamp-2 text-ui-sm text-text-secondary min-h-[2.5rem]">
                 {project.brief}
               </p>
-              <div className="mt-3 flex items-center justify-between text-ui-xs text-text-tertiary">
+              <div className="mt-3 flex items-center justify-between text-ui-xs text-text-muted">
                 <span>
                   {t('design.project.updatedAt').replace('{time}', formatTime(project.updated_at))}
                 </span>
@@ -135,7 +135,7 @@ export function DesignProjectsList({ onOpen }: DesignProjectsListProps) {
           </li>
         ))}
       </ul>
-      <div className="mt-4 flex items-center gap-1.5 text-ui-xs text-text-tertiary">
+      <div className="mt-4 flex items-center gap-1.5 text-ui-xs text-text-muted">
         <FileStack className="w-3.5 h-3.5" />
         {projects.length}
       </div>

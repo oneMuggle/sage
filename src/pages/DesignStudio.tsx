@@ -45,7 +45,7 @@ export function DesignStudio() {
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-ui-xs hover:bg-surface-hover"
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-ui-xs hover:bg-bg-hover"
               onClick={() => void loadProjects()}
             >
               <RefreshCw className="w-3 h-3" />

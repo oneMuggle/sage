@@ -54,7 +54,7 @@ export function BackgroundShellsSection() {
               <span className="block text-ui-2xs text-text truncate" title={shell.command}>
                 {shell.command}
               </span>
-              <span className="block text-ui-2xs text-text-tertiary">
+              <span className="block text-ui-2xs text-text-muted">
                 {shell.status === 'running' ? '运行中' : '已结束'} · {shell.age_seconds}s
               </span>
             </button>

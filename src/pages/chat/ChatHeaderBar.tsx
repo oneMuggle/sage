@@ -77,8 +77,8 @@ export function ChatHeaderBar({
             htmlFor="chat-header-orch-mode"
             className={
               rightPanelOpen
-                ? 'text-text-tertiary hidden 2xl:inline'
-                : 'text-text-tertiary hidden xl:inline'
+                ? 'text-text-muted hidden 2xl:inline'
+                : 'text-text-muted hidden xl:inline'
             }
           >
             {t('chat.orchMode.label')}

@@ -285,7 +285,7 @@ function NotificationPrefsCard(): JSX.Element {
               onChange={(e) => update({ webhookSecret: e.target.value })}
               data-testid="notification-webhook-secret"
             />
-            <span className="block text-ui-2xs text-text-tertiary">
+            <span className="block text-ui-2xs text-text-muted">
               {t('settings.basic.notifications_webhook_secret_desc')}
             </span>
           </div>
