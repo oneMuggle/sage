@@ -59,7 +59,7 @@ export function SuggestionCard({
             type="button"
             data-testid={`${testIdPrefix}-skip-${suggestion.id}`}
             disabled={disabled}
-            className="rounded px-2 py-0.5 text-text-muted hover:bg-surface-hover disabled:opacity-40"
+            className="rounded px-2 py-0.5 text-text-muted hover:bg-bg-hover disabled:opacity-40"
             onClick={() => onSkip(messageId, suggestion.id)}
           >
             {t('office.ai.audit.skip')}

@@ -250,7 +250,7 @@ export function PlanCard({
           <button
             onClick={() => setShowReasoning((v) => !v)}
             data-testid="plan-reasoning-toggle"
-            className="text-xs text-text-secondary hover:text-text-primary"
+            className="text-xs text-text-secondary hover:text-text"
           >
             {showReasoning ? '▾ 隐藏规划思路' : '▸ 查看 LLM 规划思路'}
           </button>

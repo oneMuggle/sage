@@ -40,7 +40,7 @@ export function TodoListSection({ todos }: TodoListSectionProps) {
           <span
             className={
               item.status === 'completed'
-                ? 'text-text-tertiary line-through flex-1'
+                ? 'text-text-muted line-through flex-1'
                 : 'text-text-secondary flex-1'
             }
           >

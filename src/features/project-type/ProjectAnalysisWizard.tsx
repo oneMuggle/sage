@@ -300,7 +300,7 @@ export function ProjectAnalysisWizard({
                 className={`rounded-lg border p-3 text-left transition-colors ${
                   active
                     ? 'border-primary bg-primary/10 text-foreground'
-                    : 'border-border bg-surface hover:bg-surface-hover text-muted-foreground'
+                    : 'border-border bg-surface hover:bg-bg-hover text-muted-foreground'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -333,7 +333,7 @@ export function ProjectAnalysisWizard({
               className={`rounded-lg border p-2 text-left text-xs transition-colors ${
                 selectedSubType === null
                   ? 'border-primary bg-primary/10 text-foreground'
-                  : 'border-border bg-surface hover:bg-surface-hover text-muted-foreground'
+                  : 'border-border bg-surface hover:bg-bg-hover text-muted-foreground'
               }`}
             >
               <span className="font-medium">仅使用形态级分类</span>
@@ -350,7 +350,7 @@ export function ProjectAnalysisWizard({
                   className={`rounded-lg border p-2 text-left text-xs transition-colors ${
                     active
                       ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-border bg-surface hover:bg-surface-hover text-muted-foreground'
+                      : 'border-border bg-surface hover:bg-bg-hover text-muted-foreground'
                   }`}
                 >
                   <div className="flex items-center gap-1.5">

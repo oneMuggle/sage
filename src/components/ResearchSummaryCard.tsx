@@ -230,7 +230,7 @@ export function ResearchSummaryCard({
         <button
           type="button"
           onClick={onDismiss}
-          className="px-4 py-2 text-text-muted hover:text-text-primary transition-colors"
+          className="px-4 py-2 text-text-muted hover:text-text transition-colors"
           data-testid="research-dismiss"
         >
           放弃

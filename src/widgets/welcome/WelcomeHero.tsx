@@ -78,7 +78,7 @@ export function WelcomeHero({ onBack }: WelcomeHeroProps) {
 
       <div>
         <h1 className="text-2xl font-semibold text-text mb-2">{t('welcome.hero.greeting')}</h1>
-        <p className="text-sm text-text-tertiary">{t('welcome.hero.subtitle')}</p>
+        <p className="text-sm text-text-muted">{t('welcome.hero.subtitle')}</p>
         <span
           data-testid="welcome-hero-copy-snapshot"
           onClick={() => void handleCopySnapshot()}

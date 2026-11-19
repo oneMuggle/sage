@@ -509,7 +509,7 @@ export function WikiProjectPicker() {
                     type="button"
                     onClick={handleBrowse}
                     data-testid="browse-btn"
-                    className="px-3 py-2 border border-border rounded-radius-sm text-sm bg-surface hover:bg-surface-hover flex items-center gap-1"
+                    className="px-3 py-2 border border-border rounded-radius-sm text-sm bg-surface hover:bg-bg-hover flex items-center gap-1"
                   >
                     <FolderSearch size={14} /> 浏览…
                   </button>
@@ -559,7 +559,7 @@ export function WikiProjectPicker() {
                     type="button"
                     onClick={handleBrowse}
                     data-testid="browse-btn"
-                    className="px-3 py-2 border border-border rounded-radius-sm text-sm bg-surface hover:bg-surface-hover flex items-center gap-1"
+                    className="px-3 py-2 border border-border rounded-radius-sm text-sm bg-surface hover:bg-bg-hover flex items-center gap-1"
                   >
                     <FolderSearch size={14} /> 浏览…
                   </button>

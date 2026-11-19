@@ -35,7 +35,7 @@ const STATUS_LABEL_KEY: Record<ImportCandidate['status'], TranslationKey> = {
 
 const STATUS_STYLE: Record<ImportCandidate['status'], string> = {
   new: 'text-success',
-  duplicate: 'text-text-tertiary',
+  duplicate: 'text-text-muted',
   conflict: 'text-warning',
 };
 
@@ -114,14 +114,14 @@ function CandidateList({
           />
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-text-tertiary">
+              <span className="text-xs text-text-muted">
                 {t(LAYER_LABEL_KEY[candidate.kind])}
               </span>
               <span className={STATUS_STYLE[candidate.status]}>
                 {t(STATUS_LABEL_KEY[candidate.status])}
               </span>
               {candidate.category ? (
-                <span className="text-xs text-text-tertiary">{candidate.category}</span>
+                <span className="text-xs text-text-muted">{candidate.category}</span>
               ) : null}
             </div>
             <p className="line-clamp-2 text-text">{candidate.content}</p>
@@ -160,7 +160,7 @@ function SelectionBar({ hook }: { hook: RulesImportHookResult }) {
         toggle={hook.toggle}
       />
       {hook.hasPlaybook ? (
-        <p className="text-xs text-text-tertiary" data-testid="rules-import-playbook-deferred">
+        <p className="text-xs text-text-muted" data-testid="rules-import-playbook-deferred">
           {t('rules.import.deferred_playbook')}
         </p>
       ) : null}

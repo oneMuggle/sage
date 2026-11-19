@@ -143,11 +143,11 @@ export function SkillAuditDrawer({
                   <span className="shrink-0 font-medium text-text">
                     {ACTION_LABELS[entry.action] ?? entry.action}
                   </span>
-                  <span className="shrink-0 text-xs text-text-tertiary">
+                  <span className="shrink-0 text-xs text-text-muted">
                     {ACTOR_LABELS[entry.actor] ?? entry.actor}
                   </span>
                   {entry.source ? (
-                    <span className="truncate text-xs text-text-tertiary">{entry.source}</span>
+                    <span className="truncate text-xs text-text-muted">{entry.source}</span>
                   ) : null}
                 </li>
               ))}

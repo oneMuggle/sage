@@ -73,7 +73,7 @@ export function AiSidebar({
               type="button"
               data-testid="office-ai-sidebar-clear-doc"
               aria-label={t('office.ai.sidebar.clear_document')}
-              className="rounded p-0.5 text-text-muted hover:bg-surface-hover hover:text-text"
+              className="rounded p-0.5 text-text-muted hover:bg-bg-hover hover:text-text"
               onClick={() => useOfficeWorkspaceStore.getState().setActiveDocument(null)}
             >
               <X className="h-3 w-3" />
@@ -88,7 +88,7 @@ export function AiSidebar({
           type="button"
           data-testid="office-ai-sidebar-close"
           aria-label={t('office.ai.sidebar.close')}
-          className="rounded p-1 hover:bg-surface-hover"
+          className="rounded p-1 hover:bg-bg-hover"
           onClick={onClose}
         >
           <X className="h-4 w-4" />

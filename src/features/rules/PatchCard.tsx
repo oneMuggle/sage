@@ -96,7 +96,7 @@ function CardBadges({
     <div className="flex flex-wrap items-center gap-1.5">
       <Badge variant="secondary">{t(layerLabelKey(operation.layer))}</Badge>
       <Badge variant="outline">{t(ACTION_KEYS[operation.action])}</Badge>
-      {isReadonly ? <Lock className="h-3.5 w-3.5 text-text-tertiary" aria-hidden="true" /> : null}
+      {isReadonly ? <Lock className="h-3.5 w-3.5 text-text-muted" aria-hidden="true" /> : null}
       {result ? (
         <Badge
           variant={STATUS_VARIANTS[result.status]}
@@ -139,7 +139,7 @@ function CardTextSections({
         </p>
       ) : null}
       {operation.reason ? (
-        <p className="text-xs text-text-tertiary">
+        <p className="text-xs text-text-muted">
           {t('rules.ai.reason')}: {operation.reason}
         </p>
       ) : null}

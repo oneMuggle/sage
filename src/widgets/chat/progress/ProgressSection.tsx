@@ -231,7 +231,7 @@ export function ProgressSection({
                     onSelectTask={openTaskDetail}
                   />
                 ) : (
-                  <div className="text-xs text-text-tertiary" data-testid="task-tree-empty">
+                  <div className="text-xs text-text-muted" data-testid="task-tree-empty">
                     暂无已派发的编排任务
                   </div>
                 ))}

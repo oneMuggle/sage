@@ -210,7 +210,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-mono text-xs text-text-tertiary truncate">{lane.lane_id}</span>
+          <span className="font-mono text-xs text-text-muted truncate">{lane.lane_id}</span>
           <span className="text-xs px-2 py-0.5 rounded bg-bg-hover text-text-secondary shrink-0">
             {lane.status}
           </span>
@@ -219,7 +219,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
           <button
             type="button"
             onClick={onClose}
-            className="text-text-tertiary hover:text-text-primary"
+            className="text-text-muted hover:text-text"
             data-testid="drawer-close"
             aria-label={t('orchestration.drawer.close')}
           >
@@ -231,7 +231,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
       <div className="flex-1 overflow-y-auto">
         {/* Delivery package */}
         <div className="px-4 py-3 border-b border-border">
-          <div className="text-xs text-text-tertiary mb-2">
+          <div className="text-xs text-text-muted mb-2">
             {t('orchestration.drawer.delivery')}
           </div>
           <div className="flex items-center gap-2 mb-2" data-testid="acceptance-state">
@@ -257,7 +257,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
               {lane.worktree}
             </div>
           ) : (
-            <div className="text-xs text-text-tertiary">{t('orchestration.drawer.noWorktree')}</div>
+            <div className="text-xs text-text-muted">{t('orchestration.drawer.noWorktree')}</div>
           )}
           {warning && (
             <div
@@ -281,7 +281,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
               )}
               {merge.filesChanged.length > 0 && (
                 <div>
-                  <div className="text-text-tertiary">
+                  <div className="text-text-muted">
                     {t('orchestration.drawer.filesChanged').replace(
                       '{n}',
                       String(merge.filesChanged.length),
@@ -302,11 +302,11 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
 
         {/* Acceptance checks */}
         <div className="px-4 py-3 border-b border-border">
-          <div className="text-xs text-text-tertiary mb-2">{t('orchestration.drawer.checks')}</div>
+          <div className="text-xs text-text-muted mb-2">{t('orchestration.drawer.checks')}</div>
           {checks === null ? (
-            <div className="text-xs text-text-tertiary">{t('orchestration.loading')}</div>
+            <div className="text-xs text-text-muted">{t('orchestration.loading')}</div>
           ) : checks.length === 0 ? (
-            <div className="text-xs text-text-tertiary" data-testid="acceptance-checks-empty">
+            <div className="text-xs text-text-muted" data-testid="acceptance-checks-empty">
               {t('orchestration.drawer.checksEmpty')}
             </div>
           ) : (
@@ -318,7 +318,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
                       c.passed
                         ? 'text-success shrink-0'
                         : c.skipped
-                          ? 'text-text-tertiary shrink-0'
+                          ? 'text-text-muted shrink-0'
                           : 'text-error shrink-0'
                     }
                   >
@@ -327,7 +327,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
                   <span className="min-w-0">
                     <span className="font-medium">{c.name}</span>
                     {c.summary !== '' && (
-                      <span className="text-text-tertiary truncate block" title={c.summary}>
+                      <span className="text-text-muted truncate block" title={c.summary}>
                         {c.summary}
                       </span>
                     )}
@@ -340,11 +340,11 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
 
         {/* TDD evidence */}
         <div className="px-4 py-3 border-b border-border">
-          <div className="text-xs text-text-tertiary mb-2">
+          <div className="text-xs text-text-muted mb-2">
             {t('orchestration.drawer.tddEvidence')}
           </div>
           {tddEvidence === null ? (
-            <div className="text-xs text-text-tertiary" data-testid="tdd-evidence-empty">
+            <div className="text-xs text-text-muted" data-testid="tdd-evidence-empty">
               {t('orchestration.drawer.tddNoEvidence')}
             </div>
           ) : (
@@ -368,7 +368,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
                     'text-xs px-2 py-0.5 rounded ' +
                     (tddEvidence.redSeen
                       ? 'bg-error/15 text-error'
-                      : 'bg-bg-hover text-text-tertiary')
+                      : 'bg-bg-hover text-text-muted')
                   }
                   data-testid="tdd-red-badge"
                 >
@@ -379,7 +379,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
                     'text-xs px-2 py-0.5 rounded ' +
                     (tddEvidence.greenSeen
                       ? 'bg-success/15 text-success'
-                      : 'bg-bg-hover text-text-tertiary')
+                      : 'bg-bg-hover text-text-muted')
                   }
                   data-testid="tdd-green-badge"
                 >
@@ -413,7 +413,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
               </div>
               {tddEvidence.testCommands.length > 0 && (
                 <div>
-                  <div className="text-text-tertiary text-xs mb-1">
+                  <div className="text-text-muted text-xs mb-1">
                     {t('orchestration.drawer.tddTestRuns')}
                   </div>
                   <ul className="space-y-0.5">
@@ -436,7 +436,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
         {/* Review verdict (A4: dispatcher 写回，无复核则整段隐藏) */}
         {reviewVerdict !== null && (
           <div className="px-4 py-3 border-b border-border">
-            <div className="text-xs text-text-tertiary mb-2">
+            <div className="text-xs text-text-muted mb-2">
               {t('orchestration.drawer.review')}
             </div>
             <div className="flex items-center gap-2" data-testid="review-verdict">
@@ -460,11 +460,11 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
 
         {/* Change summary (diff --stat from the acceptance event) */}
         <div className="px-4 py-3 border-b border-border">
-          <div className="text-xs text-text-tertiary mb-2">{t('orchestration.drawer.diff')}</div>
+          <div className="text-xs text-text-muted mb-2">{t('orchestration.drawer.diff')}</div>
           {diffSummary === null ? (
-            <div className="text-xs text-text-tertiary">{t('orchestration.loading')}</div>
+            <div className="text-xs text-text-muted">{t('orchestration.loading')}</div>
           ) : diffSummary === '' ? (
-            <div className="text-xs text-text-tertiary" data-testid="diff-empty">
+            <div className="text-xs text-text-muted" data-testid="diff-empty">
               {t('orchestration.drawer.diffEmpty')}
             </div>
           ) : (

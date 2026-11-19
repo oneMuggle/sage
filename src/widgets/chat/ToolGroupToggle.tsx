@@ -38,9 +38,9 @@ export function ToolGroupToggle({
     >
       <Wrench className="w-3.5 h-3.5 text-primary shrink-0" />
       <span className="font-medium text-text">已执行 {count} 步工具调用</span>
-      <span className="text-text-tertiary truncate font-mono text-ui-2xs">({summary})</span>
+      <span className="text-text-muted truncate font-mono text-ui-2xs">({summary})</span>
       {owners.length > 0 && (
-        <span className="text-text-tertiary shrink-0" data-testid="tool-calls-group-plugin-owners">
+        <span className="text-text-muted shrink-0" data-testid="tool-calls-group-plugin-owners">
           {t('permission.from_plugin')}: {owners.join('、')}
         </span>
       )}
