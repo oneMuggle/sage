@@ -12,7 +12,7 @@ from typing import Any, List
 from unittest.mock import patch
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
 from backend.data.session_repo import SessionRepository
 from backend.main import app
@@ -22,20 +22,15 @@ pytestmark = pytest.mark.integration
 CHAT_STREAM_PATH = "/api/v1/chat/stream"
 
 
-def _ensure_stream_registry() -> None:
-    from backend.api.chat_stream_registry import StreamRegistry
-
-    if not hasattr(app.state, "streams") or app.state.streams is None:
-        app.state.streams = StreamRegistry()
-
-
 def _parse_ndjson(text: str) -> List[dict]:
     return [json.loads(line) for line in text.split("\n") if line.strip()]
 
 
 @pytest.mark.asyncio()
-async def test_legacy_stream_emits_run_started_event():
-    _ensure_stream_registry()
+async def test_legacy_stream_emits_run_started_event(client: AsyncClient):
+    # conftest 的 client fixture 负责初始化/清空 app.state.streams
+    assert hasattr(app.state, "streams")
+
     sid = SessionRepository().create().id
 
     async def mock_run_loop(messages: Any, max_iterations: int = 5, **kwargs: Any) -> Any:
@@ -46,20 +41,15 @@ async def test_legacy_stream_emits_run_started_event():
     with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         MockAgent.return_value.run_loop = mock_run_loop
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-            headers={"X-Sage-Local-Authorization": "Bearer test-local-auth-token"},
-        ) as ac:
-            create_resp = await ac.post(
-                CHAT_STREAM_PATH,
-                json={"session_id": sid, "message": "ping"},
-            )
-            assert create_resp.status_code == 200
-            stream_id = create_resp.json()["streamId"]
+        create_resp = await client.post(
+            CHAT_STREAM_PATH,
+            json={"session_id": sid, "message": "ping"},
+        )
+        assert create_resp.status_code == 200
+        stream_id = create_resp.json()["streamId"]
 
-            attach_resp = await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
-            assert attach_resp.status_code == 200
+        attach_resp = await client.get(f"{CHAT_STREAM_PATH}/{stream_id}")
+        assert attach_resp.status_code == 200
 
     events = _parse_ndjson(attach_resp.text)
     started = [
@@ -67,6 +57,8 @@ async def test_legacy_stream_emits_run_started_event():
         for e in events
         if e.get("type") == "session_updated" and e.get("subtype") == "run_started"
     ]
-    event_summary = [(e.get("type"), e.get("subtype"), e.get("state")) for e in events]
+    event_summary = [
+        (e.get("type"), e.get("subtype"), e.get("state")) for e in events
+    ]
     assert started, f"未找到 run_started 事件，events={event_summary}"
     assert started[0]["session_id"] == sid
