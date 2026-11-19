@@ -15,6 +15,8 @@ import { toIsoString } from './todoDateUtils';
 interface TodoCreateFormProps {
   onCreate: (input: CreateTodoInput) => Promise<void>;
   busy: boolean;
+  /** 阶段 3：可选专家列表（专家专属待办）；空/未提供时不显示选择器。 */
+  specialists?: Array<{ id: string; name: string }>;
 }
 
 const PRIORITY_CONFIG: Array<{
@@ -35,7 +37,7 @@ const REMINDER_PRESETS: Array<{ minutes: number; label: string }> = [
   { minutes: 10, label: '提前10分钟' },
 ];
 
-export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
+export function TodoCreateForm({ onCreate, busy, specialists = [] }: TodoCreateFormProps) {
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -44,6 +46,7 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
   const [projectTag, setProjectTag] = useState('');
   const [tagsText, setTagsText] = useState('');
   const [reminderOffsets, setReminderOffsets] = useState<number[]>([]);
+  const [specialistId, setSpecialistId] = useState('');
 
   const canSubmit = title.trim().length > 0 && !busy;
 
@@ -69,6 +72,7 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
       .filter(Boolean);
     if (tags.length > 0) input.tags = tags;
     if (reminderOffsets.length > 0) input.reminder_offsets = reminderOffsets;
+    if (specialistId) input.specialist_id = specialistId;
 
     await onCreate(input);
 
@@ -80,6 +84,7 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
     setProjectTag('');
     setTagsText('');
     setReminderOffsets([]);
+    setSpecialistId('');
   };
 
   return (
@@ -243,6 +248,29 @@ export function TodoCreateForm({ onCreate, busy }: TodoCreateFormProps) {
               })}
             </div>
           </div>
+
+          {/* 专家归属（阶段 3，仅有专家时显示） */}
+          {specialists.length > 0 && (
+            <div>
+              <label className="flex items-center gap-1 text-ui-xs text-text-muted mb-1">
+                专家
+              </label>
+              <select
+                value={specialistId}
+                onChange={(e) => setSpecialistId(e.target.value)}
+                aria-label="专家归属"
+                data-testid="todo-create-specialist"
+                className="w-full px-2.5 py-1.5 text-xs border border-border rounded-radius-sm bg-background focus:outline-none focus:border-primary"
+              >
+                <option value="">全局待办（不限专家）</option>
+                {specialists.map((specialist) => (
+                  <option key={specialist.id} value={specialist.id}>
+                    {specialist.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
     </form>

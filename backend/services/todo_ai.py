@@ -191,11 +191,13 @@ async def generate_weekly_review(
     stats: Dict[str, Any],
     completed_titles: List[str],
     pending_high: List[str],
+    snoozed_titles: Optional[List[str]] = None,
 ) -> str:
     """生成周回顾（Markdown 短段落）。"""
     client = _client()
     completed_text = "、".join(completed_titles[:10]) or "无"
     pending_text = "、".join(pending_high[:10]) or "无"
+    snoozed_text = "、".join((snoozed_titles or [])[:5]) or "无"
     prompt = (
         "你是个人效率教练。根据下面的待办数据写一段中文周回顾"
         "（Markdown，包含「完成情况」「拖延提醒」「下周建议」三个小标题，总长 ≤300 字，不要客套）。\n\n"
@@ -204,6 +206,7 @@ async def generate_weekly_review(
         f"- 状态分布：{stats.get('by_status', {})}\n"
         f"- 最近完成：{completed_text}\n"
         f"- 积压高优先级：{pending_text}\n"
+        f"- 多次推迟的任务：{snoozed_text}\n"
     )
     content = await client.complete(prompt)
     return str(content or "").strip() or "暂无足够数据生成周回顾。"

@@ -12,6 +12,7 @@ from backend.services import (
     todo_export,
     todo_filters,
     todo_fts,
+    todo_insights,
     todo_recurrence,
     todo_stats,
     todo_tags,
@@ -55,6 +56,8 @@ _TODO_MODEL_FIELDS = (
     "reminder_offsets",
     "source_type",
     "source_ref",
+    "specialist_id",
+    "snooze_count",
     "is_recurring",
     "recurrence_rule",
     "parent_id",
@@ -77,23 +80,9 @@ _UPDATABLE_FIELDS = frozenset(
         "parent_id",
         "tags",
         "reminder_offsets",
+        "specialist_id",
     }
 )
-
-# Whitelisted ORDER BY expressions for :meth:`TodoService.list_todos`. Used as a
-# dict lookup so no caller-supplied string ever reaches SQL as an identifier.
-#   - ``due_at``: ``(due_at IS NULL)`` first so undated todos sort LAST when
-#     ascending — SQLite's bare ``due_at ASC`` puts NULLs first, which reads
-#     backwards to a user.
-#   - ``priority``: a CASE is required; lexicographic ASC gives
-#     ``high, low, medium``.
-# Deliberately no secondary tiebreaker key: the spec documents one sort key, and
-# a hidden secondary key makes ``sort_order=desc`` behave inconsistently.
-_SORT_EXPRS = {
-    "due_at": "(due_at IS NULL), due_at",
-    "priority": "CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END",
-    "created_at": "created_at",
-}
 
 
 class Todo(BaseModel):
@@ -112,6 +101,8 @@ class Todo(BaseModel):
     reminder_offsets: List[int] = Field(default_factory=list)
     source_type: Optional[str] = None
     source_ref: Optional[str] = None
+    specialist_id: Optional[str] = None
+    snooze_count: int = 0
     is_recurring: bool = False
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
@@ -168,6 +159,7 @@ class TodoService:
         reminder_offsets: Optional[List[int]] = None,
         source_type: Optional[str] = None,
         source_ref: Optional[str] = None,
+        specialist_id: Optional[str] = None,
     ) -> Todo:
         """Create a new todo and return the persisted row.
 
@@ -195,13 +187,13 @@ class TodoService:
         cursor = conn.execute(
             """INSERT INTO todos
                (title, description, due_at, priority, project_tag, project_id,
-                tags, reminder_offsets, source_type, source_ref, is_recurring,
-                recurrence_rule, parent_id, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                tags, reminder_offsets, source_type, source_ref, specialist_id,
+                is_recurring, recurrence_rule, parent_id, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (title, description, due_at, priority, project_tag, project_id,
              todo_tags.dump_tags(tags), _dump_reminder_offsets(reminder_offsets),
-             source_type, source_ref, is_recurring, recurrence_rule, parent_id,
-             now, now)
+             source_type, source_ref, specialist_id, is_recurring,
+             recurrence_rule, parent_id, now, now)
         )
         todo_id = cursor.lastrowid
         conn.commit()
@@ -240,6 +232,7 @@ class TodoService:
         q: Optional[str] = None,
         tag: Optional[str] = None,
         view: Optional[str] = None,
+        specialist_id: Optional[str] = None,
     ) -> List[Todo]:
         """List todos with optional filters.
 
@@ -267,11 +260,12 @@ class TodoService:
             include_completed=include_completed,
             tag=tag,
             view=view,
+            specialist_id=specialist_id,
         )
 
         query, params = todo_fts.apply_search_filter(self.db, query, params, q)
 
-        sort_expr = _SORT_EXPRS[sort_by]
+        sort_expr = todo_filters.SORT_EXPRS[sort_by]
         direction = "DESC" if sort_order == "desc" else "ASC"
         query += f" ORDER BY {sort_expr} {direction} LIMIT ? OFFSET ?"
         params.extend([limit, offset])
@@ -291,6 +285,7 @@ class TodoService:
         q: Optional[str] = None,
         tag: Optional[str] = None,
         view: Optional[str] = None,
+        specialist_id: Optional[str] = None,
     ) -> int:
         """Count todos matching the same filters list_todos applies.
 
@@ -310,6 +305,7 @@ class TodoService:
             include_completed=include_completed,
             tag=tag,
             view=view,
+            specialist_id=specialist_id,
         )
 
         query, params = todo_fts.apply_search_filter(self.db, query, params, q)
@@ -318,12 +314,8 @@ class TodoService:
         return int(conn.execute(query, params).fetchone()[0])
 
     def list_tags(self) -> List[Dict[str, Any]]:
-        """聚合全部待办的多标签及使用次数（按次数降序、名称升序）。"""
-        conn = self.db.get_connection()
-        rows = conn.execute(
-            "SELECT tags FROM todos WHERE tags IS NOT NULL"
-        ).fetchall()
-        return todo_tags.aggregate_tag_counts(rows)
+        """聚合全部待办的多标签及使用次数（实现见 todo_tags）。"""
+        return todo_tags.aggregate_from_db(self.db)
 
     def update_todo(self, todo_id: int, **fields) -> Optional[Todo]:
         """Update todo fields.
@@ -670,9 +662,23 @@ class TodoService:
         )
         conn.commit()
 
+    # --- snooze（阶段 3） ---
+
+    def snooze_todo(self, todo_id: int, minutes: int) -> Optional[Todo]:
+        """推迟提醒（实现见 todo_insights.snooze_todo）。"""
+        return todo_insights.snooze_todo(self, todo_id, minutes)
+
     def get_startup_summary(self) -> dict:
         """启动摘要（逾期/今日/未来 7 天/高优先级/计数）。口径见 todo_stats。"""
         return todo_stats.startup_summary(self.db, self._row_to_todo)
+
+    def completion_heatmap(self, days: int = 91) -> Dict[str, Any]:
+        """完成热力图（按日聚合，见 todo_stats.completion_heatmap）。"""
+        return todo_stats.completion_heatmap(self.db, days)
+
+    def get_most_snoozed(self, limit: int = 5) -> List[Todo]:
+        """被推迟次数最多的未完成待办（实现见 todo_insights.most_snoozed）。"""
+        return todo_insights.most_snoozed(self.db, self._row_to_todo, limit)
 
     def get_todo_stats(self) -> dict:
         """统计端点（总数/状态分布/优先级分布/逾期/今日到期/今日完成）。"""
@@ -751,6 +757,7 @@ class TodoService:
         """
         data = {name: row[name] for name in _TODO_MODEL_FIELDS}
         data["is_recurring"] = bool(data["is_recurring"])
+        data["snooze_count"] = int(data.get("snooze_count") or 0)
         data["tags"] = todo_tags.parse_tags(data.get("tags"))
         try:
             parsed_offsets = (

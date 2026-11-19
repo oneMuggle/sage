@@ -14,6 +14,16 @@ from typing import Any, List, Optional
 # ``view`` 智能视图白名单；router 负责 GET 参数的模式校验。
 VIEWS = frozenset({"all", "today", "week", "completed"})
 
+# 白名单 ORDER BY 表达式（list_todos 用；dict 查找，绝不把调用方字符串
+# 拼进 SQL 标识符位）。
+#   - ``due_at``：``(due_at IS NULL)`` 优先，让无日期行在升序时排最后；
+#   - ``priority``：CASE 保证 high→medium→low，避免字典序错排。
+SORT_EXPRS = {
+    "due_at": "(due_at IS NULL), due_at",
+    "priority": "CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END",
+    "created_at": "created_at",
+}
+
 
 def apply_common_filters(
     query: str,
@@ -25,6 +35,7 @@ def apply_common_filters(
     include_completed: bool,
     tag: Optional[str],
     view: Optional[str],
+    specialist_id: Optional[str] = None,
     now: Optional[datetime] = None,
 ) -> tuple:
     """在 ``query`` 后追加 WHERE 片段并同步 ``params``，返回二元组。"""
@@ -65,5 +76,9 @@ def apply_common_filters(
     if tag:
         query += " AND tags LIKE ?"
         params.append(f'%"{tag.strip()}"%')
+
+    if specialist_id:
+        query += " AND specialist_id = ?"
+        params.append(specialist_id)
 
     return query, params

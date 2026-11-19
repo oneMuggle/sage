@@ -111,6 +111,16 @@ describe('todoClient', () => {
     expect(invokeMock.mock.calls[3]).toEqual(['todo_weekly_review', {}]);
     expect(review.content).toBe('## 回顾');
   });
+
+  it('heatmap / snooze map to their channels', async () => {
+    invokeMock.mockResolvedValueOnce({ days: [], total: 0, max: 0 });
+    await todoClient.heatmap(30);
+    expect(invokeMock.mock.calls[0]).toEqual(['todo_heatmap', { days: 30 }]);
+
+    invokeMock.mockResolvedValueOnce({ id: 5, snooze_count: 1 });
+    await todoClient.snooze(5, 60);
+    expect(invokeMock.mock.calls[1]).toEqual(['todo_snooze', { id: 5, minutes: 60 }]);
+  });
 });
 
 describe('todoClient diagnostic formatters (Phase P113)', () => {

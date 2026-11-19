@@ -95,4 +95,17 @@ describe('TodoRowEditor — context menu', () => {
     expect(screen.queryByRole('menuitem', { name: '编辑标题' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: '标记完成' })).toBeNull();
   });
+
+  it('shows the snooze submenu only when a handler is provided', async () => {
+    renderRow({ onSnooze: vi.fn().mockResolvedValue(undefined) });
+    openMenu();
+    expect(await screen.findByRole('menuitem', { name: '稍后提醒' })).toBeInTheDocument();
+  });
+
+  it('omits the snooze submenu without a handler', async () => {
+    renderRow();
+    openMenu();
+    await screen.findByRole('menuitem', { name: '复制标题' });
+    expect(screen.queryByRole('menuitem', { name: '稍后提醒' })).toBeNull();
+  });
 });

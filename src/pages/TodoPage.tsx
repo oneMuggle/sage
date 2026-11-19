@@ -13,11 +13,12 @@
  * State flows through zustand `entities/todo/todoStore`, IPC through
  * `shared/api/todoClient`. All CRUD delegated to store.
  */
-import { Check, Download, Loader2, Sparkles, Trash2, Zap } from 'lucide-react';
+import { BarChart3, Check, Download, Loader2, Sparkles, Trash2, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { useTodoStore } from '../entities/todo/todoStore';
+import { agentsApi } from '../shared/api/agentsApi';
 import { todoClient } from '../shared/api/todoClient';
 import type { Todo, TodoListParams, UpdateTodoInput } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
@@ -25,10 +26,17 @@ import { PageHeader } from '../shared/ui';
 
 import { TodoAiDialog } from './todo/TodoAiDialog';
 import { TodoCreateForm } from './todo/TodoCreateForm';
+import { TodoHeatmap } from './todo/TodoHeatmap';
 import { TodoQuickAdd } from './todo/TodoQuickAdd';
 import { TodoRowEditor } from './todo/TodoRowEditor';
 import { TodoSubtaskTree } from './todo/TodoSubtaskTree';
 import { TodoToolbar } from './todo/TodoToolbar';
+
+/** 专家条目（阶段 3：专家专属待办的过滤/创建来源）。 */
+export interface TodoSpecialistOption {
+  id: string;
+  name: string;
+}
 
 /** 搜索输入防抖，避免每次按键都打后端 FTS。 */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -49,17 +57,28 @@ export function TodoPage() {
   const remove = useTodoStore((s) => s.delete);
   const batchComplete = useTodoStore((s) => s.batchComplete);
   const batchDelete = useTodoStore((s) => s.batchDelete);
+  const snooze = useTodoStore((s) => s.snooze);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [createBusy, setCreateBusy] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [aiDialog, setAiDialog] = useState<null | 'brief' | 'weekly'>(null);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [specialists, setSpecialists] = useState<TodoSpecialistOption[]>([]);
   const lastSentQuery = useRef<string | undefined>(params.q);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 专家列表（阶段 3）：失败静默降级为不显示专家过滤/选择器。
+  useEffect(() => {
+    agentsApi
+      .list()
+      .then((agents) => setSpecialists(agents.map((agent) => ({ id: agent.id, name: agent.name }))))
+      .catch(() => setSpecialists([]));
+  }, []);
 
   // 命令面板入口：/todos?quickadd=1 → 打开快速录入并清掉参数（避免刷新重开）。
   useEffect(() => {
@@ -213,6 +232,13 @@ export function TodoPage() {
     [create],
   );
 
+  const handleSnooze = useCallback(
+    async (id: number, minutes: number) => {
+      await snooze(id, minutes);
+    },
+    [snooze],
+  );
+
   const allSelected = todos.length > 0 && selectedIds.size === todos.length;
   const someSelected = selectedIds.size > 0;
 
@@ -229,6 +255,7 @@ export function TodoPage() {
         onCancel={handleCancel}
         onDelete={handleDelete}
         onAddSubtask={todo.parent_id == null ? handleAddSubtask : undefined}
+        onSnooze={handleSnooze}
       />
     ),
     [
@@ -239,6 +266,7 @@ export function TodoPage() {
       handleCancel,
       handleDelete,
       handleAddSubtask,
+      handleSnooze,
     ],
   );
 
@@ -276,6 +304,20 @@ export function TodoPage() {
             </button>
             <button
               type="button"
+              onClick={() => setShowHeatmap((v) => !v)}
+              title="完成热力图"
+              aria-label="完成热力图"
+              aria-pressed={showHeatmap}
+              data-testid="todo-heatmap-toggle"
+              className={`flex items-center gap-1 px-2 py-1 rounded border hover:border-primary hover:text-primary ${
+                showHeatmap ? 'border-primary text-primary' : 'border-border'
+              }`}
+            >
+              <BarChart3 className="w-3 h-3" />
+              热力图
+            </button>
+            <button
+              type="button"
               onClick={() => setQuickAddOpen(true)}
               title="快速添加（快捷键 N）"
               aria-label="快速添加"
@@ -310,15 +352,23 @@ export function TodoPage() {
 
       <div className="flex-1 overflow-y-auto p-6 max-w-3xl mx-auto w-full">
         {/* Enhanced creation form */}
-        <TodoCreateForm onCreate={handleCreate} busy={createBusy} />
+        <TodoCreateForm onCreate={handleCreate} busy={createBusy} specialists={specialists} />
 
         {/* Filter / Sort toolbar */}
         <TodoToolbar
           params={params}
           searchQuery={searchQuery}
+          specialists={specialists}
           onParamsChange={handleParamsChange}
           onSearchChange={setSearchQuery}
         />
+
+        {/* 完成热力图（阶段 3，可折叠） */}
+        {showHeatmap && (
+          <div className="px-1">
+            <TodoHeatmap />
+          </div>
+        )}
 
         {/* Batch operations bar */}
         {someSelected && (
@@ -394,6 +444,7 @@ export function TodoPage() {
                     onCancel={handleCancel}
                     onDelete={handleDelete}
                     onAddSubtask={todo.parent_id == null ? handleAddSubtask : undefined}
+                    onSnooze={handleSnooze}
                   />
                 ))}
               </ul>
