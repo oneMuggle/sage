@@ -5,6 +5,7 @@ import { invoke } from '../api/desktopInvoke';
 import type { GenerationStats, MessageDisplayMeta, MessageSource, RagCitation } from '../api/types';
 export type { MessageSource } from '../api/types';
 import { clientLogger } from '../log/client';
+
 import { sortSessions } from './sessionOrder';
 
 import { markBootStageOnce } from './bootStages';
@@ -292,6 +293,15 @@ export const useStore = create<StoreState>((set, _get) => ({
       try {
         const limit = Math.max(SESSIONS_PAGE_SIZE, _get().sessions.length);
         const sessions = await invoke<Session[]>('list_sessions', { limit, offset: 0 });
+        // 边界校验：IPC 异常响应（undefined/非数组）不得写入 sessions ——
+        // 否则按数组消费 store 的组件/动作会连锁抛错；保留上一次有效列表。
+        if (!Array.isArray(sessions)) {
+          clientLogger.warn('store.loadSessions: non-array response ignored', {
+            responseType: typeof sessions,
+          });
+          set({ sessionsLoading: false });
+          return;
+        }
         set({
           sessions,
           sessionsHasMore: sessions.length >= limit,

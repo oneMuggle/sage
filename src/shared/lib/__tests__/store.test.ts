@@ -434,4 +434,13 @@ describe('store 会话实时排序 (2026-11-19)', () => {
     useStore.getState().addSession(fresh);
     expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['pinned', 'fresh', 'existing']);
   });
+
+  it('loadSessions 忽略非数组 IPC 响应，保留上一次有效列表', async () => {
+    seed([
+      { id: 'keep', title: 'keep', created_at: 0, updated_at: 1, last_message_at: null, message_count: 0, is_pinned: false },
+    ]);
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await useStore.getState().loadSessions();
+    expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['keep']);
+  });
 });
