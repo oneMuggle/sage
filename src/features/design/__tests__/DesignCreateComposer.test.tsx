@@ -61,10 +61,7 @@ describe('DesignCreateComposer', () => {
       template_id: undefined,
       brief: '8 页投资人演示稿',
     });
-    expect(useDesignStore.getState().generate).toHaveBeenCalledWith(
-      'p1',
-      '8 页投资人演示稿',
-    );
+    expect(useDesignStore.getState().generate).toHaveBeenCalledWith('p1', '8 页投资人演示稿');
   });
 
   it('prefills kind and template when a preset chip is chosen', async () => {
@@ -88,8 +85,6 @@ describe('DesignCreateComposer', () => {
 
   it('keeps the submit button disabled until a brief is entered', () => {
     render(<DesignCreateComposer onCancel={() => {}} onCreated={() => {}} />);
-    expect(
-      screen.getByRole('button', { name: 'design.composer.create' }),
-    ).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'design.composer.create' })).toBeDisabled();
   });
 });

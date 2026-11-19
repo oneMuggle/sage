@@ -49,9 +49,7 @@ export function DesignVersionPanel({ projectId }: DesignVersionPanelProps) {
             <div
               key={artifact.id}
               className={`rounded-md border px-2.5 py-2 text-ui-xs ${
-                previewArtifact?.id === artifact.id
-                  ? 'border-accent bg-accent/5'
-                  : 'border-border'
+                previewArtifact?.id === artifact.id ? 'border-accent bg-accent/5' : 'border-border'
               }`}
             >
               <div className="flex items-center justify-between gap-2">

@@ -55,10 +55,7 @@ export function DesignIterationChat({ projectId }: DesignIterationChatProps) {
               className="max-w-[92%] rounded-lg rounded-bl-sm bg-bg-hover px-3 py-2 text-ui-xs text-text-secondary"
             >
               {message.artifact_version
-                ? t('design.detail.version').replace(
-                    '{version}',
-                    String(message.artifact_version),
-                  )
+                ? t('design.detail.version').replace('{version}', String(message.artifact_version))
                 : message.content}
             </div>
           ),
@@ -98,11 +95,7 @@ export function DesignIterationChat({ projectId }: DesignIterationChatProps) {
             disabled={loading || feedback.trim().length === 0}
             onClick={() => void handleSend()}
           >
-            {loading ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Send className="w-3 h-3" />
-            )}
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
             {loading ? t('design.detail.sending') : t('design.detail.send')}
           </button>
         </div>

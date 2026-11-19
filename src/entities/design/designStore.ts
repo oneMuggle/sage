@@ -82,10 +82,7 @@ export const useDesignStore = create<DesignState>((set) => ({
   async loadMeta() {
     set({ loadingMeta: true, errorMeta: null });
     try {
-      const [systems, templates] = await Promise.all([
-        api.listSystems(),
-        api.listTemplates(),
-      ]);
+      const [systems, templates] = await Promise.all([api.listSystems(), api.listTemplates()]);
       set({ systems, templates, loadingMeta: false });
     } catch (error) {
       set({ errorMeta: getErrorMessage(error), loadingMeta: false });
@@ -133,10 +130,7 @@ export const useDesignStore = create<DesignState>((set) => ({
     await api.deleteProject(projectId);
     set((state) => ({
       projects: state.projects.filter((p) => p.id !== projectId),
-      currentProject:
-        state.currentProject?.id === projectId
-          ? null
-          : state.currentProject,
+      currentProject: state.currentProject?.id === projectId ? null : state.currentProject,
     }));
   },
 

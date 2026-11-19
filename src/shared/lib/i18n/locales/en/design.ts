@@ -12,7 +12,8 @@ export const enDesign = {
   'design.cancel': 'Cancel',
 
   'design.empty.title': 'No design projects yet',
-  'design.empty.hint': 'Describe what you want; the default design system and template handle the rest.',
+  'design.empty.hint':
+    'Describe what you want; the default design system and template handle the rest.',
   'design.project.updatedAt': 'Updated {time}',
   'design.project.versions': 'Version {count}',
   'design.kind.deck': 'Deck',
@@ -32,7 +33,8 @@ export const enDesign = {
   'design.preset.pricing': 'Pricing page',
   'design.composer.brief': 'Brief',
   'design.composer.briefHint': 'Describe the audience, core message, and desired tone.',
-  'design.composer.briefPlaceholder': 'An 8-slide investor deck emphasizing growth metrics and the roadmap…',
+  'design.composer.briefPlaceholder':
+    'An 8-slide investor deck emphasizing growth metrics and the roadmap…',
   'design.composer.advanced': 'Advanced options',
   'design.composer.name': 'Project name (optional)',
   'design.composer.namePlaceholder': 'Defaults to the first line of the brief',
@@ -50,7 +52,8 @@ export const enDesign = {
   'design.detail.regenerate': 'Regenerate',
   'design.detail.regenerating': 'Generating…',
   'design.detail.noArtifact': 'No artifact yet. Click "Generate".',
-  'design.detail.iterationHint': 'Describe the change, e.g. "shorten the title and cool down the palette".',
+  'design.detail.iterationHint':
+    'Describe the change, e.g. "shorten the title and cool down the palette".',
   'design.detail.send': 'Send change',
   'design.detail.sending': 'Applying…',
   'design.detail.version': 'v{version}',

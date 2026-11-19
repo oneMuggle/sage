@@ -48,9 +48,7 @@ describe('DesignVersionPanel', () => {
 
   it('loads a preview when clicking a version preview button', () => {
     render(<DesignVersionPanel projectId="p1" />);
-    fireEvent.click(
-      screen.getAllByRole('button', { name: 'design.version.preview' })[0],
-    );
+    fireEvent.click(screen.getAllByRole('button', { name: 'design.version.preview' })[0]);
     expect(previewVersion).toHaveBeenCalledWith('p1', 'a2');
   });
 

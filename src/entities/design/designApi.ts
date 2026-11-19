@@ -36,9 +36,7 @@ export async function listSystems(): Promise<DesignSystem[]> {
 }
 
 /** 列出所有模板（可选按 kind 过滤） */
-export async function listTemplates(
-  kind?: 'deck' | 'prototype',
-): Promise<DesignTemplate[]> {
+export async function listTemplates(kind?: 'deck' | 'prototype'): Promise<DesignTemplate[]> {
   const params = new URLSearchParams();
   if (kind) params.set('kind', kind);
 
@@ -53,9 +51,7 @@ export async function listTemplates(
 // ---------------------------------------------------------------------------
 
 /** 列出所有项目（可选按 kind 过滤） */
-export async function listProjects(
-  kind?: 'deck' | 'prototype',
-): Promise<DesignProject[]> {
+export async function listProjects(kind?: 'deck' | 'prototype'): Promise<DesignProject[]> {
   const params = new URLSearchParams();
   if (kind) params.set('kind', kind);
 
@@ -66,9 +62,7 @@ export async function listProjects(
 }
 
 /** 获取项目详情（含最新产物） */
-export async function getProject(
-  projectId: string,
-): Promise<DesignProjectDetail> {
+export async function getProject(projectId: string): Promise<DesignProjectDetail> {
   return backendRequest<DesignProjectDetail>({
     method: 'GET',
     path: `${BASE}/projects/${projectId}`,
@@ -76,9 +70,7 @@ export async function getProject(
 }
 
 /** 创建新项目（name/system_id/template_id 可省略，后端补默认值） */
-export async function createProject(
-  input: CreateProjectInput,
-): Promise<DesignProject> {
+export async function createProject(input: CreateProjectInput): Promise<DesignProject> {
   return backendRequest<DesignProject>({
     method: 'POST',
     path: `${BASE}/projects`,
@@ -99,9 +91,7 @@ export async function deleteProject(projectId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /** 列出项目的全部产物版本（不含 HTML 正文） */
-export async function listArtifacts(
-  projectId: string,
-): Promise<DesignArtifactSummary[]> {
+export async function listArtifacts(projectId: string): Promise<DesignArtifactSummary[]> {
   return backendRequest<DesignArtifactSummary[]>({
     method: 'GET',
     path: `${BASE}/projects/${projectId}/artifacts`,
@@ -109,10 +99,7 @@ export async function listArtifacts(
 }
 
 /** 获取单个版本（含 HTML 正文，用于预览） */
-export async function getArtifact(
-  projectId: string,
-  artifactId: string,
-): Promise<DesignArtifact> {
+export async function getArtifact(projectId: string, artifactId: string): Promise<DesignArtifact> {
   return backendRequest<DesignArtifact>({
     method: 'GET',
     path: `${BASE}/projects/${projectId}/artifacts/${artifactId}`,
@@ -135,9 +122,7 @@ export async function restoreArtifact(
 // ---------------------------------------------------------------------------
 
 /** 读取持久化的迭代对话历史 */
-export async function listMessages(
-  projectId: string,
-): Promise<IterationMessage[]> {
+export async function listMessages(projectId: string): Promise<IterationMessage[]> {
   return backendRequest<IterationMessage[]>({
     method: 'GET',
     path: `${BASE}/projects/${projectId}/messages`,

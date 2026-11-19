@@ -119,9 +119,7 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
       <div className="mx-auto max-w-3xl space-y-4">
         <section>
           <h2 className="text-ui-md font-medium text-text">{t('design.composer.title')}</h2>
-          <p className="mt-1 text-ui-xs text-text-tertiary">
-            {t('design.composer.presetsHint')}
-          </p>
+          <p className="mt-1 text-ui-xs text-text-tertiary">{t('design.composer.presetsHint')}</p>
           {availablePresets.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
               {availablePresets.map((preset) => (
@@ -147,9 +145,7 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
           <label htmlFor="design-brief" className="text-ui-sm font-medium text-text">
             {t('design.composer.brief')}
           </label>
-          <p className="mt-0.5 text-ui-xs text-text-secondary">
-            {t('design.composer.briefHint')}
-          </p>
+          <p className="mt-0.5 text-ui-xs text-text-secondary">{t('design.composer.briefHint')}</p>
           <textarea
             id="design-brief"
             value={brief}
@@ -185,9 +181,7 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
               />
             </div>
             <div>
-              <span className="text-ui-sm font-medium text-text">
-                {t('design.composer.kind')}
-              </span>
+              <span className="text-ui-sm font-medium text-text">{t('design.composer.kind')}</span>
               <div className="mt-1 flex gap-2">
                 {(['deck', 'prototype'] as const).map((option) => (
                   <button
