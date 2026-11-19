@@ -134,6 +134,7 @@ python scripts/build-component-packs.py \
 
 产物：
 
+- `Sage-Setup-<version>-win7-core.exe`（轻量安装包，不含内置 AI 模型；与全量包同签发布，配合 `.sagepkg` 启用语义检索/OCR）
 - `embedding-bge-small-zh-<version>-win7.sagepkg`
 - `ocr-models-ppocr-<version>-win7.sagepkg`
 - `components-index.json`（包名、大小、sha256）

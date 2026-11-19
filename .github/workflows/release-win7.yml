@@ -168,7 +168,44 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sage-setup-source
-          path: release/*/Sage-Setup-*.exe
+          # Exclude core variant — uploaded separately by 'Upload core installer as artifact'
+          path: |
+            release/*/Sage-Setup-*.exe
+            !release/*/Sage-Setup-*-core.exe
+          if-no-files-found: error
+
+      # ── core 变体：不含内置 AI 模型的瘦安装包 ──────────────────
+      # 全量 nsis 已打入 resources/models；此处临时移开，让
+      # electron-builder.yml 的 extraResources `from: resources/models`
+      # 指向空目录，从而产出约 61MB 更小的安装包。与 .sagepkg 通道配合：
+      # core 包用户首次启动后通过设置页「组件管理」或 SageDoctor 导入
+      # .sagepkg 启用语义检索/OCR（HashEmbedder 兜底，非阻断）。
+      - name: Stage core variant — move models aside
+        shell: pwsh
+        run: |
+          $moved = Join-Path $env:RUNNER_TEMP 'staged-models'
+          if (Test-Path $moved) { Remove-Item -Recurse -Force $moved }
+          Move-Item -Path 'resources\models' -Destination $moved -Force
+          New-Item -ItemType Directory -Path 'resources\models' | Out-Null
+          Write-Host "models moved to $moved; placeholder created"
+
+      - name: Build Windows NSIS core (Win7 LTS - Source, no models)
+        run: npx electron-builder --win nsis --publish never --config.win.artifactName='${productName}-Setup-${version}-core.${ext}'
+
+      - name: Restore models after core build
+        if: always()
+        shell: pwsh
+        run: |
+          $moved = Join-Path $env:RUNNER_TEMP 'staged-models'
+          if (Test-Path 'resources\models') { Remove-Item -Recurse -Force 'resources\models' }
+          Move-Item -Path $moved -Destination 'resources\models' -Force
+          Write-Host "models restored"
+
+      - name: Upload core installer as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sage-setup-core
+          path: release/*/Sage-Setup-*-core.exe
           if-no-files-found: error
 
   build-windows-cython:
@@ -282,13 +319,18 @@ jobs:
         with:
           name: sage-setup-cython
           path: artifacts/cython
+      - name: Download core installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sage-setup-core
+          path: artifacts/core
       - name: Download component packs artifact
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           name: sage-components
           path: artifacts/components
-      - name: Verify both installers downloaded
+      - name: Verify installers downloaded
         run: |
           set -e
           shopt -s nullglob globstar
@@ -296,10 +338,13 @@ jobs:
           # so we need a recursive glob (**) to find the .exe files.
           src=(artifacts/source/**/*.exe)
           cython=(artifacts/cython/**/*.exe)
+          core=(artifacts/core/**/*.exe)
           if [ ${#src[@]} -eq 0 ]; then echo "::error::No source installer found"; exit 1; fi
           if [ ${#cython[@]} -eq 0 ]; then echo "::error::No cython installer found"; exit 1; fi
+          if [ ${#core[@]} -eq 0 ]; then echo "::error::No core installer found"; exit 1; fi
           echo "Source:   ${src[0]##*/} ($(stat -c %s "${src[0]}") bytes)"
           echo "Cython:   ${cython[0]##*/} ($(stat -c %s "${cython[0]}") bytes)"
+          echo "Core:     ${core[0]##*/} ($(stat -c %s "${core[0]}") bytes)"
       - name: Upload to LTS GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -319,16 +364,17 @@ jobs:
             > **Tier**: ${{ contains(github.ref_name, '-alpha') && 'ALPHA' || contains(github.ref_name, '-beta') && 'BETA' || contains(github.ref_name, '-rc') && 'RELEASE CANDIDATE' || 'STABLE' }}
             > ${{ contains(github.ref_name, '-alpha') && '⚠️ 仅供 Sage 贡献者使用。' || contains(github.ref_name, '-beta') && '⚠️ 公开测试版。' || contains(github.ref_name, '-rc') && '✅ 准稳定版。' || '✅ 稳定版，推荐 Win7 用户升级。' }}
 
-            ### Downloads — Win7 LTS 提供两个版本
+            ### Downloads — Win7 LTS 提供三个版本
 
             | File | 模式 | 备注 |
             | --- | --- | --- |
-            | `Sage-Setup-*-win7.exe` | 源码模式 | ✅ **推荐**，兼容性最佳，内网环境首选 |
+            | `Sage-Setup-*-win7.exe` | 源码模式 | ✅ **推荐**，含内置模型，离线即开即用 |
+            | `Sage-Setup-*-win7-core.exe` | 源码模式（无模型） | 轻量；安装后需通过设置页「组件管理」或 SageDoctor 导入 `.sagepkg` 以启用语义检索/OCR |
             | `Sage-Setup-*-win7-cython.exe` | Cython 代码保护 | ⚠️ **实验性**，代码保护但有打包风险 |
-            | `embedding-bge-small-zh-*.sagepkg` | 离线组件包 | 可选；供核心安装包补装/修复，签名可在设置页「组件管理」导入 |
+            | `embedding-bge-small-zh-*.sagepkg` | 离线组件包 | 配合 core 包必选；语义嵌入模型，签名可在设置页「组件管理」导入 |
             | `ocr-models-ppocr-*.sagepkg` | 离线组件包 | 可选；OCR 模型组件包 |
 
-            如果不确定该选哪个，请优先使用源码模式（`-win7.exe`，无 `-cython` 后缀）。
+            如果不确定该选哪个，请优先使用源码模式（`-win7.exe`，无 `-cython` / `-core` 后缀）。
 
             ### Win7 前置
 
