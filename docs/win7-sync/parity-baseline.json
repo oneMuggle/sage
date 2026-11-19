@@ -1,8 +1,8 @@
 {
-  "real": 15,
-  "main_only": 28,
-  "actionable": 43,
+  "real": 11,
+  "main_only": 30,
+  "actionable": 41,
   "updated_at": "2026-11-22",
-  "updated_by": "sync/win7-office-batch — office M1–M6b 同步 + 26 项 real 审计登记后实测",
-  "note": "actionable = real + main-only。棘轮：超过该值 CI fail；收敛后请下调本文件。real=15 为尚未同步的 main 功能（design 内容库/Craft 4 + literature M0a–M1b 6 + user_profile v2 2 + 对应测试），须 cherry-pick 后归零；main-only=28 为 design 内容资产（systems 5×3=15 + templates 8 + 2 测试），随 Design PR #3038 合入后消失。office 批次同步引入的 pydantic-v1 适配已登记 parity-allow。"
+  "updated_by": "sync/win7-user-profile-v2 — user_profile v2 同步后实测",
+  "note": "actionable = real + main-only。棘轮：超过该值 CI fail；收敛后请下调本文件。real=11 为 design（4）+ literature（7），由 PR #3038/#3194 承接；main-only=30 为 design 内容资产（systems/templates/tests），随 PR #3038 合入后消失。"
 }

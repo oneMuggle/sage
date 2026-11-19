@@ -26,10 +26,6 @@ from pydantic import BaseModel, Field
 
 from backend.data.database import get_database
 from backend.memory import get_memory_manager
-from backend.memory.preference_labels import (
-    PREFERENCE_DIMENSION_LABELS,
-    format_preference,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -241,7 +237,7 @@ def create_user_profile(data: UserProfileCreateRequest):
 @router.put("/memory/profile/{profile_id}")
 @with_db_lock
 def update_user_profile(profile_id: str, data: UserProfileUpdateRequest):
-    """编辑画像条目：删旧建新（复用 add 的去重 / 安全扫描 / 钳制）。"""
+    """编辑画像条目：复用 upsert 语义（保留 dimension，避免进化后产生平行维度行）。"""
     try:
         from backend.memory.user_profile import get_user_profile
 
@@ -254,13 +250,30 @@ def update_user_profile(profile_id: str, data: UserProfileUpdateRequest):
         importance = data.importance if data.importance is not None else old.get("importance", 5)
         if not content:
             raise HTTPException(status_code=400, detail="内容不能为空")
+        # 保留旧条目的 dimension，避免编辑后让进化任务误以为该维度是全新知识
+        dimension = old.get("dimension")
         store.delete(profile_id)
-        pid = store.add(content, category=category, importance=importance)
+        pid = store.upsert(
+            content,
+            category=category,
+            importance=importance,
+            source=old.get("source") or "manual",
+            dimension=dimension,
+        )
         if not pid:
-            # 新内容被拒（重复/安全）→ 回滚旧条目
-            store.add(old["content"], category=old["category"], importance=old.get("importance", 5))
+            # 新内容被拒（安全扫描）→ 回滚旧条目（同样保留 dimension）
+            store.upsert(
+                old["content"],
+                category=old["category"],
+                importance=old.get("importance", 5),
+                source=old.get("source") or "manual",
+                dimension=dimension,
+            )
             store.invalidate()
-            raise HTTPException(status_code=409, detail="新内容与现有画像重复或被安全扫描拦截")
+            raise HTTPException(
+                status_code=409,
+                detail="新内容与现有画像重复或被安全扫描拦截",
+            )
         store.invalidate()
         item = next((e for e in store.list() if e["id"] == pid), None)
         return {"status": "ok", "item": item}
@@ -367,19 +380,17 @@ def update_learned_preference(data: LearnedPreferenceUpdate):
         )
         conn.commit()
         short_key = key[len("pref_") :]
-        # 兼容旧条目（英文键）与新条目（中文标签）两种前缀，确保清理时
-        # 都能被命中 —— 避免 user_profile 里堆积相互冲突的偏好
-        legacy_prefix = f"用户偏好 {short_key}:"
-        new_prefix = f"用户偏好{PREFERENCE_DIMENSION_LABELS.get(short_key, short_key)}:"
         profile = get_user_profile()
-        for item in profile.list():
-            content = item.get("content") or ""
-            if content.startswith(legacy_prefix) or content.startswith(new_prefix):
-                profile.delete(item["id"])
-        profile.add(
-            content=format_preference(short_key, value),
+        # 用 dimension 路径 upsert：同 key 旧条目自动被 supersedes，
+        # 不需要手动循环 delete（旧版防御性清理已被 upsert 语义取代）。
+        # dimension 用去 pref_ 前缀的短键，与 PreferenceLearningTask 的
+        # dimension（response_length / tone / detail_level）同一词表。
+        profile.upsert(
+            content=f"用户偏好 {short_key}: {value}",
             category="preference",
             importance=6,
+            source="manual",
+            dimension=short_key,
         )
         return {"status": "ok", "key": key, "value": value}
     except HTTPException:

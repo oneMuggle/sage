@@ -189,6 +189,15 @@ class ChatService:
         with _tracer.start_as_current_span("session.create") as span:
             session_id = await self.storage.create_session(title=title)
             span.set_attribute("session.id", session_id)
+            # 会话级画像快照预热（fix/user-profile-memory-governance）：
+            # 让新会话立即看到最新画像（不依赖进程级单例的首次 load 时机）。
+            # 失败不阻断会话创建（画像预热是旁路增强）。
+            try:
+                from backend.memory.user_profile import get_user_profile
+
+                get_user_profile().preload_for_session(session_id)
+            except Exception as exc:  # noqa: BLE001 - 画像预热是旁路增强
+                logger.debug(f"用户画像快照预热失败（忽略）: {exc}")
             # 审计事件：与 spec § 6.1 5 类事件对齐
             self.events.emit(
                 "session_created",
@@ -206,6 +215,12 @@ class ChatService:
     async def delete_session(self, session_id: str) -> None:
         """删除会话（仅当会话存在时减计数）。"""
         await self.storage.delete_session(session_id)
+        try:
+            from backend.memory.user_profile import get_user_profile
+
+            get_user_profile().invalidate_session(session_id)
+        except Exception as exc:  # noqa: BLE001 - 缓存清理是旁路增强
+            logger.debug(f"用户画像会话快照清理失败（忽略）: {exc}")
         self._active_session_count = max(0, self._active_session_count - 1)
         self.metrics.gauge(
             _ACTIVE_SESSIONS_METRIC,
