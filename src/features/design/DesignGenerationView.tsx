@@ -132,7 +132,7 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
               <div className="flex gap-2">
                 <button
                   type="button"
-                  className="rounded border border-border px-2 py-0.5 hover:bg-surface-hover"
+                  className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
                   onClick={clearPreview}
                 >
                   {t('design.detail.backToLatest')}
@@ -170,7 +170,7 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
                 className={`flex-1 rounded px-2 py-1 text-ui-xs transition ${
                   panel === option
                     ? 'bg-accent/10 text-accent'
-                    : 'text-text-secondary hover:bg-surface-hover'
+                    : 'text-text-secondary hover:bg-bg-hover'
                 }`}
                 onClick={() => setPanel(option)}
               >

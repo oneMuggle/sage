@@ -119,7 +119,7 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
       <div className="mx-auto max-w-3xl space-y-4">
         <section>
           <h2 className="text-ui-md font-medium text-text">{t('design.composer.title')}</h2>
-          <p className="mt-1 text-ui-xs text-text-tertiary">{t('design.composer.presetsHint')}</p>
+          <p className="mt-1 text-ui-xs text-text-muted">{t('design.composer.presetsHint')}</p>
           {availablePresets.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
               {availablePresets.map((preset) => (
@@ -130,7 +130,7 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
                   className={`rounded-full border px-3 py-1 text-ui-xs transition ${
                     selectedPreset === preset.key
                       ? 'border-accent bg-accent/5 text-accent'
-                      : 'border-border text-text-secondary hover:bg-surface-hover'
+                      : 'border-border text-text-secondary hover:bg-bg-hover'
                   }`}
                   onClick={() => handlePreset(preset)}
                 >
@@ -159,7 +159,7 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
         <button
           type="button"
           aria-expanded={advanced}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-ui-xs text-text-secondary hover:bg-surface-hover"
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-ui-xs text-text-secondary hover:bg-bg-hover"
           onClick={() => setAdvanced((prev) => !prev)}
         >
           <ChevronDown className={`h-3.5 w-3.5 transition ${advanced ? 'rotate-180' : ''}`} />
@@ -191,7 +191,7 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
                     className={`rounded-md border px-3 py-1 text-ui-xs transition ${
                       kind === option
                         ? 'border-accent bg-accent/5 text-accent'
-                        : 'border-border text-text-secondary hover:bg-surface-hover'
+                        : 'border-border text-text-secondary hover:bg-bg-hover'
                     }`}
                     onClick={() => handleKindChange(option)}
                   >
@@ -244,7 +244,7 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
         <div className="flex items-center justify-between">
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-ui-sm hover:bg-surface-hover"
+            className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-ui-sm hover:bg-bg-hover"
             onClick={onCancel}
             disabled={submitting}
           >

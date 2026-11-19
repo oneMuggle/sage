@@ -43,7 +43,7 @@ export function DesignVersionPanel({ projectId }: DesignVersionPanelProps) {
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2">
         {ordered.length === 0 ? (
-          <p className="text-ui-xs text-text-tertiary">{t('design.version.empty')}</p>
+          <p className="text-ui-xs text-text-muted">{t('design.version.empty')}</p>
         ) : (
           ordered.map((artifact) => (
             <div
@@ -54,22 +54,22 @@ export function DesignVersionPanel({ projectId }: DesignVersionPanelProps) {
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-text">v{artifact.version}</span>
-                <span className="truncate text-text-tertiary">{artifact.title}</span>
+                <span className="truncate text-text-muted">{artifact.title}</span>
               </div>
-              <div className="mt-0.5 text-text-tertiary">
+              <div className="mt-0.5 text-text-muted">
                 {new Date(artifact.created_at).toLocaleString()}
               </div>
               <div className="mt-1.5 flex gap-2">
                 <button
                   type="button"
-                  className="rounded border border-border px-2 py-0.5 hover:bg-surface-hover"
+                  className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
                   onClick={() => void previewVersion(projectId, artifact.id)}
                 >
                   {t('design.version.preview')}
                 </button>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 rounded border border-border px-2 py-0.5 hover:bg-surface-hover disabled:opacity-40"
+                  className="inline-flex items-center gap-1 rounded border border-border px-2 py-0.5 hover:bg-bg-hover disabled:opacity-40"
                   disabled={loading || restoring !== null}
                   onClick={() => void handleRestore(artifact.id)}
                 >
