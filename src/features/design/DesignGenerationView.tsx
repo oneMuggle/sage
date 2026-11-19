@@ -2,7 +2,7 @@
  * DesignGenerationView — 项目详情：iframe 预览 + 迭代聊天 + 导出。
  */
 import { ArrowLeft, Loader2, Sparkles } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useDesignStore } from '../../entities/design/designStore';
 import type { ProjectStatus } from '../../entities/design/types';
@@ -11,6 +11,7 @@ import { HtmlPreviewHost } from '../../widgets/chat/preview/HtmlPreviewHost';
 
 import { DesignExportPanel } from './DesignExportPanel';
 import { DesignIterationChat } from './DesignIterationChat';
+import { DesignVersionPanel } from './DesignVersionPanel';
 
 interface DesignGenerationViewProps {
   projectId: string;
@@ -39,6 +40,10 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
   const loadProject = useDesignStore((s) => s.loadProject);
   const generate = useDesignStore((s) => s.generate);
   const clearCurrent = useDesignStore((s) => s.clearCurrent);
+  const previewArtifact = useDesignStore((s) => s.previewArtifact);
+  const clearPreview = useDesignStore((s) => s.clearPreview);
+  const restoreVersion = useDesignStore((s) => s.restoreVersion);
+  const [panel, setPanel] = useState<'iterate' | 'history'>('iterate');
 
   useEffect(() => {
     void loadProject(projectId);
@@ -48,6 +53,8 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
   const handleGenerate = () => {
     void generate(projectId, project?.brief);
   };
+
+  const shownArtifact = previewArtifact ?? artifact;
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
@@ -114,9 +121,35 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-h-0 overflow-y-auto">
-          {artifact ? (
+          {previewArtifact && (
+            <div className="mb-2 flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-ui-xs">
+              <span>
+                {t('design.detail.previewing').replace(
+                  '{version}',
+                  String(previewArtifact.version),
+                )}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
+                  onClick={clearPreview}
+                >
+                  {t('design.detail.backToLatest')}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-accent px-2 py-0.5 text-accent hover:bg-accent/5"
+                  onClick={() => void restoreVersion(projectId, previewArtifact.id)}
+                >
+                  {t('design.version.restore')}
+                </button>
+              </div>
+            </div>
+          )}
+          {shownArtifact ? (
             <HtmlPreviewHost
-              html={artifact.html_content}
+              html={shownArtifact.html_content}
               name={`${project?.name ?? 'design'}.html`}
               heightClassName="h-[calc(100vh-14rem)] min-h-[24rem]"
             />
@@ -127,7 +160,34 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
             </div>
           )}
         </section>
-        <DesignIterationChat projectId={projectId} />
+        <div className="flex min-h-0 flex-col gap-2">
+          <div className="flex gap-1 rounded-md border border-border bg-surface p-1">
+            {(['iterate', 'history'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={panel === option}
+                className={`flex-1 rounded px-2 py-1 text-ui-xs transition ${
+                  panel === option
+                    ? 'bg-accent/10 text-accent'
+                    : 'text-text-secondary hover:bg-bg-hover'
+                }`}
+                onClick={() => setPanel(option)}
+              >
+                {option === 'iterate'
+                  ? t('design.detail.tabIterate')
+                  : t('design.detail.tabHistory')}
+              </button>
+            ))}
+          </div>
+          <div className="min-h-0 flex-1">
+            {panel === 'iterate' ? (
+              <DesignIterationChat projectId={projectId} />
+            ) : (
+              <DesignVersionPanel projectId={projectId} />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

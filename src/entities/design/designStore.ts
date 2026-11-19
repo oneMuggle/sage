@@ -8,10 +8,13 @@ import { create } from 'zustand';
 
 import * as api from './designApi';
 import type {
+  CreateProjectInput,
   DesignArtifact,
+  DesignArtifactSummary,
   DesignProject,
   DesignSystem,
   DesignTemplate,
+  IterationMessage,
 } from './types';
 
 interface DesignState {
@@ -29,6 +32,10 @@ interface DesignState {
   // -- 当前项目 & 产物 --
   currentProject: DesignProject | null;
   currentArtifact: DesignArtifact | null;
+  /** 正在只读预览的历史版本（null = 跟随最新版本） */
+  previewArtifact: DesignArtifact | null;
+  messages: IterationMessage[];
+  artifacts: DesignArtifactSummary[];
   loadingProject: boolean;
   errorProject: string | null;
 
@@ -36,16 +43,13 @@ interface DesignState {
   loadMeta: () => Promise<void>;
   loadProjects: (kind?: 'deck' | 'prototype') => Promise<void>;
   loadProject: (projectId: string) => Promise<void>;
-  createProject: (input: {
-    name: string;
-    kind: 'deck' | 'prototype';
-    system_id: string;
-    template_id: string;
-    brief: string;
-  }) => Promise<DesignProject>;
+  createProject: (input: CreateProjectInput) => Promise<DesignProject>;
   deleteProject: (projectId: string) => Promise<void>;
   generate: (projectId: string, brief?: string) => Promise<void>;
   iterate: (projectId: string, feedback: string) => Promise<void>;
+  previewVersion: (projectId: string, artifactId: string) => Promise<void>;
+  restoreVersion: (projectId: string, artifactId: string) => Promise<void>;
+  clearPreview: () => void;
   clearCurrent: () => void;
 }
 
@@ -67,6 +71,9 @@ export const useDesignStore = create<DesignState>((set) => ({
 
   currentProject: null,
   currentArtifact: null,
+  previewArtifact: null,
+  messages: [],
+  artifacts: [],
   loadingProject: false,
   errorProject: null,
 
@@ -75,10 +82,7 @@ export const useDesignStore = create<DesignState>((set) => ({
   async loadMeta() {
     set({ loadingMeta: true, errorMeta: null });
     try {
-      const [systems, templates] = await Promise.all([
-        api.listSystems(),
-        api.listTemplates(),
-      ]);
+      const [systems, templates] = await Promise.all([api.listSystems(), api.listTemplates()]);
       set({ systems, templates, loadingMeta: false });
     } catch (error) {
       set({ errorMeta: getErrorMessage(error), loadingMeta: false });
@@ -98,10 +102,17 @@ export const useDesignStore = create<DesignState>((set) => ({
   async loadProject(projectId: string) {
     set({ loadingProject: true, errorProject: null });
     try {
-      const detail = await api.getProject(projectId);
+      const [detail, messages, artifacts] = await Promise.all([
+        api.getProject(projectId),
+        api.listMessages(projectId),
+        api.listArtifacts(projectId),
+      ]);
       set({
         currentProject: detail,
         currentArtifact: detail.latest_artifact,
+        previewArtifact: null,
+        messages,
+        artifacts,
         loadingProject: false,
       });
     } catch (error) {
@@ -119,25 +130,15 @@ export const useDesignStore = create<DesignState>((set) => ({
     await api.deleteProject(projectId);
     set((state) => ({
       projects: state.projects.filter((p) => p.id !== projectId),
-      currentProject:
-        state.currentProject?.id === projectId
-          ? null
-          : state.currentProject,
+      currentProject: state.currentProject?.id === projectId ? null : state.currentProject,
     }));
   },
 
   async generate(projectId: string, brief?: string) {
     set({ loadingProject: true, errorProject: null });
     try {
-      const artifact = await api.generateArtifact(projectId, { brief });
-      set({ currentArtifact: artifact });
-      // Reload project to get updated status + canonical artifact
-      const detail = await api.getProject(projectId);
-      set({
-        currentProject: detail,
-        currentArtifact: detail.latest_artifact ?? artifact,
-        loadingProject: false,
-      });
+      await api.generateArtifact(projectId, { brief });
+      await useDesignStore.getState().loadProject(projectId);
     } catch (error) {
       set({ errorProject: getErrorMessage(error), loadingProject: false });
     }
@@ -146,24 +147,44 @@ export const useDesignStore = create<DesignState>((set) => ({
   async iterate(projectId: string, feedback: string) {
     set({ loadingProject: true, errorProject: null });
     try {
-      const artifact = await api.iterateArtifact(projectId, { feedback });
-      set({ currentArtifact: artifact });
-      // Reload project to get updated status + canonical artifact
-      const detail = await api.getProject(projectId);
-      set({
-        currentProject: detail,
-        currentArtifact: detail.latest_artifact ?? artifact,
-        loadingProject: false,
-      });
+      await api.iterateArtifact(projectId, { feedback });
+      await useDesignStore.getState().loadProject(projectId);
     } catch (error) {
       set({ errorProject: getErrorMessage(error), loadingProject: false });
     }
+  },
+
+  async previewVersion(projectId: string, artifactId: string) {
+    try {
+      const artifact = await api.getArtifact(projectId, artifactId);
+      set({ previewArtifact: artifact });
+    } catch (error) {
+      set({ errorProject: getErrorMessage(error) });
+    }
+  },
+
+  async restoreVersion(projectId: string, artifactId: string) {
+    set({ loadingProject: true, errorProject: null });
+    try {
+      await api.restoreArtifact(projectId, artifactId);
+      set({ previewArtifact: null });
+      await useDesignStore.getState().loadProject(projectId);
+    } catch (error) {
+      set({ errorProject: getErrorMessage(error), loadingProject: false });
+    }
+  },
+
+  clearPreview() {
+    set({ previewArtifact: null });
   },
 
   clearCurrent() {
     set({
       currentProject: null,
       currentArtifact: null,
+      previewArtifact: null,
+      messages: [],
+      artifacts: [],
       loadingProject: false,
       errorProject: null,
     });
