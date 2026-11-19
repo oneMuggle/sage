@@ -177,7 +177,7 @@ async def test_two_step_run_writes_one_step_and_one_final_assistant():
 
             # 确保 STEP_DONE 事件被 NDJSON 队列转发
             events = _parse_ndjson(attach_resp.text)
-            step_done_events = [e for e in events if e["state"] == "step_done"]
+            step_done_events = [e for e in events if e.get("state") == "step_done"]
             assert len(step_done_events) == 1
             assert step_done_events[0]["step_index"] == 0
 
@@ -284,7 +284,7 @@ async def test_three_step_run_writes_two_steps_and_one_final_assistant():
             assert attach_resp.status_code == 200
 
             events = _parse_ndjson(attach_resp.text)
-            step_done_events = [e for e in events if e["state"] == "step_done"]
+            step_done_events = [e for e in events if e.get("state") == "step_done"]
             assert len(step_done_events) == 2
             assert [e["step_index"] for e in step_done_events] == [0, 1]
 
@@ -356,7 +356,7 @@ async def test_step_done_events_are_forwarded_to_ndjson_queue():
             attach_resp = await ac.get(f"{CHAT_STREAM_PATH}/{stream_id}")
 
     events = _parse_ndjson(attach_resp.text)
-    states = [e["state"] for e in events]
+    states = [e.get("state") for e in events]
 
     # STEP_DONE 必须出现在 OBSERVING 之后、DONE 之前
     assert "step_done" in states
@@ -368,6 +368,6 @@ async def test_step_done_events_are_forwarded_to_ndjson_queue():
     assert step_done_idx < done_idx
 
     # STEP_DONE 事件必须携带 step_index 字段
-    step_done_event = next(e for e in events if e["state"] == "step_done")
+    step_done_event = next(e for e in events if e.get("state") == "step_done")
     assert "step_index" in step_done_event
     assert step_done_event["step_index"] == 0
