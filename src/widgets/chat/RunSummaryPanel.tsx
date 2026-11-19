@@ -81,7 +81,7 @@ export function RunSummaryPanel({ sessionId, onRerunFailed }: RunSummaryPanelPro
             aria-expanded={!collapsed}
             aria-label={collapsed ? '展开运行摘要' : '收起运行摘要'}
             onClick={() => setCollapsed((v) => !v)}
-            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-ui-2xs font-normal text-text-tertiary hover:text-text hover:bg-bg-hover transition-colors"
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-ui-2xs font-normal text-text-muted hover:text-text hover:bg-bg-hover transition-colors"
           >
             <span>{collapsed ? '展开' : '收起'}</span>
             <ChevronDown
@@ -95,7 +95,7 @@ export function RunSummaryPanel({ sessionId, onRerunFailed }: RunSummaryPanelPro
         <div className="mt-1.5 max-h-40 overflow-y-auto space-y-1.5">
           {failedTasks.length > 0 ? (
             <div data-testid="run-summary-failures">
-              <div className="mb-0.5 text-text-tertiary">未完成的任务</div>
+              <div className="mb-0.5 text-text-muted">未完成的任务</div>
               <ul className="space-y-0.5">
                 {failedTasks.map((task) => (
                   <li key={task.task_id} className="flex flex-wrap items-baseline gap-1.5">
@@ -103,7 +103,7 @@ export function RunSummaryPanel({ sessionId, onRerunFailed }: RunSummaryPanelPro
                       [{task.agent_id}] {task.goal}
                     </span>
                     {task.retry_count && task.retry_count > 0 ? (
-                      <span className="text-text-tertiary">已重试 {task.retry_count} 次</span>
+                      <span className="text-text-muted">已重试 {task.retry_count} 次</span>
                     ) : null}
                     {task.error ? (
                       <span className="text-error" data-testid="run-summary-error">
@@ -127,12 +127,12 @@ export function RunSummaryPanel({ sessionId, onRerunFailed }: RunSummaryPanelPro
           ) : null}
 
           {changesError ? (
-            <p className="text-text-tertiary" data-testid="run-summary-changes-error">
+            <p className="text-text-muted" data-testid="run-summary-changes-error">
               无法读取文件变更：{changesError}
             </p>
           ) : fileCount > 0 ? (
             <div data-testid="run-summary-files">
-              <div className="mb-0.5 flex items-center gap-1 text-text-tertiary">
+              <div className="mb-0.5 flex items-center gap-1 text-text-muted">
                 <FileCode2 className="h-3 w-3" aria-hidden="true" />
                 <span>本次会话工作区变更 {fileCount} 个文件</span>
               </div>
@@ -152,7 +152,7 @@ export function RunSummaryPanel({ sessionId, onRerunFailed }: RunSummaryPanelPro
                   </li>
                 ))}
                 {fileCount > 8 ? (
-                  <li className="text-text-tertiary">其余 {fileCount - 8} 个见右侧变更面板</li>
+                  <li className="text-text-muted">其余 {fileCount - 8} 个见右侧变更面板</li>
                 ) : null}
               </ul>
             </div>

@@ -77,7 +77,7 @@ export function CurrentTaskFocus({ board, onOpenTask }: CurrentTaskFocusProps) {
     }
     return (
       <div
-        className="rounded border border-border bg-bg-hover px-3 py-3 text-xs text-text-tertiary"
+        className="rounded border border-border bg-bg-hover px-3 py-3 text-xs text-text-muted"
         data-testid="current-task-focus"
       >
         当前没有进行中的子任务
@@ -117,7 +117,7 @@ export function CurrentTaskFocus({ board, onOpenTask }: CurrentTaskFocusProps) {
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
           {elapsed !== null && (
-            <span className="text-ui-2xs text-text-tertiary tabular-nums">
+            <span className="text-ui-2xs text-text-muted tabular-nums">
               {formatElapsed(elapsed)}
             </span>
           )}
@@ -133,7 +133,7 @@ export function CurrentTaskFocus({ board, onOpenTask }: CurrentTaskFocusProps) {
       </div>
 
       {runningIds.length > 1 && (
-        <div className="mt-2 flex items-center gap-1.5 flex-wrap text-ui-2xs text-text-tertiary">
+        <div className="mt-2 flex items-center gap-1.5 flex-wrap text-ui-2xs text-text-muted">
           <span>并行进行中 {runningIds.length} 个：</span>
           {runningIds
             .filter((id) => id !== focusTaskId)

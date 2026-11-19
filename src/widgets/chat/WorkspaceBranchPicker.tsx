@@ -220,7 +220,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                   className="flex flex-wrap items-center justify-between gap-1.5 border-b border-border bg-bg-muted/40 px-3 py-1.5"
                   data-testid="workspace-branch-picker-actions"
                 >
-                  <span className="text-ui-2xs text-text-tertiary">
+                  <span className="text-ui-2xs text-text-muted">
                     分支 {localBranches.length} · Worktree {registered.length}
                   </span>
                   <div className="flex items-center gap-1">
@@ -414,7 +414,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
 
 function Section({ children }: { children: ReactNode }) {
   return (
-    <div className="px-3 pt-2 pb-1 text-ui-xs uppercase tracking-wide text-text-tertiary">
+    <div className="px-3 pt-2 pb-1 text-ui-xs uppercase tracking-wide text-text-muted">
       {children}
     </div>
   );
@@ -460,7 +460,7 @@ function Row({
       <span className="flex-1 min-w-0">
         <span className="block truncate text-text">{title}</span>
         {subtitle && (
-          <span className="block truncate text-ui-xs text-text-tertiary">{subtitle}</span>
+          <span className="block truncate text-ui-xs text-text-muted">{subtitle}</span>
         )}
       </span>
       {badge && (

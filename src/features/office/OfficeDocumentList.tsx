@@ -638,7 +638,7 @@ export function OfficeDocumentList({
                         type="button"
                         aria-label={t('office.doclib.moreActions')}
                         data-testid={`office-doc-more-${doc.id}`}
-                        className="p-1 rounded text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 hover:bg-surface-hover hover:text-text"
+                        className="p-1 rounded text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 hover:bg-bg-hover hover:text-text"
                       >
                         <MoreVertical className="w-4 h-4" />
                       </button>

@@ -585,7 +585,7 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
                 'flex items-center justify-center w-10 h-10 rounded-radius-sm transition-colors',
                 location.pathname === settingsNavItem.path
                   ? 'bg-primary/10 text-primary'
-                  : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary',
+                  : 'text-text-secondary hover:bg-bg-hover hover:text-text',
               )}
             >
               <Settings className="w-5 h-5" />
@@ -631,7 +631,7 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
               aria-label={collapsed ? '展开侧边栏' : '折叠侧边栏'}
               title={collapsed ? '展开侧边栏 (Ctrl+B)' : '折叠侧边栏 (Ctrl+B)'}
               data-testid={collapsed ? 'sidebar-expand-button' : 'sidebar-collapse-button'}
-              className="flex items-center justify-center w-10 h-10 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
+              className="flex items-center justify-center w-10 h-10 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
             >
               {collapsed ? (
                 <PanelLeftOpen className="w-5 h-5" />
@@ -670,7 +670,7 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
                   aria-label="新建对话"
                   data-testid="sidebar-new-chat-primary"
                   title="新建对话 (Ctrl+N)"
-                  className="flex-1 flex items-center gap-2.5 px-3 py-2 rounded-radius-sm border border-border text-sm font-medium text-text-primary hover:bg-bg-hover transition-colors"
+                  className="flex-1 flex items-center gap-2.5 px-3 py-2 rounded-radius-sm border border-border text-sm font-medium text-text hover:bg-bg-hover transition-colors"
                 >
                   <PenSquare className="w-4 h-4" />
                   <span>新建对话</span>
@@ -681,7 +681,7 @@ export function Sidebar({ width = 320, collapsed = false, onToggleCollapse }: Si
                     onClick={handleOpenSearch}
                     aria-label="搜索"
                     data-testid="sidebar-search-button"
-                    className="flex items-center justify-center w-9 h-9 rounded-radius-sm border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
+                    className="flex items-center justify-center w-9 h-9 rounded-radius-sm border border-border text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
                   >
                     <Search className="w-4 h-4" />
                   </button>

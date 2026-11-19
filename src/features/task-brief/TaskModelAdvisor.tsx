@@ -40,7 +40,7 @@ export function TaskModelAdvisor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpointId]);
   return (
-    <details className="mt-3 border-t border-ui-border pt-2">
+    <details className="mt-3 border-t border-border pt-2">
       <summary className="text-ui-base cursor-pointer">
         {en ? 'Model capabilities and cost scope' : '模型能力与成本范围'}
       </summary>
@@ -53,7 +53,7 @@ export function TaskModelAdvisor({
         data-testid="task-model-advisor"
         defaultValue=""
         onChange={(event) => onChoose(event.target.value)}
-        className="w-full mt-2 rounded border border-ui-border bg-ui-surface p-2 text-ui-base"
+        className="w-full mt-2 rounded border border-border bg-surface p-2 text-ui-base"
       >
         <option value="">{en ? 'Use configured chat model' : '使用已配置的对话模型'}</option>
         {models.map((model) => {

@@ -946,7 +946,7 @@ function ChatInputInner({
         orchModeBar={
           hideOrchModeBar ? undefined : (
             <div className="flex items-center gap-2 px-2 py-1 mb-2 border-b border-border">
-              <label className="text-xs text-text-tertiary">{t('chat.orchMode.label')}</label>
+              <label className="text-xs text-text-muted">{t('chat.orchMode.label')}</label>
               <select
                 data-testid="orch-mode-select"
                 value={orchMode}

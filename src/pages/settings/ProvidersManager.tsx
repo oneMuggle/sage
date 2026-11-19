@@ -242,7 +242,7 @@ export function ProvidersManager(): JSX.Element {
                         ? 'bg-primary/15 text-primary'
                         : p.enabled
                           ? 'bg-success/15 text-success'
-                          : 'bg-bg-subtle text-text-tertiary'
+                          : 'bg-bg-subtle text-text-muted'
                     }`}
                   >
                     {p.isDefault

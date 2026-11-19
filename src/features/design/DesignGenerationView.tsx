@@ -26,7 +26,7 @@ function statusClass(status: ProjectStatus): string {
     case 'error':
       return 'bg-red-500/10 text-red-600';
     default:
-      return 'bg-surface-hover text-text-secondary';
+      return 'bg-bg-hover text-text-secondary';
   }
 }
 
@@ -55,7 +55,7 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
         <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-ui-sm hover:bg-surface-hover"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-ui-sm hover:bg-bg-hover"
             onClick={onBack}
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -72,7 +72,7 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
             </span>
           )}
           {artifact && (
-            <span className="shrink-0 text-ui-xs text-text-tertiary">
+            <span className="shrink-0 text-ui-xs text-text-muted">
               {t('design.detail.version').replace('{version}', String(artifact.version))}
             </span>
           )}

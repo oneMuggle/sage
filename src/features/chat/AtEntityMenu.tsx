@@ -29,7 +29,7 @@ export function AtEntityMenu({ query, onSelect }: AtEntityMenuProps) {
       data-testid="at-entity-menu"
       className="flex flex-wrap items-center gap-1 px-2.5 py-1.5 mb-1.5 rounded-radius-sm border border-border bg-surface/95 text-xs"
     >
-      <span className="text-text-tertiary mr-1">{t('chat.atEntity.label')}</span>
+      <span className="text-text-muted mr-1">{t('chat.atEntity.label')}</span>
       {suggestions.map((s) => {
         const Icon = KIND_ICON[s.kind as EntityRefKind];
         return (

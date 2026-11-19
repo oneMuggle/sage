@@ -239,7 +239,7 @@ export function TaskTreeSection({
                   data-testid={`task-tree-toggle-${item.task_id}`}
                   aria-label={isCollapsed ? `展开 ${item.goal}` : `折叠 ${item.goal}`}
                   aria-expanded={!isCollapsed}
-                  className="w-3 text-ui-2xs text-text-tertiary hover:text-text-secondary shrink-0"
+                  className="w-3 text-ui-2xs text-text-muted hover:text-text-secondary shrink-0"
                   onClick={(event) => {
                     event.stopPropagation();
                     toggleCollapsed(item.task_id);
@@ -255,7 +255,7 @@ export function TaskTreeSection({
               {status === 'running' && st?.runningSince && (
                 <span
                   data-testid={`task-tree-elapsed-${item.task_id}`}
-                  className="text-text-tertiary text-ui-2xs shrink-0 tabular-nums"
+                  className="text-text-muted text-ui-2xs shrink-0 tabular-nums"
                 >
                   {formatElapsed(now - st.runningSince)}
                 </span>
@@ -300,7 +300,7 @@ export function TaskTreeSection({
               {(st?.retry_count ?? 0) > 0 && (
                 <span
                   data-testid={`task-tree-retry-${item.task_id}`}
-                  className="text-text-tertiary text-ui-2xs shrink-0"
+                  className="text-text-muted text-ui-2xs shrink-0"
                 >
                   已重试 ×{st?.retry_count}
                 </span>
@@ -310,7 +310,7 @@ export function TaskTreeSection({
               {(st?.used_tokens ?? 0) > 0 || (st?.duration_ms ?? 0) > 0 ? (
                 <span
                   data-testid={`task-tree-usage-${item.task_id}`}
-                  className="text-text-tertiary text-ui-2xs shrink-0"
+                  className="text-text-muted text-ui-2xs shrink-0"
                 >
                   {(st?.used_tokens ?? 0) > 0 && formatTokens(st!.used_tokens!)}
                   {(st?.used_tokens ?? 0) > 0 && (st?.duration_ms ?? 0) > 0 && ' · '}
@@ -324,7 +324,7 @@ export function TaskTreeSection({
                 <span
                   data-testid={`task-tree-blocked-${item.task_id}`}
                   title={st.error}
-                  className="text-text-tertiary text-ui-2xs shrink-0"
+                  className="text-text-muted text-ui-2xs shrink-0"
                 >
                   因 {st.error.slice('blocked_by_failed:'.length).split(',').join('、')}{' '}
                   失败级联跳过

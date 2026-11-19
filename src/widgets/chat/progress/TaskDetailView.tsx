@@ -168,7 +168,7 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
           {planItem?.goal ?? status?.goal ?? taskId}
         </div>
         <div
-          className="mt-1 flex items-center gap-2 flex-wrap text-ui-2xs text-text-tertiary"
+          className="mt-1 flex items-center gap-2 flex-wrap text-ui-2xs text-text-muted"
           data-testid="task-detail-stats"
         >
           <span className="tabular-nums">任务 {taskId.slice(0, 12)}</span>
@@ -196,7 +196,7 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
           )}
         </div>
         {planItem?.depends_on && planItem.depends_on.length > 0 && (
-          <div className="mt-1 text-ui-2xs text-text-tertiary" data-testid="task-detail-deps">
+          <div className="mt-1 text-ui-2xs text-text-muted" data-testid="task-detail-deps">
             ↳ 依赖 {planItem.depends_on.join(', ')}
           </div>
         )}
@@ -229,10 +229,10 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-3">
         {/* 当前步骤 —— 大字号，这是"实时运行情况"的主答案。 */}
         <div>
-          <div className="text-ui-2xs text-text-tertiary mb-1">当前步骤</div>
+          <div className="text-ui-2xs text-text-muted mb-1">当前步骤</div>
           <div
             className={`text-sm break-words ${
-              currentStep ? 'text-primary font-medium animate-pulse' : 'text-text-tertiary'
+              currentStep ? 'text-primary font-medium animate-pulse' : 'text-text-muted'
             }`}
             data-testid="task-detail-current-step"
           >
@@ -248,7 +248,7 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
 
         {error && (
           <div>
-            <div className="text-ui-2xs text-text-tertiary mb-1">错误</div>
+            <div className="text-ui-2xs text-text-muted mb-1">错误</div>
             <pre
               className="text-xs text-error whitespace-pre-wrap break-words bg-error/5 rounded p-2"
               data-testid="task-detail-error"
@@ -260,7 +260,7 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
 
         {output && (
           <div>
-            <div className="text-ui-2xs text-text-tertiary mb-1">结果预览</div>
+            <div className="text-ui-2xs text-text-muted mb-1">结果预览</div>
             <pre
               className="text-xs text-text-secondary whitespace-pre-wrap break-words bg-bg-hover rounded p-2"
               data-testid="task-detail-output"
@@ -272,11 +272,11 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
 
         {/* 实时事件流 —— 子代理的实时运行情况 */}
         <div>
-          <div className="text-ui-2xs text-text-tertiary mb-1">
+          <div className="text-ui-2xs text-text-muted mb-1">
             实时动态（{liveEvents.length} 条）
           </div>
           {liveEvents.length === 0 ? (
-            <div className="text-xs text-text-tertiary" data-testid="task-detail-events-empty">
+            <div className="text-xs text-text-muted" data-testid="task-detail-events-empty">
               暂无实时事件
             </div>
           ) : (
@@ -286,7 +286,7 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
                   key={`${evt.ts ?? idx}-${idx}`}
                   className="text-xs text-text-secondary flex items-start gap-2"
                 >
-                  <span className="text-text-tertiary shrink-0 tabular-nums w-16">
+                  <span className="text-text-muted shrink-0 tabular-nums w-16">
                     {evt.ts
                       ? new Date(evt.ts).toLocaleTimeString('zh-CN', {
                           hour12: false,
@@ -308,7 +308,7 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
         {/* 编排运行事件时间线 —— 仅当该 run 在编排 store 中登记过 */}
         {knownRun && (
           <div>
-            <div className="text-ui-2xs text-text-tertiary mb-1">事件时间线</div>
+            <div className="text-ui-2xs text-text-muted mb-1">事件时间线</div>
             <EventTimeline events={orchEvents} />
           </div>
         )}
