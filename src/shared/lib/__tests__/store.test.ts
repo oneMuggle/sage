@@ -396,3 +396,42 @@ describe('session list loading/error tri-state', () => {
     await first;
   });
 });
+
+describe('store 会话实时排序 (2026-11-19)', () => {
+  function seed(sessions: Session[]): void {
+    useStore.setState({ sessions });
+  }
+
+  it('markSessionRunning 标记 running 并置顶到 pinned 组之后', () => {
+    seed([
+      { id: 'pinned', title: 'pinned', created_at: 0, updated_at: 1, last_message_at: null, message_count: 0, is_pinned: true },
+      { id: 'newest', title: 'newest', created_at: 0, updated_at: 9_000, last_message_at: null, message_count: 0, is_pinned: false },
+      { id: 'started', title: 'started', created_at: 0, updated_at: 100, last_message_at: null, message_count: 0, is_pinned: false, run_status: 'failed', last_error: 'boom' },
+    ]);
+    useStore.getState().markSessionRunning('started');
+    const sessions = useStore.getState().sessions;
+    expect(sessions.map((s) => s.id)).toEqual(['pinned', 'started', 'newest']);
+    const started = sessions.find((s) => s.id === 'started');
+    expect(started?.run_status).toBe('running');
+    expect(started?.last_error).toBeNull();
+    expect(started?.last_message_at).toBeGreaterThan(0);
+  });
+
+  it('markSessionRunning 会话不在列表时 no-op', () => {
+    seed([]);
+    useStore.getState().markSessionRunning('missing');
+    expect(useStore.getState().sessions).toEqual([]);
+  });
+
+  it('addSession 去重且按排序规则插入', () => {
+    seed([
+      { id: 'pinned', title: 'pinned', created_at: 0, updated_at: 1, last_message_at: null, message_count: 0, is_pinned: true },
+      { id: 'existing', title: 'existing', created_at: 0, updated_at: 5_000, last_message_at: null, message_count: 0, is_pinned: false },
+    ]);
+    const fresh: Session = { id: 'fresh', title: '新对话', created_at: 0, updated_at: 10_000, last_message_at: null, message_count: 0, is_pinned: false };
+    useStore.getState().addSession(fresh);
+    expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['pinned', 'fresh', 'existing']);
+    useStore.getState().addSession(fresh);
+    expect(useStore.getState().sessions.map((s) => s.id)).toEqual(['pinned', 'fresh', 'existing']);
+  });
+});

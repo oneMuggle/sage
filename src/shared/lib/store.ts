@@ -5,6 +5,7 @@ import { invoke } from '../api/desktopInvoke';
 import type { GenerationStats, MessageDisplayMeta, MessageSource, RagCitation } from '../api/types';
 export type { MessageSource } from '../api/types';
 import { clientLogger } from '../log/client';
+import { sortSessions } from './sessionOrder';
 
 import { markBootStageOnce } from './bootStages';
 import { suppressStartupSessionRestore } from './startupRestoreGuard';
@@ -191,6 +192,10 @@ interface StoreState {
   deleteSession: (id: string) => Promise<void>;
   /** U4': 原地更新会话元数据 (如重命名),避免整表 reload 抖动 */
   updateSession: (id: string, patch: Partial<Session>) => void;
+  /** 新会话入列（项目绑定/草稿复用路径）：去重并按与后端一致的规则插入 */
+  addSession: (session: Session) => void;
+  /** 运行开始：本地即时标记 running 并按后端排序规则置顶（流末 loadSessions 对账） */
+  markSessionRunning: (id: string) => void;
 
   loadMessages: (sessionId: string) => Promise<void>;
   /**
@@ -396,7 +401,9 @@ export const useStore = create<StoreState>((set, _get) => ({
         ...(options?.conversationType ? { conversation_type: options.conversationType } : {}),
       });
       set((state) => ({
-        sessions: [session, ...state.sessions],
+        // 2026-11-19 实时排序：与 addSession/markSessionRunning 共享同一排序规则，
+        // 消除"本地 prepend 顺序与后端 SQL 顺序暂时不一致"的窗口。
+        sessions: sortSessions([session, ...state.sessions]),
         currentSessionId: session.id,
       }));
       return session.id;
@@ -411,6 +418,34 @@ export const useStore = create<StoreState>((set, _get) => ({
     set((state) => ({
       sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...patch } : s)),
     }));
+  },
+
+  // 2026-11-19 实时排序：新会话入列。id 已存在则 no-op；排序规则与后端
+  // SessionRepository.list() 严格一致（pinned → running → updated_at）。
+  addSession: (session) => {
+    set((state) => {
+      if (state.sessions.some((s) => s.id === session.id)) return {};
+      return { sessions: sortSessions([session, ...state.sessions]) };
+    });
+  },
+
+  // 2026-11-19 实时排序：运行开始立即置顶。后端 run_started 事件与流末
+  // loadSessions() 以服务端真值对账；last_error 清空与服务端语义一致
+  // （update_run_status 传 error=None 时清旧错误）。
+  markSessionRunning: (id) => {
+    set((state) => {
+      const target = state.sessions.find((s) => s.id === id);
+      if (!target) return {};
+      const updated: Session = {
+        ...target,
+        run_status: 'running',
+        last_message_at: Date.now(),
+        last_error: null,
+      };
+      return {
+        sessions: sortSessions(state.sessions.map((s) => (s.id === id ? updated : s))),
+      };
+    });
   },
 
   // 删除会话
