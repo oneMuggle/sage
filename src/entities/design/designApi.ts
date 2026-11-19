@@ -6,7 +6,9 @@
 import { backendRequest } from '../../shared/api/backendRequest';
 
 import type {
+  CreateProjectInput,
   DesignArtifact,
+  DesignArtifactSummary,
   DesignProject,
   DesignProjectDetail,
   DesignSystem,
@@ -16,6 +18,7 @@ import type {
   ExportResult,
   GenerateRequest,
   IterateRequest,
+  IterationMessage,
 } from './types';
 
 const BASE = '/api/v1/design';
@@ -72,14 +75,10 @@ export async function getProject(
   });
 }
 
-/** 创建新项目 */
-export async function createProject(input: {
-  name: string;
-  kind: 'deck' | 'prototype';
-  system_id: string;
-  template_id: string;
-  brief: string;
-}): Promise<DesignProject> {
+/** 创建新项目（name/system_id/template_id 可省略，后端补默认值） */
+export async function createProject(
+  input: CreateProjectInput,
+): Promise<DesignProject> {
   return backendRequest<DesignProject>({
     method: 'POST',
     path: `${BASE}/projects`,
@@ -92,6 +91,56 @@ export async function deleteProject(projectId: string): Promise<void> {
   return backendRequest<void>({
     method: 'DELETE',
     path: `${BASE}/projects/${projectId}`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 版本历史
+// ---------------------------------------------------------------------------
+
+/** 列出项目的全部产物版本（不含 HTML 正文） */
+export async function listArtifacts(
+  projectId: string,
+): Promise<DesignArtifactSummary[]> {
+  return backendRequest<DesignArtifactSummary[]>({
+    method: 'GET',
+    path: `${BASE}/projects/${projectId}/artifacts`,
+  });
+}
+
+/** 获取单个版本（含 HTML 正文，用于预览） */
+export async function getArtifact(
+  projectId: string,
+  artifactId: string,
+): Promise<DesignArtifact> {
+  return backendRequest<DesignArtifact>({
+    method: 'GET',
+    path: `${BASE}/projects/${projectId}/artifacts/${artifactId}`,
+  });
+}
+
+/** 把旧版本恢复为新版本（服务端不调用 LLM） */
+export async function restoreArtifact(
+  projectId: string,
+  artifactId: string,
+): Promise<DesignArtifact> {
+  return backendRequest<DesignArtifact>({
+    method: 'POST',
+    path: `${BASE}/projects/${projectId}/artifacts/${artifactId}/restore`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 迭代消息
+// ---------------------------------------------------------------------------
+
+/** 读取持久化的迭代对话历史 */
+export async function listMessages(
+  projectId: string,
+): Promise<IterationMessage[]> {
+  return backendRequest<IterationMessage[]>({
+    method: 'GET',
+    path: `${BASE}/projects/${projectId}/messages`,
   });
 }
 
@@ -167,12 +216,13 @@ function readArtifactFromSse(body: string): DesignArtifact {
 // 导出
 // ---------------------------------------------------------------------------
 
-/** 导出设计产物（PDF/PPTX/ZIP/HTML） */
+/** 导出设计产物（PDF/PPTX/ZIP/HTML）；inline=true 时返回 base64 内容 */
 export async function exportArtifact(
   projectId: string,
   format: ExportFormat,
+  inline = false,
 ): Promise<ExportResult> {
-  const request: ExportRequest = { format };
+  const request: ExportRequest = inline ? { format, inline: true } : { format };
   return backendRequest<ExportResult>({
     method: 'POST',
     path: `${BASE}/projects/${projectId}/export`,
