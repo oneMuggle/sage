@@ -132,6 +132,15 @@ _LAZY_SCROLL_STABLE_ROUNDS = 2
 #: 懒加载滚动轮间等待
 _LAZY_SCROLL_PAUSE_SECONDS = 0.4
 
+#: 网络空闲等待上限（秒）：SPA AJAX 结果加载在此窗口内完成
+_NETWORK_IDLE_TIMEOUT = 8.0
+
+#: 判定"网络空闲"所需的连续活跃请求归零轮数
+_NETWORK_IDLE_STABLE_ROUNDS = 2
+
+#: 网络空闲轮询间隔（秒）
+_NETWORK_IDLE_POLL_INTERVAL = 0.3
+
 #: 渲染实例空闲回收（秒）：超时后下次 acquire 重建，避免常驻占用
 RENDER_IDLE_TIMEOUT_SECONDS = 300.0
 
@@ -234,11 +243,15 @@ class RenderError(RuntimeError):
 def wait_page_ready(
     session: BrowserSession, target_id: Optional[str], wait_for: str = ""
 ) -> bool:
-    """navigate 后等页面可用：readyState 达标 → (可选)等 wait_for → 正文稳定。
+    """navigate 后等页面可用：readyState 达标 → wait_for → 网络空闲 → 正文稳定。
 
     SPA 的 hydrate 发生在 readyState=complete 之后，只等 readyState 会拿到
     半空页面 —— 达标后再等 innerText 长度连续 ``_SETTLE_STABLE_ROUNDS`` 轮
     不变（上限 ``_SETTLE_MAX_SECONDS``）。
+
+    readyState 与 wait_for 之间插入网络空闲等待（``_wait_network_idle``）：
+    等待页面活跃 XHR/fetch 请求归零，覆盖 SPA AJAX 异步加载窗口。网络监控
+    JS 须在导航前经 ``inject_network_monitor`` 注入，否则此处降级为不等待。
 
     ``wait_for``（R2）为 CSS 选择器：readyState 达标后轮询其出现，上限
     READY_TIMEOUT_SECONDS；超时不失败（半截内容好过没有），继续走 settle。
@@ -274,6 +287,11 @@ def wait_page_ready(
                 wait_for_satisfied = False
                 break
             time.sleep(_READY_POLL_INTERVAL)
+
+    # 网络空闲等待：SPA AJAX 结果在 readyState=complete 后才发出，
+    # 等待活跃 XHR/fetch 归零（上限 _NETWORK_IDLE_TIMEOUT）。
+    # 未注入网络监控 JS 时直接返回（降级为不等待）。
+    _wait_network_idle(session, target_id)
 
     settle_deadline = time.monotonic() + _SETTLE_MAX_SECONDS
     last_length = -1
@@ -360,6 +378,109 @@ def _scroll_for_lazy_load(session: BrowserSession, target_id: Optional[str]) -> 
                 stable_rounds = 0
             last_height = height
         time.sleep(_LAZY_SCROLL_PAUSE_SECONDS)
+
+
+# ---------------------------------------------------------------------------
+# 网络空闲监控（AJAX / XHR / fetch 等待）
+# ---------------------------------------------------------------------------
+
+#: 注入页面的网络监控 JS：monkey-patch XHR/fetch 维护活跃请求计数器。
+#: 幂等（window.__SAGE_NET_INIT__ 防重复注入）。
+#: 通过 Page.addScriptToEvaluateOnNewDocument 在导航前注入，确保覆盖 SPA
+#: 早期发出的请求（比 wait_page_ready 内注入更早）。
+_NETWORK_MONITOR_JS = """
+(function(){
+  if (window.__SAGE_NET_INIT__) return;
+  window.__SAGE_NET_INIT__ = true;
+  window.__SAGE_ACTIVE_REQUESTS__ = 0;
+
+  try {
+    var origOpen = XMLHttpRequest.prototype.open;
+    var origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function() {
+      this.__sage_tracked__ = true;
+      return origOpen.apply(this, arguments);
+    };
+    XMLHttpRequest.prototype.send = function() {
+      if (this.__sage_tracked__) {
+        window.__SAGE_ACTIVE_REQUESTS__++;
+        var self = this;
+        self.addEventListener('loadend', function() {
+          window.__SAGE_ACTIVE_REQUESTS__ = Math.max(0, window.__SAGE_ACTIVE_REQUESTS__ - 1);
+        });
+      }
+      return origSend.apply(this, arguments);
+    };
+  } catch(e) {}
+
+  try {
+    var origFetch = window.fetch;
+    window.fetch = function() {
+      window.__SAGE_ACTIVE_REQUESTS__++;
+      return origFetch.apply(this, arguments).finally(function() {
+        window.__SAGE_ACTIVE_REQUESTS__ = Math.max(0, window.__SAGE_ACTIVE_REQUESTS__ - 1);
+      });
+    };
+  } catch(e) {}
+})()
+"""
+
+#: 轮询活跃请求数的 JS 表达式（_wait_network_idle 使用）
+_NETWORK_IDLE_EXPR = "(window.__SAGE_ACTIVE_REQUESTS__||0)"
+
+
+def inject_network_monitor(session: BrowserSession, target_id: Optional[str]) -> None:
+    """导航前注入网络监控 JS，使后续 XHR/fetch 被计数。
+
+    通过 ``Page.addScriptToEvaluateOnNewDocument`` 注入，在每个新文档的第一
+    个脚本之前执行，保证 SPA 早期请求也被追踪。注入失败静默（不影响主流程，
+    只是网络空闲等待退化为不等待）。
+    """
+    with contextlib.suppress(BrowserCDPError):
+        cdp_command(
+            session,
+            "Page.addScriptToEvaluateOnNewDocument",
+            {"source": _NETWORK_MONITOR_JS},
+            target_id=target_id,
+        )
+
+
+def _wait_network_idle(
+    session: BrowserSession,
+    target_id: Optional[str],
+    timeout: float = _NETWORK_IDLE_TIMEOUT,
+) -> bool:
+    """等待页面活跃 XHR/fetch 请求归零。
+
+    在 ``readyState=complete`` 后调用，覆盖 SPA AJAX 加载窗口。
+    活跃请求数连续 ``_NETWORK_IDLE_STABLE_ROUNDS`` 轮为 0 时返回 True。
+    超时返回 False（不抛错，调用方继续后续逻辑）。
+
+    若网络监控 JS 未注入（计数器不存在），直接返回 True（降级为不等待）。
+    """
+    deadline = time.monotonic() + timeout
+    last_count = -1
+    stable_rounds = 0
+    while time.monotonic() < deadline:
+        try:
+            count = _evaluate_json(session, _NETWORK_IDLE_EXPR, target_id)
+        except BrowserCDPError:
+            return True
+        if not isinstance(count, int):
+            return True
+        if count == 0:
+            if last_count == 0:
+                stable_rounds += 1
+                if stable_rounds >= _NETWORK_IDLE_STABLE_ROUNDS:
+                    return True
+            else:
+                stable_rounds = 1
+                last_count = 0
+        else:
+            stable_rounds = 0
+            last_count = count
+        time.sleep(_NETWORK_IDLE_POLL_INTERVAL)
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -644,6 +765,7 @@ def refresh_credentials(  # noqa: PLR0911 — 各失败路径独立 return，扁
         if inject:
             cdp_command(session, "Storage.setCookies", {"cookies": inject})
         apply_stealth(session, target_id, command=cdp_command)
+        inject_network_monitor(session, target_id)
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
         if result.get("errorText"):
             return False, []
@@ -776,6 +898,8 @@ def render_page(
             _inject_local_storage(session, target_id, credential_origins)
         # AB4：文档创建前注入 stealth（失败不阻断渲染）
         apply_stealth(session, target_id, command=cdp_command)
+        # 网络空闲监控：导航前注入，使 SPA 早期 XHR/fetch 也被计数
+        inject_network_monitor(session, target_id)
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
         if result.get("errorText"):
             raise RenderError(f"渲染导航失败: {result['errorText']}")
@@ -917,6 +1041,7 @@ __all__ = [
     "READY_TIMEOUT_SECONDS",
     "RenderError",
     "get_renderer_pool",
+    "inject_network_monitor",
     "looks_like_js_shell",
     "refresh_credentials",
     "render_page",

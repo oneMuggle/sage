@@ -92,7 +92,8 @@ def test_text_mode_expression_has_no_ref_registry():
     assert "data-sage-ref" not in expression
     assert "getClientRects" not in expression
     assert "innerText" in expression
-    assert f"slice(0,{SNAPSHOT_TEXT_CAP})" in expression.replace(" ", "")
+    assert f"var TEXT_CAP = {SNAPSHOT_TEXT_CAP};" in expression
+    assert "slice(0,TEXT_CAP)" in expression.replace(" ", "")
 
 
 def test_expression_injects_max_collect_and_offscreen_flag():
@@ -304,3 +305,99 @@ def test_ref_guard_accepts_empty_name_but_rejects_stale_variants():
     assert _run_ref_guard(expression, _fake_element(True, "Changed"), "{e1:'Original'}") == stale
     # registry 中不存在该 ref（重新快照前已被清理）
     assert _run_ref_guard(expression, "undefined", "{}") == stale
+
+
+# ---------------------------------------------------------------------------
+# iframe 快照元数据
+# ---------------------------------------------------------------------------
+
+
+def test_parse_interactive_passes_through_iframes_scanned_and_truncated():
+    """iframes_scanned / iframes_truncated 从 payload 透传到 content。"""
+    payload = json.dumps({
+        "url": "https://example.test/",
+        "title": "Example",
+        "viewport": {"width": 1024, "height": 768, "scroll_y": 0},
+        "elements": [_element("e1")],
+        "elements_total": 1,
+        "text": "body",
+        "iframes_scanned": 3,
+        "iframes_truncated": True,
+    })
+    content = parse_snapshot_payload(payload)
+    assert content["iframes_scanned"] == 3
+    assert content["iframes_truncated"] is True
+    assert "iframe 数量超过上限" in content["hint"]
+
+
+def test_parse_iframes_truncated_false_no_hint():
+    """iframes_truncated=False 时不应产生 iframe 截断提示。"""
+    payload = json.dumps({
+        "url": "https://example.test/",
+        "title": "Example",
+        "viewport": {"width": 1024, "height": 768, "scroll_y": 0},
+        "elements": [_element("e1")],
+        "elements_total": 1,
+        "text": "x" * 400,
+        "iframes_scanned": 2,
+        "iframes_truncated": False,
+    })
+    content = parse_snapshot_payload(payload)
+    assert content["iframes_scanned"] == 2
+    assert content["iframes_truncated"] is False
+    assert "iframe" not in (content.get("hint") or "")
+
+
+def test_parse_cross_origin_iframe_element_keeps_frame_url():
+    """cross-origin iframe 占位元素保留 frame_url 字段。"""
+    iframe_el = _element("e2", role="iframe", name="https://other.test/page")
+    iframe_el["frame_url"] = "https://other.test/page"
+    payload = json.dumps({
+        "url": "https://example.test/",
+        "title": "Example",
+        "viewport": {"width": 1024, "height": 768, "scroll_y": 0},
+        "elements": [_element("e1"), iframe_el],
+        "elements_total": 2,
+        "text": "body",
+        "iframes_scanned": 1,
+    })
+    content = parse_snapshot_payload(payload)
+    frame_el = content["elements"][1]
+    assert frame_el["role"] == "iframe"
+    assert frame_el["frame_url"] == "https://other.test/page"
+
+
+def test_parse_query_matches_cross_origin_iframe_by_frame_url():
+    """query 过滤可命中 cross-origin iframe 的 frame_url。"""
+    iframe_el = _element("e2", role="iframe", name="https://cnki.example/result")
+    iframe_el["frame_url"] = "https://cnki.example/result"
+    iframe_el["_cross_origin"] = True
+    payload = json.dumps({
+        "url": "https://example.test/",
+        "title": "Example",
+        "viewport": {"width": 1024, "height": 768, "scroll_y": 0},
+        "elements": [_element("e1", role="button", name="Search"), iframe_el],
+        "elements_total": 2,
+        "text": "body",
+    })
+    content = parse_snapshot_payload(payload, query="cnki")
+    # _cross_origin 字段应被清除，不暴露给调用方
+    assert len(content["elements"]) == 1
+    assert "_cross_origin" not in content["elements"][0]
+    assert content["elements"][0]["frame_url"] == "https://cnki.example/result"
+
+
+def test_build_snapshot_expression_contains_iframe_constants():
+    """表达式中必须含 iframe 遍历相关常量占位符替换后的值。"""
+    expression = build_snapshot_expression()
+    assert "var IFRAME_MAX_PER_FRAME = 60;" in expression
+    assert "var IFRAME_MAX_FRAMES = 10;" in expression
+    assert "iframeEl.contentDocument" in expression
+
+
+def test_build_text_expression_contains_iframe_traversal():
+    """text 模式表达式也应包含 iframe 正文采集逻辑。"""
+    expression = build_snapshot_expression(mode="text")
+    assert "iframeDoc.body" in expression
+    # text 模式直接内联替换上限值（不声明 var），检查 for 循环边界
+    assert "f<10" in expression.replace(" ", "")

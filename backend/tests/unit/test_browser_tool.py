@@ -359,8 +359,11 @@ def _tool(cls):
 def test_navigate_happy_path_with_settle(stubbed, monkeypatch):
     stubbed.results.extend(
         [
+            {},  # Page.addScriptToEvaluateOnNewDocument（inject_network_monitor）
             {},  # Page.navigate
             {"result": {"value": "complete"}},  # readyState poll
+            {"result": {"value": 0}},  # _wait_network_idle round 1
+            {"result": {"value": 0}},  # _wait_network_idle round 2（stable）
             {"result": {"value": 0}},  # settle: innerText 长度（SPA hydrate 窗口）
             {"result": {"value": 0}},
             {"result": {"value": 0}},  # 连续 2 轮不变 → 稳定，提前返回
@@ -370,7 +373,7 @@ def test_navigate_happy_path_with_settle(stubbed, monkeypatch):
     result = _tool(BrowserNavigateTool).execute(url="https://x/", browser_id="b1")
     assert result.success is True
     assert result.content["title"] == "X"
-    assert stubbed.calls[0]["method"] == "Page.navigate"
+    assert stubbed.calls[1]["method"] == "Page.navigate"
 
 
 def test_navigate_offline_gate_blocks_http_only(stubbed, monkeypatch):
@@ -396,11 +399,14 @@ def test_navigate_offline_gate_blocks_http_only(stubbed, monkeypatch):
     # about:blank 无网络访问 —— 过门禁，走到导航层（stub 下成功）
     stubbed.results.extend(
         [
+            {},  # Page.addScriptToEvaluateOnNewDocument（inject_network_monitor）
             {},  # Page.navigate
             {"result": {"value": "complete"}},
-            {"result": {"value": 0}},
-            {"result": {"value": 0}},
-            {"result": {"value": 0}},
+            {"result": {"value": 0}},  # _wait_network_idle round 1
+            {"result": {"value": 0}},  # _wait_network_idle round 2（stable）
+            {"result": {"value": 0}},  # text settle round 1
+            {"result": {"value": 0}},  # text settle round 2
+            {"result": {"value": 0}},  # text settle round 3（stable）
             {"result": {"value": json.dumps({"url": "about:blank", "title": ""})}},
         ]
     )
@@ -425,7 +431,7 @@ def test_navigate_rejects_bad_scheme_and_reports_error_text(stubbed):
     assert _tool(BrowserNavigateTool).execute(url="file:///etc/passwd").success is False
     assert "file" in _tool(BrowserNavigateTool).execute(url="file:///x").error
 
-    stubbed.results.extend([{"errorText": "ERR_NAME_NOT_RESOLVED"}])
+    stubbed.results.extend([{}, {"errorText": "ERR_NAME_NOT_RESOLVED"}])
     result = _tool(BrowserNavigateTool).execute(url="https://nope.example", browser_id="b1")
     assert result.success is False
     assert "ERR_NAME_NOT_RESOLVED" in result.error
@@ -443,9 +449,10 @@ def test_snapshot_text_mode_caps_text_and_keeps_legacy_shape(stubbed, monkeypatc
     assert result.content["text"] == "x"
     assert result.content["truncated"] is False
     assert result.content["browser_meta"]["action"] == "snapshot"
-    # 截断发生在页面侧（JS slice）—— 锁定表达式包含上限，且 text 模式不注入 ref
+    # 截断发生在页面侧（JS slice）—— 锁定表达式包含上限变量，且 text 模式不注入 ref
     expression = stubbed.calls[0]["params"]["expression"]
-    assert "slice(0,8)" in expression.replace(" ", "")
+    assert "var TEXT_CAP = 8;" in expression
+    assert "slice(0,TEXT_CAP)" in expression.replace(" ", "")
     assert "__SAGE_REFS__" not in expression
 
 
@@ -1305,11 +1312,14 @@ def test_browser_login_export_uses_storage_get_cookies(monkeypatch):
 # ---------------------------------------------------------------------------
 
 _NAV_RESULTS = [
+    {},  # Page.addScriptToEvaluateOnNewDocument（inject_network_monitor）
     {},  # Page.navigate
     {"result": {"value": "complete"}},
-    {"result": {"value": 0}},
-    {"result": {"value": 0}},
-    {"result": {"value": 0}},
+    {"result": {"value": 0}},  # _wait_network_idle round 1
+    {"result": {"value": 0}},  # _wait_network_idle round 2（stable）
+    {"result": {"value": 0}},  # text settle round 1
+    {"result": {"value": 0}},  # text settle round 2
+    {"result": {"value": 0}},  # text settle round 3（stable）
     {"result": {"value": json.dumps({"url": "https://x/", "title": "X"})}},
 ]
 
@@ -1364,11 +1374,15 @@ def test_navigate_new_tab_marks_active_target(stubbed, monkeypatch):
     _stub_tabs(monkeypatch, [_page("t-old"), _page("t-new")])
     stubbed.results.extend(
         [
-            {"targetId": "t-new"},  # Target.createTarget
+            {"targetId": "t-new"},  # Target.createTarget(about:blank)
+            {},  # Page.addScriptToEvaluateOnNewDocument（inject_network_monitor）
+            {},  # Page.navigate
             {"result": {"value": "complete"}},
-            {"result": {"value": 0}},
-            {"result": {"value": 0}},
-            {"result": {"value": 0}},
+            {"result": {"value": 0}},  # _wait_network_idle round 1
+            {"result": {"value": 0}},  # _wait_network_idle round 2（stable）
+            {"result": {"value": 0}},  # text settle round 1
+            {"result": {"value": 0}},  # text settle round 2
+            {"result": {"value": 0}},  # text settle round 3（stable）
             {"result": {"value": json.dumps({"url": "https://x/", "title": "X"})}},
         ]
     )
@@ -1455,7 +1469,7 @@ def test_browser_meta_on_success_and_failure(stubbed):
     assert meta["login_wall"] is True  # 沿用最近一次快照判定
 
     # 失败结果同样带 meta（content 非 dict 时包 result）
-    stubbed.results.append({"errorText": "ERR_NAME_NOT_RESOLVED"})
+    stubbed.results.extend([{}, {"errorText": "ERR_NAME_NOT_RESOLVED"}])
     failed = _tool(BrowserNavigateTool).execute(url="https://nope.example", browser_id="b1")
     assert failed.success is False
     assert failed.content["result"] is None
@@ -1692,13 +1706,16 @@ def _plain_input_meta(*_args, **_kwargs):
 
 
 def _nav_results_for(final_url: str, final_title: str = "Final") -> List[Dict[str, Any]]:
-    """Page.navigate → 就绪/稳定等待 → 最终页面 URL（模拟重定向落地）。"""
+    """inject_network_monitor → Page.navigate → 就绪/稳定等待 → 最终页面 URL（模拟重定向落地）。"""
     return [
-        {},
+        {},  # Page.addScriptToEvaluateOnNewDocument（inject_network_monitor）
+        {},  # Page.navigate
         {"result": {"value": "complete"}},
-        {"result": {"value": 0}},
-        {"result": {"value": 0}},
-        {"result": {"value": 0}},
+        {"result": {"value": 0}},  # _wait_network_idle round 1
+        {"result": {"value": 0}},  # _wait_network_idle round 2（stable）
+        {"result": {"value": 0}},  # text settle round 1
+        {"result": {"value": 0}},  # text settle round 2
+        {"result": {"value": 0}},  # text settle round 3（stable）
         {"result": {"value": json.dumps({"url": final_url, "title": final_title})}},
     ]
 

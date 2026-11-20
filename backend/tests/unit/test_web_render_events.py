@@ -196,7 +196,13 @@ def test_render_page_records_event_metrics(fake_time, monkeypatch):
 def test_wait_page_ready_reports_wait_for_hit(fake_time, monkeypatch):
     """wait_for 选择器在窗口内出现 → True。"""
     evals = iter(["complete", True, 5, 5, 5])
-    monkeypatch.setattr(web_render, "_evaluate_json", lambda s, e, t: next(evals))
+
+    def _eval(session, expression, target_id):
+        if "__SAGE_ACTIVE_REQUESTS__" in expression:
+            return 0
+        return next(evals)
+
+    monkeypatch.setattr(web_render, "_evaluate_json", _eval)
     assert web_render.wait_page_ready(SimpleNamespace(), "t1", wait_for=".item") is True
 
 
@@ -214,7 +220,13 @@ def test_wait_page_ready_reports_wait_for_miss(fake_time, monkeypatch):
 
 def test_wait_page_ready_without_wait_for_is_true(fake_time, monkeypatch):
     evals = iter(["complete", 5, 5, 5])
-    monkeypatch.setattr(web_render, "_evaluate_json", lambda s, e, t: next(evals))
+
+    def _eval(session, expression, target_id):
+        if "__SAGE_ACTIVE_REQUESTS__" in expression:
+            return 0
+        return next(evals)
+
+    monkeypatch.setattr(web_render, "_evaluate_json", _eval)
     assert web_render.wait_page_ready(SimpleNamespace(), "t1") is True
 
 

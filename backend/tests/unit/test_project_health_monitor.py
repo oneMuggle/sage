@@ -197,11 +197,15 @@ def test_scan_all_sorts_critical_before_warning_before_ok():
         ],
         {
             "ok": [],
-            "warn": [FakeMilestone(id="mw", title="W", due_date="2026-11-13", status="pending")],
+            "warn": [FakeMilestone(id="mw", title="W", due_date="2026-11-17", status="pending")],
             "crit": [FakeMilestone(id="mc", title="C", due_date="2026-10-01", status="pending")],
         },
     )
-    summaries = monitor.scan_all()
+    # 注入固定日期，避免真实日历漂移。在 today=2026-11-20 下：
+    # - crit: 2026-10-01 逾期 50 天 → CRITICAL
+    # - warn: 2026-11-17 逾期 3 天 → WARNING（3 < CRITICAL_OVERDUE_DAYS=7）
+    # - ok: 无里程碑 → OK
+    summaries = monitor.scan_all(today="2026-11-20")
     assert [s.project_id for s in summaries] == ["crit", "warn", "ok"]
 
 
