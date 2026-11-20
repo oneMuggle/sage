@@ -39,7 +39,13 @@ def user_data_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def resolver(db: Database, user_data_dir: Path, monkeypatch) -> DefaultWorkspaceResolver:
-    """Patch the module-level DefaultWorkspaceResolver to use the test DB."""
+    """Patch the module-level DefaultWorkspaceResolver to use the test DB.
+
+    Also redirect ``Path.home()`` so the default-workspace fallthrough
+    (``~/Sage/``) stays inside the temp dir instead of touching the runner's
+    real home directory.
+    """
+    monkeypatch.setattr(Path, "home", lambda: user_data_dir)
     test_resolver = DefaultWorkspaceResolver(db=db, user_data_dir=str(user_data_dir))
     monkeypatch.setattr(routes, "DefaultWorkspaceResolver", lambda: test_resolver)
     return test_resolver
@@ -50,11 +56,11 @@ def resolver(db: Database, user_data_dir: Path, monkeypatch) -> DefaultWorkspace
 # ----------------------------------------------------------------------
 
 
-def test_get_default_with_no_preference_returns_scratch(resolver, user_data_dir):
+def test_get_default_with_no_preference_returns_default(resolver, user_data_dir):
     response = routes.get_default_workspace(session_id=None, detected_root=None)
 
     assert response.path is not None
-    assert response.source == "scratch"
+    assert response.source == "default"
     assert response.is_fallback is True
 
 

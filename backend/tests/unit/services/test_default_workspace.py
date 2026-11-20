@@ -2,6 +2,10 @@
 
 Cover the priority chain with an in-memory SQLite DB and real temp dirs —
 no subprocess, no Electron IPC — so the tests stay fast and deterministic.
+
+2026-11-20: scratch → default (~/Sage/) 语义变更。所有 fallthrough 测试
+断言 source=DEFAULT（而非 SCRATCH）。测试通过 monkeypatch Path.home() 隔离，
+避免创建真实 ~/Sage/。
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from backend.data.database import Database
 from backend.office.errors import OfficePathError
 from backend.office.session_workspace import bind_session_workspace
 from backend.services.default_workspace import (
+    DEFAULT_WORKSPACE_DIRNAME,
     LAST_WORKSPACE_KEY,
     DefaultWorkspaceResolver,
     WorkspaceSource,
@@ -75,6 +80,13 @@ def another_dir(tmp_path: Path) -> Path:
     return path
 
 
+@pytest.fixture()
+def isolated_home(monkeypatch, tmp_path: Path):
+    """Redirect Path.home() to tmp_path so ~/Sage/ is isolated per test."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    return tmp_path
+
+
 # ----------------------------------------------------------------------
 # priority 1: explicit project path wins
 # ----------------------------------------------------------------------
@@ -89,14 +101,14 @@ def test_explicit_project_path_wins(resolver, project_dir):
     assert result.is_fallback is False
 
 
-def test_explicit_invalid_path_falls_through(resolver, user_data_dir):
+def test_explicit_invalid_path_falls_through(resolver, isolated_home):
     """A bad project path must not halt resolution — the chain moves on."""
     result = resolver.resolve_default_workspace(
         project_path="/definitely/does/not/exist"
     )
 
     assert result is not None
-    assert result.source == WorkspaceSource.SCRATCH
+    assert result.source == WorkspaceSource.DEFAULT
     assert result.is_fallback is True
 
 
@@ -123,7 +135,7 @@ def test_session_binding_beats_user_preference(resolver, another_dir, session_id
     assert Path(result.path) == another_dir.resolve()
 
 
-def test_session_binding_with_dead_path_skips(resolver, session_id, tmp_path):
+def test_session_binding_with_dead_path_skips(resolver, session_id, tmp_path, isolated_home):
     """A stale binding (directory deleted) must not block the next priority."""
     # Bind the session to a directory, then delete it.
     dead = tmp_path / "dead-binding"
@@ -133,9 +145,9 @@ def test_session_binding_with_dead_path_skips(resolver, session_id, tmp_path):
 
     result = resolver.resolve_default_workspace(session_id=session_id)
 
-    # Falls through to scratch.
+    # Falls through to default workspace.
     assert result is not None
-    assert result.source == WorkspaceSource.SCRATCH
+    assert result.source == WorkspaceSource.DEFAULT
     assert result.is_fallback is True
 
 
@@ -154,7 +166,7 @@ def test_user_preference_hits(resolver, project_dir):
     assert result.source == WorkspaceSource.USER_PREFERENCE
 
 
-def test_stale_preference_retained(resolver, tmp_path):
+def test_stale_preference_retained(resolver, tmp_path, isolated_home):
     """A transiently unusable remembered path is kept, not silently forgotten."""
     dead = tmp_path / "gone"
     dead.mkdir()
@@ -165,38 +177,66 @@ def test_stale_preference_retained(resolver, tmp_path):
 
     result = resolver.resolve_default_workspace()
 
-    # Falls to scratch, but resolution must not mutate the stored preference:
+    # Falls to default workspace, but resolution must not mutate the stored preference:
     # an unmounted drive can come back, and only an explicit forget clears it.
     assert result is not None
-    assert result.source == WorkspaceSource.SCRATCH
+    assert result.source == WorkspaceSource.DEFAULT
     assert resolver.settings.get(LAST_WORKSPACE_KEY) is not None
 
 
 # ----------------------------------------------------------------------
-# priority 4: scratch workspace
+# priority 5: default workspace (~/Sage/)
 # ----------------------------------------------------------------------
 
 
-def test_scratch_workspace_created_when_nothing_else(resolver, user_data_dir):
+def test_default_workspace_created_when_nothing_else(resolver, isolated_home):
     result = resolver.resolve_default_workspace()
 
     assert result is not None
-    assert result.source == WorkspaceSource.SCRATCH
+    assert result.source == WorkspaceSource.DEFAULT
     assert result.is_fallback is True
-    # The scratch dir was created under the isolated user_data_dir.
-    scratch = user_data_dir / "workspaces" / "default"
-    assert Path(result.path) == scratch.resolve()
-    assert scratch.exists()
-    assert scratch.is_dir()
+    # The default dir was created under isolated_home (~/Sage/).
+    default_dir = isolated_home / DEFAULT_WORKSPACE_DIRNAME
+    assert Path(result.path) == default_dir.resolve()
+    assert default_dir.exists()
+    assert default_dir.is_dir()
 
 
-def test_scratch_workspace_is_idempotent(resolver):
-    """Two consecutive resolutions must return the same scratch path."""
+def test_default_workspace_is_idempotent(resolver, isolated_home):
+    """Two consecutive resolutions must return the same default path."""
     a = resolver.resolve_default_workspace()
     b = resolver.resolve_default_workspace()
     assert a is not None
     assert b is not None
     assert a.path == b.path
+
+
+def test_resolve_to_default_returns_default_workspace(resolver, isolated_home):
+    """resolve_to_default() bypasses the chain and resolves to ~/Sage/."""
+    result = resolver.resolve_to_default()
+
+    assert result is not None
+    default_dir = isolated_home / DEFAULT_WORKSPACE_DIRNAME
+    assert Path(result.path) == default_dir.resolve()
+    assert result.source == WorkspaceSource.DEFAULT
+    assert result.is_fallback is False  # explicit choice, not a fallback
+    assert default_dir.exists()
+
+
+def test_resolve_to_default_is_idempotent(resolver, isolated_home):
+    """Two consecutive resolve_to_default() calls return the same path."""
+    a = resolver.resolve_to_default()
+    b = resolver.resolve_to_default()
+    assert a is not None
+    assert b is not None
+    assert a.path == b.path
+    assert a.source == WorkspaceSource.DEFAULT
+
+
+def test_default_workspace_path_returns_home_sage(resolver, isolated_home):
+    """default_workspace_path() returns ~/Sage/ without creating it."""
+    path = resolver.default_workspace_path()
+    assert path == isolated_home / DEFAULT_WORKSPACE_DIRNAME
 
 
 # ----------------------------------------------------------------------

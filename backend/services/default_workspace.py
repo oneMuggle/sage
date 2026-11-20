@@ -1,4 +1,4 @@
-"""Default workspace resolution (2026-10-29, P0).
+"""Default workspace resolution (2026-10-29, P0; 2026-11-20 默认工作区重构).
 
 Single source of truth for "which directory should this session work in?".
 
@@ -14,12 +14,13 @@ This module replaces that with one ordered chain:
     2. session binding       — an existing session's live binding
     3. user preference       — ``preferences`` table; survives reinstall
     4. detected root         — Electron's cwd sniffing, a hint only
-    5. scratch workspace     — ``<userData>/workspaces/default``, created lazily
+    5. default workspace     — ``~/Sage/`` (DEFAULT_WORKSPACE_DIRNAME), created lazily
     6. ``None``              — the caller renders the "pick a folder" guide
 
-Step 4 mirrors how mainstream desktop AI tools stay usable without a project
-(Cursor falls back to ``$HOME``, Cline to ``~/Desktop``) but keeps the files
-in one predictable directory instead of scattering them across the home tree.
+Step 5 (2026-11-20) changed from ``<userData>/workspaces/default`` to ``~/Sage/``.
+This ensures sessions always have a usable workspace_root even when the user
+selects "不绑定项目" (skip_workspace_binding=True), which now resolves to
+``~/Sage/`` via ``resolve_to_default()`` instead of returning None.
 
 The legacy localStorage value is not read here — the frontend migrates it into
 ``preferences`` on first run, which then makes it visible to step 3.
@@ -48,6 +49,10 @@ logger = logging.getLogger(__name__)
 #: user across machines when the profile is synced.
 LAST_WORKSPACE_KEY = "last_workspace_path"
 
+#: 默认工作区目录名（在用户主目录下）。
+#: 用户选择"不绑定项目"时使用，确保所有工具都有合法的 workspace_root。
+DEFAULT_WORKSPACE_DIRNAME = "Sage"
+
 #: Scratch workspace layout, relative to the per-user data directory.
 SCRATCH_WORKSPACE_SUBPATH = ("workspaces", "default")
 
@@ -63,6 +68,7 @@ class WorkspaceSource(str, Enum):
     SESSION_BINDING = "session_binding"
     USER_PREFERENCE = "user_preference"
     DETECTED = "detected"
+    DEFAULT = "default"
     SCRATCH = "scratch"
 
 
@@ -163,11 +169,11 @@ class DefaultWorkspaceResolver:
                 "default_workspace: detected project root is unusable, falling through"
             )
 
-        scratch = self._ensure_scratch_workspace()
-        if scratch is not None:
+        default = self._ensure_default_workspace()
+        if default is not None:
             return WorkspaceResolution(
-                path=str(scratch),
-                source=WorkspaceSource.SCRATCH,
+                path=str(default),
+                source=WorkspaceSource.DEFAULT,
                 is_fallback=True,
             )
 
@@ -202,6 +208,30 @@ class DefaultWorkspaceResolver:
             or _DEFAULT_USER_DATA_DIR
         )
         return Path(base).joinpath(*SCRATCH_WORKSPACE_SUBPATH)
+
+    def default_workspace_path(self) -> Path:
+        """用户主目录下的默认工作区路径（``~/Sage/``）。
+
+        跨安装持久化，用户可见可管理。不检查目录是否存在。
+        """
+        return Path.home() / DEFAULT_WORKSPACE_DIRNAME
+
+    def resolve_to_default(self) -> Optional[WorkspaceResolution]:
+        """直接解析到默认工作区（``~/Sage/``），不走解析链。
+
+        用于用户明确选择"默认工作区"（即 skip_workspace_binding=True）的场景。
+        返回 ``WorkspaceResolution(source=DEFAULT)``，is_fallback=False。
+        若 ``~/Sage/`` 无法创建，回落临时目录；若仍失败则返回 None。
+        """
+        path = self._ensure_default_workspace()
+        if path is not None:
+            return WorkspaceResolution(
+                path=str(path),
+                source=WorkspaceSource.DEFAULT,
+                is_fallback=False,
+            )
+        logger.error("default_workspace: could not create default workspace ~/Sage/")
+        return None
 
     # ------------------------------------------------------------------
     # internals
@@ -254,6 +284,27 @@ class DefaultWorkspaceResolver:
             except OSError as exc:
                 logger.warning(
                     "default_workspace: scratch workspace location unusable",
+                    extra={"candidate": str(candidate), "reason": str(exc)},
+                )
+        return None
+
+    def _ensure_default_workspace(self) -> Optional[Path]:
+        """创建 ``~/Sage/`` 默认工作区，失败时回落临时目录。
+
+        首选 ``Path.home() / DEFAULT_WORKSPACE_DIRNAME``（即 ``~/Sage/``）；
+        若该路径因权限、磁盘满等原因不可写，回落 ``<tmpdir>/sage-workspaces/default``。
+        """
+        candidates = [
+            self.default_workspace_path(),
+            Path(tempfile.gettempdir()) / "sage-workspaces" / "default",
+        ]
+        for candidate in candidates:
+            try:
+                candidate.mkdir(parents=True, exist_ok=True)
+                return candidate.resolve()
+            except OSError as exc:
+                logger.warning(
+                    "default_workspace: default workspace location unusable",
                     extra={"candidate": str(candidate), "reason": str(exc)},
                 )
         return None
