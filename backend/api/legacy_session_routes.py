@@ -137,23 +137,27 @@ def create_session(data: SessionCreate, repo: SessionRepository = Depends(get_se
         )
 
     workspace_binding: Optional[Dict[str, Any]] = None
-    if not data.skip_workspace_binding:
-        try:
-            resolver = DefaultWorkspaceResolver()
-            resolution = resolver.resolve_default_workspace(detected_root=data.detected_root)
-            if resolution is not None:
-                conn = get_database().get_connection()
-                bind_session_workspace(conn, session.id, resolution.path)
-                workspace_binding = {
-                    "path": resolution.path,
-                    "source": resolution.source.value,
-                    "is_fallback": resolution.is_fallback,
-                }
-        except Exception as exc:  # noqa: BLE001 — 工作区解析失败不能阻塞会话创建
-            logger.warning(
-                "create_session: workspace resolution/bind failed (fail-open)",
-                extra={"session_id": session.id, "reason": str(exc)},
+    try:
+        resolver = DefaultWorkspaceResolver()
+        if data.skip_workspace_binding:
+            resolution = resolver.resolve_to_default()
+        else:
+            resolution = resolver.resolve_default_workspace(
+                detected_root=data.detected_root
             )
+        if resolution is not None:
+            conn = get_database().get_connection()
+            bind_session_workspace(conn, session.id, resolution.path)
+            workspace_binding = {
+                "path": resolution.path,
+                "source": resolution.source.value,
+                "is_fallback": resolution.is_fallback,
+            }
+    except Exception as exc:  # noqa: BLE001 — 工作区解析失败不能阻塞会话创建
+        logger.warning(
+            "create_session: workspace resolution/bind failed (fail-open)",
+            extra={"session_id": session.id, "reason": str(exc)},
+        )
 
     # Phase 2: session_start 生命周期钩子 (observe-only, fail-open)
     _fire_session_hook("session_start", session.id, title=session.title)

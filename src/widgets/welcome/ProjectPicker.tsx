@@ -37,7 +37,10 @@ export function ProjectPicker({ value, onChange, projects }: ProjectPickerProps)
   const selectedProject = projects.find((p) => p.id === value);
 
   return (
-    <Select value={value ?? 'none'} onValueChange={(val: string) => onChange(val === 'none' ? null : val)}>
+    <Select
+      value={value ?? 'default'}
+      onValueChange={(val: string) => onChange(val === 'default' ? null : val)}
+    >
       <SelectTrigger aria-label="选择项目" className="w-48">
         <SelectValue placeholder="选择项目">
           {selectedProject ? selectedProject.name : '选择项目'}
@@ -55,7 +58,7 @@ export function ProjectPicker({ value, onChange, projects }: ProjectPickerProps)
             />
           </div>
         </div>
-        <SelectItem value="none">不绑定项目</SelectItem>
+        <SelectItem value="default">默认工作区（~/Sage/）</SelectItem>
         {filteredProjects.length > 0 ? (
           filteredProjects.map((project) => (
             <SelectItem key={project.id} value={project.id}>

@@ -20,10 +20,10 @@ describe('ProjectPicker', () => {
     expect(screen.getByText('Project Alpha')).toBeInTheDocument();
   });
 
-  it('shows "不绑定项目" option', () => {
+  it('shows "默认工作区" option', () => {
     render(<ProjectPicker value={null} onChange={vi.fn()} projects={mockProjects} />);
     fireEvent.click(screen.getByRole('combobox'));
-    expect(screen.getByText('不绑定项目')).toBeInTheDocument();
+    expect(screen.getByText('默认工作区（~/Sage/）')).toBeInTheDocument();
   });
 
   it('calls onChange when selecting a project', () => {
@@ -34,11 +34,11 @@ describe('ProjectPicker', () => {
     expect(onChange).toHaveBeenCalledWith('proj-2');
   });
 
-  it('calls onChange with null when selecting "不绑定项目"', () => {
+  it('calls onChange with null when selecting "默认工作区"', () => {
     const onChange = vi.fn();
     render(<ProjectPicker value="proj-1" onChange={onChange} projects={mockProjects} />);
     fireEvent.click(screen.getByRole('combobox'));
-    fireEvent.click(screen.getByText('不绑定项目'));
+    fireEvent.click(screen.getByText('默认工作区（~/Sage/）'));
     expect(onChange).toHaveBeenCalledWith(null);
   });
 

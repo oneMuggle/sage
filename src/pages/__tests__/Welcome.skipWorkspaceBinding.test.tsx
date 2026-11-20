@@ -59,11 +59,12 @@ function renderWelcome() {
   );
 }
 
-describe('Welcome page - skip workspace binding', () => {
-  // 2026-11-04 (fix/skip-workspace-binding): 用户在新会话页选择"不绑定项目"时，
-  // handleSubmit 应调用 createSession(true)，传递 skipBinding=true。
+describe('Welcome page - default workspace (skip workspace binding)', () => {
+  // 2026-11-20 (feat/default-workspace): 用户在新会话页选择"默认工作区（~/Sage/）"时，
+  // handleSubmit 应调用 createSession(true)，传递 skipBinding=true，
+  // 后端 resolve_to_default() 将绑定到 ~/Sage/。
   // 语义对齐主流 AI 应用 (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
-  it('calls createSession(true) when projectId is null (user chose "不绑定项目")', async () => {
+  it('calls createSession(true) when projectId is null (user chose "默认工作区")', async () => {
     renderWelcome();
 
     // 输入消息
