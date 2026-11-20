@@ -18,6 +18,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from typing import Optional
@@ -48,14 +49,18 @@ router = APIRouter(prefix="/design", tags=["design"])
 
 
 class CreateProjectRequest(BaseModel):
-    """POST /design/projects body."""
+    """POST /design/projects body.
+
+    Only ``brief`` is required; the studio resolves missing name, kind,
+    system and template from defaults.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
-    kind: str
-    system_id: str
-    template_id: str
+    name: Optional[str] = None
+    kind: str = "deck"
+    system_id: Optional[str] = None
+    template_id: Optional[str] = None
     brief: str
 
 
@@ -81,6 +86,7 @@ class ExportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     format: str = "html"
+    inline: bool = False
 
 
 class OutlineRequest(BaseModel):
@@ -285,6 +291,81 @@ async def delete_project(project_id: str):
 
 
 # ---------------------------------------------------------------------------
+# GET /design/projects/:project_id/artifacts — version history
+# ---------------------------------------------------------------------------
+
+
+@router.get("/projects/{project_id}/artifacts")
+async def list_artifacts(project_id: str):
+    """Return artifact version summaries (no HTML payload), oldest first."""
+    studio = _require_studio()
+    try:
+        artifacts = studio.list_artifacts(project_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    return [
+        {
+            "id": a.id,
+            "project_id": a.project_id,
+            "version": a.version,
+            "title": a.title,
+            "kind": a.kind,
+            "created_at": a.created_at.isoformat(),
+        }
+        for a in artifacts
+    ]
+
+
+@router.get("/projects/{project_id}/artifacts/{artifact_id}")
+async def get_artifact(project_id: str, artifact_id: str):
+    """Return one artifact with its full HTML content."""
+    studio = _require_studio()
+    try:
+        studio.get_project(project_id)
+        artifact = studio.get_artifact(artifact_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    if artifact.project_id != project_id:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "detail": (
+                    f"Artifact {artifact_id} does not belong to project "
+                    f"{project_id}"
+                ),
+            },
+        )
+    return artifact.model_dump()
+
+
+@router.post("/projects/{project_id}/artifacts/{artifact_id}/restore")
+async def restore_artifact(project_id: str, artifact_id: str):
+    """Restore an old artifact by appending it as a new version."""
+    studio = _require_studio()
+    try:
+        artifact = studio.restore_artifact(project_id, artifact_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    return artifact.model_dump()
+
+
+# ---------------------------------------------------------------------------
+# GET /design/projects/:project_id/messages — iteration history
+# ---------------------------------------------------------------------------
+
+
+@router.get("/projects/{project_id}/messages")
+async def list_messages(project_id: str):
+    """Return persisted iteration messages, oldest first."""
+    studio = _require_studio()
+    try:
+        messages = studio.list_messages(project_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    return [m.model_dump() for m in messages]
+
+
+# ---------------------------------------------------------------------------
 # POST /design/projects/:project_id/generate (SSE)
 # ---------------------------------------------------------------------------
 
@@ -451,6 +532,19 @@ async def export_artifact(  # noqa: PLR0911 — 每个校验门一个返回是�
                 status_code=500,
                 content={"detail": result.error or "Export failed"},
             )
+
+        if req.inline and req.format != "html" and result.file_path:
+            from pathlib import Path as _Path
+
+            path = _Path(result.file_path)
+            return {
+                "ok": True,
+                "format": result.format,
+                "filename": path.name,
+                "content_base64": base64.b64encode(
+                    path.read_bytes()
+                ).decode("ascii"),
+            }
 
         return result.model_dump()
 

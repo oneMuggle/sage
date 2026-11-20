@@ -16,9 +16,30 @@ interface DesignExportPanelProps {
 
 const FORMATS: ExportFormat[] = ['pdf', 'pptx', 'zip', 'html'];
 
+const MIME: Record<ExportFormat, string> = {
+  pdf: 'application/pdf',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  zip: 'application/zip',
+  html: 'text/html;charset=utf-8',
+};
+
 function downloadHtml(html: string, filename: string): void {
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadBase64(base64: string, filename: string, mime: string): void {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename;
@@ -33,16 +54,21 @@ export function DesignExportPanel({ projectId, hasArtifact }: DesignExportPanelP
   const handleExport = async (format: ExportFormat) => {
     setRunning(format);
     try {
-      const result = await exportArtifact(projectId, format);
+      const result = await exportArtifact(projectId, format, true);
       if (!result.ok) {
         throw new Error(result.error ?? result.format);
       }
+      let displayed = format.toUpperCase();
       if (format === 'html' && result.html_content) {
-        downloadHtml(result.html_content, `design-${projectId}.html`);
+        displayed = `design-${projectId}.html`;
+        downloadHtml(result.html_content, displayed);
+      } else if (result.content_base64 && result.filename) {
+        displayed = result.filename;
+        downloadBase64(result.content_base64, result.filename, MIME[format]);
+      } else if (!result.file_path) {
+        throw new Error(result.format);
       }
-      toast.success(
-        t('design.export.success').replace('{path}', result.file_path ?? format.toUpperCase()),
-      );
+      toast.success(t('design.export.success').replace('{name}', displayed));
     } catch (err) {
       toast.error(
         t('design.export.failed').replace(

@@ -80,6 +80,35 @@ export interface DesignProjectDetail extends DesignProject {
   latest_artifact: DesignArtifact | null;
 }
 
+/** 创建项目的输入：只有 brief 必填，其余由后端默认值补齐 */
+export interface CreateProjectInput {
+  name?: string;
+  kind: ProjectKind;
+  system_id?: string;
+  template_id?: string;
+  brief: string;
+}
+
+/** GET /design/projects/{id}/artifacts 的列表项（不含 HTML 正文） */
+export interface DesignArtifactSummary {
+  id: string;
+  project_id: string;
+  version: number;
+  title: string;
+  kind: string;
+  created_at: string;
+}
+
+/** 一次迭代对话消息（服务端持久化） */
+export interface IterationMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  artifact_id?: string | null;
+  artifact_version?: number | null;
+  created_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // 生成 & 迭代请求
 // ---------------------------------------------------------------------------
@@ -102,6 +131,8 @@ export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip';
 
 export interface ExportRequest {
   format: ExportFormat;
+  /** true 时后端以 base64 内联返回文件内容，便于前端直接下载 */
+  inline?: boolean;
 }
 
 export interface ExportResult {
@@ -110,5 +141,7 @@ export interface ExportResult {
   file_path?: string;
   html_content?: string;
   download_url?: string;
+  filename?: string;
+  content_base64?: string;
   error?: string;
 }

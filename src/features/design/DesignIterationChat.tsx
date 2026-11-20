@@ -16,17 +16,21 @@ export function DesignIterationChat({ projectId }: DesignIterationChatProps) {
   const iterate = useDesignStore((s) => s.iterate);
   const loading = useDesignStore((s) => s.loadingProject);
   const error = useDesignStore((s) => s.errorProject);
-  const currentArtifact = useDesignStore((s) => s.currentArtifact);
+  const messages = useDesignStore((s) => s.messages);
 
   const [feedback, setFeedback] = useState('');
-  const [history, setHistory] = useState<string[]>([]);
+  const [pending, setPending] = useState<string | null>(null);
 
   const handleSend = async () => {
     const text = feedback.trim();
     if (!text || loading) return;
-    setHistory((prev) => [...prev, text]);
+    setPending(text);
     setFeedback('');
-    await iterate(projectId, text);
+    try {
+      await iterate(projectId, text);
+    } finally {
+      setPending(null);
+    }
   };
 
   return (
@@ -37,24 +41,35 @@ export function DesignIterationChat({ projectId }: DesignIterationChatProps) {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 space-y-2">
         <p className="text-ui-xs text-text-muted">{t('design.detail.iterationHint')}</p>
-        {history.map((entry, index) => (
-          <div
-            key={`${entry}-${index}`}
-            className="ml-auto max-w-[92%] rounded-lg rounded-br-sm bg-accent/10 px-3 py-2 text-ui-sm text-text"
-          >
-            {entry}
+        {messages.map((message) =>
+          message.role === 'user' ? (
+            <div
+              key={message.id}
+              className="ml-auto max-w-[92%] rounded-lg rounded-br-sm bg-accent/10 px-3 py-2 text-ui-sm text-text"
+            >
+              {message.content}
+            </div>
+          ) : (
+            <div
+              key={message.id}
+              className="max-w-[92%] rounded-lg rounded-bl-sm bg-bg-hover px-3 py-2 text-ui-xs text-text-secondary"
+            >
+              {message.artifact_version
+                ? t('design.detail.version').replace('{version}', String(message.artifact_version))
+                : message.content}
+            </div>
+          ),
+        )}
+        {pending && (
+          <div className="ml-auto max-w-[92%] rounded-lg rounded-br-sm bg-accent/10 px-3 py-2 text-ui-sm text-text">
+            {pending}
           </div>
-        ))}
+        )}
         {loading && (
           <div className="flex items-center gap-1.5 text-ui-xs text-text-secondary">
             <Loader2 className="w-3 h-3 animate-spin" />
             {t('design.detail.sending')}
           </div>
-        )}
-        {!loading && currentArtifact && (
-          <p className="text-ui-xs text-text-muted">
-            {t('design.detail.version').replace('{version}', String(currentArtifact.version))}
-          </p>
         )}
         {error && <p className="text-ui-xs text-red-500">{error}</p>}
       </div>
@@ -80,11 +95,7 @@ export function DesignIterationChat({ projectId }: DesignIterationChatProps) {
             disabled={loading || feedback.trim().length === 0}
             onClick={() => void handleSend()}
           >
-            {loading ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Send className="w-3 h-3" />
-            )}
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
             {loading ? t('design.detail.sending') : t('design.detail.send')}
           </button>
         </div>

@@ -8,7 +8,7 @@ import { Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useDesignStore } from '../entities/design/designStore';
-import { DesignCreateWizard } from '../features/design/DesignCreateWizard';
+import { DesignCreateComposer } from '../features/design/DesignCreateComposer';
 import { DesignGenerationView } from '../features/design/DesignGenerationView';
 import { DesignProjectsList } from '../features/design/DesignProjectsList';
 import { useI18n } from '../shared/lib/i18n';
@@ -67,7 +67,7 @@ export function DesignStudio() {
       />
 
       {creating ? (
-        <DesignCreateWizard
+        <DesignCreateComposer
           onCancel={() => setCreating(false)}
           onCreated={(projectId) => handleOpen(projectId)}
         />
