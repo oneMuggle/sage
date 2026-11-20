@@ -29,9 +29,19 @@ triggers: []
 1. `browser_launch`（`headless=false` 便于观察与处理验证码）。
 2. `browser_navigate` 打开：
    `https://kns.cnki.net/kns8s/defaultresult/index?kw=<关键词>&korder=SU`
+   - **`wait_for=".result-list, .search-result-wrap, #result-table, .s-main"`**：
+     搜索结果由 XHR 异步加载，加 `wait_for` 让导航等待结果容器出现再返回。
 3. `browser_snapshot` 读取结果页；需要翻页时用 `browser_interact` 点击
    「下一页」，不要手工拼接带 `QueryID`/`v=` 的详情页 URL。
-4. 热门/高频检索可能触发滑块验证码：停下来请用户在窗口中完成，
+4. **点击搜索按钮后**：若首次 `browser_snapshot` 结果列表为空，
+   不要立即判断失败——SPA 搜索请求可能还在进行，请等待 2–3 秒后重新
+   `browser_snapshot`；或改用 `browser_navigate wait_for=...` 直接导航到
+   结果 URL（见上方）。
+5. **知网内网镜像库**部分版本把搜索结果放在 `<iframe>` 内，
+   `browser_snapshot` 会自动扫描 same-origin iframe 内容并标注 `frame_url`；
+   若 `elements` 中出现 `role: "iframe"` 且 `frame_url` 指向结果页，
+   可用 `browser_navigate url=<frame_url>` 直接进入该 frame。
+6. 热门/高频检索可能触发滑块验证码：停下来请用户在窗口中完成，
    不要自动破解。
 
 ## 2. 打开文献详情
