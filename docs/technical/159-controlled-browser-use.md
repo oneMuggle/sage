@@ -148,6 +148,18 @@
 - **Canvas 提示**：可交互元素少于 3 个且正文少于 200 字符时，在快照结果里提示「页面可能是
   Canvas/图片渲染，考虑截图 + 视觉模型」。
 - 组合键解析支持 Control/Ctrl、Shift、Alt/Option、Meta/Cmd/Command/Win/Super。
+- **iframe 遍历（v2.1）**：`_INTERACTIVE_JS` 通过 `iframe.contentDocument` 遍历所有
+  same-origin iframe 并合并元素（`frame_url` 字段标注来源）；cross-origin iframe 仅记录
+  `role: "iframe"` + `frame_url` 占位，供 AI 感知存在并可手动 navigate 进入。每个子 frame
+  最多采集 60 个候选，最多处理 10 个子 frame（`IFRAME_MAX_COLLECT_PER_FRAME` /
+  `IFRAME_MAX_FRAMES`）。跨 frame ref 在下次 snapshot 后失效（已知限制），AI 应在交互前重拍快照。
+  快照输出新增 `iframes_scanned` / `iframes_truncated` 字段。
+- **网络空闲等待（AJAX 适配）**：`web_render.py` 在每次 `Page.navigate` 前通过
+  `Page.addScriptToEvaluateOnNewDocument` 注入 XHR/fetch monkey-patch 计数器
+  （`window.__SAGE_ACTIVE_REQUESTS__`），`wait_page_ready` 在 readyState 达标后额外等待
+  活跃请求归零（连续 2 轮 0，上限 8 秒，轮询间隔 0.3 秒）。`browser_navigate`（含 `new_tab`
+  两条路径）同样在导航前注入；`browser_interact click` 成功后追加最多 5 秒网络空闲等待，
+  避免 SPA 内容更新前 AI 提前 snapshot。
 
 ### 视觉兜底（M5）
 
@@ -302,7 +314,7 @@
 | 时间线缩略图 | 时间线仅显示缩略图文件名（相机图标）；确认条内联 ≤100KB 的 data URL 缩略图，无法生成时回退显示截图路径 |
 | 对话框不自动处理 | `alert/confirm/prompt` 不自动接受/取消，需用户接管 |
 | 无 diff 快照 | 快照不与上一版做差异对比，模型需自行比较 |
-| 无跨域 iframe 定向 | 不能对跨域子框架内的元素直接定位，只能操作主框架 |
+| 无跨域 iframe 定向 | 不能对跨域子框架内的元素直接定位（ref 跨 frame 会在下次 snapshot 后失效）；same-origin iframe 内容已自动纳入快照（标注 `frame_url`），cross-origin iframe 仅记录 src 占位 |
 | 无 URL 令牌脱敏 | 审计与展示层未对 URL 中的敏感查询参数做掩码 |
 | 无审计导出 | 仅面板内表格展示，未提供 JSON/CSV 导出 |
 | 无指标埋点 | 未接入 `web_metrics` 之类的指标；排障依赖日志与审计表 |

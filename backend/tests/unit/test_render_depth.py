@@ -63,6 +63,8 @@ def _install_render(monkeypatch, evaluate_results: List[Any]) -> List[Dict[str, 
             return "complete"
         if "querySelector" in expression:
             return True  # R37 探针：按"有懒加载"处理，不消耗回放序列
+        if "__SAGE_ACTIVE_REQUESTS__" in expression:
+            return 0  # 网络空闲：不消耗回放序列
         if not queue:
             raise AssertionError("evaluate 序列耗尽")
         return queue.pop(0)

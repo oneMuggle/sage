@@ -19,6 +19,7 @@ v1 面向 coder（executor 边界）；导航仅允许 http/https/about/data。
 from __future__ import annotations
 
 import base64
+import contextlib
 import io
 import json
 import logging
@@ -65,7 +66,7 @@ from .browser_observe import (
 )
 from .file_tool import _record_artifact_safely
 from .network_config import load_network_policy
-from .web_render import wait_page_ready
+from .web_render import _wait_network_idle, inject_network_monitor, wait_page_ready
 
 logger = logging.getLogger(__name__)
 
@@ -1395,9 +1396,10 @@ class BrowserNavigateTool(BaseTool):
             if gate is not None:
                 return gate
             if new_tab:
-                created = cdp_command(session, "Target.createTarget", {"url": url.strip()}).get(
-                    "targetId"
-                )
+                # 先建空白标签页，注入网络监控后再导航（确保 monkey-patch 早于页面脚本）
+                created = cdp_command(
+                    session, "Target.createTarget", {"url": "about:blank"}
+                ).get("targetId")
                 if not created:
                     return _meta_result(
                         ToolResult(success=False, error="新标签页创建失败"),
@@ -1405,9 +1407,18 @@ class BrowserNavigateTool(BaseTool):
                         "navigate",
                         url=url,
                     )
-                # 与 browser_tabs create 对齐：新标签成为当前活动目标，
-                # 否则后续 ensure_page_target(None) 会落回旧标签页
                 session.active_target_id = created
+                inject_network_monitor(session, created)
+                nav = cdp_command(
+                    session, "Page.navigate", {"url": url.strip()}
+                )
+                if nav.get("errorText"):
+                    return _meta_result(
+                        ToolResult(success=False, error=f"导航失败: {nav['errorText']}"),
+                        session,
+                        "navigate",
+                        url=url,
+                    )
                 _wait_page_settled(session, created, wait_for)
                 info = _evaluate_json(
                     session,
@@ -1415,6 +1426,8 @@ class BrowserNavigateTool(BaseTool):
                     created,
                 )
             else:
+                # 导航前注入网络空闲监控（覆盖 SPA AJAX 加载）
+                inject_network_monitor(session, None)
                 result = cdp_command(session, "Page.navigate", {"url": url.strip()})
                 if result.get("errorText"):
                     return _meta_result(
@@ -1933,6 +1946,12 @@ class BrowserInteractTool(BaseTool):
             )
         # I1：点击链接 / JS 跳转可能把页面带到新域名；交互成功后按最终 URL
         # 重跑站点门禁，避免「在允许站点点一个链接」绕过站点策略。
+        # 在此之前，若 action 为 click，等待 SPA AJAX 请求归零（最多 5 秒），
+        # 确保页面内容已加载完成，后续站点门禁与 snapshot 能拿到正确 URL/内容。
+        if action == "click" and outcome.get("ok"):
+            # 网络空闲等待失败不阻断主流程，降级为不等待
+            with contextlib.suppress(Exception):
+                _wait_network_idle(session, None, timeout=5.0)
         final_domain = browser_safety.domain_of(page_url)
         if page_url and final_domain and final_domain != domain:
             navigation_gate = _site_access_gate(session, page_url, final_domain, started)

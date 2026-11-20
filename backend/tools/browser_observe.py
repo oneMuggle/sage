@@ -49,6 +49,12 @@ STALE_REF_ERROR = "ref 已失效（页面已变化），请先调用 browser_sna
 #: 非 JSON / 结构异常时的统一错误文案
 INVALID_SNAPSHOT_ERROR = "页面快照返回异常（非 JSON）"
 
+#: 每个子 iframe 最多采集的候选元素数（防止 iframe 数量爆炸时拖慢快照）
+IFRAME_MAX_COLLECT_PER_FRAME = 60
+
+#: 最多处理的子 iframe 数（超出部分标注 truncated_iframes）
+IFRAME_MAX_FRAMES = 10
+
 #: 页面候选元素选择器（去重前的原始集合）
 CANDIDATE_SELECTOR = (
     "a[href], area[href], button, input, textarea, select, summary, label[for], "
@@ -59,6 +65,8 @@ CANDIDATE_SELECTOR = (
 
 #: interactive / full 模式的注入 JS。占位符由 ``build_snapshot_expression``
 #: 替换（不用 % / format，避免与 JS 花括号冲突）。
+#: iframe 遍历：对 same-origin iframe 通过 contentDocument 递归采集，
+#: cross-origin iframe 仅记录 src URL 占位（供 AI 感知有 iframe 存在）。
 _INTERACTIVE_JS = r"""
 (function(){
   var SELECTOR = __SELECTOR__;
@@ -66,6 +74,8 @@ _INTERACTIVE_JS = r"""
   var INCLUDE_OFFSCREEN = __INCLUDE_OFFSCREEN__;
   var TEXT_CAP = __TEXT_CAP__;
   var MODE = __MODE__;
+  var IFRAME_MAX_PER_FRAME = __IFRAME_MAX_PER_FRAME__;
+  var IFRAME_MAX_FRAMES = __IFRAME_MAX_FRAMES__;
 
   function textOf(node){
     if (!node) return '';
@@ -87,7 +97,7 @@ _INTERACTIVE_JS = r"""
       var parts = [];
       for (var i = 0; i < ids.length; i++) {
         if (!ids[i]) continue;
-        var labelled = document.getElementById(ids[i]);
+        var labelled = el.ownerDocument.getElementById(ids[i]);
         if (labelled) parts.push(textOf(labelled));
       }
       var fromIds = clean(parts.join(' '), 80);
@@ -157,14 +167,15 @@ _INTERACTIVE_JS = r"""
     return 'generic';
   }
 
-  function inViewport(el){
+  function inViewportOf(doc, el){
     var rect = el.getBoundingClientRect();
-    var width = window.innerWidth || document.documentElement.clientWidth || 0;
-    var height = window.innerHeight || document.documentElement.clientHeight || 0;
+    var win = doc.defaultView || window;
+    var width = win.innerWidth || doc.documentElement.clientWidth || 0;
+    var height = win.innerHeight || doc.documentElement.clientHeight || 0;
     return rect.bottom > 0 && rect.right > 0 && rect.top < height && rect.left < width;
   }
 
-  function fieldOf(el, candidate){
+  function fieldOf(el, candidate, frameUrl){
     var role = roleOf(el);
     var tag = (el.tagName || '').toLowerCase();
     var inputType = ((el.getAttribute && el.getAttribute('type')) || '').toLowerCase();
@@ -175,6 +186,7 @@ _INTERACTIVE_JS = r"""
       disabled: el.disabled === true,
       in_viewport: candidate.in_viewport
     };
+    if (frameUrl) item.frame_url = frameUrl;
     if (role === 'textbox' || role === 'combobox') {
       var kind = inputType;
       if (!kind) {
@@ -194,48 +206,110 @@ _INTERACTIVE_JS = r"""
     return item;
   }
 
-  var raw = document.querySelectorAll(SELECTOR);
-  var unique = [];
-  for (var i = 0; i < raw.length; i++) {
-    if (unique.indexOf(raw[i]) === -1) unique.push(raw[i]);
-  }
-
-  var candidates = [];
-  for (var j = 0; j < unique.length; j++) {
-    var el = unique[j];
-    if (!el.getClientRects || el.getClientRects().length === 0) continue;
-    if (el.closest && el.closest('[hidden],[aria-hidden="true"]')) continue;
-    candidates.push({el: el, in_viewport: inViewport(el)});
-  }
-
-  if (!INCLUDE_OFFSCREEN) {
-    var visible = [];
-    var offscreen = [];
-    for (var m = 0; m < candidates.length; m++) {
-      if (candidates[m].in_viewport) visible.push(candidates[m]);
-      else offscreen.push(candidates[m]);
+  // collect(doc, refOffset, frameUrl) → {items:[], nextOffset, text}
+  // doc: 目标 document（主框架或 iframe.contentDocument）
+  // refOffset: 起始 ref 序号（主框架从 1 开始，iframe 接着排）
+  // frameUrl: null 表示主框架，非 null 表示子 frame（写入元素的 frame_url 字段）
+  function collect(doc, refOffset, frameUrl){
+    var raw = doc.querySelectorAll(SELECTOR);
+    var unique = [];
+    for (var i = 0; i < raw.length; i++) {
+      if (unique.indexOf(raw[i]) === -1) unique.push(raw[i]);
     }
-    candidates = visible.concat(offscreen);
-  }
-  if (candidates.length > MAX_COLLECT) candidates = candidates.slice(0, MAX_COLLECT);
 
-  var registry = {};
-  var names = {};
-  var elements = [];
-  for (var n = 0; n < candidates.length; n++) {
-    var candidate = candidates[n];
-    candidate.ref = 'e' + (n + 1);
-    var accessibleName = nameOf(candidate.el);
-    try {
-      candidate.el.setAttribute('data-sage-ref', candidate.ref);
-      candidate.el.setAttribute('data-sage-ref-name', accessibleName);
-    } catch (err) {}
-    registry[candidate.ref] = candidate.el;
-    names[candidate.ref] = accessibleName;
-    elements.push(fieldOf(candidate.el, candidate));
+    var candidates = [];
+    for (var j = 0; j < unique.length; j++) {
+      var el = unique[j];
+      if (!el.getClientRects || el.getClientRects().length === 0) continue;
+      if (el.closest && el.closest('[hidden],[aria-hidden="true"]')) continue;
+      candidates.push({el: el, in_viewport: inViewportOf(doc, el)});
+    }
+
+    if (!INCLUDE_OFFSCREEN) {
+      var visible = [];
+      var offscreen = [];
+      for (var m = 0; m < candidates.length; m++) {
+        if (candidates[m].in_viewport) visible.push(candidates[m]);
+        else offscreen.push(candidates[m]);
+      }
+      candidates = visible.concat(offscreen);
+    }
+
+    var perFrameCap = frameUrl ? IFRAME_MAX_PER_FRAME : MAX_COLLECT;
+    if (candidates.length > perFrameCap) candidates = candidates.slice(0, perFrameCap);
+
+    var items = [];
+    var nextOffset = refOffset;
+    for (var n = 0; n < candidates.length; n++) {
+      var candidate = candidates[n];
+      candidate.ref = 'e' + nextOffset;
+      nextOffset++;
+      var accessibleName = nameOf(candidate.el);
+      try {
+        candidate.el.setAttribute('data-sage-ref', candidate.ref);
+        candidate.el.setAttribute('data-sage-ref-name', accessibleName);
+      } catch (err) {}
+      // 注册到 window（主框架的 window），iframe 元素也存主框架注册表
+      // 注：跨 frame ref 在下次 snapshot 后会失效（已知限制），AI 应在交互前重拍快照
+      window.__SAGE_REFS__[candidate.ref] = candidate.el;
+      window.__SAGE_REF_NAMES__[candidate.ref] = accessibleName;
+      items.push(fieldOf(candidate.el, candidate, frameUrl));
+    }
+    var bodyText = (doc.body && doc.body.innerText || '').slice(0, TEXT_CAP);
+    return {items: items, nextOffset: nextOffset, text: bodyText};
   }
-  window.__SAGE_REFS__ = registry;
-  window.__SAGE_REF_NAMES__ = names;
+
+  // 重置注册表
+  window.__SAGE_REFS__ = {};
+  window.__SAGE_REF_NAMES__ = {};
+
+  var allElements = [];
+  var allText = '';
+
+  // 主框架采集（refOffset 从 1 开始）
+  var mainResult = collect(document, 1, null);
+  allElements = allElements.concat(mainResult.items);
+  allText = mainResult.text;
+  var nextRef = mainResult.nextOffset;
+
+  // iframe 遍历
+  var iframes = document.querySelectorAll('iframe');
+  var iframeCount = 0;
+  var truncatedIframes = false;
+  for (var f = 0; f < iframes.length; f++) {
+    if (iframeCount >= IFRAME_MAX_FRAMES) {
+      truncatedIframes = true;
+      break;
+    }
+    var iframeEl = iframes[f];
+    var iframeSrc = '';
+    try { iframeSrc = iframeEl.src || iframeEl.getAttribute('src') || ''; } catch(e){}
+    var iframeDoc = null;
+    try { iframeDoc = iframeEl.contentDocument || null; } catch(e){}
+    if (iframeDoc && iframeDoc.body) {
+      // same-origin iframe：递归采集
+      var sub = collect(iframeDoc, nextRef, iframeSrc);
+      allElements = allElements.concat(sub.items);
+      nextRef = sub.nextOffset;
+      allText = (allText + '\n' + sub.text).slice(0, TEXT_CAP);
+      iframeCount++;
+    } else if (iframeSrc) {
+      // cross-origin 或加载中的 iframe：记录占位
+      allElements.push({
+        ref: 'e' + nextRef,
+        role: 'iframe',
+        name: clean(iframeSrc, 200),
+        disabled: false,
+        in_viewport: inViewportOf(document, iframeEl),
+        frame_url: iframeSrc,
+        _cross_origin: true
+      });
+      nextRef++;
+      iframeCount++;
+    }
+  }
+
+  if (allElements.length > MAX_COLLECT) allElements = allElements.slice(0, MAX_COLLECT);
 
   return JSON.stringify({
     url: location.href,
@@ -245,21 +319,35 @@ _INTERACTIVE_JS = r"""
       height: window.innerHeight || 0,
       scroll_y: window.scrollY || 0
     },
-    elements: elements,
-    elements_total: elements.length,
+    elements: allElements,
+    elements_total: allElements.length,
     mode: MODE,
-    text: (document.body && document.body.innerText || '').slice(0, TEXT_CAP)
+    text: allText,
+    iframes_scanned: iframeCount,
+    iframes_truncated: truncatedIframes
   });
 })()
 """
 
 #: text 模式：纯文本快照，不含任何 ref 注册逻辑（保持旧形状）。
+#: 遍历 same-origin iframe 的正文一并归入 text。
 _TEXT_JS = r"""
 (function(){
+  var TEXT_CAP = __TEXT_CAP__;
+  var parts = [(document.body && document.body.innerText || '').slice(0, TEXT_CAP)];
+  var iframes = document.querySelectorAll('iframe');
+  for (var f = 0; f < iframes.length && f < __IFRAME_MAX_FRAMES__; f++) {
+    var iframeDoc = null;
+    try { iframeDoc = iframes[f].contentDocument || null; } catch(e){}
+    if (iframeDoc && iframeDoc.body) {
+      var subText = (iframeDoc.body.innerText || '').slice(0, TEXT_CAP);
+      if (subText) parts.push(subText);
+    }
+  }
   return JSON.stringify({
     url: location.href,
     title: document.title,
-    text: (document.body && document.body.innerText || '').slice(0, __TEXT_CAP__)
+    text: parts.join('\n').slice(0, TEXT_CAP)
   });
 })()
 """
@@ -289,7 +377,10 @@ def build_snapshot_expression(
     """
     normalized = _normalize_mode(mode)
     if normalized == "text":
-        return _TEXT_JS.replace("__TEXT_CAP__", str(int(SNAPSHOT_TEXT_CAP)))
+        return (
+            _TEXT_JS.replace("__TEXT_CAP__", str(int(SNAPSHOT_TEXT_CAP)))
+            .replace("__IFRAME_MAX_FRAMES__", str(int(IFRAME_MAX_FRAMES)))
+        )
 
     try:
         collect_cap = max(0, int(max_collect))
@@ -301,6 +392,8 @@ def build_snapshot_expression(
         .replace("__INCLUDE_OFFSCREEN__", "true" if include_offscreen else "false")
         .replace("__TEXT_CAP__", str(int(SNAPSHOT_TEXT_CAP)))
         .replace("__MODE__", json.dumps(normalized))
+        .replace("__IFRAME_MAX_PER_FRAME__", str(int(IFRAME_MAX_COLLECT_PER_FRAME)))
+        .replace("__IFRAME_MAX_FRAMES__", str(int(IFRAME_MAX_FRAMES)))
     )
 
 
@@ -365,12 +458,23 @@ def parse_snapshot_payload(
             for item in elements
             if needle in _as_text(item.get("role")).lower()
             or needle in _as_text(item.get("name")).lower()
+            or (item.get("_cross_origin") is True
+                and needle in _as_text(item.get("frame_url")).lower())
         ]
+        # 清理内部标记字段（不暴露给 AI）
+        for item in elements:
+            item.pop("_cross_origin", None)
+
+    # 清理非 query 模式下的内部标记字段
+    for item in elements:
+        item.pop("_cross_origin", None)
 
     total = len(elements)
     limit = _clamp_max_nodes(max_nodes)
     truncated = total > limit
     viewport = data.get("viewport")
+    iframes_scanned = int(data.get("iframes_scanned") or 0)
+    iframes_truncated = bool(data.get("iframes_truncated"))
     result: Dict[str, Any] = {
         "url": url,
         "title": title,
@@ -379,12 +483,19 @@ def parse_snapshot_payload(
         "elements_total": total,
         "truncated": truncated,
         "mode": normalized,
+        "iframes_scanned": iframes_scanned,
+        "iframes_truncated": iframes_truncated,
     }
 
     hints = []
     if truncated:
         hints.append(
             f"共 {total} 个交互元素，已返回前 {limit} 个；可用 query 过滤或滚动后重新快照"
+        )
+    if iframes_truncated:
+        hints.append(
+            f"iframe 数量超过上限 {IFRAME_MAX_FRAMES}，部分子 frame 内容未采集；"
+            "可用 query 过滤目标 frame 内的元素"
         )
     if total < CANVAS_ELEMENT_THRESHOLD and len(text) < SNAPSHOT_CANVAS_TEXT_HINT:
         hints.append("页面可能由 Canvas 渲染，建议 browser_screenshot(return_image=true)")
