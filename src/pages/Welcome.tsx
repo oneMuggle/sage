@@ -397,9 +397,10 @@ export function Welcome() {
           sessionId = result.session.id;
           createdSession = result.session;
         } else {
-          // 2026-11-04 (fix/skip-workspace-binding): effectiveProjectId === null
-          // 表示用户在新会话页明确选择"不绑定项目"，传 skipBinding=true 跳过工作区解析链。
-          // 语义对齐主流 AI 应用 (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
+          // 2026-11-20 (feat/default-workspace): effectiveProjectId === null
+          // 表示用户在新会话页选择"默认工作区（~/Sage/）"，传 skipBinding=true，
+          // 后端 resolve_to_default() 将绑定到 ~/Sage/（工具全部可用）。
+          // 语义对齐主流 AI 应用 (Cursor 用 $HOME / Cline 用 ~/Desktop)。
           sessionId = await createSession(effectiveProjectId === null);
         }
         draftSessionRef.current = null;

@@ -377,9 +377,10 @@ export const useStore = create<StoreState>((set, _get) => ({
   },
 
   // 创建会话
-  // 2026-11-04 (fix/skip-workspace-binding): skipBinding=true 时跳过工作区解析链，
-  // 不绑定任何工作区。用于前端用户明确选择"不绑定项目"的场景，语义对齐主流 AI 应用
-  // (Cursor / Cline / Windsurf) 的"显式选择 > 自动推断"原则。
+  // 2026-11-20 (feat/default-workspace): skipBinding=true 时后端调 resolve_to_default()，
+  // 将会话绑定到默认工作区 ~/Sage/（source="default"）。用于前端用户选择"默认工作区"的场景，
+  // 此时所有工作区相关工具均可用。语义对齐主流 AI 应用 (Cursor 用 $HOME / Cline 用 ~/Desktop)。
+  // 旧行为（skipBinding=true → 无工作区 → 工具全失效）已废弃。
   createSession: async (
     skipBinding = false,
     options?: { participantIds?: string[]; conversationType?: 'dm' | 'group'; title?: string },
