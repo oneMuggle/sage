@@ -15,6 +15,7 @@ import type {
   DesignSystem,
   DesignTemplate,
   IterationMessage,
+  ProjectTweaks,
 } from './types';
 
 interface DesignState {
@@ -36,6 +37,7 @@ interface DesignState {
   previewArtifact: DesignArtifact | null;
   messages: IterationMessage[];
   artifacts: DesignArtifactSummary[];
+  tweaks: ProjectTweaks;
   loadingProject: boolean;
   errorProject: string | null;
 
@@ -49,6 +51,8 @@ interface DesignState {
   iterate: (projectId: string, feedback: string) => Promise<void>;
   previewVersion: (projectId: string, artifactId: string) => Promise<void>;
   restoreVersion: (projectId: string, artifactId: string) => Promise<void>;
+  updateTweaksLocal: (patch: Partial<ProjectTweaks>) => void;
+  persistTweaks: (projectId: string) => Promise<void>;
   clearPreview: () => void;
   clearCurrent: () => void;
 }
@@ -74,6 +78,7 @@ export const useDesignStore = create<DesignState>((set) => ({
   previewArtifact: null,
   messages: [],
   artifacts: [],
+  tweaks: {},
   loadingProject: false,
   errorProject: null,
 
@@ -102,10 +107,11 @@ export const useDesignStore = create<DesignState>((set) => ({
   async loadProject(projectId: string) {
     set({ loadingProject: true, errorProject: null });
     try {
-      const [detail, messages, artifacts] = await Promise.all([
+      const [detail, messages, artifacts, tweaks] = await Promise.all([
         api.getProject(projectId),
         api.listMessages(projectId),
         api.listArtifacts(projectId),
+        api.getTweaks(projectId),
       ]);
       set({
         currentProject: detail,
@@ -113,6 +119,7 @@ export const useDesignStore = create<DesignState>((set) => ({
         previewArtifact: null,
         messages,
         artifacts,
+        tweaks,
         loadingProject: false,
       });
     } catch (error) {
@@ -178,6 +185,19 @@ export const useDesignStore = create<DesignState>((set) => ({
     set({ previewArtifact: null });
   },
 
+  updateTweaksLocal(patch: Partial<ProjectTweaks>) {
+    set((state) => ({ tweaks: { ...state.tweaks, ...patch } }));
+  },
+
+  async persistTweaks(projectId: string) {
+    try {
+      const saved = await api.updateTweaks(projectId, useDesignStore.getState().tweaks);
+      set({ tweaks: saved });
+    } catch (error) {
+      set({ errorProject: getErrorMessage(error) });
+    }
+  },
+
   clearCurrent() {
     set({
       currentProject: null,
@@ -185,6 +205,7 @@ export const useDesignStore = create<DesignState>((set) => ({
       previewArtifact: null,
       messages: [],
       artifacts: [],
+      tweaks: {},
       loadingProject: false,
       errorProject: null,
     });

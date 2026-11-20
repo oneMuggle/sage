@@ -107,6 +107,17 @@ class BindSourceRequest(BaseModel):
     name: Optional[str] = None
 
 
+class TweaksRequest(BaseModel):
+    """PUT /design/projects/{id}/tweaks body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    accent: Optional[str] = None
+    radius: Optional[float] = None
+    font_size: Optional[float] = None
+    density: Optional[float] = None
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -363,6 +374,39 @@ async def list_messages(project_id: str):
     except DesignProjectNotFoundError as exc:
         return _map_design_error(exc)
     return [m.model_dump() for m in messages]
+
+
+# ---------------------------------------------------------------------------
+# GET/PUT /design/projects/:project_id/tweaks — design parameter overrides
+# ---------------------------------------------------------------------------
+
+
+@router.get("/projects/{project_id}/tweaks")
+async def get_tweaks(project_id: str):
+    """Return the project's tweaks (empty defaults when never set)."""
+    studio = _require_studio()
+    try:
+        tweaks = studio.get_tweaks(project_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    return tweaks.model_dump()
+
+
+@router.put("/projects/{project_id}/tweaks")
+async def update_tweaks(project_id: str, req: TweaksRequest):
+    """Merge partial tweaks into the project's tweak overrides."""
+    studio = _require_studio()
+    try:
+        tweaks = studio.update_tweaks(
+            project_id,
+            accent=req.accent,
+            radius=req.radius,
+            font_size=req.font_size,
+            density=req.density,
+        )
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    return tweaks.model_dump()
 
 
 # ---------------------------------------------------------------------------

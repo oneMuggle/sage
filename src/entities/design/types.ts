@@ -109,6 +109,14 @@ export interface IterationMessage {
   created_at: string;
 }
 
+/** 项目级微调参数（覆盖设计系统 CSS 变量，不重新生成） */
+export interface ProjectTweaks {
+  accent?: string | null;
+  radius?: number | null;
+  font_size?: number | null;
+  density?: number | null;
+}
+
 // ---------------------------------------------------------------------------
 // 生成 & 迭代请求
 // ---------------------------------------------------------------------------
