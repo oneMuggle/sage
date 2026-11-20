@@ -59,12 +59,21 @@ export const enDesign = {
   'design.detail.version': 'v{version}',
   'design.detail.tabIterate': 'Edit',
   'design.detail.tabHistory': 'Versions',
+  'design.detail.tabTweaks': 'Tweaks',
   'design.detail.previewing': 'Previewing v{version} (read-only)',
   'design.detail.backToLatest': 'Back to latest',
   'design.version.preview': 'Preview',
   'design.version.restore': 'Restore',
   'design.version.empty': 'No versions yet',
   'design.version.restored': 'Restored as a new version',
+
+  // Tweaks
+  'design.tweaks.title': 'Tweaks',
+  'design.tweaks.accent': 'Accent color',
+  'design.tweaks.radius': 'Corner radius',
+  'design.tweaks.fontSize': 'Font size',
+  'design.tweaks.density': 'Density',
+  'design.tweaks.reset': 'Reset to system defaults',
 
   'design.export.title': 'Export',
   'design.export.pdf': 'PDF',
