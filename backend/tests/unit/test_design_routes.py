@@ -420,6 +420,42 @@ class TestDesignRoutes:
         assert body["filename"].endswith(".zip")
         assert base64.b64decode(body["content_base64"])[:2] == b"PK"
 
+    async def test_tweaks_round_trip(self, studio):
+        """GET 返回空默认值；PUT 合并后 GET 可读回。"""
+        from backend.main import app
+
+        project = studio.create_project(kind="prototype", brief="tweaks")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                initial = await client.get(
+                    f"/api/v1/design/projects/{project.id}/tweaks",
+                )
+                updated = await client.put(
+                    f"/api/v1/design/projects/{project.id}/tweaks",
+                    json={"accent": "#1a56db", "radius": 8},
+                )
+                fetched = await client.get(
+                    f"/api/v1/design/projects/{project.id}/tweaks",
+                )
+
+        assert initial.status_code == 200
+        assert initial.json() == {
+            "accent": None,
+            "radius": None,
+            "font_size": None,
+            "density": None,
+        }
+        assert updated.status_code == 200
+        assert updated.json()["radius"] == 8
+        assert fetched.json()["accent"] == "#1a56db"
+
     async def test_create_project_invalid_kind(self, studio):
         from backend.main import app
 
