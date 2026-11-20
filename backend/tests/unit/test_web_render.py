@@ -78,7 +78,7 @@ def test_shell_detection_short_body_without_markers_is_static():
 
 
 def test_wait_page_ready_returns_after_text_stabilises(fake_time, monkeypatch):
-    reads = iter(["loading", "complete", 0, 1200, 1200, 1200])
+    reads = iter(["loading", "complete", 0, 0, 1200, 1200, 1200])
 
     def _fake_eval(session, expression, target_id):
         return next(reads)
@@ -95,6 +95,8 @@ def test_wait_page_ready_settle_caps_at_max_window(fake_time, monkeypatch):
     def _fake_eval(session, expression, target_id):
         if "readyState" in expression:
             return "complete"
+        if "__SAGE_ACTIVE_REQUESTS__" in expression:
+            return 0  # network idle: always idle
         return next(ticks)  # 内文长度一直变
 
     monkeypatch.setattr(web_render, "_evaluate_json", _fake_eval)

@@ -92,7 +92,8 @@ def test_text_mode_expression_has_no_ref_registry():
     assert "data-sage-ref" not in expression
     assert "getClientRects" not in expression
     assert "innerText" in expression
-    assert f"slice(0,{SNAPSHOT_TEXT_CAP})" in expression.replace(" ", "")
+    assert f"var TEXT_CAP = {SNAPSHOT_TEXT_CAP};" in expression
+    assert "slice(0,TEXT_CAP)" in expression.replace(" ", "")
 
 
 def test_expression_injects_max_collect_and_offscreen_flag():
@@ -398,4 +399,5 @@ def test_build_text_expression_contains_iframe_traversal():
     """text 模式表达式也应包含 iframe 正文采集逻辑。"""
     expression = build_snapshot_expression(mode="text")
     assert "iframeDoc.body" in expression
-    assert "var IFRAME_MAX_FRAMES = 10;" in expression
+    # text 模式直接内联替换上限值（不声明 var），检查 for 循环边界
+    assert "f<10" in expression.replace(" ", "")
