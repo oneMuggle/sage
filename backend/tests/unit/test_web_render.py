@@ -17,6 +17,7 @@ from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.tools import browser_cdp, web_render
 from backend.tools.web_render import (
     RenderError,
+    _wait_network_idle,
     looks_like_js_shell,
     render_page,
     wait_page_ready,
@@ -741,5 +742,58 @@ def test_render_pool_size_clamped(monkeypatch):
             lambda raw=raw: _FakeSettingsRepo(raw),
         )
         assert web_render._render_pool_size() == expected
+
+
+# ---------------------------------------------------------------------------
+# 网络空闲等待（_wait_network_idle）
+# ---------------------------------------------------------------------------
+
+
+def test_wait_network_idle_returns_when_zero_from_start(fake_time, monkeypatch):
+    """活跃请求一开始就是 0，连续稳定 2 轮后立即返回（不超时）。"""
+    reads = iter([0, 0])
+
+    def _fake_eval(session, expression, target_id):
+        return next(reads)
+
+    monkeypatch.setattr(web_render, "_evaluate_json", _fake_eval)
+    _wait_network_idle(SimpleNamespace(), "t1", timeout=8.0)
+    # 2 轮 × 0.3 秒轮询间隔
+    assert fake_time.now < 2.0
+
+
+def test_wait_network_idle_waits_until_requests_drain(fake_time, monkeypatch):
+    """有 3 个活跃请求，逐次递减至 0；等待应在归零并稳定 2 轮后结束。"""
+    reads = iter([3, 2, 1, 0, 0])
+
+    def _fake_eval(session, expression, target_id):
+        return next(reads)
+
+    monkeypatch.setattr(web_render, "_evaluate_json", _fake_eval)
+    _wait_network_idle(SimpleNamespace(), "t1", timeout=8.0)
+    # 5 轮 × 0.3 秒 = 1.5 秒
+    assert fake_time.now < 5.0
+
+
+def test_wait_network_idle_times_out_when_requests_keep_active(fake_time, monkeypatch):
+    """请求始终活跃不归零，等待应在 timeout 后退出（不抛异常）。"""
+    def _fake_eval(session, expression, target_id):
+        return 5  # 永远有 5 个活跃请求
+
+    monkeypatch.setattr(web_render, "_evaluate_json", _fake_eval)
+    _wait_network_idle(SimpleNamespace(), "t1", timeout=2.0)
+    # 应接近 timeout（不超过 2.0 + 1 轮轮询间隔）
+    assert 1.5 <= fake_time.now <= 3.0
+
+
+def test_wait_network_idle_swallows_eval_error(fake_time, monkeypatch):
+    """表达式执行异常（如 target 销毁）时静默返回，不抛异常。"""
+    def _fake_eval(session, expression, target_id):
+        raise browser_cdp.BrowserCDPError("target crashed")
+
+    monkeypatch.setattr(web_render, "_evaluate_json", _fake_eval)
+    _wait_network_idle(SimpleNamespace(), "t1", timeout=5.0)
+    assert fake_time.now == 0.0
+
 
 
