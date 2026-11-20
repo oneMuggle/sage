@@ -243,6 +243,14 @@ if not report.ok:
 
 - `POST /design/projects/{id}/export` 增加 `inline: true`，PDF / PPTX / ZIP 以 base64 返回，前端 Blob 直接下载；HTML 仍走 `html_content`。
 
+微调（2026-11-20 新增）：
+
+- 后端 `backend/design/tweaks_store.py` 提供 `TweaksStore` 与 `ProjectTweaks`，文件式存储 `<workspace>/design/<id>/tweaks.json`（原子写），暴露 4 个覆盖参数 `accent / radius / font_size / density`（均可空）。
+- `GET /design/projects/{id}/tweaks` 与 `PUT /design/projects/{id}/tweaks`（合并部分字段）；`DesignStudio.get_tweaks / update_tweaks` 在编排层接入。
+- 前端 `src/features/design/DesignTweaksPanel.tsx`：色板（accent）+ 3 个滑块（圆角 0–24px / 字号 12–22px / 密度 8–32px）+ 重置按钮；控件值 = `tweaks.x ?? defaults.x`，默认值由 `extractTweakDefaults(tokens_css)` 从设计系统 `tokens.css` 解析。
+- 前端 `src/features/design/designTweaks.ts`：`applyTweaks(html, tweaks)` 向产物 HTML 注入 `<style id="sage-design-tweaks">` 覆盖 `:root` 变量（`--color-accent` / `--color-primary` / `--border-radius` / `--font-size-base` / `--space-4`），不重新生成产物。
+- 详情页右栏改为 3 Tab：「修改 / 版本 / 微调」；预览 HTML 经 `applyTweaks` 注入覆盖；面板以 500ms debounce 调用 `PUT /tweaks` 持久化。
+
 要点：
 
 - 生成/迭代端点仍是 SSE，Electron IPC relay 会等响应完成后以 text 返回；流式进度为后续里程碑。
