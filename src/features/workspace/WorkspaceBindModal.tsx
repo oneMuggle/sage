@@ -121,7 +121,7 @@ export function WorkspaceBindModal({
           </div>
         ) : (
           <div className="text-sm text-muted">
-            尚未绑定工作区目录。请选择一个文件夹,Sage 会用它来管理 Office 文档。
+            当前为默认工作区 ~/Sage/（可切换到具体项目目录）。
           </div>
         )}
 
