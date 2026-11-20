@@ -436,15 +436,13 @@ def inject_network_monitor(session: BrowserSession, target_id: Optional[str]) ->
     个脚本之前执行，保证 SPA 早期请求也被追踪。注入失败静默（不影响主流程，
     只是网络空闲等待退化为不等待）。
     """
-    try:
+    with contextlib.suppress(BrowserCDPError):
         cdp_command(
             session,
             "Page.addScriptToEvaluateOnNewDocument",
             {"source": _NETWORK_MONITOR_JS},
             target_id=target_id,
         )
-    except BrowserCDPError:
-        pass
 
 
 def _wait_network_idle(

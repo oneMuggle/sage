@@ -19,6 +19,7 @@ v1 面向 coder（executor 边界）；导航仅允许 http/https/about/data。
 from __future__ import annotations
 
 import base64
+import contextlib
 import io
 import json
 import logging
@@ -65,8 +66,7 @@ from .browser_observe import (
 )
 from .file_tool import _record_artifact_safely
 from .network_config import load_network_policy
-from .web_render import inject_network_monitor, wait_page_ready
-from .web_render import _wait_network_idle
+from .web_render import _wait_network_idle, inject_network_monitor, wait_page_ready
 
 logger = logging.getLogger(__name__)
 
@@ -1949,10 +1949,9 @@ class BrowserInteractTool(BaseTool):
         # 在此之前，若 action 为 click，等待 SPA AJAX 请求归零（最多 5 秒），
         # 确保页面内容已加载完成，后续站点门禁与 snapshot 能拿到正确 URL/内容。
         if action == "click" and outcome.get("ok"):
-            try:
+            # 网络空闲等待失败不阻断主流程，降级为不等待
+            with contextlib.suppress(Exception):
                 _wait_network_idle(session, None, timeout=5.0)
-            except Exception:
-                pass  # 网络空闲等待失败不阻断主流程，降级为不等待
         final_domain = browser_safety.domain_of(page_url)
         if page_url and final_domain and final_domain != domain:
             navigation_gate = _site_access_gate(session, page_url, final_domain, started)
