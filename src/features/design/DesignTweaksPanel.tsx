@@ -84,9 +84,7 @@ export function DesignTweaksPanel({ projectId }: DesignTweaksPanelProps) {
   return (
     <aside className="flex h-full min-h-0 flex-col rounded-lg border border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <span className="text-ui-sm font-medium text-text">
-          {t('design.tweaks.title')}
-        </span>
+        <span className="text-ui-sm font-medium text-text">{t('design.tweaks.title')}</span>
         {saving && <Loader2 className="h-3 w-3 animate-spin text-text-muted" />}
       </div>
 

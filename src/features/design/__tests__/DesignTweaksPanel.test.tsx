@@ -48,9 +48,7 @@ describe('DesignTweaksPanel', () => {
   it('renders control values from the design system tokens', () => {
     render(<DesignTweaksPanel projectId="p1" />);
     expect(screen.getByLabelText('design.tweaks.accent')).toHaveValue('#1a56db');
-    expect(
-      (screen.getByLabelText('design.tweaks.radius') as HTMLInputElement).value,
-    ).toBe('4');
+    expect((screen.getByLabelText('design.tweaks.radius') as HTMLInputElement).value).toBe('4');
   });
 
   it('updates local tweaks when the accent changes', () => {

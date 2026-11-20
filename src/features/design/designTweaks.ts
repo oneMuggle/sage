@@ -46,10 +46,7 @@ export function extractTweakDefaults(tokensCss: string): TweakDefaults {
 export function tweakCssDeclarations(tweaks: ProjectTweaks): string[] {
   const declarations: string[] = [];
   if (tweaks.accent) {
-    declarations.push(
-      `--color-accent: ${tweaks.accent};`,
-      `--color-primary: ${tweaks.accent};`,
-    );
+    declarations.push(`--color-accent: ${tweaks.accent};`, `--color-primary: ${tweaks.accent};`);
   }
   if (tweaks.radius != null) {
     declarations.push(
@@ -72,7 +69,5 @@ export function applyTweaks(html: string, tweaks: ProjectTweaks): string {
   const declarations = tweakCssDeclarations(tweaks);
   if (declarations.length === 0) return html;
   const style = `<style id="sage-design-tweaks">:root{${declarations.join(' ')}}</style>`;
-  return html.includes('</head>')
-    ? html.replace('</head>', `${style}</head>`)
-    : `${style}${html}`;
+  return html.includes('</head>') ? html.replace('</head>', `${style}</head>`) : `${style}${html}`;
 }
