@@ -8,7 +8,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from backend.data.design_repo import DesignRepo
 from backend.design.async_bridge import run_sync
