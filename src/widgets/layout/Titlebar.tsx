@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import { detectPlatform, isElectronDesktop } from '../../shared/api/windowControlsClient';
 import { BrandLogo } from '../../shared/ui';
+import { BrowserSessionStatus } from '../../features/browser/BrowserSessionStatus';
 
 import { TitlebarActions } from './TitlebarActions';
 import { WindowControls } from './WindowControls';
@@ -94,16 +95,10 @@ export function Titlebar({
   /* v8 ignore stop */
   const copyControls = (
     <>
-      <span
-        data-testid="titlebar-copy-snapshot"
-        onClick={() => void handleCopySnapshot()}
-      >
+      <span data-testid="titlebar-copy-snapshot" onClick={() => void handleCopySnapshot()}>
         {copiedSnapshot ? '已复制快照' : ''}
       </span>
-      <span
-        data-testid="titlebar-copy-json"
-        onClick={() => void handleCopyJson()}
-      >
+      <span data-testid="titlebar-copy-json" onClick={() => void handleCopyJson()}>
         {copiedJson ? '已复制JSON' : ''}
       </span>
     </>
@@ -113,18 +108,25 @@ export function Titlebar({
   if (!isDesktop) {
     return (
       <div className="flex items-center justify-between px-4 h-10 border-b border-border bg-bg-subtle">
-        <div className="flex items-center">{onToggleMobileSidebar && (
-        <button
-          type="button"
-          data-testid="mobile-sidebar-toggle"
-          aria-label={mobileSidebarOpen ? '关闭导航菜单' : '打开导航菜单'}
-          aria-expanded={mobileSidebarOpen}
-          onClick={onToggleMobileSidebar}
-          className="no-drag mr-2 p-1.5 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
-        >
-          <Menu className="w-4 h-4" />
-        </button>
-      )}<TitlebarActions />{copyControls}</div>
+        <div className="flex items-center">
+          {onToggleMobileSidebar && (
+            <button
+              type="button"
+              data-testid="mobile-sidebar-toggle"
+              aria-label={mobileSidebarOpen ? '关闭导航菜单' : '打开导航菜单'}
+              aria-expanded={mobileSidebarOpen}
+              onClick={onToggleMobileSidebar}
+              className="no-drag mr-2 p-1.5 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+          )}
+          <TitlebarActions />
+          {copyControls}
+        </div>
+        <div className="flex items-center gap-1">
+          <BrowserSessionStatus />
+        </div>
       </div>
     );
   }
@@ -133,18 +135,25 @@ export function Titlebar({
   if (isMac) {
     return (
       <div className="drag flex items-center justify-between px-4 h-10 border-b border-border bg-bg-subtle pt-7">
-        <div className="no-drag flex items-center">{onToggleMobileSidebar && (
-        <button
-          type="button"
-          data-testid="mobile-sidebar-toggle"
-          aria-label={mobileSidebarOpen ? '关闭导航菜单' : '打开导航菜单'}
-          aria-expanded={mobileSidebarOpen}
-          onClick={onToggleMobileSidebar}
-          className="no-drag mr-2 p-1.5 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
-        >
-          <Menu className="w-4 h-4" />
-        </button>
-      )}<TitlebarActions />{copyControls}</div>
+        <div className="no-drag flex items-center">
+          {onToggleMobileSidebar && (
+            <button
+              type="button"
+              data-testid="mobile-sidebar-toggle"
+              aria-label={mobileSidebarOpen ? '关闭导航菜单' : '打开导航菜单'}
+              aria-expanded={mobileSidebarOpen}
+              onClick={onToggleMobileSidebar}
+              className="no-drag mr-2 p-1.5 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+          )}
+          <TitlebarActions />
+          {copyControls}
+        </div>
+        <div className="flex items-center gap-1">
+          <BrowserSessionStatus />
+        </div>
       </div>
     );
   }
@@ -154,22 +163,23 @@ export function Titlebar({
     <div className="drag flex items-center justify-between px-4 h-9 border-b border-border bg-bg-subtle">
       <div className="no-drag flex items-center gap-2">
         {onToggleMobileSidebar && (
-        <button
-          type="button"
-          data-testid="mobile-sidebar-toggle"
-          aria-label={mobileSidebarOpen ? '关闭导航菜单' : '打开导航菜单'}
-          aria-expanded={mobileSidebarOpen}
-          onClick={onToggleMobileSidebar}
-          className="no-drag mr-2 p-1.5 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
-        >
-          <Menu className="w-4 h-4" />
-        </button>
-      )}
+          <button
+            type="button"
+            data-testid="mobile-sidebar-toggle"
+            aria-label={mobileSidebarOpen ? '关闭导航菜单' : '打开导航菜单'}
+            aria-expanded={mobileSidebarOpen}
+            onClick={onToggleMobileSidebar}
+            className="no-drag mr-2 p-1.5 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        )}
         {!hideBrandLogo && <BrandLogo size="xs" />}
         <TitlebarActions />
         {copyControls}
       </div>
-      <div className="no-drag flex items-center">
+      <div className="no-drag flex items-center gap-1">
+        <BrowserSessionStatus />
         <WindowControls />
       </div>
     </div>
