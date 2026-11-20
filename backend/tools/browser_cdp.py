@@ -246,13 +246,13 @@ class BrowserSession:
         if not self.last_used_at:
             from datetime import datetime, timezone
 
-            self.last_used_at = datetime.now(timezone.utc).isoformat()
+            self.last_used_at = datetime.now(timezone.utc).isoformat()  # noqa: UP017
 
     def touch(self) -> None:
         """更新最后使用时间（每次访问会话时调用）。"""
         from datetime import datetime, timezone
 
-        self.last_used_at = datetime.now(timezone.utc).isoformat()
+        self.last_used_at = datetime.now(timezone.utc).isoformat()  # noqa: UP017
 
     def is_alive(self) -> bool:
         return self.process.poll() is None

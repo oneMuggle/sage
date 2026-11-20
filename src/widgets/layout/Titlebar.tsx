@@ -1,9 +1,9 @@
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
 
+import { BrowserSessionStatus } from '../../features/browser/BrowserSessionStatus';
 import { detectPlatform, isElectronDesktop } from '../../shared/api/windowControlsClient';
 import { BrandLogo } from '../../shared/ui';
-import { BrowserSessionStatus } from '../../features/browser/BrowserSessionStatus';
 
 import { TitlebarActions } from './TitlebarActions';
 import { WindowControls } from './WindowControls';
