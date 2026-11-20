@@ -677,7 +677,7 @@ def test_web_fetch_auto_renders_spa_shell(monkeypatch):
     """auto：静态抽取命中 JS 壳 → 自动渲染并返回渲染正文。"""
     seen = {}
 
-    def _fake_render(url, network_policy, wait_for="", credential_domain=""):
+    def _fake_render(url, network_policy, wait_for="", credential_domain="", account_id=""):
         seen["url"] = url
         seen["wait_for"] = wait_for
         return {
@@ -764,7 +764,7 @@ def test_web_fetch_render_never_skips_shell(monkeypatch):
 def test_web_fetch_render_always_forces_rendering(monkeypatch):
     """render=always：静态正文充足的页面也强制渲染。"""
 
-    def _fake_render(url, network_policy, wait_for="", credential_domain=""):
+    def _fake_render(url, network_policy, wait_for="", credential_domain="", account_id=""):
         return {"url": url, "title": "渲染版", "content": "强制渲染正文", "rendered": True}
 
     monkeypatch.setattr(web_render, "render_page", _fake_render)
@@ -787,7 +787,7 @@ def test_web_fetch_render_always_forces_rendering(monkeypatch):
 def test_web_fetch_render_failure_reports_guidance(monkeypatch):
     """渲染失败独立语义：明确错误 + 手动路径指引，不吞成通用失败。"""
 
-    def _boom(url, network_policy, wait_for="", credential_domain=""):
+    def _boom(url, network_policy, wait_for="", credential_domain="", account_id=""):
         raise web_render.RenderError(
             "JS 渲染失败: 浏览器不可用（可经 coder 用 browser_launch + browser_navigate 手动渲染，或 web_fetch render=never 取静态内容）"
         )
@@ -808,7 +808,7 @@ def test_web_fetch_render_failure_reports_guidance(monkeypatch):
 def test_web_fetch_render_links_mode_returns_rendered_links(monkeypatch):
     """R1（关闭 W6）：渲染页经 outerHTML 复用抽取器，links 来自渲染结果。"""
 
-    def _fake_render(url, network_policy, wait_for="", credential_domain=""):
+    def _fake_render(url, network_policy, wait_for="", credential_domain="", account_id=""):
         return {
             "url": url,
             "title": "SPA",
@@ -1045,7 +1045,7 @@ def test_looks_like_antibot_page(html, text, expected):
 def _install_fake_render(monkeypatch, result=None, error=None, calls=None):
     calls = calls if calls is not None else []
 
-    def fake_render(url, network_policy, wait_for="", credential_domain=""):
+    def fake_render(url, network_policy, wait_for="", credential_domain="", account_id=""):
         calls.append(url)
         if error:
             raise web_render.RenderError(error)
@@ -1375,7 +1375,7 @@ def test_web_fetch_files_mode_merges_rendered_candidates(monkeypatch):
     """SPA 壳：渲染后 DOM 里的下载按钮与静态候选合并。"""
     shell = '<html><head><script src="app.js"></script></head><body><div id="root"></div><a href="/static.pdf">s</a></body></html>'
 
-    def fake_render(url, network_policy, wait_for="", credential_domain=""):
+    def fake_render(url, network_policy, wait_for="", credential_domain="", account_id=""):
         return {
             "url": url,
             "title": "SPA",
@@ -1426,7 +1426,7 @@ def test_render_dynamic_forwards_credential_domain(monkeypatch):
     tool = WebFetchTool()
     captured = {}
 
-    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None, account_id=""):
         captured["credential_domain"] = credential_domain
         return {"url": url, "title": "t", "content": "rendered body", "rendered": True}
 
@@ -1457,7 +1457,7 @@ def test_render_dynamic_merges_refresh_note(monkeypatch):
 
     tool = WebFetchTool()
 
-    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None, account_id=""):
         return {
             "url": url,
             "title": "t",
@@ -1492,7 +1492,7 @@ def test_escalate_forwards_credential_and_sets_note(monkeypatch):
     tool = _fetch_tool()
     captured = {}
 
-    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None, account_id=""):
         captured["credential_domain"] = credential_domain
         return {
             "url": url,
@@ -1524,7 +1524,7 @@ def test_escalate_without_credential_keeps_no_note(monkeypatch):
 
     tool = _fetch_tool()
 
-    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None, account_id=""):
         assert credential_domain == ""
         return {"url": url, "title": "t", "content": "real body", "rendered": True}
 
@@ -1569,14 +1569,14 @@ def test_fetch_credentialled_auto_refresh_replays(monkeypatch):
     monkeypatch.setattr(
         WebFetchTool,
         "_try_auto_refresh",
-        lambda self, d, u: "credential_auto_refreshed: 已用持久 profile 静默重导登录态（SID）",
+        lambda self, d, u, a="": "credential_auto_refreshed: 已用持久 profile 静默重导登录态（SID）",
     )
     import backend.tools.credential_vault as vault_mod
 
     monkeypatch.setattr(
         vault_mod,
         "resolve_credential",
-        lambda domain, url=None, repo=None, now=None: fake_ns(
+        lambda domain, url=None, repo=None, now=None, account_id=None: fake_ns(
             ok=True, headers={"Cookie": "SID=new"}, cookies=[]
         ),
     )
@@ -1610,7 +1610,7 @@ def test_fetch_credentialled_refresh_off_keeps_login_error(monkeypatch):
         return resp, "https://login.example.com/session", None
 
     monkeypatch.setattr(WebFetchTool, "_get_with_redirects", fake_get)
-    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u: "")
+    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u, a="": "")
 
     response, final_url, note, login_error = tool._fetch_credentialled(
         "https://example.com/dash",
@@ -1633,7 +1633,7 @@ def test_render_dynamic_login_wall_raises(monkeypatch):
         "render_page",
         lambda *a, **k: {"url": "u", "title": "t", "content": "x", "rendered": True, "login_wall": True},
     )
-    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u: "")
+    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u, a="": "")
     with pytest.raises(web_render.RenderError, match="login_required"):
         tool._render_dynamic(
             "https://example.com/",
@@ -1748,7 +1748,7 @@ def test_render_dynamic_login_wall_retries_after_refresh(monkeypatch):
         return {"url": "u", "title": "t", "content": "real body", "rendered": True}
 
     monkeypatch.setattr(web_render, "render_page", fake_render)
-    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u: "refreshed note")
+    monkeypatch.setattr(WebFetchTool, "_try_auto_refresh", lambda self, d, u, a="": "refreshed note")
     content = tool._render_dynamic(
         "https://example.com/",
         NetworkPolicy(mode=NetworkMode.ONLINE),

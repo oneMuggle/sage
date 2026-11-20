@@ -1,7 +1,7 @@
 # 浏览器多账号管理设计文档
 
 > **日期**：2026-11-20
-> **状态**：草案
+> **状态**：已实施（Phase 1–6 核心完成；Phase 4.4 / 5.3–5.4 交互增强列为后续）
 > **分支**：feat/browser-multi-account
 > **基线**：release/win7 (f02321c7e)
 
@@ -510,44 +510,44 @@ AI: [按序执行，每步切换前自动调用 switch_account]
 
 ### Phase 1：数据层（后端）
 
-- [ ] 1.1 创建 `browser_accounts` SQLite 表
-- [ ] 1.2 实现 `BrowserAccountService` CRUD 方法
-- [ ] 1.3 重构 `credential_vault` key 结构，添加 `account_id` 维度
-- [ ] 1.4 实现 vault 自动迁移（旧格式 → 新格式）
-- [ ] 1.5 向后兼容层：旧 API 自动路由到 default account
+- [x] 1.1 创建 `browser_accounts` SQLite 表
+- [x] 1.2 实现 `BrowserAccountService` CRUD 方法
+- [x] 1.3 重构 `credential_vault` key 结构，添加 `account_id` 维度
+- [x] 1.4 实现 vault 自动迁移（旧格式 → 新格式）
+- [x] 1.5 向后兼容层：旧 API 自动路由到 default account
 
 ### Phase 2：浏览器切换（后端）
 
-- [ ] 2.1 实现 CDP cookie/localStorage 快照（`snapshot_account_state`）
-- [ ] 2.2 实现 CDP cookie/localStorage 注入（`swap_cookie_state`）
-- [ ] 2.3 实现 `switch_account()` 编排逻辑
-- [ ] 2.4 扩展 `SiteLoginJobs` 支持 account_id 维度
-- [ ] 2.5 扩展 `browser_login` 工具支持 account_id/account_label 参数
+- [x] 2.1 实现 CDP cookie/localStorage 快照（`snapshot_account_state`）
+- [x] 2.2 实现 CDP cookie/localStorage 注入（`swap_cookie_state`）
+- [x] 2.3 实现 `switch_account()` 编排逻辑
+- [x] 2.4 扩展 `SiteLoginJobs` 支持 account_id 维度
+- [x] 2.5 扩展 `browser_login` 工具支持 account_id/account_label 参数
 
 ### Phase 3：API 层（后端）
 
-- [ ] 3.1 新增 `/api/v1/browser-accounts` REST 端点
-- [ ] 3.2 新增 `POST /switch` 端点
-- [ ] 3.3 扩展 `web_fetch` 支持 account_id 参数
+- [x] 3.1 新增 `/api/v1/browser-accounts` REST 端点
+- [x] 3.2 新增 `POST /switch` 端点
+- [x] 3.3 扩展 `web_fetch` 支持 account_id 参数
 
 ### Phase 4：AI 工具（后端）
 
-- [ ] 4.1 实现 `browser_switch_account` 工具
-- [ ] 4.2 实现 `browser_list_accounts` 工具
-- [ ] 4.3 注册工具到工具注册表
+- [x] 4.1 实现 `browser_switch_account` 工具
+- [x] 4.2 实现 `browser_list_accounts` 工具
+- [x] 4.3 注册工具到工具注册表
 - [ ] 4.4 实现切换确认 IPC 协议（AI → 前端 → 用户确认）
 
 ### Phase 5：前端 UI
 
-- [ ] 5.1 设置页账号池管理组件
+- [x] 5.1 设置页账号池管理组件
 - [ ] 5.2 登录时命名对话框
 - [ ] 5.3 AI 切换确认弹窗
 - [ ] 5.4 聊天面板当前账号状态指示
 
 ### Phase 6：测试
 
-- [ ] 6.1 单元测试：credential_vault 迁移逻辑
-- [ ] 6.2 单元测试：BrowserAccountService CRUD
+- [x] 6.1 单元测试：credential_vault 迁移逻辑
+- [x] 6.2 单元测试：BrowserAccountService CRUD
 - [ ] 6.3 集成测试：cookie swap 切换流程
 - [ ] 6.4 E2E 测试：多账号接力场景
 

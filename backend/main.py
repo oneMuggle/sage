@@ -96,6 +96,7 @@ from backend.adapters.out.storage.sqlite_adapter import SqliteStorageAdapter
 from backend.adapters.out.tool.inproc_adapter import InprocToolAdapter
 from backend.api.artifact_routes import router as artifact_router
 from backend.api.asr_router import build_router as build_asr_router
+from backend.api.browser_account_routes import router as browser_account_router
 from backend.api.browser_extension_routes import router as browser_extension_router
 from backend.api.browser_use_routes import router as browser_use_router
 from backend.api.chat_attachment_routes import router as chat_attachment_router
@@ -1764,6 +1765,8 @@ app.include_router(rules_import_router, prefix="/api/v1")
 # M1 工具安全加固: /api/v1/permissions/{pending, <id>/answer}
 app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")
+# 浏览器多账号: /api/v1/browser-accounts[/{id}, /switch, /login]
+app.include_router(browser_account_router, prefix="/api/v1")
 # M3 受控浏览器控制面: /api/v1/browser/control[/{session_id}]
 app.include_router(browser_use_router, prefix="/api/v1")
 # 外部日常浏览器扩展桥: /api/v1/web-access/{extension,browser-extension}/*

@@ -568,6 +568,25 @@ export const zhChatAndSider = {
     '断开后 Sage 将无法访问该网站的登录内容。确定断开吗？',
   'settings.network.sites.saved_hours': '{hours} 小时',
   'settings.network.sites.saved_just_now': '刚刚',
+  // 浏览器多账号（2026-11-20 browser-multi-account）
+  'settings.network.accounts': '浏览器账号',
+  'settings.network.accounts.hint':
+    '同一网站可保存多个账号。切换账号时 Sage 会热替换浏览器登录态，账号之间互不串号，适合多用户接力完成网页流程。',
+  'settings.network.accounts.empty': '还没有保存任何账号。登录网站后会自动登记为默认账号。',
+  'settings.network.accounts.add': '添加账号',
+  'settings.network.accounts.name_placeholder': '账号名称，如「张三的工作号」',
+  'settings.network.accounts.domain_placeholder': '网站域名，如 cnki.net',
+  'settings.network.accounts.create': '创建账号',
+  'settings.network.accounts.switch': '切换',
+  'settings.network.accounts.switching': '切换中…',
+  'settings.network.accounts.delete': '删除',
+  'settings.network.accounts.delete.confirm':
+    '删除账号会同时删除它保存的登录凭据。确定删除吗？',
+  'settings.network.accounts.default_badge': '默认',
+  'settings.network.accounts.switch_success': '已切换到「{label}」',
+  'settings.network.accounts.switch_failed': '切换失败：{error}',
+  'settings.network.accounts.created': '账号「{label}」已创建',
+  'settings.network.accounts.deleted': '账号已删除',
   'settings.network.extension': '日常浏览器扩展',
   'settings.network.extension.hint':
     '在你自己的 Chrome/Edge 中共享一个已登录标签页，Sage 就能直接读取；随时可以停止共享。',

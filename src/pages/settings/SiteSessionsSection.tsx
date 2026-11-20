@@ -18,6 +18,7 @@ import {
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
+import { BrowserAccountsSection } from './BrowserAccountsSection';
 import { CredentialsSection } from './NetworkCredentialsSection';
 
 interface SiteSessionsSectionProps {
@@ -284,6 +285,10 @@ export function SiteSessionsSection({ pollIntervalMs = 2000 }: SiteSessionsSecti
           ))}
         </ul>
       )}
+
+      <div className="mt-4 border-t border-border pt-3">
+        <BrowserAccountsSection />
+      </div>
 
       <details className="mt-3" data-testid="site-advanced">
         <summary className="text-xs text-text-secondary cursor-pointer select-none">

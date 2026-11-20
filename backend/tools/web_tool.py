@@ -630,6 +630,13 @@ class WebFetchTool(BaseTool):
                             "被踢到登录页报 login_required"
                         ),
                     },
+                    "account_id": {
+                        "type": "string",
+                        "description": (
+                            "可选：使用浏览器多账号中指定账号的登录态（从 "
+                            "browser_list_accounts 获取）。不传则使用默认账号。"
+                        ),
+                    },
                     "wait_for": {
                         "type": "string",
                         "description": (
@@ -660,6 +667,7 @@ class WebFetchTool(BaseTool):
         max_length: int = 10000,
         render: str = "auto",
         credential_domain: str = "",
+        account_id: str = "",
         wait_for: str = "",
         refresh: bool = False,
         escalate: bool = True,
@@ -673,6 +681,7 @@ class WebFetchTool(BaseTool):
             max_length: 正文最大长度
             render:     ``auto``（默认，检出 JS 壳自动渲染）/ ``always`` / ``never``
             credential_domain: browser_cookies 档案 domain，附加登录态 cookie
+            account_id: 浏览器多账号 ID（可选；不传用默认账号）
             wait_for:   渲染分支等待出现的 CSS 选择器（R2）
             refresh:    跳过缓存强制抓取（C1，默认 false）
             escalate:   反爬拦截时自动升级到渲染通道（AB1，默认 true）
@@ -694,6 +703,14 @@ class WebFetchTool(BaseTool):
         # 用户/LLM 未显式传 credential_domain 时，从 URL hostname 在凭据档案中
         # 查找最匹配的 domain。这样 browser_login 导出的 cookie 无需再手动
         # 传参即可生效 —— 用户登录后再次访问同一站点"直接能用"。
+        # 多账号：account_id 给定 → 冲突解析为 vault 维度（默认账号 → None）。
+        vault_account_id = ""
+        if account_id.strip():
+            from backend.services.browser_account_service import browser_account_service
+
+            vault_account_id = (
+                browser_account_service.resolve_vault_account_id(account_id) or ""
+            )
         if not credential_domain.strip():
             from .credential_vault import find_credential_for_host
 
@@ -701,13 +718,20 @@ class WebFetchTool(BaseTool):
                 _hostname = urlparse(url).hostname or ""
             except ValueError:
                 _hostname = ""
-            _inferred = find_credential_for_host(_hostname)
+            _inferred = find_credential_for_host(
+                _hostname, account_id=(vault_account_id or None)
+            )
             if _inferred:
                 credential_domain = _inferred
 
         # C1：TTL 缓存。credential_domain（登录态时效）与 raw（原始 HTML）
-        # 不参与缓存；命中即返回，cached 标记明示。
-        use_cache = not refresh and mode != "raw" and not credential_domain.strip()
+        # 不参与缓存；命中即返回，cached 标记明示。多账号同样不缓存。
+        use_cache = (
+            not refresh
+            and mode != "raw"
+            and not credential_domain.strip()
+            and not account_id.strip()
+        )
         if use_cache:
             from .web_cache import get as _cache_get
 
@@ -724,7 +748,9 @@ class WebFetchTool(BaseTool):
             from .credential_vault import cookie_domain_matches, resolve_credential
 
             credential_domain = credential_domain.strip()
-            resolution = resolve_credential(credential_domain, url=url)
+            resolution = resolve_credential(
+                credential_domain, url=url, account_id=(vault_account_id or None)
+            )
             if resolution.status == "expired":
                 return ToolResult(
                     success=False,
@@ -794,6 +820,7 @@ class WebFetchTool(BaseTool):
                     gated_by_whitelist,
                     credential_domain.strip(),
                     credential_headers,
+                    vault_account_id,
                 )
                 status = response.status_code
                 if login_error:
@@ -818,6 +845,7 @@ class WebFetchTool(BaseTool):
                         content,
                         wait_for,
                         credential_domain.strip(),
+                        vault_account_id,
                     )
             except _AntibotBlocked as blocked:
                 if not can_escalate:
@@ -831,7 +859,13 @@ class WebFetchTool(BaseTool):
                 # AB1：静态通道被拦 → 经渲染池（真 Chrome 指纹 + 代理 + 可选持久
                 # profile）重放一次；仍被拦才返回指引。
                 content = self._escalate(
-                    url, network_policy, mode, wait_for, blocked, credential_domain.strip()
+                    url,
+                    network_policy,
+                    mode,
+                    wait_for,
+                    blocked,
+                    credential_domain.strip(),
+                    vault_account_id,
                 )
             if mode == "files" and content.get("kind") != "binary":
                 self._finalize_files(content, network_policy)
@@ -1076,15 +1110,21 @@ class WebFetchTool(BaseTool):
 
         raise ValueError("redirect_limit_exceeded: 重定向次数超限")
 
-    def _try_auto_refresh(self, credential_domain: str, url: str) -> str:
+    def _try_auto_refresh(
+        self, credential_domain: str, url: str, account_id: str = ""
+    ) -> str:
         """AU3：用档案来源持久 profile 静默重导 cookie；成功返回 note，否则空串。"""
         from .credential_vault import get_source_profile
         from .web_render import _auto_refresh_enabled, refresh_credentials
 
-        source_profile = get_source_profile(credential_domain)
+        source_profile = get_source_profile(
+            credential_domain, account_id=(account_id or None)
+        )
         if not source_profile or not _auto_refresh_enabled():
             return ""
-        ok, refreshed = refresh_credentials(credential_domain, url, source_profile)
+        ok, refreshed = refresh_credentials(
+            credential_domain, url, source_profile, account_id=account_id
+        )
         if not ok:
             return ""
         return (
@@ -1099,6 +1139,7 @@ class WebFetchTool(BaseTool):
         gated_by_whitelist: bool,
         credential_domain: str,
         credential_headers: Optional[Dict[str, str]],
+        account_id: str = "",
     ) -> tuple:
         """静态抓取 + AU2 登录墙检测；AU3 命中登录墙时静默刷新并重放一次。
 
@@ -1125,10 +1166,12 @@ class WebFetchTool(BaseTool):
         # AU3：档案带来源持久 profile（AU6）且开关开启 → 静默重导 cookie 重放
         from .credential_vault import resolve_credential
 
-        refresh_note = self._try_auto_refresh(credential_domain, url)
+        refresh_note = self._try_auto_refresh(credential_domain, url, account_id)
         if not refresh_note:
             return response, final_url, note, login_error
-        resolution = resolve_credential(credential_domain, url=url)
+        resolution = resolve_credential(
+            credential_domain, url=url, account_id=(account_id or None)
+        )
         if not resolution.ok or "Cookie" not in resolution.headers:
             return response, final_url, note, login_error
         response, final_url, note2 = self._get_with_redirects(
@@ -1377,6 +1420,7 @@ class WebFetchTool(BaseTool):
         wait_for: str,
         blocked: _AntibotBlocked,
         credential_domain: str = "",
+        account_id: str = "",
     ) -> Dict[str, Any]:
         """AB1 升级链：渲染池重放；渲染结果仍是盾页 / 拒绝状态 → 抛 RenderError 附指引。
 
@@ -1384,7 +1428,11 @@ class WebFetchTool(BaseTool):
         """
         try:
             rendered = web_render.render_page(
-                url, network_policy, wait_for=wait_for, credential_domain=credential_domain
+                url,
+                network_policy,
+                wait_for=wait_for,
+                credential_domain=credential_domain,
+                account_id=account_id,
             )
         except RenderError as exc:
             raise RenderError(
@@ -1465,6 +1513,7 @@ class WebFetchTool(BaseTool):
         static_content: Dict[str, Any],
         wait_for: str = "",
         credential_domain: str = "",
+        account_id: str = "",
     ) -> Dict[str, Any]:
         """JS 壳命中后的渲染降级：headless 取渲染后正文（W1）。
 
@@ -1472,15 +1521,23 @@ class WebFetchTool(BaseTool):
         渲染后 cookie 续期回写档案并以 note 提示。
         """
         rendered = web_render.render_page(
-            url, network_policy, wait_for=wait_for, credential_domain=credential_domain
+            url,
+            network_policy,
+            wait_for=wait_for,
+            credential_domain=credential_domain,
+            account_id=account_id,
         )
         # AU7：渲染落在登录墙 → AU3 自愈重试一次，仍墙则报 login_required
         auto_refresh_note = ""
         if rendered.get("login_wall") and credential_domain:
-            auto_refresh_note = self._try_auto_refresh(credential_domain, url)
+            auto_refresh_note = self._try_auto_refresh(credential_domain, url, account_id)
             if auto_refresh_note:
                 rendered = web_render.render_page(
-                    url, network_policy, wait_for=wait_for, credential_domain=credential_domain
+                    url,
+                    network_policy,
+                    wait_for=wait_for,
+                    credential_domain=credential_domain,
+                    account_id=account_id,
                 )
         if rendered.get("login_wall"):
             raise RenderError(

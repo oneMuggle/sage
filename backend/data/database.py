@@ -2663,6 +2663,28 @@ class Database:
             "ON feedback_conversations(remote_ticket_id)"
         )
 
+        # ── 浏览器多账号管理 ──────────────────────────────────────
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS browser_accounts (
+                id TEXT PRIMARY KEY,
+                label TEXT NOT NULL,
+                domain TEXT NOT NULL,
+                color TEXT,
+                notes TEXT,
+                is_default INTEGER DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_ba_label_domain "
+            "ON browser_accounts(label, domain)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ba_domain "
+            "ON browser_accounts(domain)"
+        )
+
         conn.commit()
 
         # C3 (DSH 对标 R9): schema 版本化迁移 —— 幂等应用所有未执行迁移。

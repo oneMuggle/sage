@@ -589,6 +589,7 @@ def _writeback_render_cookies(
     credential_domain: str,
     request_url: str,
     repo: Any = None,
+    account_id: str = "",
 ) -> Optional[List[str]]:
     """AU5 回写：Storage.getCookies 按域取回渲染浏览器的 cookie，合并回档案。
 
@@ -615,7 +616,13 @@ def _writeback_render_cookies(
     if not matched:
         return None
     try:
-        changed = merge_cdp_cookies(credential_domain, matched, request_url, repo=repo)
+        changed = merge_cdp_cookies(
+            credential_domain,
+            matched,
+            request_url,
+            repo=repo,
+            account_id=(account_id or None),
+        )
     except Exception:  # noqa: BLE001 — 回写失败不影响本次请求
         return None
     return sorted(set(changed)) or None
@@ -665,7 +672,11 @@ def _inject_local_storage(
 
 
 def _writeback_render_storage(  # noqa: PLR0911 — 各失败路径独立 return，扁平更直读
-    session: Any, target_id: str, credential_domain: str, repo: Any = None
+    session: Any,
+    target_id: str,
+    credential_domain: str,
+    repo: Any = None,
+    account_id: str = "",
 ) -> bool:
     """渲染后把页面 localStorage 合并回档案（尽力而为，失败返回 False）。"""
     if not target_id:
@@ -707,6 +718,7 @@ def _writeback_render_storage(  # noqa: PLR0911 — 各失败路径独立 return
                 credential_domain,
                 [{"origin": origin, "localStorage": cleaned}],
                 repo=repo,
+                account_id=(account_id or None),
             )
         )
     except Exception:  # noqa: BLE001 — 回写失败不影响本次请求
@@ -718,6 +730,7 @@ def refresh_credentials(  # noqa: PLR0911 — 各失败路径独立 return，扁
     url: str,
     profile_name: str,
     repo: Any = None,
+    account_id: str = "",
 ) -> Tuple[bool, List[str]]:
     """AU3：用来源持久 profile 静默重访 ``url``，把有效 cookie 重导回档案。
 
@@ -745,7 +758,9 @@ def refresh_credentials(  # noqa: PLR0911 — 各失败路径独立 return，扁
     if not credential_domain or not profile_name:
         return False, []
 
-    resolution = resolve_credential(credential_domain, url=url, repo=repo)
+    resolution = resolve_credential(
+        credential_domain, url=url, repo=repo, account_id=(account_id or None)
+    )
     inject = list(resolution.cookies) if resolution.ok and resolution.kind == KIND_COOKIE else []
 
     session: Optional[BrowserSession] = None
@@ -798,7 +813,9 @@ def refresh_credentials(  # noqa: PLR0911 — 各失败路径独立 return，扁
         ]
         if not matched:
             return False, []
-        changed = merge_cdp_cookies(credential_domain, matched, url, repo=repo)
+        changed = merge_cdp_cookies(
+            credential_domain, matched, url, repo=repo, account_id=(account_id or None)
+        )
         return (bool(changed), sorted(set(changed)))
     except BrowserCDPError:
         return False, []
@@ -822,6 +839,7 @@ def render_page(
     credential_domain: str = "",
     repo: Any = None,
     _retried: bool = False,
+    account_id: str = "",
 ) -> Dict[str, Any]:
     """headless 渲染 ``url``，返回与 web_fetch._render 可拼接的 content 片段。
 
@@ -859,7 +877,9 @@ def render_page(
             resolve_credential,
         )
 
-        resolution = resolve_credential(credential_domain, url=url, repo=repo)
+        resolution = resolve_credential(
+            credential_domain, url=url, repo=repo, account_id=(account_id or None)
+        )
         if resolution.ok and resolution.kind == KIND_COOKIE:
             credential_cookies = list(resolution.cookies or [])
             credential_origins = list(resolution.origins or [])
@@ -923,10 +943,12 @@ def render_page(
         # AU5：渲染标签页存活期间按域取回 cookie 合并回档案（续期回写；
         # 任何失败静默——与 AU2"回写失败不影响本次请求"同口径）。
         if credential_cookies:
-            refreshed = _writeback_render_cookies(session, credential_domain, url, repo=repo)
+            refreshed = _writeback_render_cookies(
+                session, credential_domain, url, repo=repo, account_id=account_id
+            )
         if (credential_cookies or credential_origins) and target_id:
             storage_refreshed = _writeback_render_storage(
-                session, target_id, credential_domain, repo=repo
+                session, target_id, credential_domain, repo=repo, account_id=account_id
             )
     except BrowserCDPError as exc:
         raise RenderError(
@@ -1017,6 +1039,7 @@ def render_page(
                 credential_domain=credential_domain,
                 repo=repo,
                 _retried=True,
+                account_id=account_id,
             )
             prefix = f"render_retried: 首次渲染返回 {status_val}，已自动重试"
             retried["note"] = (

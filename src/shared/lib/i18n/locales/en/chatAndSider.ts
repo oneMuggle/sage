@@ -558,6 +558,26 @@ export const enChatAndSider = {
     'Sage will lose access to signed-in content on this website. Disconnect?',
   'settings.network.sites.saved_hours': '{hours}h',
   'settings.network.sites.saved_just_now': 'just now',
+  // Browser multi-account (2026-11-20 browser-multi-account)
+  'settings.network.accounts': 'Browser accounts',
+  'settings.network.accounts.hint':
+    'Save multiple accounts per website. Switching hot-swaps the browser sign-in state so accounts stay isolated — ideal for relay workflows across users.',
+  'settings.network.accounts.empty':
+    'No accounts saved yet. Signing in to a website registers a default account automatically.',
+  'settings.network.accounts.add': 'Add account',
+  'settings.network.accounts.name_placeholder': 'Account name, e.g. "Alice — work"',
+  'settings.network.accounts.domain_placeholder': 'Website domain, e.g. cnki.net',
+  'settings.network.accounts.create': 'Create account',
+  'settings.network.accounts.switch': 'Switch',
+  'settings.network.accounts.switching': 'Switching…',
+  'settings.network.accounts.delete': 'Delete',
+  'settings.network.accounts.delete.confirm':
+    'Deleting an account also removes its saved sign-in credentials. Delete?',
+  'settings.network.accounts.default_badge': 'Default',
+  'settings.network.accounts.switch_success': 'Switched to "{label}"',
+  'settings.network.accounts.switch_failed': 'Switch failed: {error}',
+  'settings.network.accounts.created': 'Account "{label}" created',
+  'settings.network.accounts.deleted': 'Account deleted',
   'settings.network.advanced': 'Advanced: manual import & diagnostics',
   'settings.network.advanced.hint':
     'For advanced users and developers. Normal use does not require changing anything here.',
