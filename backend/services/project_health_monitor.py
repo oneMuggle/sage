@@ -199,9 +199,15 @@ class ProjectHealthMonitor:
             overdue=overdue,
         )
 
-    def scan_all(self, limit: int = 100) -> List[ProjectHealthSummary]:
-        """扫描所有活跃项目，按严重程度降序返回。"""
-        today = time.strftime("%Y-%m-%d")
+    def scan_all(
+        self, limit: int = 100, today: Optional[str] = None,
+    ) -> List[ProjectHealthSummary]:
+        """扫描所有活跃项目，按严重程度降序返回。
+
+        ``today`` 允许测试注入固定日期,避免随真实时间漂移触发断言;
+        未传时回落到 ``time.strftime``。
+        """
+        today = today or time.strftime("%Y-%m-%d")
         summaries: List[ProjectHealthSummary] = []
         for project in self.project_repo.list(limit=limit):
             if (project.status or "active") != "active":
