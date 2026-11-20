@@ -601,12 +601,28 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # /btw 等伪会话（sessions 表无行）update 零命中，静默即可。
             # 刻意 new 一个独立实例而非用下方 producer 内的 session_repo 变量 ——
             # 那个变量在数百行之后才绑定，早期失败路径 finally 会 UnboundLocalError。
+            run_status_applied = False
             try:
-                await to_thread(
+                run_status_applied = await to_thread(
                     SessionRepository().update_run_status, data.session_id, "running"
                 )
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(running)写入失败: %s", status_err)
+            # 2026-11-19 实时排序：running 落库后推送 run_started，前端据此把
+            # 会话即时置顶（SQL 已按 run_status 排序，此前运行期间无刷新信号，
+            # 侧栏要等流结束 loadSessions 才重排）。伪会话（无 sessions 行）
+            # rowcount=0 → 不推送。fail-open：事件推送失败不影响主流。
+            if run_status_applied:
+                try:
+                    await entry.queue.put(
+                        {
+                            "type": "session_updated",
+                            "subtype": "run_started",
+                            "session_id": data.session_id,
+                        }
+                    )
+                except Exception as evt_err:  # noqa: BLE001 — fail-open
+                    logger.debug("session_updated/run_started 事件推送失败: %s", evt_err)
 
             # ===== B-2 (round5 批次 B): 发送前自动快照 BEGIN =====
             # 偏好 auto_checkpoint 非显式 "0"（缺省=开）且会话绑定工作区时, run

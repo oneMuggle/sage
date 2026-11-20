@@ -112,6 +112,8 @@ async def test_office_refs_without_binding_returns_403_and_no_registry_entry(
     _insert_session(conn, SESSION_ID)
 
     # IMPORTANT: no bind_session_workspace call here — session is unbound.
+    # 2026-11-19: xdist 同 worker 的先前文件可能残留条目 —— 此处断言"没有新增"。
+    baseline_registry = _registry_size()
 
     refs = [{"doc_id": "doc-a", "doc_type": "word", "filename": "a.docx"}]
     response = await client.post(
@@ -127,7 +129,7 @@ async def test_office_refs_without_binding_returns_403_and_no_registry_entry(
     assert body.get("detail", {}).get("type") == "workspace_not_bound"
 
     # Authorization failed -> no stream id was issued.
-    assert _registry_size() == 0
+    assert _registry_size() == baseline_registry
 
 
 @pytest.mark.asyncio()
@@ -198,6 +200,9 @@ async def test_workspace_path_mismatch_returns_400_and_no_registry_entry(
         _make_doc(doc_id="doc-a", workspace_path=str(work.resolve())),
     )
 
+    # 2026-11-19: xdist 同 worker 的先前文件可能残留条目 —— 此处断言"没有新增"。
+    baseline_registry = _registry_size()
+
     refs = [{"doc_id": "doc-a", "doc_type": "word", "filename": "doc.docx"}]
     response = await client.post(
         CHAT_STREAM_PATH,
@@ -209,7 +214,7 @@ async def test_workspace_path_mismatch_returns_400_and_no_registry_entry(
         },
     )
     assert response.status_code == 400, response.text
-    assert _registry_size() == 0
+    assert _registry_size() == baseline_registry
 
 
 @pytest.mark.asyncio()
@@ -223,6 +228,9 @@ async def test_unknown_doc_ref_returns_404_and_no_registry_entry(
     work.mkdir()
     bind_session_workspace(conn, SESSION_ID, str(work), now_ms=1000)
 
+    # 2026-11-19: xdist 同 worker 的先前文件可能残留条目 —— 此处断言"没有新增"。
+    baseline_registry = _registry_size()
+
     refs = [{"doc_id": "ghost", "doc_type": "word", "filename": "g.docx"}]
     response = await client.post(
         CHAT_STREAM_PATH,
@@ -233,7 +241,7 @@ async def test_unknown_doc_ref_returns_404_and_no_registry_entry(
         },
     )
     assert response.status_code == 404, response.text
-    assert _registry_size() == 0
+    assert _registry_size() == baseline_registry
 
 
 @pytest.mark.asyncio()

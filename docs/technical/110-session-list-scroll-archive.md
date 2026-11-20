@@ -98,3 +98,18 @@ src/widgets/sidebar/sections/ConversationsSection.tsx
 src/widgets/layout/Sidebar.tsx
 src/widgets/session/{SessionItem,SessionList,VirtualSessionList}.tsx
 ```
+
+## 实时排序与运行态（2026-11-19）
+
+排序由后端 `SessionRepository.list()` 的 SQL 决定：
+`is_pinned DESC → run_status IN ('running','suspended') DESC → updated_at DESC`。
+前端列表是 store 快照，此前只在流结束 `loadSessions()` 时刷新，导致运行中的
+会话要等流结束才重排。现在：
+
+- `useChat.sendMessage` 发送瞬间调用 store `markSessionRunning(sid)`（乐观置顶）；
+- 后端 `/api/v1/chat/stream` 在 `run_status='running'` 落库后推送
+  `session_updated / run_started` 事件，前端同分支原地置顶，不再触发全量拉取；
+- 流结束仍以 `loadSessions()` 全量对账（标题、终态徽章、最终顺序）。
+- 本地比较器 `src/shared/lib/sessionOrder.ts` 字段顺序与 SQL 严格一致。
+- 新会话：`store.createSession()` 与项目绑定路径（`projectApi.createSession` →
+  Welcome 提交时 `addSession`）都会即时入列，不再等流末刷新。
