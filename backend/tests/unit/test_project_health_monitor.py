@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
 from typing import List, Optional
 
 import pytest
@@ -190,10 +189,6 @@ def test_scan_all_skips_non_active_projects():
 
 
 def test_scan_all_sorts_critical_before_warning_before_ok():
-    # scan_all() 走真实墙钟（time.strftime），due_date 必须相对今天推导，
-    # 否则逾期天数会随运行日期漂移（如 warn 满 7 天后升级为 critical 造成平局）。
-    warn_due = (date.today() - timedelta(days=1)).isoformat()
-    crit_due = (date.today() - timedelta(days=CRITICAL_OVERDUE_DAYS + 10)).isoformat()
     monitor, _ = make_monitor(
         [
             FakeProject(id="ok", name="OK"),
@@ -202,8 +197,8 @@ def test_scan_all_sorts_critical_before_warning_before_ok():
         ],
         {
             "ok": [],
-            "warn": [FakeMilestone(id="mw", title="W", due_date=warn_due, status="pending")],
-            "crit": [FakeMilestone(id="mc", title="C", due_date=crit_due, status="pending")],
+            "warn": [FakeMilestone(id="mw", title="W", due_date="2026-11-13", status="pending")],
+            "crit": [FakeMilestone(id="mc", title="C", due_date="2026-10-01", status="pending")],
         },
     )
     summaries = monitor.scan_all()
