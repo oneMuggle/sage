@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { getEffective } from '../../entities/model-catalog/api';
@@ -21,6 +21,7 @@ import {
   type LLMErrorResponse,
 } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
+import { isPlanApprovalPending, setPlanApprovalPending } from '../../shared/lib/planApprovalStorage';
 // Task 5: modelWindows imports removed — frontend no longer computes history budget.
 // Backend now resolves effective window from catalog and computes budget.
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
@@ -121,6 +122,18 @@ export function useChat() {
     loadMessages,
   } = useStore();
   const { settings } = useSettings();
+
+  // 计划待批准状态的重载恢复：planApprovalFor 只是组件 state，刷新后批准条
+  // 会消失。localStorage 里按会话记一个标记，切回/重载该会话时重新亮出。
+  const planApprovalForRef = useRef<string | null>(null);
+  useEffect(() => {
+    planApprovalForRef.current = planApprovalFor;
+  }, [planApprovalFor]);
+  useEffect(() => {
+    if (currentSessionId && isPlanApprovalPending(currentSessionId)) {
+      setPlanApprovalFor(currentSessionId);
+    }
+  }, [currentSessionId]);
 
   // U5 (对标增强第二轮批次 B): 流式中用户继续发送 → 入队,当前回复自然
   // 结束(onDone)后自动发送。队列实体在 chatStreamStore(按会话隔离，
@@ -297,11 +310,11 @@ export function useChat() {
       const delivery: DeliveryMode = opts?.delivery ?? DEFAULT_DELIVERY_MODE;
       const streamStore = useChatStreamStore.getState();
 
-      const enqueue = (): void => {
+      const enqueue = (notice = '已加入队列,当前回复完成后自动发送'): void => {
         // U5: 忙时不再丢弃消息——完整 payload 入队（含图片/附件/officeRefs，
         // 旧实现只存 content 导致 flush 时附件全丢）,当前回复自然结束后自动发送
         streamStore.enqueueChat(sid, { content, officeRefs, orchestrationMode, opts });
-        toast.info('已加入队列,当前回复完成后自动发送');
+        toast.info(notice);
       };
 
       // 插话必须回显：此前只弹 toast，用户在会话里看不到自己说过什么，
@@ -348,7 +361,11 @@ export function useChat() {
           echoSteering('已插话，已转达给编排任务，将在下一个执行边界生效');
           return 'handled';
         }
-        enqueue();
+        enqueue(
+          runId
+            ? '编排插话未送达（任务可能已结束），已加入队列'
+            : '当前没有可插话的编排任务，已加入队列',
+        );
         return 'handled';
       }
 
@@ -998,7 +1015,10 @@ export function useChat() {
               // S8: 后台会话完成提醒
               maybeNotify('done', (lastDoneContent ?? '').slice(0, 120));
               // PM2: 计划模式 run 自然完成 → 该会话进入"待批准"状态
-              if (opts?.planMode) setPlanApprovalFor(sid);
+              if (opts?.planMode) {
+                setPlanApprovalFor(sid);
+                setPlanApprovalPending(sid, true);
+              }
               // 流自然结束 — 把 streaming.content 写回 store,
               // 然后清掉 streaming overlay 让消息退回 store 视图
               // U5: 自然结束才 flush 队列(错误/中断路径 flushQueue=false)
@@ -1206,7 +1226,12 @@ export function useChat() {
     /** 2026-10-28 (Plan Mode 增强): 计划模式执行模式推荐（single/multi/ask_user） */
     executionModeRecommendation,
     /** PM2: 清除计划批准状态（批准执行或忽略时调用） */
-    clearPlanApproval: useCallback(() => setPlanApprovalFor(null), []),
+    clearPlanApproval: useCallback(() => {
+      if (planApprovalForRef.current) {
+        setPlanApprovalPending(planApprovalForRef.current, false);
+      }
+      setPlanApprovalFor(null);
+    }, []),
     /** U5: 当前会话的待发送队列（可见 + 可操作） */
     pendingQueue,
     /** U5: 队列是否因上一轮错误/中断而暂停自动发送 */

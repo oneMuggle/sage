@@ -9,6 +9,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useRunControlStore } from '../../../../entities/orchestration/runControlStore';
 import type { TaskBoard } from '../../../../features/send-message/useChat';
 import { orchRunClient } from '../../../../shared/api/orchRunClient';
 import type { SubagentLiveState } from '../../../../shared/api/types/chatAndEventTypes';
@@ -52,6 +53,38 @@ function buildBoard(overrides?: Partial<TaskBoard>): TaskBoard {
 describe('TaskDetailView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useRunControlStore.getState().resetAll();
+  });
+
+  it('run 已登记进 runControlStore 时渲染事件时间线与 steering 入口', () => {
+    const board = buildBoard();
+    const store = useRunControlStore.getState();
+    store.setRunSnapshot({
+      run_id: 'run-1',
+      status: 'running',
+      summary: {},
+      last_event_seq: 1,
+      updated_at: Date.now(),
+      tasks: [],
+    });
+    store.applyEvent({
+      event_id: 'evt-1',
+      run_id: 'run-1',
+      seq: 2,
+      event_type: 'task.started',
+      occurred_at: Date.now(),
+      producer: 'chat-dispatcher',
+      producer_generation: 1,
+      entity: { task_id: 't1', agent_id: 'researcher' },
+      payload: {},
+      visibility: 'user',
+      schema_version: '1',
+    });
+
+    render(<TaskDetailView board={board} taskId="t1" onBack={vi.fn()} />);
+
+    expect(screen.getByText('事件时间线')).toBeInTheDocument();
+    expect(screen.getByTestId('context-input')).toBeInTheDocument();
   });
 
   it('渲染头部：agent_id、goal、状态、返回按钮', () => {
