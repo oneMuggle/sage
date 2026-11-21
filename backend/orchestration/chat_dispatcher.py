@@ -52,6 +52,9 @@ logger = logging.getLogger(__name__)
 #: 并发上限 —— 子 agent 同时执行数（多出的排队等待）。
 MAX_CONCURRENT_SUBAGENTS = 4
 
+#: M2.2: 同一 run 内并存的后台派发上限（collect 一次收全部在飞派发）。
+MAX_CONCURRENT_BACKGROUND_DISPATCHES = 4
+
 #: 单子结果截断上限 —— 聚合 markdown 进 conductor 上下文，防止灌爆。
 MAX_SUBAGENT_RESULT_CHARS = 50 * 1024
 
@@ -352,6 +355,8 @@ class ChatDispatcher:
         # BD (round12): 后台派发句柄 —— 同一时刻至多一个在飞；collect 侧
         # shield 等待，超时/取消不杀派发本身。
         self._bg_task: Optional[asyncio.Task] = None
+        # M2.2: 多个后台派发并存（collect 收全部在飞派发）。
+        self._bg_tasks: Set[asyncio.Task] = set()
         # RD14 (round22): 每 run 重派（retry_of）计数 —— 超过
         # max_retry_of_chains 后降级普通任务。
         self._redeploy_count = 0
@@ -847,16 +852,20 @@ class ChatDispatcher:
     def start_background_dispatch(
         self, tasks: List[Dict[str, str]]
     ) -> Optional[asyncio.Task]:
-        """BD (round12): 以后台任务启动派发，立即返回句柄（不阻塞）。
+        """BD (round12) + M2.2: 以后台任务启动派发，立即返回句柄（不阻塞）。
 
-        已有后台派发在飞（未终态）时返回 None —— conductor 应先 collect。
+        M2.2 起允许多个后台派发并存；达到 ``MAX_CONCURRENT_BACKGROUND_DISPATCHES``
+        时返回 None（conductor 应先 collect_subagents 收走已完成的派发）。
         """
-        if self._bg_task is not None and not self._bg_task.done():
+        in_flight = [t for t in self._bg_tasks if not t.done()]
+        if len(in_flight) >= MAX_CONCURRENT_BACKGROUND_DISPATCHES:
             return None
-        self._bg_task = asyncio.create_task(
+        task = asyncio.create_task(
             self.dispatch(tasks), name=f"bg-dispatch-{self.run_id}"
         )
-        return self._bg_task
+        self._bg_tasks.add(task)
+        self._bg_task = task
+        return task
 
     def _task_tokens_used(self, task_id: str) -> Optional[int]:
         """BU17 (round31): 任务级累计 tokens（RT23 归因，run 内 memoize）。
@@ -887,12 +896,12 @@ class ChatDispatcher:
         partial 载荷同源）与 ``budget_exceeded`` 标志 —— conductor 在
         wait=false 快照上即可见"已完成什么/是否触顶"。
         """
-        if self._bg_task is None:
+        if not self._bg_tasks:
             status = "none"
-        elif self._bg_task.done():
-            status = "completed"
-        else:
+        elif any(not t.done() for t in self._bg_tasks):
             status = "running"
+        else:
+            status = "completed"
         tasks = [
             {
                 "task_id": s.task_id,
@@ -904,8 +913,11 @@ class ChatDispatcher:
         ]
         snapshot: Dict[str, Any] = {"status": status, "tasks": tasks}
         # BD7: 聚合预览 —— 仅在已有后台派发时提供（none 态无 states 可聚合）。
-        if self._bg_task is not None:
+        if self._bg_tasks:
             snapshot["aggregate"] = self._aggregate(list(self._states.values()))
+            snapshot["dispatches_in_flight"] = sum(
+                1 for t in self._bg_tasks if not t.done()
+            )
         snapshot["budget_exceeded"] = self._budget_exceeded
         # BU14 (round28): 墙钟触顶标志与预算对称透出 —— conductor 在
         # wait=false 快照上可区分"还在跑"与"守门已停派"。
@@ -919,9 +931,18 @@ class ChatDispatcher:
         （任务板照常推进，conductor 可再次 collect）。无在飞后台派发时
         抛 RuntimeError。
         """
-        if self._bg_task is None:
+        if not self._bg_tasks:
             raise RuntimeError("no_background_dispatch: 尚无后台派发可收集")
-        return await asyncio.wait_for(asyncio.shield(self._bg_task), timeout)
+        in_flight = [t for t in self._bg_tasks if not t.done()]
+        if not in_flight:
+            return self._aggregate(list(self._states.values()))
+
+        async def _wait_all() -> None:
+            await asyncio.gather(*(asyncio.shield(t) for t in in_flight))
+
+        # shield 让超时只收回本次 collect，不杀派发本身。
+        await asyncio.wait_for(_wait_all(), timeout)
+        return self._aggregate(list(self._states.values()))
 
     def partial_aggregate(self) -> Dict[str, Any]:
         """BD6 (round17): collect 超时时返回已完成部分聚合。
@@ -930,7 +951,7 @@ class ChatDispatcher:
         conductor 拿到已完成产出后可决定提前汇总或继续等（再次 collect）。
         无在飞后台派发时抛 RuntimeError。
         """
-        if self._bg_task is None:
+        if not self._bg_tasks:
             raise RuntimeError("no_background_dispatch: 尚无后台派发可收集")
         states = list(self._states.values())
         total = len(states)
