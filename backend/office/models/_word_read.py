@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -68,6 +68,20 @@ class WordHeaderFooterContent(BaseModel):
     has_page_number_field: bool = False
 
 
+class WordTrackedChange(BaseModel):
+    """One OOXML tracked revision (M3 read side)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["insert", "delete"]
+    text: str
+    author: Optional[str] = None
+    date: Optional[str] = Field(default=None, description="OOXML w:date 原始 ISO 字符串")
+    paragraph_index: Optional[int] = Field(
+        default=None, description="0 基正文段落索引（与 read_docx paragraph 对齐）"
+    )
+
+
 class OfficeWordReadResult(BaseModel):
     """Result of POST /api/v1/office/word/read."""
 
@@ -97,6 +111,8 @@ class OfficeWordReadResult(BaseModel):
     # default_factory 保持旧 payload 在 extra="forbid" 下有效（win7 回流
     # 与旧客户端可整体忽略）。上限/降级策略见 word._extract_image_previews。
     image_previews: List[WordImagePreview] = Field(default_factory=list)
+    # M3: 修订痕迹读取（additive；无修订为空表）。
+    tracked_changes: List[WordTrackedChange] = Field(default_factory=list)
 
 
 class WordImagePreview(BaseModel):

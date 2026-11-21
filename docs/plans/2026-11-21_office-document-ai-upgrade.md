@@ -255,10 +255,18 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 
 ### M3 — Word 修订/批注读回与接受拒绝（P0，对应 G2）
 
-- [ ] 解析 `w:ins/w:del/w:move*/comments`，`read_docx` 支持 accepted/original/all 视图
-- [ ] 预览显示修订与批注；审校面板逐条/批量接受拒绝
-- [ ] 修订写入扩展到超链接/域/表格单元格；删除段落合并语义处理
-- [ ] round-trip fixture（跨 run、超链接、表格、删除段落）与 Word/LibreOffice 对照
+- [x] 解析 `w:ins/w:del`（含作者/时间/段落锚点），`read_docx` 结果附加 `tracked_changes`
+- [x] 接受/拒绝：`POST /office/word/tracked-changes/resolve`（accept/reject，输出新文件或 overwrite 原地替换）
+- [ ] 前端预览显示修订/批注并逐条接受拒绝（后端与 REST 已就绪）
+- [ ] 修订写入扩展到超链接/域/表格单元格；删除段落标记合并语义
+- [x] round-trip 测试：修订写入 → 读取 → accept/reject（正文段落；跨 run 由 writer 测试覆盖）
+
+> **实施记录（2026-11-21，M3a 修订读回/接受拒绝）**
+> - 新增：`backend/office/word_tracked_changes.py`（`extract_tracked_changes` / `read_word_tracked_changes` / `resolve_word_tracked_changes`）
+> - 模型：`WordTrackedChange`（kind/text/author/date/paragraph_index）；`OfficeWordReadResult.tracked_changes`
+> - 端点：`POST /office/word/tracked-changes`、`POST /office/word/tracked-changes/resolve`
+> - 测试：unit 6 + integration 2；Word 读取回归通过；ruff/py38/architecture 通过
+> - 已知限制：正文段落范围；跨段落书签/表格单元格修订与删除段落标记合并待后续
 
 ### M4 — Excel 读写对称与错误治理（P0，对应 G6/G14）
 

@@ -81,6 +81,14 @@ from backend.office.storage import (
     validate_workspace,
 )
 from backend.office.template_library import instantiate_template, list_templates
+from backend.office.word_tracked_changes import (
+    WordTrackedChangesReadRequest,
+    WordTrackedChangesResolveRequest,
+    WordTrackedChangesResolveResult,
+    WordTrackedChangesResult,
+    read_word_tracked_changes,
+    resolve_word_tracked_changes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -387,6 +395,24 @@ def render_verify_endpoint(req: RenderVerifyRequest) -> RenderVerifyResult:
     无转换器时返回 ``status="degraded"``（HTTP 200），不阻塞调用方。
     """
     return verify_document(req)
+
+
+@router.post("/word/tracked-changes", response_model=WordTrackedChangesResult)
+def word_tracked_changes_endpoint(
+    req: WordTrackedChangesReadRequest,
+) -> WordTrackedChangesResult:
+    """M3: 读取 Word 修订痕迹（w:ins / w:del，含作者与时间）。"""
+    return read_word_tracked_changes(req.workspace_path, req.file_path)
+
+
+@router.post(
+    "/word/tracked-changes/resolve", response_model=WordTrackedChangesResolveResult
+)
+def word_tracked_changes_resolve_endpoint(
+    req: WordTrackedChangesResolveRequest,
+) -> WordTrackedChangesResolveResult:
+    """M3: 全部接受或拒绝修订，输出新文件（或 overwrite 原地替换）。"""
+    return resolve_word_tracked_changes(req)
 
 
 @router.get("/progress/{task_id}")
