@@ -171,6 +171,21 @@ def test_watermark_and_page_numbers(tmp_path: Path) -> None:
     assert "P2" in text
 
 
+def test_split_invalid_range_leaves_no_partial_outputs(tmp_path: Path) -> None:
+    source = _pdf(tmp_path / "doc.pdf", 3)
+
+    with pytest.raises(OfficeParseError):
+        split_pdf(
+            PdfSplitRequest(
+                workspace_path=str(tmp_path),
+                file_path=str(source),
+                ranges=["1", "4"],
+            )
+        )
+
+    assert not (tmp_path / "doc-1.pdf").exists()
+
+
 def test_invalid_page_range_is_rejected(tmp_path: Path) -> None:
     source = _pdf(tmp_path / "doc.pdf", 2)
 

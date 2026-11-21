@@ -330,13 +330,17 @@ def split_pdf(request: PdfSplitRequest) -> PdfOpsResult:
         raise OfficeParseError("output_prefix 非法")
     document = _open_pdf(source)
     outputs: List[str] = []
+    planned: List[tuple] = []
     try:
+        # Validate every range/output before writing anything (all-or-nothing).
         for order, raw_range in enumerate(request.ranges, start=1):
             indices = _parse_pages([raw_range], document.page_count)
             name = _validate_output_name(f"{prefix}-{order}.pdf")
             target = resolve_within(workspace, source.parent / name)
             if target.exists():
                 raise OfficeParseError(f"输出文件已存在: {name}")
+            planned.append((indices, target))
+        for indices, target in planned:
             part = fitz.open()
             try:
                 for index in indices:
@@ -346,6 +350,13 @@ def split_pdf(request: PdfSplitRequest) -> PdfOpsResult:
                 part.close()
             outputs.append(_rel(target, workspace))
         page_count = document.page_count
+    except Exception:
+        for relative in outputs:
+            try:
+                (workspace / relative).unlink()
+            except OSError:
+                logger.debug("failed to clean partial split output %s", relative)
+        raise
     finally:
         document.close()
     return PdfOpsResult(ok=True, outputs=outputs, page_count=page_count)
