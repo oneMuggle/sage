@@ -68,4 +68,42 @@ describe('DesignResourcesPanel', () => {
       ),
     );
   });
+
+  it('embeds multiple chart series', async () => {
+    const embedChart = vi.fn().mockResolvedValue({
+      ok: true,
+      artifact_id: 'a2',
+      version: 2,
+      title: 't',
+      injected_at_slot: false,
+    });
+    useDesignStore.setState({ embedChart } as never);
+
+    render(<DesignResourcesPanel projectId="p1" />);
+
+    fireEvent.change(screen.getAllByLabelText('design.resources.seriesName')[0], {
+      target: { value: 'Revenue' },
+    });
+    fireEvent.change(screen.getAllByLabelText('design.resources.values')[0], {
+      target: { value: '10, 20' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: /design.resources.addSeries/ }),
+    );
+    fireEvent.change(screen.getAllByLabelText('design.resources.seriesName')[1], {
+      target: { value: 'Cost' },
+    });
+    fireEvent.change(screen.getAllByLabelText('design.resources.values')[1], {
+      target: { value: '5, 8' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'design.resources.embed' }));
+
+    await waitFor(() => expect(embedChart).toHaveBeenCalledTimes(1));
+    const chart = vi.mocked(embedChart).mock.calls[0][1] as {
+      series: { name: string; y: number[] }[];
+    };
+    expect(chart.series).toHaveLength(2);
+    expect(chart.series[0].name).toBe('Revenue');
+    expect(chart.series[1].y).toEqual([5, 8]);
+  });
 });

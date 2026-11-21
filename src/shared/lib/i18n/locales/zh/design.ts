@@ -118,6 +118,9 @@ export const zhDesign = {
   'design.resources.labels': '标签（逗号分隔）',
   'design.resources.seriesName': '系列名称',
   'design.resources.values': '数值（逗号分隔）',
+  'design.resources.series': '系列 {index}',
+  'design.resources.addSeries': '添加系列',
+  'design.resources.removeSeries': '删除系列',
   'design.resources.embed': '嵌入图表',
   'design.resources.embedded': '已嵌入为 v{version}',
 

@@ -43,8 +43,9 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
   const [chartType, setChartType] = useState<ChartType>('bar');
   const [chartTitle, setChartTitle] = useState('');
   const [labelsText, setLabelsText] = useState('');
-  const [seriesName, setSeriesName] = useState('');
-  const [valuesText, setValuesText] = useState('');
+  const [series, setSeries] = useState<{ name: string; values: string }[]>([
+    { name: '', values: '' },
+  ]);
   const [embedding, setEmbedding] = useState(false);
   const [preview, setPreview] = useState<SourcePreview | null>(null);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
@@ -85,8 +86,16 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
     setPreviewPath(null);
   };
 
-  const values = parseNumbers(valuesText);
-  const canEmbed = !embedding && seriesName.trim().length > 0 && values.length > 0;
+  const updateSeries = (index: number, patch: Partial<{ name: string; values: string }>) => {
+    setSeries((prev) =>
+      prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)),
+    );
+  };
+
+  const validSeries = series
+    .map((entry) => ({ name: entry.name.trim(), y: parseNumbers(entry.values) }))
+    .filter((entry) => entry.name.length > 0 && entry.y.length > 0);
+  const canEmbed = !embedding && validSeries.length > 0;
 
   const handleEmbed = async () => {
     if (!canEmbed) return;
@@ -95,13 +104,11 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
       type: chartType,
       title: chartTitle.trim() || null,
       labels: labels.length ? labels : null,
-      series: [
-        {
-          name: seriesName.trim(),
-          ...(labels.length ? { x: labels } : {}),
-          y: values,
-        },
-      ],
+      series: validSeries.map((entry) => ({
+        name: entry.name,
+        ...(labels.length ? { x: labels } : {}),
+        y: entry.y,
+      })),
     };
     setEmbedding(true);
     try {
@@ -251,23 +258,51 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
               className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
             />
           </label>
-          <label className="block">
-            <span className="text-text-muted">{t('design.resources.seriesName')}</span>
-            <input
-              value={seriesName}
-              onChange={(event) => setSeriesName(event.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
-            />
-          </label>
-          <label className="block">
-            <span className="text-text-muted">{t('design.resources.values')}</span>
-            <input
-              value={valuesText}
-              onChange={(event) => setValuesText(event.target.value)}
-              placeholder="10, 20, 30, 40"
-              className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
-            />
-          </label>
+          {series.map((entry, index) => (
+            <div key={index} className="space-y-1 rounded-md border border-border p-2">
+              <div className="flex items-center justify-between">
+                <span className="text-text-muted">
+                  {t('design.resources.series').replace(
+                    '{index}',
+                    String(index + 1),
+                  )}
+                </span>
+                {series.length > 1 && (
+                  <button
+                    type="button"
+                    aria-label={t('design.resources.removeSeries')}
+                    className="rounded border border-border px-1.5 py-0.5 hover:bg-bg-hover"
+                    onClick={() =>
+                      setSeries((prev) => prev.filter((_, i) => i !== index))
+                    }
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              <input
+                value={entry.name}
+                aria-label={t('design.resources.seriesName')}
+                onChange={(event) => updateSeries(index, { name: event.target.value })}
+                placeholder={t('design.resources.seriesName')}
+                className="w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
+              />
+              <input
+                value={entry.values}
+                aria-label={t('design.resources.values')}
+                onChange={(event) => updateSeries(index, { values: event.target.value })}
+                placeholder="10, 20, 30, 40"
+                className="w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
+              />
+            </div>
+          ))}
+          <button
+            type="button"
+            className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
+            onClick={() => setSeries((prev) => [...prev, { name: '', values: '' }])}
+          >
+            + {t('design.resources.addSeries')}
+          </button>
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"

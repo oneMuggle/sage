@@ -120,6 +120,9 @@ export const enDesign = {
   'design.resources.labels': 'Labels (comma-separated)',
   'design.resources.seriesName': 'Series name',
   'design.resources.values': 'Values (comma-separated)',
+  'design.resources.series': 'Series {index}',
+  'design.resources.addSeries': 'Add series',
+  'design.resources.removeSeries': 'Remove series',
   'design.resources.embed': 'Embed chart',
   'design.resources.embedded': 'Embedded as v{version}',
 
