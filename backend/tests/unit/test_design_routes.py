@@ -626,6 +626,35 @@ class TestDesignRoutes:
         assert reset.json()["accent"] is None
         assert reset.json()["radius"] is None
 
+    async def test_tweaks_replace_writes_exact_field_set(self, studio):
+        """replace=True 时未提供的字段被清空（预设应用语义）。"""
+        from backend.main import app
+
+        project = studio.create_project(kind="prototype", brief="replace")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                await client.put(
+                    f"/api/v1/design/projects/{project.id}/tweaks",
+                    json={"accent": "#111111", "radius": 10},
+                )
+                replaced = await client.put(
+                    f"/api/v1/design/projects/{project.id}/tweaks",
+                    json={"font_family": "Georgia, serif", "replace": True},
+                )
+
+        assert replaced.status_code == 200
+        body = replaced.json()
+        assert body["accent"] is None
+        assert body["radius"] is None
+        assert body["font_family"] == "Georgia, serif"
+
     async def test_create_project_invalid_kind(self, studio):
         from backend.main import app
 

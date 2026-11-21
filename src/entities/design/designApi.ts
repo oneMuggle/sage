@@ -229,15 +229,16 @@ export async function getTweaks(projectId: string): Promise<ProjectTweaks> {
   });
 }
 
-/** 合并保存项目微调参数 */
+/** 合并保存项目微调参数；replace=true 时按精确字段集覆盖（null 清空） */
 export async function updateTweaks(
   projectId: string,
   tweaks: ProjectTweaks,
+  replace = false,
 ): Promise<ProjectTweaks> {
   return backendRequest<ProjectTweaks>({
     method: 'PUT',
     path: `${BASE}/projects/${projectId}/tweaks`,
-    body: tweaks,
+    body: replace ? { ...tweaks, replace: true } : tweaks,
   });
 }
 

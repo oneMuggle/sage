@@ -131,6 +131,11 @@ export const enDesign = {
   'design.tweaks.fontSize': 'Font size',
   'design.tweaks.density': 'Density',
   'design.tweaks.reset': 'Reset to system defaults',
+  'design.tweaks.presets': 'Presets',
+  'design.tweaks.presetName': 'Preset name',
+  'design.tweaks.savePreset': 'Save preset',
+  'design.tweaks.applyPreset': 'Apply',
+  'design.tweaks.deletePreset': 'Delete',
 
   // Generation stages
   'design.stage.idle': 'Idle',

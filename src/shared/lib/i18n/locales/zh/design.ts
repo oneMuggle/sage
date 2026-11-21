@@ -129,6 +129,11 @@ export const zhDesign = {
   'design.tweaks.fontSize': '字号',
   'design.tweaks.density': '密度',
   'design.tweaks.reset': '恢复设计系统默认',
+  'design.tweaks.presets': '预设',
+  'design.tweaks.presetName': '预设名称',
+  'design.tweaks.savePreset': '保存预设',
+  'design.tweaks.applyPreset': '应用',
+  'design.tweaks.deletePreset': '删除',
 
   // 生成进度
   'design.stage.idle': '空闲',

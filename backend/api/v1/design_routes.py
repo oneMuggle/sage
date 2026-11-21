@@ -103,7 +103,11 @@ class BindSourceRequest(BaseModel):
 
 
 class TweaksRequest(BaseModel):
-    """PUT /design/projects/{id}/tweaks body."""
+    """PUT /design/projects/{id}/tweaks body.
+
+    ``replace=True`` writes the exact field set (nulls clear overrides);
+    otherwise fields are merged and nulls are ignored.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -112,6 +116,7 @@ class TweaksRequest(BaseModel):
     font_size: Optional[float] = None
     density: Optional[float] = None
     font_family: Optional[str] = None
+    replace: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +414,16 @@ async def update_tweaks(project_id: str, req: TweaksRequest):
     """
     studio = _require_studio()
     try:
-        if all(
+        if req.replace:
+            tweaks = studio.set_tweaks(
+                project_id,
+                accent=req.accent,
+                radius=req.radius,
+                font_size=req.font_size,
+                density=req.density,
+                font_family=req.font_family,
+            )
+        elif all(
             value is None
             for value in (
                 req.accent,

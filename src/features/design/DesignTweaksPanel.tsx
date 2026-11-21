@@ -9,6 +9,12 @@ import type { ProjectTweaks } from '../../entities/design/types';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { extractTweakDefaults } from './designTweaks';
+import {
+  deletePreset,
+  loadPresets,
+  savePreset,
+  type TweakPreset,
+} from './designTweakPresets';
 
 interface DesignTweaksPanelProps {
   projectId: string;
@@ -58,6 +64,10 @@ export function DesignTweaksPanel({ projectId }: DesignTweaksPanelProps) {
   const project = useDesignStore((s) => s.currentProject);
   const updateTweaksLocal = useDesignStore((s) => s.updateTweaksLocal);
   const persistTweaks = useDesignStore((s) => s.persistTweaks);
+  const applyTweaksPreset = useDesignStore((s) => s.applyTweaksPreset);
+
+  const [presets, setPresets] = useState<TweakPreset[]>(() => loadPresets());
+  const [presetName, setPresetName] = useState('');
 
   const defaults = useMemo(() => {
     const system = systems.find((item) => item.id === project?.system_id);
@@ -89,6 +99,15 @@ export function DesignTweaksPanel({ projectId }: DesignTweaksPanelProps) {
   const density = tweaks.density ?? defaults.density;
   const selectedFontKey =
     FONT_OPTIONS.find((option) => option.value === (tweaks.font_family ?? null))?.key ?? 'auto';
+  const hasOverrides = Object.values(tweaks).some(
+    (value) => value !== null && value !== undefined,
+  );
+
+  const handleSavePreset = () => {
+    if (!presetName.trim() || !hasOverrides) return;
+    setPresets(savePreset(presetName, tweaks));
+    setPresetName('');
+  };
 
   return (
     <aside className="flex h-full min-h-0 flex-col rounded-lg border border-border bg-surface">
@@ -172,6 +191,50 @@ export function DesignTweaksPanel({ projectId }: DesignTweaksPanelProps) {
           <RotateCcw className="h-3 w-3" />
           {t('design.tweaks.reset')}
         </button>
+
+        <section className="space-y-2 border-t border-border pt-3">
+          <div className="text-text-secondary">{t('design.tweaks.presets')}</div>
+          <div className="flex gap-2">
+            <input
+              value={presetName}
+              onChange={(event) => setPresetName(event.target.value)}
+              placeholder={t('design.tweaks.presetName')}
+              className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
+            />
+            <button
+              type="button"
+              className="shrink-0 rounded border border-border px-2 py-1 hover:bg-bg-hover disabled:opacity-40"
+              disabled={!presetName.trim() || !hasOverrides}
+              onClick={handleSavePreset}
+            >
+              {t('design.tweaks.savePreset')}
+            </button>
+          </div>
+          {presets.map((preset) => (
+            <div
+              key={preset.name}
+              className="flex items-center justify-between gap-2 rounded border border-border px-2 py-1"
+            >
+              <span className="truncate text-text">{preset.name}</span>
+              <div className="flex shrink-0 gap-1">
+                <button
+                  type="button"
+                  className="rounded border border-border px-1.5 py-0.5 hover:bg-bg-hover"
+                  onClick={() => void applyTweaksPreset(projectId, preset.tweaks)}
+                >
+                  {t('design.tweaks.applyPreset')}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-border px-1.5 py-0.5 hover:bg-bg-hover"
+                  onClick={() => setPresets(deletePreset(preset.name))}
+                >
+                  {t('design.tweaks.deletePreset')}
+                </button>
+              </div>
+            </div>
+          ))}
+        </section>
       </div>
     </aside>
   );

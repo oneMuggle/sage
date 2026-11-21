@@ -64,6 +64,7 @@ interface DesignState {
   restoreVersion: (projectId: string, artifactId: string) => Promise<void>;
   updateTweaksLocal: (patch: Partial<ProjectTweaks>) => void;
   persistTweaks: (projectId: string) => Promise<void>;
+  applyTweaksPreset: (projectId: string, tweaks: ProjectTweaks) => Promise<void>;
   bindSource: (projectId: string, filePath: string) => Promise<void>;
   unbindSource: (projectId: string) => Promise<void>;
   refreshWithSource: (projectId: string) => Promise<void>;
@@ -252,6 +253,16 @@ export const useDesignStore = create<DesignState>((set) => ({
   async persistTweaks(projectId: string) {
     try {
       const saved = await api.updateTweaks(projectId, useDesignStore.getState().tweaks);
+      set({ tweaks: saved });
+    } catch (error) {
+      set({ errorProject: getErrorMessage(error) });
+    }
+  },
+
+  async applyTweaksPreset(projectId: string, tweaks: ProjectTweaks) {
+    set({ tweaks });
+    try {
+      const saved = await api.updateTweaks(projectId, tweaks, true);
       set({ tweaks: saved });
     } catch (error) {
       set({ errorProject: getErrorMessage(error) });
