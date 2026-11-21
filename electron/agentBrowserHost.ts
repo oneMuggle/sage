@@ -9,7 +9,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { basename, join } from 'node:path';
-import { BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, session } from 'electron';
 
 import {
   startAgentBrowserBridge,
@@ -55,8 +55,25 @@ function createWindow(partitionSession: Electron.Session, visible: boolean): Bri
   } catch {
     // UA 归一化失败不阻断窗口创建（降级为默认 UA）
   }
-  // 与主窗口同口径：拒绝弹窗与本地协议导航，缩小登录页面的攻击面。
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // 与主窗口同口径：本地/自定义协议一律拒绝。但 http(s) 弹窗需放行——知网等
+  // 检索入口依赖 window.open 的隐藏小窗建立代理会话（随即自行关闭），一律 deny
+  // 会让这类站点直接死路（页面提示「弹窗被拦截」）。放行时强制沙箱化子窗口并
+  // 继承持久分区；页面文本仍按不可信数据处理，站点策略在工具动作前复核域名。
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (!/^https?:\/\//i.test(url)) return { action: 'deny' };
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        show: true,
+        webPreferences: {
+          sandbox: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+          partition: AGENT_BROWSER_PARTITION,
+        },
+      },
+    };
+  });
   win.webContents.on('will-navigate', (event, url) => {
     if (!/^https?:\/\//i.test(url)) event.preventDefault();
   });
@@ -86,10 +103,15 @@ export async function startAgentBrowserHost(): Promise<AgentBrowserBridgeHandle 
       log: (message: string) => logger.debug(message),
       onDownload: (handler) => {
         partitionSession.on('will-download', (_event, item) => {
-          // Electron 默认会弹保存对话框（隐藏窗口下会卡住）；后端已通过
-          // Browser.setDownloadBehavior 指定目录，这里直接落盘。
-          if (downloadDir) {
-            item.setSavePath(join(downloadDir, basename(item.getFilename())));
+          // Electron 默认会弹保存对话框（隐藏/受控窗口下无人可点 → 下载卡死）。
+          // 后端通常已通过 Browser.setDownloadBehavior 指定目录；若尚未设置
+          // （例如 navigate 自动拉起后后端漏调），兜底写入系统下载目录，
+          // 任何情况下都不允许弹对话框。
+          const saveDir = downloadDir || app.getPath('downloads');
+          try {
+            item.setSavePath(join(saveDir, basename(item.getFilename())));
+          } catch {
+            // setSavePath 失败时保持默认行为，不阻断事件上报
           }
           const guid = randomBytes(8).toString('hex');
           const emit = (method: string, extra: Record<string, unknown>): void => {
