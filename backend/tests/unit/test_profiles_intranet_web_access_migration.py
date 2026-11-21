@@ -124,6 +124,9 @@ def test_default_seed_coder_uses_current_tool_names():
         "browser_downloads",
         "browser_close",
         "browser_login",
+        # 2026-11-20 多账号：BROWSER_TOOLS 新增列表 / 切换
+        "browser_list_accounts",
+        "browser_switch_account",
         # 2026-11-17 (M1): BROWSER_TOOLS 新增多标签管理
         "browser_tabs",
         # alpha.36 (Bug #5): 沙箱代码执行
