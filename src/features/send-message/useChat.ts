@@ -21,7 +21,10 @@ import {
   type LLMErrorResponse,
 } from '../../shared/lib/errorMapping';
 import { logger } from '../../shared/lib/logger';
-import { isPlanApprovalPending, setPlanApprovalPending } from '../../shared/lib/planApprovalStorage';
+import {
+  isPlanApprovalPending,
+  setPlanApprovalPending,
+} from '../../shared/lib/planApprovalStorage';
 // Task 5: modelWindows imports removed — frontend no longer computes history budget.
 // Backend now resolves effective window from catalog and computes budget.
 import { chatApi, useStore, type Message } from '../../shared/lib/store';
@@ -517,12 +520,11 @@ export function useChat() {
       } catch {
         // fail-open: 读取覆盖失败沿用全局选择（后端有双保险修复）
       }
-      const { endpoint: effectiveEndpoint, modelId: chatModelId } =
-        resolveEffectiveChatModel(
-          settings.modelSelections.chatModel,
-          settings.endpoints,
-          sessionModelOverride,
-        );
+      const { endpoint: effectiveEndpoint, modelId: chatModelId } = resolveEffectiveChatModel(
+        settings.modelSelections.chatModel,
+        settings.endpoints,
+        sessionModelOverride,
+      );
       // 发送前已校验全局端点存在；会话覆盖解析失败时回退全局端点。
       const sendEndpoint = effectiveEndpoint ?? chatEndpoint;
       if (!sendEndpoint) return;
