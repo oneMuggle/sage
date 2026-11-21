@@ -169,3 +169,69 @@ def test_subagent_whitelist_gets_screenshot_and_downloads_not_tabs():
         assert tool in whitelist
 
 
+# 2026-11-17 feat/controlled-browser-use (M1 收尾): 主对话直接完成
+# 导航→观察→交互→下载 循环。browser_launch 是高级入口（navigate 会自动
+# 拉起），不进 primary。
+_PRIMARY_BROWSER_USE_TOOLS = {
+    "browser_navigate",
+    "browser_snapshot",
+    "browser_interact",
+    "browser_screenshot",
+    "browser_tabs",
+    "browser_downloads",
+    "browser_close",
+    "browser_login",
+}
+
+
+def test_primary_profile_includes_browser_use_loop():
+    """primary seed 与默认 profile 必须含完整 browser use 工具组（不含 launch）。"""
+    from backend.agents.profiles import _PRIMARY_SEED_TOOLS, create_default_agents
+
+    assert set(_PRIMARY_SEED_TOOLS) >= _PRIMARY_BROWSER_USE_TOOLS, (
+        "primary seed 缺浏览器工具组 — 主对话无法完成 browser use 循环"
+    )
+    # browser_launch 不进 primary —— navigate 会自动拉起浏览器。
+    assert "browser_launch" not in _PRIMARY_SEED_TOOLS, (
+        "browser_launch 不应进 primary（navigate 会自动拉起）"
+    )
+
+    defaults = {a.id: a for a in create_default_agents()}
+    primary_tools = set(defaults["primary"].tools)
+    assert primary_tools >= _PRIMARY_BROWSER_USE_TOOLS
+    assert "browser_launch" not in primary_tools
+
+
+def test_researcher_profile_includes_browser_evidence_tools():
+    """researcher 补截图/下载/标签三件（动态页面委派取证全链路）。"""
+    from backend.agents.profiles import create_default_agents
+
+    defaults = {a.id: a for a in create_default_agents()}
+    researcher_tools = set(defaults["researcher"].tools)
+
+    for tool in ("browser_screenshot", "browser_downloads", "browser_tabs"):
+        assert tool in researcher_tools, f"researcher 缺 {tool}"
+
+
+def test_subagent_whitelist_gets_screenshot_and_downloads_not_tabs():
+    """子代理白名单补 screenshot/downloads（READ），但不给 tabs（最小权限）。"""
+    from backend.tools.agent_tool import SUBAGENT_TOOL_WHITELIST
+
+    whitelist = set(SUBAGENT_TOOL_WHITELIST)
+    assert "browser_screenshot" in whitelist
+    assert "browser_downloads" in whitelist
+    assert "browser_tabs" not in whitelist, (
+        "browser_tabs 不应下放子代理 — 多标签归主对话/researcher 统筹"
+    )
+    # 既有浏览器通道不被误删
+    for tool in (
+        "browser_launch",
+        "browser_navigate",
+        "browser_snapshot",
+        "browser_interact",
+        "browser_cookies",
+        "browser_close",
+    ):
+        assert tool in whitelist
+
+

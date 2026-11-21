@@ -1,0 +1,7 @@
+{
+  "id": "data-report",
+  "name": "Data Report",
+  "category": "analytics",
+  "description": "A data-dense design system optimized for reports, dashboards, and analytics. Table-first, chart-friendly, high information density.",
+  "tags": ["data", "report", "dashboard", "analytics", "table"]
+}

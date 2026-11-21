@@ -52,6 +52,7 @@ import logging
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+<<<<<<< HEAD
 
 if TYPE_CHECKING:
     import pymupdf
@@ -65,6 +66,14 @@ if TYPE_CHECKING:
 from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict
+=======
+
+if TYPE_CHECKING:
+    import pymupdf
+    from docx.document import Document
+
+from pydantic import BaseModel, ConfigDict, Field
+>>>>>>> origin/main
 
 from .errors import OfficeError
 from .models import OfficeDocType

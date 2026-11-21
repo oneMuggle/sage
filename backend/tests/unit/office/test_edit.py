@@ -427,6 +427,6 @@ def test_unsupported_doc_type_via_dispatch(tmp_path: Path):
 def test_unknown_op_fails_without_saving(tmp_path: Path):
     path = tmp_path / "a.xlsx"
     _make_xlsx(path)
-    saved, results = update_xlsx(path, [{"op": "merge_cells", "range": "A1:B2"}])
+    saved, results = update_xlsx(path, [{"op": "frobnicate", "range": "A1:B2"}])
     assert not saved
     assert "unsupported_op" in results[0]["error"]

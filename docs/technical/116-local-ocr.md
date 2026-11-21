@@ -167,8 +167,12 @@ catalog 请求有 1.5s 超时，失败按 `unknown` 处理。
 OpenAI 兼容 / Anthropic / Gemini / Ollama 的 `model_capabilities` 在正负 marker 都未命中时返回
 `vision_known=False`，`agent._get_model_capabilities` 将其与 `resolver is None` 一样按未知放行。
 若上游对带图请求返回 400/422 且响应体命中 image/vision 特征串，`llm_client` 会给出
+<<<<<<< HEAD
 「更换支持视觉的对话模型，或在设置页把当前模型标记为不支持图片，以启用视觉理解模型 / OCR 回退」
 的可操作错误文案。
+=======
+「配置视觉理解模型或启用本地 OCR」的可操作错误文案。
+>>>>>>> origin/main
 
 ## 8. 性能
 

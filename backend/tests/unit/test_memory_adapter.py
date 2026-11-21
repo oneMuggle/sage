@@ -123,6 +123,7 @@ class TestMemoryAdapterStore:
             memory_type="episodic",
             importance=7,
             tags=["preference", "food"],
+<<<<<<< HEAD
             metadata={
                 "session_id": "session-123",
                 "tags": ["preference", "food"],
@@ -133,6 +134,9 @@ class TestMemoryAdapterStore:
                 # 2026-11-17 记忆详情化：标题随 metadata/kwarg 透传
                 "title": None,
             },
+=======
+            metadata={"session_id": "session-123", "tags": ["preference", "food"], "title": None},
+>>>>>>> origin/main
             session_id="session-123",
             agent_id=None,
             title=None,
@@ -429,6 +433,8 @@ class TestMemoryAdapterProfileIntegration:
         profile.get_core_items.return_value = [
             {"content": f"画像{i}", "category": "preference", "importance": 8} for i in range(6)
         ]
+        # 会话级快照：retrieve 有 session_id 时走 get_snapshot_for(session)
+        profile.get_snapshot_for.return_value = profile
         adapter.user_profile = profile
         adapter.vector_store = None  # 走纯关键词融合, 简化
         # 检索命中一条高重要性事实
@@ -448,15 +454,19 @@ class TestMemoryAdapterProfileIntegration:
 
     @pytest.mark.asyncio()
     async def test_store_profile_writes_to_profile_store(self, adapter):
-        """store_profile 委托 UserProfileStore.add, 返回画像 ID。"""
+        """store_profile 委托 UserProfileStore.upsert（带 source/evidence）， 返回画像 ID。"""
         profile = Mock()
-        profile.add.return_value = "profile-id-1"
+        profile.upsert.return_value = "profile-id-1"
         adapter.user_profile = profile
 
         pid = await adapter.store_profile("用户偏好X", category="preference", importance=7)
         assert pid == "profile-id-1"
-        profile.add.assert_called_once_with(
-            "用户偏好X", category="preference", importance=7
+        profile.upsert.assert_called_once_with(
+            "用户偏好X",
+            category="preference",
+            importance=7,
+            source="per_turn",
+            evidence_session_id=None,
         )
 
     @pytest.mark.asyncio()

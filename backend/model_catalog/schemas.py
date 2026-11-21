@@ -132,6 +132,7 @@ class LayerValues(CatalogValue):
     # Capability metadata carried by this layer.  Merged per-key with the same
     # first-layer-wins priority as the other fields; None = layer says nothing.
     capabilities: Optional[Dict[str, bool]] = None
+<<<<<<< HEAD
 
     @field_validator("source")
     @classmethod
@@ -151,6 +152,8 @@ class LayerValues(CatalogValue):
         if v is not None and (not isinstance(v, str) or not v.strip()):
             raise ValueError("value must not be blank")
         return v
+=======
+>>>>>>> origin/main
 
 
 def _validate_utc_timestamp(value: str) -> str:

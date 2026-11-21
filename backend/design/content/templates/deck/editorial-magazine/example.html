@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>On Slowness — An Editorial</title>
+  <style>
+    :root {
+      --ink: #0a0a0b;
+      --paper: #f1efea;
+      --paper-tint: #e8e5de;
+      --ink-tint: #18181a;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0; }
+    html, body { background: var(--paper); color: var(--ink); }
+    body {
+      font-family: "Inter", "Noto Sans SC", -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .slide {
+      min-height: 100vh;
+      width: 100%;
+      display: none;
+      padding: 6rem 8vw 4rem;
+      position: relative;
+      flex-direction: column;
+    }
+    .slide.active { display: flex; }
+
+    /* Top hairline rule on every slide except Hero Cover */
+    .slide.has-rule::before {
+      content: "";
+      position: absolute;
+      top: 3.5rem; left: 8vw; right: 8vw;
+      height: 1px;
+      background: var(--ink);
+    }
+
+    /* Folio */
+    .folio {
+      position: absolute;
+      bottom: 2rem; right: 8vw;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      color: var(--ink-tint);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Kicker */
+    .kicker {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--ink-tint);
+      margin-bottom: 1.5rem;
+    }
+
+    /* Display type */
+    .display {
+      font-family: "Playfair Display", "Noto Serif SC", Georgia, serif;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      line-height: 1.1;
+    }
+
+    /* L01: Hero Cover */
+    .slide-cover {
+      justify-content: center;
+      padding: 6rem 8vw;
+    }
+    .slide-cover .title {
+      font-size: clamp(3rem, 7vw, 6rem);
+      max-width: 18ch;
+      margin-bottom: 2rem;
+    }
+    .slide-cover .subtitle {
+      font-size: 1.25rem;
+      max-width: 42ch;
+      color: var(--ink-tint);
+    }
+    .slide-cover .folio { color: var(--ink-tint); }
+
+    /* L02: Act Divider */
+    .slide-act {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+    .slide-act::after {
+      content: "";
+      position: absolute;
+      bottom: 3.5rem; left: 8vw; right: 8vw;
+      height: 1px;
+      background: var(--ink);
+    }
+    .slide-act .act-label {
+      font-size: clamp(2.5rem, 6vw, 5rem);
+    }
+
+    /* L03: Big Numbers Grid */
+    .slide-numbers .lead {
+      font-family: "Playfair Display", "Noto Serif SC", Georgia, serif;
+      font-size: 2rem;
+      line-height: 1.25;
+      max-width: 28ch;
+      margin-bottom: 3rem;
+    }
+    .numbers-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 3rem 4rem;
+    }
+    .stat-figure {
+      font-family: "Playfair Display", "Noto Serif SC", Georgia, serif;
+      font-size: clamp(3rem, 6vw, 5rem);
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 0.75rem;
+    }
+    .stat-label {
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      color: var(--ink);
+      margin-bottom: 0.25rem;
+    }
+    .stat-caption {
+      font-size: 12px;
+      color: var(--ink-tint);
+    }
+
+    @media (max-width: 640px) {
+      .slide { padding: 5rem 6vw 3rem; }
+      .slide.has-rule::before { left: 6vw; right: 6vw; top: 3rem; }
+      .slide-act::after { left: 6vw; right: 6vw; }
+      .folio { right: 6vw; }
+      .numbers-grid { grid-template-columns: 1fr; gap: 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- L01: Hero Cover -->
+  <article class="slide slide-cover" id="slide-01">
+    <p class="kicker">An Essay on Attention</p>
+    <h1 class="display title">On Slowness</h1>
+    <p class="subtitle">A case for doing less, more carefully, in a season that rewards speed above all else.</p>
+    <span class="folio">01 / 03</span>
+  </article>
+
+  <!-- L02: Act Divider -->
+  <article class="slide slide-act has-rule" id="slide-02">
+    <p class="kicker">Part One</p>
+    <h2 class="display act-label">The Evidence</h2>
+    <span class="folio">02 / 03</span>
+  </article>
+
+  <!-- L03: Big Numbers Grid -->
+  <article class="slide slide-numbers has-rule" id="slide-03">
+    <p class="kicker">Three measurements that changed how we work</p>
+    <p class="lead">We tracked one team for ninety days after they stopped measuring daily output.</p>
+    <div class="numbers-grid">
+      <div>
+        <div class="stat-figure">41%</div>
+        <div class="stat-label">Fewer meetings per week</div>
+        <div class="stat-caption">Self-reported, averaged across the quarter.</div>
+      </div>
+      <div>
+        <div class="stat-figure">2.3&times;</div>
+        <div class="stat-label">Longer focus blocks</div>
+        <div class="stat-caption">Median uninterrupted time, before and after.</div>
+      </div>
+      <div>
+        <div class="stat-figure">17%</div>
+        <div class="stat-label">Higher peer-rated quality</div>
+        <div class="stat-caption">Blinded review of shipped work, same rubric.</div>
+      </div>
+      <div>
+        <div class="stat-figure">0</div>
+        <div class="stat-label">Missed deadlines</div>
+        <div class="stat-caption">Across the ninety-day window. None.</div>
+      </div>
+    </div>
+    <span class="folio">03 / 03</span>
+  </article>
+
+  <script>
+    (function () {
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var total = slides.length;
+      var current = 0;
+
+      function show(i) {
+        current = Math.max(0, Math.min(total - 1, i));
+        slides.forEach(function (s, idx) {
+          s.classList.toggle('active', idx === current);
+        });
+        var hash = '#slide-' + String(current + 1).padStart(2, '0');
+        if (window.location.hash !== hash) {
+          history.replaceState(null, '', hash);
+        }
+      }
+
+      function indexFromHash(hash) {
+        var m = /^#slide-(\d+)$/.exec(hash || '');
+        if (!m) return 0;
+        var n = parseInt(m[1], 10);
+        return (n >= 1 && n <= total) ? n - 1 : 0;
+      }
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowRight' || e.key === 'PageDown') { show(current + 1); e.preventDefault(); }
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { show(current - 1); e.preventDefault(); }
+        else if (e.key === 'Home') { show(0); e.preventDefault(); }
+        else if (e.key === 'End') { show(total - 1); e.preventDefault(); }
+      });
+
+      window.addEventListener('hashchange', function () { show(indexFromHash(window.location.hash)); });
+
+      show(indexFromHash(window.location.hash));
+    })();
+  </script>
+</body>
+</html>

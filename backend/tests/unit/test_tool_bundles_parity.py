@@ -83,6 +83,7 @@ _EXPECTED_ONLINE = [
     "office_latexdiff",
     "office_extract_latex_project",
     "office_repair_word",
+    "office_ooxml",
     "office_refresh_toc",
     "edit_file",
     "glob_search",
@@ -411,7 +412,11 @@ def test_standard_online_matches_golden_snapshot() -> None:
     registry = _install_via_facade()
 
     assert registry.list_names() == _EXPECTED_ONLINE
+<<<<<<< HEAD
     assert len(registry.list_names()) == len(set(registry.list_names())) == 121
+=======
+    assert len(registry.list_names()) == len(set(registry.list_names())) == 122
+>>>>>>> origin/main
 
 
 def test_standard_risks_and_schemas_align_with_golden_snapshot() -> None:
@@ -435,7 +440,11 @@ def test_network_gating_counts_and_differences() -> None:
     intranet = _install_via_facade(NetworkMode.INTRANET).list_names()
     offline = _install_via_facade(NetworkMode.OFFLINE).list_names()
 
+<<<<<<< HEAD
     assert (len(online), len(intranet), len(offline)) == (121, 120, 116)
+=======
+    assert (len(online), len(intranet), len(offline)) == (122, 121, 117)
+>>>>>>> origin/main
     assert set(online) - set(intranet) == {"web_search"}
     assert set(intranet) - set(offline) == {
         "web_fetch",
@@ -518,7 +527,11 @@ def test_headless_install_excludes_ask_user_only() -> None:
     registry = _install_bundles(_harness("headless"))
     names = registry.list_names()
 
+<<<<<<< HEAD
     assert len(names) == 120
+=======
+    assert len(names) == 121
+>>>>>>> origin/main
     assert "ask_user_question" not in names
     assert set(_EXPECTED_ONLINE) - set(names) == {"ask_user_question"}
     _assert_subsequence(names)
@@ -555,7 +568,11 @@ def test_register_all_tools_reads_project_harness(tmp_path: Path) -> None:
 
     registry = _install_via_facade()
 
+<<<<<<< HEAD
     assert len(registry.list_names()) == 120
+=======
+    assert len(registry.list_names()) == 121
+>>>>>>> origin/main
     assert "ask_user_question" not in registry.list_names()
 
 

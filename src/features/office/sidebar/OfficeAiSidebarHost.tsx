@@ -76,7 +76,11 @@ export function OfficeAiSidebarHost({
     prefillInitialCommand(`${t('office.ai.edit.prefix')}${draftTail}`);
   };
 
+<<<<<<< HEAD
 useSelectionCapture(rootRef);
+=======
+  useSelectionCapture(rootRef);
+>>>>>>> origin/main
 
   const { pending, errorText, runRewrite, runChat, applySuggestion, markSkipped } =
     useAiCapabilities({ rootRef });

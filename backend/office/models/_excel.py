@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+<<<<<<< HEAD
 from typing import Dict, List, Literal, Optional, Union
+=======
+from typing import Any, Dict, List, Literal, Optional, Union
+>>>>>>> origin/main
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,6 +33,13 @@ class ExcelSheetContent(BaseModel):
         default=None,
         description="公式缺缓存值时的一行提示（openpyxl 无法计算公式）。",
     )
+<<<<<<< HEAD
+=======
+    # M4: 读侧对称字段（图表 / 条件格式 / 数据验证）。
+    charts: List[Dict[str, Any]] = Field(default_factory=list)
+    conditional_formats: List[Dict[str, Any]] = Field(default_factory=list)
+    data_validations: List[Dict[str, Any]] = Field(default_factory=list)
+>>>>>>> origin/main
 
 
 class OfficeExcelReadResult(BaseModel):
@@ -301,6 +312,7 @@ class ChartSpec(BaseModel):
         description="类别标签（bar/hbar/pie 或 line 分类轴）；series 无 x 时必选",
     )
 
+<<<<<<< HEAD
 # pydantic v1 在类创建时解析注解；以下模型引用了后置定义的类，
 # 需在全部类定义后显式解析前向引用（v2 走 model_rebuild，v1 走 update_forward_refs）。
 if hasattr(ExcelSheetSpec, "model_rebuild"):
@@ -312,3 +324,6 @@ if hasattr(ExcelPrintSetupSpec, "model_rebuild"):
     ExcelPrintSetupSpec.model_rebuild()
 else:
     ExcelPrintSetupSpec.update_forward_refs()
+=======
+
+>>>>>>> origin/main

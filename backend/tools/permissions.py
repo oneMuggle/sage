@@ -144,6 +144,7 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "office_fill_latex_template": ToolCapability.WRITE,
     "office_fix_word": ToolCapability.WRITE,
     "office_repair_word": ToolCapability.WRITE,
+    "office_ooxml": ToolCapability.WRITE,
     "office_revise_word": ToolCapability.WRITE,
     "office_render_audit": ToolCapability.WRITE,
     "office_refresh_toc": ToolCapability.WRITE,

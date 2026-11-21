@@ -68,7 +68,7 @@
 
 ### 2.1.3 后端：六边形架构（Hexagonal Architecture，2026-06-06 P2 完工）
 
-> **P2 重构说明**：Sage 后端已从单体 `core/` 迁移到六边形架构（Ports & Adapters），实现"业务与技术分离"。本节为新架构概览；详细端口列表、依赖约束、双轨切换请阅读 [`docs/technical/18-hexagonal.md`](./technical/18-hexagonal.md)。
+> **P2 重构说明**：Sage 后端已从单体 `core/` 迁移到六边形架构（Ports & Adapters），实现"业务与技术分离"。本节为新架构概览；详细端口列表、依赖约束、双轨切换请阅读 [`docs/technical/18-hexagonal.md`](./18-hexagonal.md)。
 
 ```
                     ┌──────────────────────┐

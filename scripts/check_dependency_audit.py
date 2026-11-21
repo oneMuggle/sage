@@ -146,9 +146,19 @@ def validate_policy(policy: Any, failures: list[str]) -> set[Key]:
 
 
 def package_identity_from_node(node: Any) -> str | None:
+    """Derive a package identity from a package-lock ``packages`` key.
+
+    Handles both top-level (``node_modules/react``) and nested
+    (``node_modules/foo/node_modules/react``) node_modules paths.  npm may
+    dedupe a shared dependency at the top level while transitive dependents
+    keep their own nested copy; audit reports reference these nested paths,
+    so they must resolve to the package they actually contain.
+    """
     if not isinstance(node, str) or not node.startswith("node_modules/"):
         return None
-    package = node[len("node_modules/"):]
+    # npm nests as ``node_modules/a/node_modules/b``; the identity is whatever
+    # follows the *last* node_modules/ segment (handles scopes too).
+    package = node.rsplit("node_modules/", 1)[-1]
     if not package or package.startswith("/"):
         return None
     if package.startswith("@"):
@@ -268,13 +278,23 @@ def npm_findings(
             continue
         lock_identities = {identities[node] for node in nodes}
         lock_versions = {versions[node] for node in nodes}
-        if lock_identities != {package} or len(lock_versions) != 1:
-            report_error(f"{path}: {package}: nodes must match package identity and version", failures)
+        if lock_identities != {package}:
+            report_error(f"{path}: {package}: nodes must match package identity", failures)
             continue
-        if item_version is not None and item_version.strip() not in lock_versions:
-            report_error(f"{path}: {package}: nodes must exist in package-lock and match version", failures)
-            continue
-        version = item_version.strip() if item_version is not None else next(iter(lock_versions))
+        if item_version is not None:
+            version = item_version.strip()
+            if lock_versions != {version}:
+                report_error(
+                    f"{path}: {package}: nodes must exist in package-lock and match version",
+                    failures,
+                )
+                continue
+        else:
+            # npm groups multi-version advisories (e.g. picomatch 2.x and 4.x
+            # both matching ``<=4.0.7``) into one item with no top-level
+            # version.  Nodes still resolve to one package; findings are keyed
+            # per node version so policy matching stays version-accurate.
+            version = None
         via = item.get("via")
         if not isinstance(via, list):
             report_error(f"{path}: {package}: via must be a list", failures)
@@ -305,9 +325,70 @@ def npm_findings(
                 has_valid_advisory = True
                 parseable_severities.add(severity)
                 if severity in {"high", "critical"}:
+<<<<<<< HEAD
                     findings.add(("npm", item_name, version, identifier, node))
         if item_severity in {"high", "critical"} and not valid_advisories_by_severity[item_severity]:
             report_error(f"{path}: {package}: item severity {item_severity} lacks a matching valid advisory", failures)
+=======
+                    findings.add(
+                        (
+                            "npm",
+                            item_name,
+                            version if version is not None else versions[node],
+                            identifier,
+                            node,
+                        )
+                    )
+        parsed_items[item_name] = (
+            item_severity,
+            {
+                severity
+                for severity, is_valid in valid_advisories_by_severity.items()
+                if is_valid
+            },
+            dependency_references,
+        )
+
+    severity_rank = {level: index for index, level in enumerate(LEVELS)}
+
+    def has_advisory_chain(
+        package_name: str, minimum_severity: str, visited: set[str]
+    ) -> bool:
+        """Resolve npm meta-vulnerability refs to a direct advisory in this report."""
+        if package_name in visited:
+            return False
+        parsed = parsed_items.get(package_name)
+        if parsed is None:
+            return False
+        item_severity, direct_severities, references = parsed
+        required_rank = severity_rank[minimum_severity]
+        if severity_rank[item_severity] < required_rank:
+            return False
+        if any(severity_rank[level] >= required_rank for level in direct_severities):
+            return True
+        next_visited = visited | {package_name}
+        return any(
+            has_advisory_chain(reference, minimum_severity, next_visited)
+            for reference in references
+        )
+
+    for package_name, (item_severity, direct_severities, references) in parsed_items.items():
+        if item_severity not in {"high", "critical"}:
+            continue
+        required_rank = severity_rank[item_severity]
+        has_direct_advisory = any(
+            severity_rank[level] >= required_rank for level in direct_severities
+        )
+        has_transitive_advisory = any(
+            has_advisory_chain(reference, item_severity, {package_name})
+            for reference in references
+        )
+        if not has_direct_advisory and not has_transitive_advisory:
+            report_error(
+                f"{path}: {package_name}: item severity {item_severity} lacks a matching valid advisory or dependency chain",
+                failures,
+            )
+>>>>>>> origin/main
     expected = {level for level in ("high", "critical") if normalized[level]}
     missing_severities = expected - parseable_severities
     if missing_severities:

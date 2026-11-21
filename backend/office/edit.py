@@ -49,16 +49,32 @@ the LLM-facing version):
         set_number_format {sheet, cells: 'B2' | 'B2:B10' | [..], format}
         set_fill    {sheet, cells, color: 'FF0000'（可带 #）} — solid 填充
         freeze_panes {sheet, cell: 'B2' | 'A1'(取消冻结)}
+        insert_rows / delete_rows {sheet, index(1-based), amount?}
+        insert_cols / delete_cols {sheet, index(1-based), amount?}
+        merge_cells {sheet, range: 'A1:B2', merge?} — merge=false 取消合并
 
     ppt (slide ``index`` is 0-based, matching read_ppt):
         replace_text    {find, replace}     — all shapes' text frames
         set_slide_title {index, title}
         set_slide_bullets {index, bullets}
         set_slide_notes {index, notes}
-        append_slide    {title, bullets?, notes?}
+        append_slide    {title?, bullets?, notes?, layout?, placeholders?, position?}
+                          — layout 为版式名或索引；placeholders 为 {idx: text}
+        duplicate_slide {index, position?}  — 深拷贝形状与关系（图片/图表共享 part）
+        move_slide      {index, to}         — 调整页序（to 为目标 0 基位置）
         delete_slide    {index}
+        set_run_format  {index, find?|shape_index?, paragraph_index?, run_index?,
+                         bold?, italic?, underline?, font_size?, font_name?, color?}
+                          — find 优先；否则按形状/段落/run 定位
         add_picture     {index|slide, path|base64, width_inches?, height_inches?}
                           — 插到标题区下方（与生成器正文几何对齐）
+        replace_image   {index, find?|shape_index?, path|base64,
+                         width_inches?, height_inches?}
+                          — 原位替换图片（保持层级与几何）
+        add_chart       {index, type: 'column'|'bar'|'line'|'pie',
+                         categories, series:[{name, values}],
+                         left_inches?, top_inches?, width_inches?, height_inches?, title?}
+                          — python-pptx 原生图表
 
 Non-goals: 宏编辑与 track-changes 仍不支持。样式 / 图表 / 图片已于
 批次 2 支持（word.set_paragraph_style、excel.add_chart、word.add_image、
@@ -954,6 +970,64 @@ def _apply_xlsx_op(wb: Any, op: Dict[str, Any]) -> Dict[str, Any]:  # noqa: PLR0
         wb[op["sheet"]].freeze_panes = cell.upper()
         return {"op": op_name, "ok": True, "frozen_at": cell.upper()}
 
+    if op_name in ("insert_rows", "delete_rows", "insert_cols", "delete_cols"):
+        missing = _require_fields(op, ("sheet", "index"))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        if op["sheet"] not in wb.sheetnames:
+            return {"op": op_name, "ok": False, "error": f"sheet_not_found: {op['sheet']!r}"}
+        try:
+            index = int(op["index"])
+            amount = int(op.get("amount", 1))
+        except (TypeError, ValueError):
+            return {"op": op_name, "ok": False, "error": "index_amount_must_be_int"}
+        if index < 1 or amount < 1:
+            return {"op": op_name, "ok": False, "error": "index_and_amount_must_be_positive"}
+        worksheet = wb[op["sheet"]]
+        if op_name == "insert_rows":
+            worksheet.insert_rows(index, amount)
+        elif op_name == "delete_rows":
+            worksheet.delete_rows(index, amount)
+        elif op_name == "insert_cols":
+            worksheet.insert_cols(index, amount)
+        else:
+            worksheet.delete_cols(index, amount)
+        return {
+            "op": op_name,
+            "ok": True,
+            "sheet": op["sheet"],
+            "index": index,
+            "amount": amount,
+            "warnings": ["formula_refs_merged_ranges_and_charts_not_migrated"],
+        }
+
+    if op_name == "merge_cells":
+        missing = _require_fields(op, ("sheet", "range"))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        if op["sheet"] not in wb.sheetnames:
+            return {"op": op_name, "ok": False, "error": f"sheet_not_found: {op['sheet']!r}"}
+        from openpyxl.utils.cell import range_boundaries  # noqa: PLC0415
+
+        range_text = str(op["range"]).strip().upper()
+        try:
+            range_boundaries(range_text)
+        except ValueError:
+            return {"op": op_name, "ok": False, "error": f"invalid_range: {range_text!r}"}
+        worksheet = wb[op["sheet"]]
+        merge = bool(op.get("merge", True))
+        if merge:
+            worksheet.merge_cells(range_text)
+        else:
+            worksheet.unmerge_cells(range_text)
+        return {
+            "op": op_name,
+            "ok": True,
+            "range": range_text,
+            "merged": merge,
+            "warnings": ["non_top_left_values_hidden"] if merge else [],
+        }
+
     return {"op": str(op_name), "ok": False, "error": f"unsupported_op: {op_name}"}
 
 
@@ -1025,6 +1099,115 @@ def _fill_text_frame(tf: Any, lines: List[str]) -> None:
     tf.text = lines[0]
     for line in lines[1:]:
         tf.add_paragraph().text = line
+
+
+def _find_slide_layout(prs: Any, name_or_index: Any) -> Any:
+    """Resolve a layout by 0-based index or case-insensitive name."""
+    layouts = prs.slide_layouts
+    if isinstance(name_or_index, int):
+        if 0 <= name_or_index < len(layouts):
+            return layouts[name_or_index]
+        raise ValueError(f"layout_index_out_of_range: {name_or_index}")
+    text = str(name_or_index or "").strip().lower()
+    if not text:
+        raise ValueError("layout_name_required")
+    for layout in layouts:
+        if str(layout.name or "").strip().lower() == text:
+            return layout
+    for layout in layouts:
+        if text in str(layout.name or "").strip().lower():
+            return layout
+    raise ValueError(f"layout_not_found: {name_or_index}")
+
+
+def _move_slide(prs: Any, from_index: int, to_index: int) -> int:
+    """Reorder slides by moving the ``p:sldId`` entry in ``p:sldIdLst``.
+
+    Returns the clamped destination index (out-of-range targets are clamped).
+    """
+    sld_id_lst = prs.slides._sldIdLst
+    items = list(sld_id_lst)
+    if not (0 <= from_index < len(items)):
+        raise ValueError(f"slide_index_out_of_range: {from_index}")
+    target = max(0, min(int(to_index), len(items) - 1))
+    if from_index == target:
+        return target
+    item = items.pop(from_index)
+    items.insert(target, item)
+    for child in list(sld_id_lst):
+        sld_id_lst.remove(child)
+    for child in items:
+        sld_id_lst.append(child)
+    return target
+
+
+def _remap_slide_relationships(source_part: Any, new_part: Any, element: Any) -> None:
+    """Point copied shape XML at relationships owned by the new slide part."""
+    from pptx.oxml.ns import qn  # noqa: PLC0415
+
+    for node in element.iter():
+        for attr in (qn("r:embed"), qn("r:link"), qn("r:id")):
+            rel_id = node.get(attr)
+            if not rel_id:
+                continue
+            rel = source_part.rels.get(rel_id)
+            if rel is None:
+                continue
+            if rel.is_external:
+                new_id = new_part.relate_to(rel.target_ref, rel.reltype, is_external=True)
+            else:
+                new_id = new_part.relate_to(rel.target_part, rel.reltype)
+            node.set(attr, new_id)
+
+
+def _duplicate_slide(prs: Any, index: int, position: Any = None) -> int:
+    """Deep-copy one slide (shapes + relationships) and return its new index."""
+    import copy  # noqa: PLC0415
+
+    slides = prs.slides
+    if not (0 <= index < len(slides)):
+        raise ValueError(f"slide_index_out_of_range: {index}")
+    source = slides[index]
+    new_slide = slides.add_slide(source.slide_layout)
+    for shape in list(new_slide.shapes):
+        shape._element.getparent().remove(shape._element)
+    for shape in source.shapes:
+        element = copy.deepcopy(shape._element)
+        _remap_slide_relationships(source.part, new_slide.part, element)
+        new_slide.shapes._spTree.append(element)
+    try:
+        notes_text = source.notes_slide.notes_text_frame.text
+    except (AttributeError, KeyError, ValueError):
+        notes_text = ""
+    if notes_text:
+        new_slide.notes_slide.notes_text_frame.text = notes_text
+    new_index = len(slides) - 1
+    if position is not None:
+        _move_slide(prs, new_index, int(position))
+        new_index = max(0, min(int(position), len(slides) - 1))
+    return new_index
+
+
+def _apply_run_format(run: Any, op: Dict[str, Any]) -> None:
+    """Apply the requested font attributes to one run."""
+    font = run.font
+    if "bold" in op:
+        font.bold = bool(op["bold"])
+    if "italic" in op:
+        font.italic = bool(op["italic"])
+    if "underline" in op:
+        font.underline = bool(op["underline"])
+    if op.get("font_size") is not None:
+        from pptx.util import Pt  # noqa: PLC0415
+
+        font.size = Pt(float(op["font_size"]))
+    if op.get("font_name"):
+        font.name = str(op["font_name"])
+    if op.get("color"):
+        from pptx.dml.color import RGBColor  # noqa: PLC0415
+
+        value = str(op["color"]).strip().lstrip("#").upper()
+        font.color.rgb = RGBColor.from_string(value)
 
 
 def _apply_pptx_op(prs: Any, op: Dict[str, Any], doc_path: Optional[Path] = None) -> Dict[str, Any]:  # noqa: PLR0911 — op 分发表
@@ -1101,18 +1284,306 @@ def _apply_pptx_op(prs: Any, op: Dict[str, Any], doc_path: Optional[Path] = None
         title = str(op.get("title") or "")
         bullets = [str(b) for b in op.get("bullets") or []]
         notes = op.get("notes")
-        layouts = prs.slide_layouts
-        blank = layouts[6] if len(layouts) > 6 else layouts[len(layouts) - 1]
-        slide = slides.add_slide(blank)
-        if title:
-            box = slide.shapes.add_textbox(*_TITLE_BOX_GEOMETRY)
-            box.text_frame.text = title
-        if bullets:
-            box = slide.shapes.add_textbox(*_BODY_BOX_GEOMETRY)
-            _fill_text_frame(box.text_frame, bullets)
+        layout_spec = op.get("layout")
+        placeholders = op.get("placeholders")
+        layout_name = None
+        if layout_spec is not None:
+            try:
+                layout = _find_slide_layout(prs, layout_spec)
+            except ValueError as exc:
+                return {"op": op_name, "ok": False, "error": str(exc)}
+            layout_name = str(layout.name or "")
+            slide = slides.add_slide(layout)
+            if isinstance(placeholders, dict):
+                for key, value in placeholders.items():
+                    try:
+                        placeholder_idx = int(key)
+                    except (TypeError, ValueError):
+                        continue
+                    for shape in slide.placeholders:
+                        if (
+                            shape.placeholder_format.idx == placeholder_idx
+                            and shape.has_text_frame
+                        ):
+                            shape.text_frame.text = str(value)
+            if title and slide.shapes.title is not None and slide.shapes.title.has_text_frame:
+                slide.shapes.title.text_frame.text = title
+            elif title and not isinstance(placeholders, dict):
+                box = slide.shapes.add_textbox(*_TITLE_BOX_GEOMETRY)
+                box.text_frame.text = title
+            if bullets:
+                body = None
+                candidates = [shape for shape in slide.placeholders if shape.has_text_frame]
+                for shape in candidates:
+                    if shape.placeholder_format.idx == 1:
+                        body = shape
+                        break
+                if body is None:
+                    try:
+                        from pptx.enum.shapes import PP_PLACEHOLDER
+
+                        for shape in candidates:
+                            if shape.placeholder_format.type == PP_PLACEHOLDER.BODY:
+                                body = shape
+                                break
+                    except (ImportError, AttributeError):
+                        body = None
+                if body is None:
+                    for shape in candidates:
+                        # Skip title (0), date (10), footer (11), slide number (12).
+                        if shape.placeholder_format.idx not in (0, 10, 11, 12):
+                            body = shape
+                            break
+                if body is not None:
+                    _fill_text_frame(body.text_frame, bullets)
+                else:
+                    box = slide.shapes.add_textbox(*_BODY_BOX_GEOMETRY)
+                    _fill_text_frame(box.text_frame, bullets)
+        else:
+            layouts = prs.slide_layouts
+            blank = layouts[6] if len(layouts) > 6 else layouts[len(layouts) - 1]
+            slide = slides.add_slide(blank)
+            if title:
+                box = slide.shapes.add_textbox(*_TITLE_BOX_GEOMETRY)
+                box.text_frame.text = title
+            if bullets:
+                box = slide.shapes.add_textbox(*_BODY_BOX_GEOMETRY)
+                _fill_text_frame(box.text_frame, bullets)
         if notes:
             slide.notes_slide.notes_text_frame.text = str(notes)
-        return {"op": op_name, "ok": True, "index": len(slides) - 1}
+        new_index = len(slides) - 1
+        position = op.get("position")
+        if position is not None:
+            try:
+                _move_slide(prs, new_index, int(position))
+            except (TypeError, ValueError) as exc:
+                return {"op": op_name, "ok": False, "error": str(exc)}
+            new_index = max(0, min(int(position), len(slides) - 1))
+        result = {"op": op_name, "ok": True, "index": new_index}
+        if layout_name:
+            result["layout"] = layout_name
+        return result
+
+    if op_name == "duplicate_slide":
+        missing = _require_fields(op, ("index",))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        try:
+            source_index = int(op["index"])
+            new_index = _duplicate_slide(prs, source_index, op.get("position"))
+        except (TypeError, ValueError) as exc:
+            return {"op": op_name, "ok": False, "error": str(exc)}
+        return {
+            "op": op_name,
+            "ok": True,
+            "index": new_index,
+            "source_index": source_index,
+            "remaining": len(slides),
+        }
+
+    if op_name == "move_slide":
+        missing = _require_fields(op, ("index",))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        target_value = op.get("to")
+        if target_value is None:
+            target_value = op.get("position")
+        if target_value is None:
+            return {"op": op_name, "ok": False, "error": "to_required"}
+        try:
+            moved_to = _move_slide(prs, int(op["index"]), int(target_value))
+        except (TypeError, ValueError) as exc:
+            return {"op": op_name, "ok": False, "error": str(exc)}
+        return {"op": op_name, "ok": True, "index": moved_to, "remaining": len(slides)}
+
+    if op_name == "set_run_format":
+        missing = _require_fields(op, ("index",))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        try:
+            slide = _slide_at(int(op["index"]))
+        except (TypeError, ValueError) as exc:
+            return {"op": op_name, "ok": False, "error": str(exc)}
+        find = op.get("find")
+        runs: List[Any] = []
+        if find not in (None, ""):
+            needle = str(find)
+            for shape in _slide_text_shapes(slide):
+                for paragraph in shape.text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        if needle in run.text:
+                            runs.append(run)
+            if not runs:
+                return {"op": op_name, "ok": False, "error": f"text_not_found: {needle!r}"}
+        else:
+            shapes = list(slide.shapes)
+            try:
+                shape_index = int(op.get("shape_index", 0))
+            except (TypeError, ValueError):
+                return {"op": op_name, "ok": False, "error": "shape_index_invalid"}
+            if not (0 <= shape_index < len(shapes)) or not shapes[shape_index].has_text_frame:
+                return {
+                    "op": op_name,
+                    "ok": False,
+                    "error": "shape_index_out_of_range_or_not_text",
+                }
+            paragraphs = list(shapes[shape_index].text_frame.paragraphs)
+            try:
+                paragraph_index = int(op.get("paragraph_index", 0))
+            except (TypeError, ValueError):
+                return {"op": op_name, "ok": False, "error": "paragraph_index_invalid"}
+            if not (0 <= paragraph_index < len(paragraphs)):
+                return {
+                    "op": op_name,
+                    "ok": False,
+                    "error": f"paragraph_index_out_of_range: {paragraph_index}",
+                }
+            paragraph_runs = list(paragraphs[paragraph_index].runs)
+            run_index = op.get("run_index")
+            if run_index is None:
+                runs = paragraph_runs
+            else:
+                try:
+                    selected = int(run_index)
+                except (TypeError, ValueError):
+                    return {"op": op_name, "ok": False, "error": "run_index_invalid"}
+                if not (0 <= selected < len(paragraph_runs)):
+                    return {
+                        "op": op_name,
+                        "ok": False,
+                        "error": f"run_index_out_of_range: {selected}",
+                    }
+                runs = [paragraph_runs[selected]]
+            if not runs:
+                return {"op": op_name, "ok": False, "error": "paragraph_has_no_runs"}
+        for run in runs:
+            _apply_run_format(run, op)
+        return {"op": op_name, "ok": True, "runs": len(runs)}
+
+    if op_name == "replace_image":
+        missing = _require_fields(op, ("index",))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        try:
+            slide = _slide_at(int(op["index"]))
+        except (TypeError, ValueError) as exc:
+            return {"op": op_name, "ok": False, "error": str(exc)}
+        from pptx.enum.shapes import MSO_SHAPE_TYPE  # noqa: PLC0415
+
+        pictures = [shape for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.PICTURE]
+        if not pictures:
+            return {"op": op_name, "ok": False, "error": "picture_not_found"}
+        target = None
+        find = op.get("find")
+        if find not in (None, ""):
+            needle = str(find)
+            for picture in pictures:
+                alt_text = ""
+                try:
+                    alt_text = picture._element.xpath("./p:nvPicPr/p:cNvPr/@descr")[0]
+                except (AttributeError, IndexError, KeyError, TypeError):
+                    alt_text = ""
+                if needle in (picture.name or "") or needle in alt_text:
+                    target = picture
+                    break
+            if target is None:
+                return {"op": op_name, "ok": False, "error": f"picture_not_found: {needle!r}"}
+        else:
+            try:
+                picture_index = int(op.get("shape_index", 0))
+            except (TypeError, ValueError):
+                return {"op": op_name, "ok": False, "error": "shape_index_invalid"}
+            if not (0 <= picture_index < len(pictures)):
+                return {
+                    "op": op_name,
+                    "ok": False,
+                    "error": f"shape_index_out_of_range: {picture_index}",
+                }
+            target = pictures[picture_index]
+        try:
+            payload = _image_payload_from_op(op, doc_path)
+        except ValueError as exc:
+            return {"op": op_name, "ok": False, "error": str(exc)}
+        from pptx.util import Inches  # noqa: PLC0415
+
+        from .charts import image_bytes_to_stream
+
+        width = Inches(float(op["width_inches"])) if op.get("width_inches") else target.width
+        height = Inches(float(op["height_inches"])) if op.get("height_inches") else target.height
+        replacement = slide.shapes.add_picture(
+            image_bytes_to_stream(payload),
+            target.left,
+            target.top,
+            width=width,
+            height=height,
+        )
+        replacement.name = target.name
+        try:
+            alt_text = target._element.xpath("./p:nvPicPr/p:cNvPr/@descr")
+            if alt_text:
+                replacement._element.xpath("./p:nvPicPr/p:cNvPr")[0].set(
+                    "descr", alt_text[0]
+                )
+        except (AttributeError, IndexError):
+            pass
+        target._element.addprevious(replacement._element)
+        target._element.getparent().remove(target._element)
+        return {"op": op_name, "ok": True, "index": int(op["index"])}
+
+    if op_name == "add_chart":
+        missing = _require_fields(op, ("index", "categories", "series"))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        try:
+            slide = _slide_at(int(op["index"]))
+        except (TypeError, ValueError) as exc:
+            return {"op": op_name, "ok": False, "error": str(exc)}
+        from pptx.chart.data import CategoryChartData  # noqa: PLC0415
+        from pptx.enum.chart import XL_CHART_TYPE  # noqa: PLC0415
+        from pptx.util import Inches  # noqa: PLC0415
+
+        chart_types = {
+            "column": XL_CHART_TYPE.COLUMN_CLUSTERED,
+            "bar": XL_CHART_TYPE.BAR_CLUSTERED,
+            "line": XL_CHART_TYPE.LINE,
+            "pie": XL_CHART_TYPE.PIE,
+        }
+        chart_type_key = str(op.get("type") or "column").strip().lower()
+        chart_type = chart_types.get(chart_type_key)
+        if chart_type is None:
+            return {
+                "op": op_name,
+                "ok": False,
+                "error": f"unsupported_chart_type: {chart_type_key}",
+            }
+        categories = op.get("categories")
+        if not isinstance(categories, list) or not categories:
+            return {"op": op_name, "ok": False, "error": "categories_required"}
+        chart_data = CategoryChartData()
+        chart_data.categories = [str(category) for category in categories]
+        series_specs = op.get("series") or []
+        if not isinstance(series_specs, list):
+            return {"op": op_name, "ok": False, "error": "series_required"}
+        for series_spec in series_specs:
+            if not isinstance(series_spec, dict):
+                continue
+            values = series_spec.get("values") or []
+            numeric_values = [
+                float(value) if isinstance(value, (int, float)) else value  # noqa: UP038 — py38 runtime
+                for value in values
+            ]
+            chart_data.add_series(str(series_spec.get("name") or ""), numeric_values)
+        left = Inches(float(op.get("left_inches", 1.0)))
+        top = Inches(float(op.get("top_inches", 1.5)))
+        width = Inches(float(op.get("width_inches", 8.0)))
+        height = Inches(float(op.get("height_inches", 5.0)))
+        graphic_frame = slide.shapes.add_chart(
+            chart_type, left, top, width, height, chart_data
+        )
+        if op.get("title"):
+            graphic_frame.chart.has_title = True
+            graphic_frame.chart.chart_title.text_frame.text = str(op["title"])
+        return {"op": op_name, "ok": True, "index": int(op["index"])}
 
     if op_name == "delete_slide":
         missing = _require_fields(op, ("index",))

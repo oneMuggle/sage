@@ -22,6 +22,11 @@ from backend.office.apply_update import (
     OfficeDocUpdateResult,
     apply_doc_update,
 )
+from backend.office.compare import (
+    CompareRequest,
+    CompareResult,
+    compare_documents,
+)
 from backend.office.diff_preview import (
     DiffPreviewResult,
     OfficeExportPdfRequest,
@@ -29,11 +34,17 @@ from backend.office.diff_preview import (
     preview_update,
 )
 from backend.office.errors import OfficeFileNotFoundError, OfficePathError
+from backend.office.excel_health import (
+    ExcelFormulaHealthRequest,
+    ExcelFormulaHealthResult,
+    check_formula_health,
+)
 from backend.office.excel_recalc import (
     ExcelRecalcRequest,
     ExcelRecalcResult,
     refresh_formula_cache,
 )
+from backend.office.extractors import ExtractRequest, ExtractResult, extract_document
 from backend.office.legacy_import import (
     LegacyImportRequest,
     LegacyImportResult,
@@ -54,8 +65,31 @@ from backend.office.models import (
     TemplateLibraryResponse,
     WordTemplateFillResult,
 )
+from backend.office.ooxml import (
+    OoxmlMergeRunsRequest,
+    OoxmlMergeRunsResult,
+    OoxmlValidateRequest,
+    OoxmlValidateResult,
+    merge_docx_runs,
+    validate_ooxml,
+)
 from backend.office.path_safety import resolve_within
 from backend.office.pdf_forms import fill_pdf_form, read_pdf_form
+from backend.office.pdf_ops import (
+    PdfMergeRequest,
+    PdfOpsResult,
+    PdfPageNumbersRequest,
+    PdfPagesRequest,
+    PdfRotateRequest,
+    PdfSplitRequest,
+    PdfWatermarkRequest,
+    merge_pdfs,
+    number_pdf_pages,
+    rotate_pdf,
+    split_pdf,
+    update_pages,
+    watermark_pdf,
+)
 from backend.office.pdf_to_word import PdfToWordRequest, PdfToWordResult, convert_pdf_to_word
 from backend.office.ppt_template import (
     PptTemplateAnalyzeRequest,
@@ -64,6 +98,11 @@ from backend.office.ppt_template import (
     PptTemplateFillResult,
     analyze_ppt_template,
     fill_ppt_template,
+)
+from backend.office.render_verify import (
+    RenderVerifyRequest,
+    RenderVerifyResult,
+    verify_document,
 )
 from backend.office.revision import stat_revision
 from backend.office.storage import (
@@ -77,6 +116,14 @@ from backend.office.storage import (
     validate_workspace,
 )
 from backend.office.template_library import instantiate_template, list_templates
+from backend.office.word_tracked_changes import (
+    WordTrackedChangesReadRequest,
+    WordTrackedChangesResolveRequest,
+    WordTrackedChangesResolveResult,
+    WordTrackedChangesResult,
+    read_word_tracked_changes,
+    resolve_word_tracked_changes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -256,6 +303,14 @@ def excel_recalc_endpoint(req: ExcelRecalcRequest) -> ExcelRecalcResult:
     return refresh_formula_cache(req)
 
 
+@router.post("/excel/formula-health", response_model=ExcelFormulaHealthResult)
+def excel_formula_health_endpoint(
+    req: ExcelFormulaHealthRequest,
+) -> ExcelFormulaHealthResult:
+    """M4: 扫描公式错误值（#REF!/#DIV/0! 等）与缺失缓存，建议是否重算。"""
+    return check_formula_health(req)
+
+
 @router.post("/import/convert-legacy", response_model=LegacyImportResult)
 def convert_legacy_import_endpoint(req: LegacyImportRequest) -> LegacyImportResult:
     """P1-C: 旧格式 (.doc/.xls/.ppt) 暂存文件 → 现代格式就地转换。"""
@@ -288,6 +343,42 @@ def fill_pdf_form_endpoint(req: PdfFormFillRequest) -> PdfFormFillResult:
     Service function handles all validation internally.
     """
     return fill_pdf_form(req)
+
+
+@router.post("/pdf/merge", response_model=PdfOpsResult)
+def pdf_merge_endpoint(req: PdfMergeRequest) -> PdfOpsResult:
+    """M6: 按顺序合并多个 PDF。"""
+    return merge_pdfs(req)
+
+
+@router.post("/pdf/rotate", response_model=PdfOpsResult)
+def pdf_rotate_endpoint(req: PdfRotateRequest) -> PdfOpsResult:
+    """M6: 旋转指定页（或全部页）90/180/270 度。"""
+    return rotate_pdf(req)
+
+
+@router.post("/pdf/pages", response_model=PdfOpsResult)
+def pdf_pages_endpoint(req: PdfPagesRequest) -> PdfOpsResult:
+    """M6: 抽取或删除指定页，输出新 PDF。"""
+    return update_pages(req)
+
+
+@router.post("/pdf/split", response_model=PdfOpsResult)
+def pdf_split_endpoint(req: PdfSplitRequest) -> PdfOpsResult:
+    """M6: 按区间拆分为多个 PDF。"""
+    return split_pdf(req)
+
+
+@router.post("/pdf/watermark", response_model=PdfOpsResult)
+def pdf_watermark_endpoint(req: PdfWatermarkRequest) -> PdfOpsResult:
+    """M6: 给每页添加文字水印。"""
+    return watermark_pdf(req)
+
+
+@router.post("/pdf/page-numbers", response_model=PdfOpsResult)
+def pdf_page_numbers_endpoint(req: PdfPageNumbersRequest) -> PdfOpsResult:
+    """M6: 在页面底部添加页码（模板支持 {n}）。"""
+    return number_pdf_pages(req)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -374,6 +465,57 @@ def pdf_preview_endpoint(req: OfficeExportPdfRequest):
         )
         prog.report("完成", 95)
     return result
+
+
+@router.post("/render/verify", response_model=RenderVerifyResult)
+def render_verify_endpoint(req: RenderVerifyRequest) -> RenderVerifyResult:
+    """M1: 渲染级校验 —— docx/xlsx/pptx → PDF → 几何/空白/溢出检查 + 缩略图。
+
+    无转换器时返回 ``status="degraded"``（HTTP 200），不阻塞调用方。
+    """
+    return verify_document(req)
+
+
+@router.post("/word/tracked-changes", response_model=WordTrackedChangesResult)
+def word_tracked_changes_endpoint(
+    req: WordTrackedChangesReadRequest,
+) -> WordTrackedChangesResult:
+    """M3: 读取 Word 修订痕迹（w:ins / w:del，含作者与时间）。"""
+    return read_word_tracked_changes(req.workspace_path, req.file_path)
+
+
+@router.post(
+    "/word/tracked-changes/resolve", response_model=WordTrackedChangesResolveResult
+)
+def word_tracked_changes_resolve_endpoint(
+    req: WordTrackedChangesResolveRequest,
+) -> WordTrackedChangesResolveResult:
+    """M3: 全部接受或拒绝修订，输出新文件（或 overwrite 原地替换）。"""
+    return resolve_word_tracked_changes(req)
+
+
+@router.post("/ooxml/validate", response_model=OoxmlValidateResult)
+def ooxml_validate_endpoint(req: OoxmlValidateRequest) -> OoxmlValidateResult:
+    """M5: OOXML 结构校验（必需部件/XML 合法/DTD 拒绝），可选修复 xml:space。"""
+    return validate_ooxml(req)
+
+
+@router.post("/ooxml/merge-runs", response_model=OoxmlMergeRunsResult)
+def ooxml_merge_runs_endpoint(req: OoxmlMergeRunsRequest) -> OoxmlMergeRunsResult:
+    """M5: 合并 docx 中相邻且格式相同的 run（提升 find/replace 可靠性）。"""
+    return merge_docx_runs(req)
+
+
+@router.post("/extract", response_model=ExtractResult)
+def extract_document_endpoint(req: ExtractRequest) -> ExtractResult:
+    """M6b: 统一文档提取（light 默认；markitdown/docling 可选后端）。"""
+    return extract_document(req)
+
+
+@router.post("/compare", response_model=CompareResult)
+def compare_documents_endpoint(req: CompareRequest) -> CompareResult:
+    """M6b: 任意两份文档对比（Word/Excel/PPT/PDF/CSV），返回统一 diff 报告。"""
+    return compare_documents(req)
 
 
 @router.get("/progress/{task_id}")

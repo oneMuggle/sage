@@ -495,7 +495,12 @@ class MemoryManager:
             )
 
         elif resolved == "semantic":
+<<<<<<< HEAD
             meta = metadata or {}
+=======
+            # main 分支无 episodic 分支的 meta 局部变量 —— title 回退用
+            # (metadata or {}) 直接取值，避免 UnboundLocalError。
+>>>>>>> origin/main
             return self.semantic.save(
                 content=content,
                 summary=None,
@@ -505,7 +510,11 @@ class MemoryManager:
                 project_key=project_key,
                 supersedes_id=supersedes_id,
                 agent_id=write_agent_id,
+<<<<<<< HEAD
                 title=title or meta.get("title"),
+=======
+                title=title or (metadata or {}).get("title"),
+>>>>>>> origin/main
             )
 
         else:
@@ -770,13 +779,18 @@ class MemoryManager:
         # 用户画像（USER.md 概念）: 持久画像快照置于上下文顶部（best-effort）。
         # 让 legacy SageAgent（经 memory_manager.get_context）与 hex
         # ChatService（经 MemoryAdapter.retrieve → MemoryContext.core）都能
-        # 注入同一份用户知识。快照冻结于 load(), 中途写入不改（保 prefix cache）。
+        # 注入同一份用户知识。快照冻结于会话首次注入时刻，中途写入不改
+        # （保 prefix cache）；新会话首次注入时取最新画像。
         # M0: 画像属于长期语义知识，按 semantic 层权限闸门。
         if self._tier_allowed("semantic"):
             try:
                 from backend.memory.user_profile import get_user_profile
 
-                profile_snapshot = get_user_profile().get_snapshot()
+                store = get_user_profile()
+                profile_store = (
+                    store.get_snapshot_for(session_id) if session_id else store
+                )
+                profile_snapshot = profile_store.get_snapshot()
                 if profile_snapshot:
                     parts.append(profile_snapshot)
             except Exception as exc:

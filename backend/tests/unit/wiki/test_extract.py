@@ -179,6 +179,27 @@ def test_xlsx_extract_returns_sheet_headers_and_rows(xlsx_path: Path):
     assert "beta" in text
 
 
+def test_pdf_extract_returns_page_text(tmp_path: Path):
+    import fitz
+
+    from backend.wiki.extract import extract_text_for_ingest
+
+    source = tmp_path / "paper.pdf"
+    document = fitz.open()
+    try:
+        page = document.new_page(width=400, height=300)
+        page.insert_text((50, 50), "PDF ingest text", fontname="helv", fontsize=12)
+        document.save(str(source))
+    finally:
+        document.close()
+
+    text, meta = extract_text_for_ingest(source, return_meta=True)
+
+    assert "PDF ingest text" in text
+    assert "--- page 1 ---" in text
+    assert meta["doc_type"] == "pdf"
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Hard limits
 # ──────────────────────────────────────────────────────────────────────
