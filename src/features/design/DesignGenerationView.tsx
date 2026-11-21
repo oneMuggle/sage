@@ -11,6 +11,7 @@ import { HtmlPreviewHost } from '../../widgets/chat/preview/HtmlPreviewHost';
 
 import { DesignExportPanel } from './DesignExportPanel';
 import { DesignIterationChat } from './DesignIterationChat';
+import { DesignProgressStrip } from './DesignProgressStrip';
 import { DesignTweaksPanel } from './DesignTweaksPanel';
 import { DesignVersionPanel } from './DesignVersionPanel';
 import { applyTweaks } from './designTweaks';
@@ -46,6 +47,7 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
   const clearPreview = useDesignStore((s) => s.clearPreview);
   const restoreVersion = useDesignStore((s) => s.restoreVersion);
   const tweaks = useDesignStore((s) => s.tweaks);
+  const generationProgress = useDesignStore((s) => s.generationProgress);
   const [panel, setPanel] = useState<'iterate' | 'history' | 'tweaks'>('iterate');
 
   useEffect(() => {
@@ -121,6 +123,8 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
           </button>
         </div>
       )}
+
+      {loading && generationProgress && <DesignProgressStrip stage={generationProgress.stage} />}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-h-0 overflow-y-auto">

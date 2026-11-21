@@ -117,6 +117,13 @@ export interface ProjectTweaks {
   density?: number | null;
 }
 
+/** 生成阶段进度（idle / starting / composing / generating / linting / saving / complete / error） */
+export interface GenerationProgress {
+  stage: string;
+  message: string;
+  updated_at?: string;
+}
+
 // ---------------------------------------------------------------------------
 // 生成 & 迭代请求
 // ---------------------------------------------------------------------------
