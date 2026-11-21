@@ -151,3 +151,76 @@ class TestRunStore:
 
         with pytest.raises(ValueError, match="meta.json"):
             load_run(tmp_path / "missing")
+
+
+class TestGates:
+    def _run(self, tmp_path, record_query_log=True):
+        from backend.literature.run_store import (
+            create_run,
+            record_papers,
+            record_query,
+            save_draft,
+            save_outline,
+        )
+
+        run = create_run(tmp_path, "t", "demo", run_id="r1")
+        if record_query_log:
+            record_query(run, "q", "demo", 2)
+        record_papers(run, [_paper("p1"), _paper("p2")])
+        save_outline(
+            run,
+            {
+                "title": "x",
+                "sections": [
+                    {"id": "s1", "title": "引言", "source_keys": ["p1"]},
+                    {"id": "s2", "title": "方法", "source_keys": ["p2"]},
+                ],
+            },
+        )
+        save_draft(run, "# 草稿\n\nP1 的发现 [cite:p1]。\n")
+        return run
+
+    def test_extract_citations_orders_and_splits(self):
+        from backend.literature.gates import extract_citations
+
+        assert extract_citations("a [cite:p2] b [cite:p1, p2] c [cite:p2]") == [
+            "p2",
+            "p1",
+        ]
+
+    def test_gate_ok_with_unused_warning(self, tmp_path):
+        from backend.literature.gates import run_gates
+
+        report = run_gates(self._run(tmp_path))
+        assert report.ok is True
+        assert report.citations == ["p1"]
+        assert any("p2" in w for w in report.warnings)
+
+    def test_unresolved_citation_fails(self, tmp_path):
+        from backend.literature.gates import run_gates
+        from backend.literature.run_store import save_draft
+
+        run = self._run(tmp_path)
+        save_draft(run, "引用不存在的 [cite:missing]")
+        report = run_gates(run)
+        assert report.ok is False
+        assert any("missing" in e for e in report.errors)
+
+    def test_missing_query_log_fails(self, tmp_path):
+        from backend.literature.gates import run_gates
+
+        report = run_gates(self._run(tmp_path, record_query_log=False))
+        assert any("检索日志" in e for e in report.errors)
+
+    def test_build_references_only_cited(self):
+        from backend.literature.gates import build_references
+        from backend.literature.models import PaperRecord
+
+        papers = [
+            PaperRecord("p1", "论文一", ("张三", "李四"), "2024", "期刊A"),
+            PaperRecord("p2", "论文二", ("王五",), "2023", "期刊B"),
+        ]
+        text, entries = build_references("b [cite:p2] a [cite:p1]", papers)
+        assert "[1] 王五. 论文二[J]. 期刊B, 2023." in text
+        assert "[2] 张三, 李四. 论文一[J]. 期刊A, 2024." in text
+        assert [e["key"] for e in entries] == ["p2", "p1"]
