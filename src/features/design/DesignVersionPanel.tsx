@@ -18,6 +18,7 @@ export function DesignVersionPanel({ projectId }: DesignVersionPanelProps) {
   const previewArtifact = useDesignStore((s) => s.previewArtifact);
   const loading = useDesignStore((s) => s.loadingProject);
   const previewVersion = useDesignStore((s) => s.previewVersion);
+  const compareVersion = useDesignStore((s) => s.compareVersion);
   const restoreVersion = useDesignStore((s) => s.restoreVersion);
   const [restoring, setRestoring] = useState<string | null>(null);
 
@@ -66,6 +67,14 @@ export function DesignVersionPanel({ projectId }: DesignVersionPanelProps) {
                   onClick={() => void previewVersion(projectId, artifact.id)}
                 >
                   {t('design.version.preview')}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover disabled:opacity-40"
+                  disabled={artifact.version <= 1}
+                  onClick={() => void compareVersion(projectId, artifact.id)}
+                >
+                  {t('design.version.compare')}
                 </button>
                 <button
                   type="button"

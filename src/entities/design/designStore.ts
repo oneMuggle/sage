@@ -40,6 +40,8 @@ interface DesignState {
   currentArtifact: DesignArtifact | null;
   /** 正在只读预览的历史版本（null = 跟随最新版本） */
   previewArtifact: DesignArtifact | null;
+  /** 版本对比对（左=更早版本，右=当前选择版本） */
+  comparePair: { left: DesignArtifact; right: DesignArtifact } | null;
   messages: IterationMessage[];
   artifacts: DesignArtifactSummary[];
   tweaks: ProjectTweaks;
@@ -61,9 +63,12 @@ interface DesignState {
   generate: (projectId: string, brief?: string) => Promise<void>;
   iterate: (projectId: string, feedback: string) => Promise<void>;
   previewVersion: (projectId: string, artifactId: string) => Promise<void>;
+  compareVersion: (projectId: string, artifactId: string) => Promise<void>;
+  clearCompare: () => void;
   restoreVersion: (projectId: string, artifactId: string) => Promise<void>;
   updateTweaksLocal: (patch: Partial<ProjectTweaks>) => void;
   persistTweaks: (projectId: string) => Promise<void>;
+  applyTweaksPreset: (projectId: string, tweaks: ProjectTweaks) => Promise<void>;
   bindSource: (projectId: string, filePath: string) => Promise<void>;
   unbindSource: (projectId: string) => Promise<void>;
   refreshWithSource: (projectId: string) => Promise<void>;
@@ -108,6 +113,7 @@ export const useDesignStore = create<DesignState>((set) => ({
   currentProject: null,
   currentArtifact: null,
   previewArtifact: null,
+  comparePair: null,
   messages: [],
   artifacts: [],
   tweaks: {},
@@ -159,6 +165,7 @@ export const useDesignStore = create<DesignState>((set) => ({
         currentProject: detail,
         currentArtifact: detail.latest_artifact,
         previewArtifact: null,
+        comparePair: null,
         messages,
         artifacts,
         tweaks,
@@ -191,7 +198,10 @@ export const useDesignStore = create<DesignState>((set) => ({
       errorProject: null,
       generationProgress: { stage: 'starting', message: '' },
     });
-    const stopPolling = startProgressPolling(projectId, set);
+    const stopStreaming = api.subscribeDesignProgress(projectId, (progress) =>
+      set({ generationProgress: progress }),
+    );
+    const stopPolling = stopStreaming ? () => undefined : startProgressPolling(projectId, set);
     try {
       await api.generateArtifact(projectId, { brief });
       await useDesignStore.getState().loadProject(projectId);
@@ -199,6 +209,7 @@ export const useDesignStore = create<DesignState>((set) => ({
       set({ errorProject: getErrorMessage(error), loadingProject: false });
     } finally {
       stopPolling();
+      stopStreaming?.();
       set({ generationProgress: null });
     }
   },
@@ -209,7 +220,10 @@ export const useDesignStore = create<DesignState>((set) => ({
       errorProject: null,
       generationProgress: { stage: 'starting', message: '' },
     });
-    const stopPolling = startProgressPolling(projectId, set);
+    const stopStreaming = api.subscribeDesignProgress(projectId, (progress) =>
+      set({ generationProgress: progress }),
+    );
+    const stopPolling = stopStreaming ? () => undefined : startProgressPolling(projectId, set);
     try {
       await api.iterateArtifact(projectId, { feedback });
       await useDesignStore.getState().loadProject(projectId);
@@ -217,6 +231,7 @@ export const useDesignStore = create<DesignState>((set) => ({
       set({ errorProject: getErrorMessage(error), loadingProject: false });
     } finally {
       stopPolling();
+      stopStreaming?.();
       set({ generationProgress: null });
     }
   },
@@ -228,6 +243,25 @@ export const useDesignStore = create<DesignState>((set) => ({
     } catch (error) {
       set({ errorProject: getErrorMessage(error) });
     }
+  },
+
+  async compareVersion(projectId: string, artifactId: string) {
+    try {
+      const right = await api.getArtifact(projectId, artifactId);
+      const artifacts = useDesignStore.getState().artifacts;
+      const previousSummary = artifacts
+        .filter((artifact) => artifact.version < right.version)
+        .sort((a, b) => b.version - a.version)[0];
+      if (!previousSummary) return;
+      const left = await api.getArtifact(projectId, previousSummary.id);
+      set({ comparePair: { left, right }, previewArtifact: null });
+    } catch (error) {
+      set({ errorProject: getErrorMessage(error) });
+    }
+  },
+
+  clearCompare() {
+    set({ comparePair: null });
   },
 
   async restoreVersion(projectId: string, artifactId: string) {
@@ -252,6 +286,16 @@ export const useDesignStore = create<DesignState>((set) => ({
   async persistTweaks(projectId: string) {
     try {
       const saved = await api.updateTweaks(projectId, useDesignStore.getState().tweaks);
+      set({ tweaks: saved });
+    } catch (error) {
+      set({ errorProject: getErrorMessage(error) });
+    }
+  },
+
+  async applyTweaksPreset(projectId: string, tweaks: ProjectTweaks) {
+    set({ tweaks });
+    try {
+      const saved = await api.updateTweaks(projectId, tweaks, true);
       set({ tweaks: saved });
     } catch (error) {
       set({ errorProject: getErrorMessage(error) });
@@ -314,6 +358,7 @@ export const useDesignStore = create<DesignState>((set) => ({
       currentProject: null,
       currentArtifact: null,
       previewArtifact: null,
+      comparePair: null,
       messages: [],
       artifacts: [],
       tweaks: {},

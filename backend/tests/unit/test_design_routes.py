@@ -451,6 +451,7 @@ class TestDesignRoutes:
             "radius": None,
             "font_size": None,
             "density": None,
+            "font_family": None,
         }
         assert updated.status_code == 200
         assert updated.json()["radius"] == 8
@@ -465,6 +466,9 @@ class TestDesignRoutes:
         )
         with patch(
             "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ), patch(
+            "backend.api.v1.design_shared.get_design_studio",
             return_value=studio,
         ):
             transport = ASGITransport(app=app)
@@ -598,6 +602,133 @@ class TestDesignRoutes:
                     },
                 )
         assert resp.status_code == 404
+
+    async def test_tweaks_reset_clears_overrides(self, studio):
+        """PUT 全空请求视为重置（前端「恢复设计系统默认」的行为）。"""
+        from backend.main import app
+
+        project = studio.create_project(kind="prototype", brief="reset")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                await client.put(
+                    f"/api/v1/design/projects/{project.id}/tweaks",
+                    json={"accent": "#1a56db", "radius": 8},
+                )
+                reset = await client.put(
+                    f"/api/v1/design/projects/{project.id}/tweaks",
+                    json={},
+                )
+
+        assert reset.status_code == 200
+        assert reset.json()["accent"] is None
+        assert reset.json()["radius"] is None
+
+    async def test_tweaks_replace_writes_exact_field_set(self, studio):
+        """replace=True 时未提供的字段被清空（预设应用语义）。"""
+        from backend.main import app
+
+        project = studio.create_project(kind="prototype", brief="replace")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                await client.put(
+                    f"/api/v1/design/projects/{project.id}/tweaks",
+                    json={"accent": "#111111", "radius": 10},
+                )
+                replaced = await client.put(
+                    f"/api/v1/design/projects/{project.id}/tweaks",
+                    json={"font_family": "Georgia, serif", "replace": True},
+                )
+
+        assert replaced.status_code == 200
+        body = replaced.json()
+        assert body["accent"] is None
+        assert body["radius"] is None
+        assert body["font_family"] == "Georgia, serif"
+
+    async def test_source_preview_csv_returns_columns(self, studio, tmp_path):
+        """预览 CSV 返回列名/行数/样例。"""
+        from backend.main import app
+
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text(
+            "name,value\nalpha,1\nbeta,2\n", encoding="utf-8",
+        )
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://test",
+        ) as client:
+            resp = await client.post(
+                "/api/v1/design/source/preview",
+                json={"file_path": str(csv_path)},
+            )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["kind"] == "csv"
+        assert body["sheets"][0]["columns"] == ["name", "value"]
+        assert body["sheets"][0]["row_count"] == 2
+        assert body["sheets"][0]["sample"][0] == ["alpha", "1"]
+
+    async def test_source_preview_rejects_unsupported_extension(
+        self, studio, tmp_path,
+    ):
+        from backend.main import app
+
+        bad_path = tmp_path / "data.txt"
+        bad_path.write_text("hello", encoding="utf-8")
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://test",
+        ) as client:
+            resp = await client.post(
+                "/api/v1/design/source/preview",
+                json={"file_path": str(bad_path)},
+            )
+
+        assert resp.status_code == 400
+
+    async def test_progress_stream_ends_on_complete(self, studio):
+        """进度 SSE 流在 complete 阶段发出帧后结束。"""
+        from backend.main import app
+
+        project = studio.create_project(
+            "Stream", "prototype", "test-sys", "test-page", "brief",
+        )
+        studio.add_artifact(project.id, "<html/>", title="S")
+        studio._progress_update(project.id, "complete", "done")
+
+        with patch(
+            "backend.api.v1.design_shared.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.get(
+                    f"/api/v1/design/projects/{project.id}/progress/stream",
+                )
+
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.headers["content-type"]
+        assert "event: progress" in resp.text
+        assert '"stage": "complete"' in resp.text
 
     async def test_create_project_invalid_kind(self, studio):
         from backend.main import app

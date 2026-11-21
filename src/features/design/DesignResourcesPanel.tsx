@@ -5,8 +5,9 @@ import { Database, FileSpreadsheet, Loader2, RefreshCw, Unlink } from 'lucide-re
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { previewSource } from '../../entities/design/designApi';
 import { useDesignStore } from '../../entities/design/designStore';
-import type { ChartSpec, ChartType } from '../../entities/design/types';
+import type { ChartSpec, ChartType, SourcePreview } from '../../entities/design/types';
 import { useI18n } from '../../shared/lib/i18n';
 
 const CHART_TYPES: ChartType[] = ['bar', 'line', 'hbar', 'pie'];
@@ -42,12 +43,15 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
   const [chartType, setChartType] = useState<ChartType>('bar');
   const [chartTitle, setChartTitle] = useState('');
   const [labelsText, setLabelsText] = useState('');
-  const [seriesName, setSeriesName] = useState('');
-  const [valuesText, setValuesText] = useState('');
+  const [series, setSeries] = useState<{ name: string; values: string }[]>([
+    { name: '', values: '' },
+  ]);
   const [embedding, setEmbedding] = useState(false);
+  const [preview, setPreview] = useState<SourcePreview | null>(null);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
-  const canPickFile =
-    typeof window !== 'undefined' && Boolean(window.electronAPI?.selectFile);
+  const canPickFile = typeof window !== 'undefined' && Boolean(window.electronAPI?.selectFile);
 
   const handleBind = async () => {
     const picker = window.electronAPI?.selectFile;
@@ -57,11 +61,38 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
       filters: [{ name: 'Data', extensions: SOURCE_EXTS }],
     });
     if (!path) return;
-    await bindSource(projectId, path);
+    setPreviewPath(path);
+    setPreviewLoading(true);
+    try {
+      setPreview(await previewSource(path));
+    } catch (err) {
+      toast.error(
+        t('design.resources.previewFailed').replace(
+          '{error}',
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+      setPreviewPath(null);
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
-  const values = parseNumbers(valuesText);
-  const canEmbed = !embedding && seriesName.trim().length > 0 && values.length > 0;
+  const handleConfirmBind = async () => {
+    if (!previewPath) return;
+    await bindSource(projectId, previewPath);
+    setPreview(null);
+    setPreviewPath(null);
+  };
+
+  const updateSeries = (index: number, patch: Partial<{ name: string; values: string }>) => {
+    setSeries((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
+  };
+
+  const validSeries = series
+    .map((entry) => ({ name: entry.name.trim(), y: parseNumbers(entry.values) }))
+    .filter((entry) => entry.name.length > 0 && entry.y.length > 0);
+  const canEmbed = !embedding && validSeries.length > 0;
 
   const handleEmbed = async () => {
     if (!canEmbed) return;
@@ -70,21 +101,17 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
       type: chartType,
       title: chartTitle.trim() || null,
       labels: labels.length ? labels : null,
-      series: [
-        {
-          name: seriesName.trim(),
-          ...(labels.length ? { x: labels } : {}),
-          y: values,
-        },
-      ],
+      series: validSeries.map((entry) => ({
+        name: entry.name,
+        ...(labels.length ? { x: labels } : {}),
+        y: entry.y,
+      })),
     };
     setEmbedding(true);
     try {
       const result = await embedChart(projectId, chart);
       if (result) {
-        toast.success(
-          t('design.resources.embedded').replace('{version}', String(result.version)),
-        );
+        toast.success(t('design.resources.embedded').replace('{version}', String(result.version)));
       }
     } finally {
       setEmbedding(false);
@@ -135,15 +162,60 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={!canPickFile}
+            disabled={!canPickFile || previewLoading}
             title={
               canPickFile ? t('design.resources.bind') : t('design.resources.filePickerUnavailable')
             }
             onClick={() => void handleBind()}
           >
-            <FileSpreadsheet className="h-3 w-3" />
+            {previewLoading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-3 w-3" />
+            )}
             {t('design.resources.bind')}
           </button>
+
+          {preview && (
+            <div className="space-y-1.5 rounded-md border border-border p-2">
+              <div className="text-text">
+                {preview.kind} · {preview.sheets[0]?.name ?? '-'} ·{' '}
+                {t('design.resources.rows').replace(
+                  '{count}',
+                  String(preview.sheets[0]?.row_count ?? 0),
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {(preview.sheets[0]?.columns ?? []).map((column) => (
+                  <span
+                    key={column}
+                    className="rounded bg-bg-hover px-1 py-0.5 text-text-secondary"
+                  >
+                    {column}
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-0.5">
+                <button
+                  type="button"
+                  className="rounded border border-accent px-2 py-0.5 text-accent hover:bg-accent/5"
+                  onClick={() => void handleConfirmBind()}
+                >
+                  {t('design.resources.confirmBind')}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
+                  onClick={() => {
+                    setPreview(null);
+                    setPreviewPath(null);
+                  }}
+                >
+                  {t('design.resources.cancelPreview')}
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="space-y-2 border-t border-border pt-3">
@@ -179,23 +251,46 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
               className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
             />
           </label>
-          <label className="block">
-            <span className="text-text-muted">{t('design.resources.seriesName')}</span>
-            <input
-              value={seriesName}
-              onChange={(event) => setSeriesName(event.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
-            />
-          </label>
-          <label className="block">
-            <span className="text-text-muted">{t('design.resources.values')}</span>
-            <input
-              value={valuesText}
-              onChange={(event) => setValuesText(event.target.value)}
-              placeholder="10, 20, 30, 40"
-              className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
-            />
-          </label>
+          {series.map((entry, index) => (
+            <div key={index} className="space-y-1 rounded-md border border-border p-2">
+              <div className="flex items-center justify-between">
+                <span className="text-text-muted">
+                  {t('design.resources.series').replace('{index}', String(index + 1))}
+                </span>
+                {series.length > 1 && (
+                  <button
+                    type="button"
+                    aria-label={t('design.resources.removeSeries')}
+                    className="rounded border border-border px-1.5 py-0.5 hover:bg-bg-hover"
+                    onClick={() => setSeries((prev) => prev.filter((_, i) => i !== index))}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              <input
+                value={entry.name}
+                aria-label={t('design.resources.seriesName')}
+                onChange={(event) => updateSeries(index, { name: event.target.value })}
+                placeholder={t('design.resources.seriesName')}
+                className="w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
+              />
+              <input
+                value={entry.values}
+                aria-label={t('design.resources.values')}
+                onChange={(event) => updateSeries(index, { values: event.target.value })}
+                placeholder="10, 20, 30, 40"
+                className="w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
+              />
+            </div>
+          ))}
+          <button
+            type="button"
+            className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
+            onClick={() => setSeries((prev) => [...prev, { name: '', values: '' }])}
+          >
+            + {t('design.resources.addSeries')}
+          </button>
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"

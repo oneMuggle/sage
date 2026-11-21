@@ -385,3 +385,100 @@ export async function relaySkillNotifications(
     signal,
   );
 }
+
+/**
+ * Parse a Node Readable carrying SSE (`event:` / `data:` frames separated by
+ * blank lines) and invoke `onEvent(eventType, payload)` per frame.
+ *
+ * Mirrors `parseNdjsonStream`'s Node-stream handling (node-fetch@2 has no
+ * Web ReadableStream) and honors AbortSignal via `stream.destroy()`.
+ */
+export async function parseSseStream(
+  body: NodeJS.ReadableStream | null,
+  onEvent: (eventType: string, data: unknown) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!body) return;
+  const stream = body as unknown as Readable;
+  if (signal?.aborted) {
+    stream.destroy();
+    return;
+  }
+
+  return new Promise<void>((resolve) => {
+    let buffer = '';
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    };
+    const onAbort = () => {
+      stream.destroy();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+
+    stream.setEncoding('utf8');
+    stream.on('data', (chunk: unknown) => {
+      buffer += String(chunk).replace(/\r\n/g, '\n');
+      let index = buffer.indexOf('\n\n');
+      while (index >= 0) {
+        const frame = buffer.slice(0, index);
+        buffer = buffer.slice(index + 2);
+        let eventType = 'message';
+        const dataLines: string[] = [];
+        for (const line of frame.split('\n')) {
+          if (line.startsWith('event:')) eventType = line.slice(6).trim();
+          else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+        }
+        if (dataLines.length > 0) {
+          try {
+            onEvent(eventType, JSON.parse(dataLines.join('\n')));
+          } catch {
+            // skip malformed frame
+          }
+        }
+        index = buffer.indexOf('\n\n');
+      }
+    });
+    stream.on('end', finish);
+    stream.on('close', finish);
+    stream.on('error', () => finish());
+  });
+}
+
+/**
+ * Relay a backend SSE endpoint to the renderer as `sage:event:{eventName}`.
+ * Used by `sage:listen('design-progress-{projectId}')`.
+ */
+export async function relaySseToEvent(
+  webContents: WebContentsLike,
+  eventName: string,
+  url: string,
+  signal: AbortSignal,
+  authToken?: string,
+): Promise<void> {
+  let res: import('node-fetch').Response;
+  try {
+    res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'text/event-stream',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      signal,
+    });
+  } catch {
+    return;
+  }
+  if (!res.ok) return;
+
+  await parseSseStream(
+    res.body,
+    (_eventType, data) => {
+      if (canSend(webContents)) webContents.send(`sage:event:${eventName}`, data);
+    },
+    signal,
+  );
+}
