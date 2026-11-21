@@ -1,7 +1,7 @@
 /**
  * DesignGenerationView — 项目详情：iframe 预览 + 迭代聊天 + 导出。
  */
-import { ArrowLeft, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Loader2, ShieldCheck, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useDesignStore } from '../../entities/design/designStore';
@@ -49,9 +49,12 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
   const restoreVersion = useDesignStore((s) => s.restoreVersion);
   const tweaks = useDesignStore((s) => s.tweaks);
   const generationProgress = useDesignStore((s) => s.generationProgress);
+  const review = useDesignStore((s) => s.review);
+  const runReview = useDesignStore((s) => s.runReview);
   const [panel, setPanel] = useState<'iterate' | 'history' | 'tweaks' | 'resources'>(
     'iterate',
   );
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   useEffect(() => {
     void loadProject(projectId);
@@ -96,6 +99,18 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
           <DesignExportPanel projectId={projectId} hasArtifact={Boolean(artifact)} />
           <button
             type="button"
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-ui-xs hover:bg-bg-hover disabled:opacity-40"
+            disabled={!artifact || loading}
+            onClick={() => {
+              setReviewOpen(true);
+              void runReview(projectId);
+            }}
+          >
+            <ShieldCheck className="w-3 h-3" />
+            {t('design.review.run')}
+          </button>
+          <button
+            type="button"
             className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-ui-xs text-white disabled:opacity-40"
             disabled={loading}
             onClick={handleGenerate}
@@ -128,6 +143,48 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
       )}
 
       {loading && generationProgress && <DesignProgressStrip stage={generationProgress.stage} />}
+
+      {review && (
+        <div
+          className={`mx-5 mt-2 rounded-md border px-3 py-1.5 text-ui-xs ${
+            review.ok
+              ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-600'
+              : 'border-amber-500/30 bg-amber-500/5 text-amber-600'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate">
+              {review.ok
+                ? t('design.review.ok')
+                : t('design.review.summary')
+                    .replace('{errors}', String(review.error_count))
+                    .replace('{warnings}', String(review.warning_count))}
+            </span>
+            {review.issues.length > 0 && (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center gap-0.5 hover:underline"
+                onClick={() => setReviewOpen((prev) => !prev)}
+              >
+                <ChevronDown
+                  className={`h-3 w-3 transition ${reviewOpen ? 'rotate-180' : ''}`}
+                />
+                {t('design.review.details')}
+              </button>
+            )}
+          </div>
+          {reviewOpen && review.issues.length > 0 && (
+            <ul className="mt-1 space-y-0.5">
+              {review.issues.map((issue) => (
+                <li key={`${issue.rule_id}-${issue.line ?? ''}`} className="truncate">
+                  [{issue.severity === 'error' ? 'P0' : 'P1'}] {issue.rule_id}:{' '}
+                  {issue.message}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-h-0 overflow-y-auto">

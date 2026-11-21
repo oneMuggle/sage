@@ -165,6 +165,24 @@ export interface EmbedChartResult {
 }
 
 // ---------------------------------------------------------------------------
+// 质量评审（复用后端 DesignLinter）
+// ---------------------------------------------------------------------------
+
+export interface LintIssueSummary {
+  rule_id: string;
+  severity: 'error' | 'warning';
+  message: string;
+  line?: number | null;
+}
+
+export interface ReviewResult {
+  ok: boolean;
+  error_count: number;
+  warning_count: number;
+  issues: LintIssueSummary[];
+}
+
+// ---------------------------------------------------------------------------
 // 生成 & 迭代请求
 // ---------------------------------------------------------------------------
 
