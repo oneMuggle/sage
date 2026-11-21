@@ -89,8 +89,15 @@ _OP_DESCRIPTIONS = {
     "ppt": (
         "ppt ops（slide index 从 0 起）: replace_text{find,replace}; set_slide_title"
         "{index,title}; set_slide_bullets{index,bullets}; set_slide_notes{index,notes}; "
-        "append_slide{title,bullets?,notes?}; delete_slide{index}; "
-        "add_picture{index,path|base64,width_inches?,height_inches?}（≤10MB）"
+        "append_slide{title?,bullets?,notes?,layout?,placeholders?,position?}"
+        "（layout 为版式名/索引，placeholders 为 {idx:text}）; "
+        "duplicate_slide{index,position?}; move_slide{index,to}; delete_slide{index}; "
+        "set_run_format{index,find?|shape_index?,paragraph_index?,run_index?,bold?,"
+        "italic?,underline?,font_size?,font_name?,color?}; "
+        "add_picture{index,path|base64,width_inches?,height_inches?}（≤10MB）; "
+        "replace_image{index,find?|shape_index?,path|base64,width_inches?,height_inches?}; "
+        "add_chart{index,type:'column'|'bar'|'line'|'pie',categories,"
+        "series:[{name,values}],left_inches?,top_inches?,width_inches?,height_inches?,title?}"
     ),
 }
 

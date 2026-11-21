@@ -26,7 +26,7 @@ import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .errors import OfficeFileNotFoundError, OfficeGenerateError, OfficeParseError, OfficePathError
 from .models import (
@@ -136,6 +136,104 @@ def _extract_notes(slide) -> Optional[str]:
         return None
 
 
+def _enum_name(value: Any) -> str:
+    """Stable name for python-pptx enums (XL_CHART_TYPE / PP_PLACEHOLDER)."""
+    name = getattr(value, "name", None)
+    if isinstance(name, str) and name:
+        return name
+    text = str(value or "")
+    return text.rsplit(".", 1)[-1].split(" ")[0] if text else ""
+
+
+def _extract_layout_name(slide) -> Optional[str]:
+    try:
+        name = slide.slide_layout.name
+    except (AttributeError, KeyError, ValueError):
+        return None
+    return str(name) if name else None
+
+
+def _extract_placeholders(slide) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    try:
+        placeholders = list(slide.placeholders)
+    except (AttributeError, KeyError, ValueError):
+        return items
+    for shape in placeholders:
+        try:
+            fmt = shape.placeholder_format
+            idx = int(fmt.idx)
+            placeholder_type = _enum_name(fmt.type)
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+        text = ""
+        if getattr(shape, "has_text_frame", False):
+            with contextlib.suppress(AttributeError, KeyError, ValueError):
+                text = shape.text_frame.text.strip()
+        items.append(
+            {
+                "idx": idx,
+                "type": placeholder_type,
+                "name": str(getattr(shape, "name", "") or ""),
+                "text": text or None,
+            }
+        )
+    return items
+
+
+def _series_values(series: Any) -> List[Any]:
+    try:
+        values = list(series.values)
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return []
+    result: List[Any] = []
+    for value in values:
+        if value is None or isinstance(value, (int, float, str, bool)):  # noqa: UP038 — py38 runtime
+            result.append(value)
+        else:
+            result.append(str(value))
+    return result
+
+
+def _extract_charts(slide) -> List[Dict[str, Any]]:
+    charts: List[Dict[str, Any]] = []
+    for shape in slide.shapes:
+        if not getattr(shape, "has_chart", False):
+            continue
+        try:
+            chart = shape.chart
+        except (AttributeError, KeyError, ValueError):
+            continue
+        categories: List[Any] = []
+        series: List[Dict[str, Any]] = []
+        try:
+            plot = chart.plots[0]
+            categories = [
+                None if category is None else str(category)
+                for category in list(plot.categories)
+            ]
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            pass
+        try:
+            for item in chart.series:
+                series.append(
+                    {
+                        "name": str(getattr(item, "name", "") or ""),
+                        "values": _series_values(item),
+                    }
+                )
+        except (AttributeError, KeyError, TypeError, ValueError):
+            pass
+        charts.append(
+            {
+                "type": _enum_name(getattr(chart, "chart_type", "")),
+                "categories": categories,
+                "series": series,
+            }
+        )
+    return charts
+
+
 def _build_pptx_summary(
     file_path: Path,
     *,
@@ -218,6 +316,9 @@ def read_ppt(
                 table_count=_count_tables(slide),
                 image_count=_count_images(slide),
                 notes=_extract_notes(slide),
+                layout=_extract_layout_name(slide),
+                placeholders=_extract_placeholders(slide),
+                charts=_extract_charts(slide),
             )
         )
 

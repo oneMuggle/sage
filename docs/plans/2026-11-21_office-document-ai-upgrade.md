@@ -241,11 +241,17 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 
 ### M2 — PPT 深度编辑（P0，对应 G1）
 
-- [ ] `update_pptx` 扩展 duplicate/move/add_slide(layout)/run 格式/替换图片/图表/批注
-- [ ] 模板缩略图 + 按 layout 新增页填充（analyze/fill 工具与 REST 同步）
-- [ ] `read_ppt` 补 layout/占位符/图表/主题/批注
+- [x] `update_pptx` 扩展 duplicate/move/append_slide(layout+placeholders+position)/set_run_format/replace_image/add_chart
+- [ ] 模板缩略图（按 layout 渲染）+ 按 layout 新增页填充 —— 填充已完成，缩略图待 M2b
+- [x] `read_ppt` 补 layout/占位符/图表数据（主题字体与批注待 M5 OOXML 通道）
 - [ ] golden deck（10 页，含图表与模板）套用与 LibreOffice 打开无修复提示
 - [ ] win7（python-pptx 0.6.23）兼容 fixture 通过
+- [ ] PPT 批注写入（`add_comment`）—— 依赖 M5 OOXML 底层通道
+
+> **实施记录（2026-11-21，M2a 编辑/读取切片）**
+> - 编辑：`update_pptx` 新增 `duplicate_slide`（形状+关系深拷贝）、`move_slide`、`append_slide` 的 layout/placeholders/position、`set_run_format`（find 或 shape/paragraph/run 定位）、`replace_image`（原位替换保层级）、`add_chart`（column/bar/line/pie）
+> - 读取：`PptSlideContent` 新增 `layout` / `placeholders` / `charts`；`read_ppt` 抽取版式名、占位符（idx/type/name/text）、图表类别与系列
+> - 测试：`test_ppt_edit_ops.py`（8）；PPT 相关回归 74 通过；ruff 通过
 
 ### M3 — Word 修订/批注读回与接受拒绝（P0，对应 G2）
 
