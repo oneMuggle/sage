@@ -4,9 +4,11 @@
  * 用户只需选一个意图 chip（可选）并写 brief，设计系统 / 模板 / 项目名
  * 由服务端默认值补齐；「高级选项」里才暴露完整选择。
  */
-import { ArrowLeft, ChevronDown, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, ChevronDown, FileText, Loader2, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
+import { extractOutline } from '../../entities/design/designApi';
 import { useDesignStore } from '../../entities/design/designStore';
 import type { ProjectKind } from '../../entities/design/types';
 import { useI18n } from '../../shared/lib/i18n';
@@ -50,7 +52,43 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
   const [brief, setBrief] = useState('');
   const [advanced, setAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [importingOutline, setImportingOutline] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const canPickFile =
+    typeof window !== 'undefined' && Boolean(window.electronAPI?.selectFile);
+
+  const handleImportOutline = async () => {
+    const picker = window.electronAPI?.selectFile;
+    if (!picker) return;
+    const path = await picker({
+      title: t('design.composer.importOutline'),
+      filters: [{ name: 'Word', extensions: ['docx'] }],
+    });
+    if (!path) return;
+    setImportingOutline(true);
+    try {
+      const outline = await extractOutline(path);
+      setBrief((prev) =>
+        prev.trim() ? `${prev}\n\n${outline.outline_md}` : outline.outline_md,
+      );
+      toast.success(
+        t('design.composer.outlineLoaded').replace(
+          '{count}',
+          String(outline.slide_count),
+        ),
+      );
+    } catch (err) {
+      toast.error(
+        t('design.composer.outlineFailed').replace(
+          '{error}',
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    } finally {
+      setImportingOutline(false);
+    }
+  };
 
   const availablePresets = useMemo(
     () =>
@@ -142,10 +180,34 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
         </section>
 
         <section className="rounded-lg border border-border bg-surface p-4">
-          <label htmlFor="design-brief" className="text-ui-sm font-medium text-text">
-            {t('design.composer.brief')}
-          </label>
-          <p className="mt-0.5 text-ui-xs text-text-secondary">{t('design.composer.briefHint')}</p>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <label htmlFor="design-brief" className="text-ui-sm font-medium text-text">
+                {t('design.composer.brief')}
+              </label>
+              <p className="mt-0.5 text-ui-xs text-text-secondary">
+                {t('design.composer.briefHint')}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-ui-xs hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!canPickFile || importingOutline}
+              title={
+                canPickFile
+                  ? t('design.composer.importOutline')
+                  : t('design.resources.filePickerUnavailable')
+              }
+              onClick={() => void handleImportOutline()}
+            >
+              {importingOutline ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <FileText className="h-3 w-3" />
+              )}
+              {t('design.composer.importOutline')}
+            </button>
+          </div>
           <textarea
             id="design-brief"
             value={brief}

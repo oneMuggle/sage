@@ -6,13 +6,16 @@
 import { backendRequest } from '../../shared/api/backendRequest';
 
 import type {
+  ChartSpec,
   CreateProjectInput,
   DesignArtifact,
   DesignArtifactSummary,
   DesignProject,
   DesignProjectDetail,
+  DesignSourceBinding,
   DesignSystem,
   DesignTemplate,
+  EmbedChartResult,
   ExportFormat,
   ExportRequest,
   ExportResult,
@@ -20,6 +23,7 @@ import type {
   GenerationProgress,
   IterateRequest,
   IterationMessage,
+  OutlineResult,
   ProjectTweaks,
 } from './types';
 
@@ -136,6 +140,71 @@ export async function getProgress(projectId: string): Promise<GenerationProgress
   return backendRequest<GenerationProgress>({
     method: 'GET',
     path: `${BASE}/projects/${projectId}/progress`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 资源（Word 大纲 / 数据源 / 图表）
+// ---------------------------------------------------------------------------
+
+/** 从 .docx 提取大纲（后端只接受 docx 路径） */
+export async function extractOutline(filePath: string): Promise<OutlineResult> {
+  return backendRequest<OutlineResult>({
+    method: 'POST',
+    path: `${BASE}/outline`,
+    body: { file_path: filePath },
+  });
+}
+
+/** 读取项目的数据源绑定（未绑定时后端返回 404） */
+export async function getSource(projectId: string): Promise<DesignSourceBinding> {
+  return backendRequest<DesignSourceBinding>({
+    method: 'GET',
+    path: `${BASE}/projects/${projectId}/source`,
+  });
+}
+
+/** 绑定数据源（xlsx/csv/json） */
+export async function bindSource(
+  projectId: string,
+  filePath: string,
+): Promise<DesignSourceBinding> {
+  return backendRequest<DesignSourceBinding>({
+    method: 'POST',
+    path: `${BASE}/projects/${projectId}/source`,
+    body: { file_path: filePath },
+  });
+}
+
+/** 解绑数据源 */
+export async function unbindSource(projectId: string): Promise<void> {
+  return backendRequest<void>({
+    method: 'DELETE',
+    path: `${BASE}/projects/${projectId}/source`,
+  });
+}
+
+/** 用当前绑定的数据源重新生成（SSE） */
+export async function refreshArtifact(projectId: string): Promise<DesignArtifact> {
+  return readArtifactFromSse(
+    await backendRequest<string>({
+      method: 'POST',
+      path: `${BASE}/projects/${projectId}/refresh`,
+      responseType: 'text',
+    }),
+  );
+}
+
+/** 渲染图表并注入最新产物（不调 LLM，追加新版本） */
+export async function embedChart(
+  projectId: string,
+  chart: ChartSpec,
+  slot?: string,
+): Promise<EmbedChartResult> {
+  return backendRequest<EmbedChartResult>({
+    method: 'POST',
+    path: `${BASE}/projects/${projectId}/chart`,
+    body: slot ? { chart, slot } : { chart },
   });
 }
 
