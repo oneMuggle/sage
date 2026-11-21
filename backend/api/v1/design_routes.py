@@ -22,21 +22,23 @@ import base64
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
+from backend.api.v1.design_shared import map_design_error as _map_design_error
 from backend.api.v1.design_streaming import (
     sse_event as _sse_event,
     stream_studio_call as _stream_studio_call,
 )
-from backend.design import get_design_studio
+
+# Re-exported symbol: route tests patch `design_routes.get_design_studio`.
+from backend.design import get_design_studio  # noqa: F401
 from backend.design.errors import (
     DesignError,
     DesignGenerationError,
     DesignProjectNotFoundError,
     DesignSystemNotFoundError,
-    DesignTemplateKindMismatchError,
     DesignTemplateNotFoundError,
 )
 from backend.design.export import DesignExporter
@@ -124,8 +126,12 @@ class TweaksRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# _map_design_error comes from design_shared; _require_studio stays local so
+# tests keep patching `design_routes.get_design_studio`.
 def _require_studio():
     """Return the global DesignStudio or raise 404."""
+    from fastapi import HTTPException
+
     studio = get_design_studio()
     if studio is None:
         raise HTTPException(
@@ -133,22 +139,6 @@ def _require_studio():
             detail="Design studio not initialised",
         )
     return studio
-
-
-def _map_design_error(exc: DesignError) -> JSONResponse:
-    """Convert a DesignError into the appropriate HTTP JSON response."""
-    not_found = (
-        DesignProjectNotFoundError,
-        DesignSystemNotFoundError,
-        DesignTemplateNotFoundError,
-    )
-    bad_request = DesignTemplateKindMismatchError
-    status = (
-        400 if isinstance(exc, bad_request)
-        else 404 if isinstance(exc, not_found)
-        else 500
-    )
-    return JSONResponse(status_code=status, content={"detail": str(exc)})
 
 
 # ---------------------------------------------------------------------------
@@ -370,23 +360,6 @@ async def list_messages(project_id: str):
     except DesignProjectNotFoundError as exc:
         return _map_design_error(exc)
     return [m.model_dump() for m in messages]
-
-
-# ---------------------------------------------------------------------------
-# GET /design/projects/:project_id/progress — generation stage polling
-# ---------------------------------------------------------------------------
-
-
-@router.get("/projects/{project_id}/progress")
-async def get_progress(project_id: str):
-    """Return the latest generation stage: idle / starting / composing /
-    generating / linting / saving / complete / error."""
-    studio = _require_studio()
-    try:
-        progress = studio.get_progress(project_id)
-    except DesignProjectNotFoundError as exc:
-        return _map_design_error(exc)
-    return progress
 
 
 # ---------------------------------------------------------------------------

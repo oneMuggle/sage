@@ -1622,12 +1622,19 @@ from backend.api.v1.design_routes import router as design_router
 
 app.include_router(design_router, prefix="/api/v1")
 
-# Design resources: /api/v1/design/{outline,projects/:id/chart}
+# Design resources: /api/v1/design/{outline,projects/:id/chart,source/preview}
 from backend.api.v1.design_resources_routes import (
     router as design_resources_router,
 )
 
 app.include_router(design_resources_router, prefix="/api/v1")
+
+# Design progress: /api/v1/design/projects/:id/progress[/stream]
+from backend.api.v1.design_progress_routes import (
+    router as design_progress_router,
+)
+
+app.include_router(design_progress_router, prefix="/api/v1")
 
 
 @app.get("/health/proof")

@@ -122,6 +122,7 @@ import {
   relayOrchEventsStream,
   relayShellStream,
   relaySkillNotifications,
+  relaySseToEvent,
   WIKI_STREAM_ERROR,
 } from './relay';
 import { streamControllers } from './commands';
@@ -2098,6 +2099,29 @@ async function registerIpcHandlers(): Promise<void> {
         ).catch((e) => {
           if (e instanceof Error && e.name !== 'AbortError') {
             logger.error('ipc: shell stream relay error', { event, err: e.message });
+          }
+        });
+        return { ok: true, event };
+      }
+
+      // design-progress-{projectId}: 设计生成阶段 SSE 流
+      const designProgressMatch = event.match(/^design-progress-(.+)$/);
+      if (designProgressMatch) {
+        const projectId = designProgressMatch[1];
+        const abort = new AbortController();
+        eventSubscriptions.set(event, abort);
+        relaySseToEvent(
+          senderWebContents,
+          event,
+          `${BACKEND_URL}/api/v1/design/projects/${encodeURIComponent(projectId)}/progress/stream`,
+          abort.signal,
+          backendAuthToken ?? undefined,
+        ).catch((e) => {
+          if (e instanceof Error && e.name !== 'AbortError') {
+            logger.error('ipc: design progress relay error', {
+              event,
+              err: e.message,
+            });
           }
         });
         return { ok: true, event };

@@ -198,7 +198,12 @@ export const useDesignStore = create<DesignState>((set) => ({
       errorProject: null,
       generationProgress: { stage: 'starting', message: '' },
     });
-    const stopPolling = startProgressPolling(projectId, set);
+    const stopStreaming = api.subscribeDesignProgress(projectId, (progress) =>
+      set({ generationProgress: progress }),
+    );
+    const stopPolling = stopStreaming
+      ? () => undefined
+      : startProgressPolling(projectId, set);
     try {
       await api.generateArtifact(projectId, { brief });
       await useDesignStore.getState().loadProject(projectId);
@@ -206,6 +211,7 @@ export const useDesignStore = create<DesignState>((set) => ({
       set({ errorProject: getErrorMessage(error), loadingProject: false });
     } finally {
       stopPolling();
+      stopStreaming?.();
       set({ generationProgress: null });
     }
   },
@@ -216,7 +222,12 @@ export const useDesignStore = create<DesignState>((set) => ({
       errorProject: null,
       generationProgress: { stage: 'starting', message: '' },
     });
-    const stopPolling = startProgressPolling(projectId, set);
+    const stopStreaming = api.subscribeDesignProgress(projectId, (progress) =>
+      set({ generationProgress: progress }),
+    );
+    const stopPolling = stopStreaming
+      ? () => undefined
+      : startProgressPolling(projectId, set);
     try {
       await api.iterateArtifact(projectId, { feedback });
       await useDesignStore.getState().loadProject(projectId);
@@ -224,6 +235,7 @@ export const useDesignStore = create<DesignState>((set) => ({
       set({ errorProject: getErrorMessage(error), loadingProject: false });
     } finally {
       stopPolling();
+      stopStreaming?.();
       set({ generationProgress: null });
     }
   },

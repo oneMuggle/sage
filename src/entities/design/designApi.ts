@@ -153,6 +153,28 @@ export async function reviewArtifact(projectId: string): Promise<ReviewResult> {
   });
 }
 
+/**
+ * 订阅阶段进度流（Electron 事件通道可用时）。
+ * 返回取消函数；环境不支持时返回 null（调用方回退到轮询）。
+ */
+export function subscribeDesignProgress(
+  projectId: string,
+  handler: (progress: GenerationProgress) => void,
+): (() => void) | null {
+  const bridge = typeof window !== 'undefined' ? window.electronAPI : undefined;
+  if (!bridge?.listen) return null;
+  let unlisten: (() => void) | null = null;
+  void bridge
+    .listen<GenerationProgress>(`design-progress-${projectId}`, handler)
+    .then((fn) => {
+      unlisten = fn;
+    })
+    .catch(() => undefined);
+  return () => {
+    if (unlisten) unlisten();
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 资源（Word 大纲 / 数据源 / 图表）
 // ---------------------------------------------------------------------------

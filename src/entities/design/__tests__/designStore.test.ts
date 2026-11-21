@@ -197,6 +197,38 @@ describe('designStore version + message state', () => {
     expect(pair?.right.version).toBe(2);
   });
 
+  it('generate consumes streamed progress when the bridge is available', async () => {
+    let emit!: (progress: { stage: string; message: string }) => void;
+    const stop = vi.fn();
+    vi.mocked(api.subscribeDesignProgress).mockImplementation((_projectId, handler) => {
+      emit = handler as never;
+      return stop;
+    });
+    let resolveGenerate!: (artifact: typeof sampleArtifact) => void;
+    vi.mocked(api.generateArtifact).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveGenerate = resolve;
+        }),
+    );
+    vi.mocked(api.getProject).mockResolvedValue({
+      ...baseProject,
+      latest_artifact: null,
+    });
+    vi.mocked(api.listMessages).mockResolvedValue([]);
+    vi.mocked(api.listArtifacts).mockResolvedValue([]);
+    vi.mocked(api.getTweaks).mockResolvedValue({});
+
+    const promise = useDesignStore.getState().generate('p1');
+    emit({ stage: 'linting', message: 'checking' });
+    expect(useDesignStore.getState().generationProgress?.stage).toBe('linting');
+
+    resolveGenerate(sampleArtifact);
+    await promise;
+    expect(stop).toHaveBeenCalled();
+    expect(useDesignStore.getState().generationProgress).toBeNull();
+  });
+
   it('runReview stores the lint report', async () => {
     vi.mocked(api.reviewArtifact).mockResolvedValue({
       ok: false,
