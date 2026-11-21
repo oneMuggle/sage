@@ -14,6 +14,7 @@ import type {
   DesignProject,
   DesignSystem,
   DesignTemplate,
+  GenerationProgress,
   IterationMessage,
   ProjectTweaks,
 } from './types';
@@ -38,6 +39,8 @@ interface DesignState {
   messages: IterationMessage[];
   artifacts: DesignArtifactSummary[];
   tweaks: ProjectTweaks;
+  /** 生成阶段进度（loading 期间由轮询更新，结束后清空） */
+  generationProgress: GenerationProgress | null;
   loadingProject: boolean;
   errorProject: string | null;
 
@@ -62,6 +65,22 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+/** 生成期间轮询阶段进度；返回停止函数。 */
+const PROGRESS_POLL_MS = 800;
+
+function startProgressPolling(
+  projectId: string,
+  set: (partial: Partial<DesignState>) => void,
+): () => void {
+  const timer = setInterval(() => {
+    void api
+      .getProgress(projectId)
+      .then((progress) => set({ generationProgress: progress }))
+      .catch(() => undefined);
+  }, PROGRESS_POLL_MS);
+  return () => clearInterval(timer);
+}
+
 export const useDesignStore = create<DesignState>((set) => ({
   // -- Initial state --
   systems: [],
@@ -79,6 +98,7 @@ export const useDesignStore = create<DesignState>((set) => ({
   messages: [],
   artifacts: [],
   tweaks: {},
+  generationProgress: null,
   loadingProject: false,
   errorProject: null,
 
@@ -142,22 +162,38 @@ export const useDesignStore = create<DesignState>((set) => ({
   },
 
   async generate(projectId: string, brief?: string) {
-    set({ loadingProject: true, errorProject: null });
+    set({
+      loadingProject: true,
+      errorProject: null,
+      generationProgress: { stage: 'starting', message: '' },
+    });
+    const stopPolling = startProgressPolling(projectId, set);
     try {
       await api.generateArtifact(projectId, { brief });
       await useDesignStore.getState().loadProject(projectId);
     } catch (error) {
       set({ errorProject: getErrorMessage(error), loadingProject: false });
+    } finally {
+      stopPolling();
+      set({ generationProgress: null });
     }
   },
 
   async iterate(projectId: string, feedback: string) {
-    set({ loadingProject: true, errorProject: null });
+    set({
+      loadingProject: true,
+      errorProject: null,
+      generationProgress: { stage: 'starting', message: '' },
+    });
+    const stopPolling = startProgressPolling(projectId, set);
     try {
       await api.iterateArtifact(projectId, { feedback });
       await useDesignStore.getState().loadProject(projectId);
     } catch (error) {
       set({ errorProject: getErrorMessage(error), loadingProject: false });
+    } finally {
+      stopPolling();
+      set({ generationProgress: null });
     }
   },
 
@@ -206,6 +242,7 @@ export const useDesignStore = create<DesignState>((set) => ({
       messages: [],
       artifacts: [],
       tweaks: {},
+      generationProgress: null,
       loadingProject: false,
       errorProject: null,
     });

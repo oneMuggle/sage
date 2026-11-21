@@ -126,4 +126,37 @@ describe('designStore version + message state', () => {
 
     expect(useDesignStore.getState().previewArtifact).toBeNull();
   });
+
+  it('generate polls generation progress while the request is in flight', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveGenerate!: (artifact: typeof sampleArtifact) => void;
+      vi.mocked(api.generateArtifact).mockImplementation(
+        () => new Promise((resolve) => { resolveGenerate = resolve; }),
+      );
+      vi.mocked(api.getProgress).mockResolvedValue({
+        stage: 'generating',
+        message: 'Calling LLM',
+      });
+      vi.mocked(api.getProject).mockResolvedValue({
+        ...baseProject,
+        latest_artifact: null,
+      });
+      vi.mocked(api.listMessages).mockResolvedValue([]);
+      vi.mocked(api.listArtifacts).mockResolvedValue([]);
+      vi.mocked(api.getTweaks).mockResolvedValue({});
+
+      const promise = useDesignStore.getState().generate('p1');
+      expect(useDesignStore.getState().generationProgress?.stage).toBe('starting');
+
+      await vi.advanceTimersByTimeAsync(800);
+      expect(useDesignStore.getState().generationProgress?.stage).toBe('generating');
+
+      resolveGenerate(sampleArtifact);
+      await promise;
+      expect(useDesignStore.getState().generationProgress).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
