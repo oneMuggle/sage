@@ -3,8 +3,11 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
+  fetchBrowserConfig,
   fetchBrowserList,
+  setBrowserConfig as saveBrowserConfig,
   setBrowserPath,
+  type BrowserConfig,
   type DiscoveredBrowser,
 } from '../../shared/api/browserSettingsClient';
 import { useI18n } from '../../shared/lib/i18n';
@@ -26,15 +29,22 @@ export function BrowserSettingsSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 2026-11-20: 浏览器会话配置（P0/P3）
+  const [browserConfig, setBrowserConfig] = useState<BrowserConfig>({
+    maxSessions: 4,
+    lruEvict: false,
+  });
+  const [savingConfig, setSavingConfig] = useState(false);
 
   const load = async (): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchBrowserList();
+      const [result, config] = await Promise.all([fetchBrowserList(), fetchBrowserConfig()]);
       setBrowsers(result.browsers);
       setUserConfigured(result.userConfigured);
       setEmbeddedAvailable(result.embeddedAvailable);
+      setBrowserConfig(config);
     } catch (cause) {
       // 加载失败 ≠ 未发现浏览器：空态只用于「后端明确返回空」。
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -67,6 +77,20 @@ export function BrowserSettingsSection() {
 
   const handleReset = async (): Promise<void> => {
     await handleSelect('');
+  };
+
+  // P0/P3: 保存并发上限 / LRU 回收开关
+  const handleSaveConfig = async (patch: Partial<BrowserConfig>): Promise<void> => {
+    setSavingConfig(true);
+    try {
+      const next = await saveBrowserConfig(patch);
+      setBrowserConfig(next);
+      toast.success(t('settings.network.browser.config_saved'));
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSavingConfig(false);
+    }
   };
 
   const isSelected = (path: string): boolean => {
@@ -178,7 +202,9 @@ export function BrowserSettingsSection() {
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-muted">{t('settings.network.browser.embedded_hint')}</div>
+                <div className="text-xs text-muted">
+                  {t('settings.network.browser.embedded_hint')}
+                </div>
               </div>
               {isSelected(EMBEDDED_PATH) && <Check className="w-4 h-4 text-primary shrink-0" />}
               {saving === EMBEDDED_PATH && (
@@ -199,6 +225,58 @@ export function BrowserSettingsSection() {
           {t('settings.network.browser.reset')}
         </button>
       )}
+
+      {/* P0: 并发实例上限 */}
+      <div className="mt-6 pt-4 border-t border-border">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-medium text-text">
+            {t('settings.network.browser.max_sessions')}
+          </h4>
+          <span className="text-sm font-mono text-text">{browserConfig.maxSessions}</span>
+        </div>
+        <p className="text-xs text-muted mb-3">{t('settings.network.browser.max_sessions_hint')}</p>
+        <input
+          type="range"
+          min={2}
+          max={8}
+          step={1}
+          value={browserConfig.maxSessions}
+          disabled={savingConfig}
+          onChange={(e) => void handleSaveConfig({ maxSessions: Number(e.target.value) })}
+          className="w-full accent-primary disabled:opacity-50"
+          data-testid="browser-max-sessions-slider"
+        />
+        <div className="flex justify-between text-xs text-muted mt-1">
+          <span>{t('settings.network.browser.max_sessions_low')}</span>
+          <span>{t('settings.network.browser.max_sessions_rec')}</span>
+          <span>{t('settings.network.browser.max_sessions_high')}</span>
+        </div>
+      </div>
+
+      {/* P3: LRU 自动回收开关 */}
+      <div className="mt-4 flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-text">{t('settings.network.browser.lru_evict')}</div>
+          <p className="text-xs text-muted mt-1">{t('settings.network.browser.lru_evict_hint')}</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={browserConfig.lruEvict}
+          disabled={savingConfig}
+          onClick={() => void handleSaveConfig({ lruEvict: !browserConfig.lruEvict })}
+          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+            browserConfig.lruEvict ? 'bg-primary' : 'bg-surface border border-border'
+          }`}
+          data-testid="browser-lru-evict-toggle"
+        >
+          <span
+            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+              browserConfig.lruEvict ? 'translate-x-4' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
     </section>
   );
 }

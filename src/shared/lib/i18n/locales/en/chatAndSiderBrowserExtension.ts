@@ -54,4 +54,25 @@ export const enChatAndSiderBrowserExtension = {
   'settings.network.browser.saved': 'Browser selection saved',
   'settings.network.browser.save_failed': 'Save failed',
   'settings.network.browser.reset': 'Reset to auto-detection',
+  // 2026-11-20: browser session config (concurrency cap / LRU eviction)
+  'settings.network.browser.max_sessions': 'Max concurrent instances',
+  'settings.network.browser.max_sessions_hint':
+    'Upper limit of simultaneous browser instances. Each uses ~150–300MB RAM; higher is more resource-intensive.',
+  'settings.network.browser.max_sessions_low': '2 (low RAM)',
+  'settings.network.browser.max_sessions_rec': '4 (recommended)',
+  'settings.network.browser.max_sessions_high': '8 (high perf)',
+  'settings.network.browser.lru_evict': 'Auto-evict least-recently-used',
+  'settings.network.browser.lru_evict_hint':
+    'When the cap is reached, close the least-recently-used instance (does not affect your everyday browser tabs).',
+  'settings.network.browser.config_saved': 'Browser config saved',
+  // 2026-11-20: browser instance panel (P1 status + P2 naming/quick-bind)
+  'settings.network.browser.panel_title': 'Browser instances',
+  'settings.network.browser.panel_empty': 'No active browser instances',
+  'settings.network.browser.panel_hint': 'Click an instance to bind it to the current chat',
+  'settings.network.browser.panel_bind': 'Bind',
+  'settings.network.browser.panel_bound': 'Bound',
+  'settings.network.browser.panel_rename': 'Rename',
+  'settings.network.browser.panel_last_used': 'Last used',
+  'settings.network.browser.rename_saved': 'Renamed',
+  'settings.network.browser.status_dot_hint': 'Browser instances',
 };

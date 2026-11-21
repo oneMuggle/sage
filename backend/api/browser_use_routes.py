@@ -341,3 +341,107 @@ def list_browser_audit(request: Request, session_id: str = "", limit: int = 50) 
     if guard is not None:
         return guard
     return {"entries": browser_action_repo.list_recent(session_id or None, limit)}
+
+
+# ---------------------------------------------------------------------------
+# 2026-11-20: 浏览器会话配置（P0/P1/P2/P3）
+# ---------------------------------------------------------------------------
+
+
+class BrowserConfigBody(BaseModel):
+    """PUT browser-config 请求体：并发上限 + LRU 回收开关。"""
+
+    max_sessions: Optional[int] = None  # 2-8, 默认 4
+    lru_evict: Optional[bool] = None  # 默认 false
+
+    class Config:
+        extra = Extra.forbid
+
+
+class BrowserSessionUpdateBody(BaseModel):
+    """PATCH browser/{id} 请求体：会话名称。"""
+
+    name: str  # 用户给的名称（如"账号A-审核员"）
+
+    class Config:
+        extra = Extra.forbid
+
+
+SETTINGS_KEY_BROWSER_CONFIG = "browser_config"
+
+
+@router.get("/browser/config")
+def get_browser_config(request: Request) -> Any:
+    """读取浏览器会话配置（并发上限 + LRU 回收开关）。"""
+    guard = _origin_guard(request)
+    if guard is not None:
+        return guard
+    repo = SettingsRepository()
+    raw = repo.get(SETTINGS_KEY_BROWSER_CONFIG)
+    if raw:
+        import json
+
+        try:
+            config = json.loads(raw) if isinstance(raw, str) else raw
+            return {
+                "maxSessions": int(config.get("maxSessions", 4)),
+                "lruEvict": bool(config.get("lruEvict", False)),
+            }
+        except (ValueError, TypeError):
+            pass
+    return {"maxSessions": 4, "lruEvict": False}
+
+
+@router.put("/browser/config")
+def set_browser_config(request: Request, body: BrowserConfigBody) -> Any:
+    """写入浏览器会话配置。"""
+    guard = _origin_guard(request)
+    if guard is not None:
+        return guard
+    repo = SettingsRepository()
+    raw = repo.get(SETTINGS_KEY_BROWSER_CONFIG)
+    import json
+
+    try:
+        config = json.loads(raw) if raw else {}
+    except (ValueError, TypeError):
+        config = {}
+
+    if body.max_sessions is not None:
+        # 安全边界：2-8
+        config["maxSessions"] = max(2, min(8, int(body.max_sessions)))
+    if body.lru_evict is not None:
+        config["lruEvict"] = bool(body.lru_evict)
+
+    repo.set(SETTINGS_KEY_BROWSER_CONFIG, json.dumps(config))
+    return {
+        "maxSessions": config.get("maxSessions", 4),
+        "lruEvict": config.get("lruEvict", False),
+    }
+
+
+@router.get("/browser/status")
+def get_browser_status(request: Request) -> Any:
+    """获取浏览器状态摘要（状态栏指示器用）。"""
+    guard = _origin_guard(request)
+    if guard is not None:
+        return guard
+    manager = get_browser_manager()
+    return manager.get_status()
+
+
+@router.patch("/browser/{browser_id}")
+def update_browser_session(
+    request: Request, browser_id: str, body: BrowserSessionUpdateBody
+) -> Any:
+    """更新浏览器会话名称（P2 功能）。"""
+    guard = _origin_guard(request)
+    if guard is not None:
+        return guard
+    manager = get_browser_manager()
+    if manager.update_session_name(browser_id, body.name):
+        return {"ok": True, "browser_id": browser_id, "name": body.name}
+    return JSONResponse(
+        status_code=404,
+        content={"ok": False, "error": f"browser session {browser_id} not found"},
+    )

@@ -45,8 +45,47 @@ from .browser_ws import ws_close, ws_connect, ws_recv_text, ws_send_text
 
 logger = logging.getLogger(__name__)
 
-#: 并发浏览器实例上限（每个实例是独立 Chromium 进程 + 临时目录）
-MAX_BROWSER_SESSIONS = 4
+#: 并发浏览器实例上限默认值（每个实例是独立 Chromium 进程 + 临时目录）。
+#: 实际运行时通过 ``get_max_sessions()`` 从 settings 读取用户配置。
+DEFAULT_MAX_BROWSER_SESSIONS = 4
+
+#: 兼容旧代码：模块级常量保留为默认值
+MAX_BROWSER_SESSIONS = DEFAULT_MAX_BROWSER_SESSIONS
+
+
+def get_max_sessions() -> int:
+    """从 settings 读取浏览器并发上限，回退到默认值 4。
+
+    用户可在设置页调整 2-8 范围。安全边界在函数内强制钳制。
+    """
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        repo = SettingsRepository()
+        raw = repo.get("browser_config")
+        if raw:
+            config = json.loads(raw) if isinstance(raw, str) else raw
+            value = config.get("maxSessions", DEFAULT_MAX_BROWSER_SESSIONS)
+            # 安全边界：2-8
+            return max(2, min(8, int(value)))
+    except Exception as exc:
+        logger.debug("get_max_sessions fallback: %s", exc)
+    return DEFAULT_MAX_BROWSER_SESSIONS
+
+
+def get_lru_evict_enabled() -> bool:
+    """从 settings 读取 LRU 自动回收开关，默认关闭。"""
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        repo = SettingsRepository()
+        raw = repo.get("browser_config")
+        if raw:
+            config = json.loads(raw) if isinstance(raw, str) else raw
+            return bool(config.get("lruEvict", False))
+    except Exception as exc:
+        logger.debug("get_lru_evict_enabled fallback: %s", exc)
+    return False
 
 #: web_fetch 渲染池的保留 browser_id（web_render 专用）。"唯一实例"解析
 #: 跳过它 —— 渲染池后台常驻时 browser_snapshot 仍应能免 id 解析用户实例。
@@ -281,12 +320,30 @@ class BrowserSession:
     #: 当前活动标签页（browser_tabs switch/create 设置；None = 解析为第一个页面）
     active_target_id: Optional[str] = None
 
+    #: P2: 用户给的会话名称（多账号场景下区分用途，如"账号A-审核员"）
+    name: str = ""
+    #: P1/P3: 最后使用时间（ISO 格式字符串，便于 JSON 序列化；LRU 回收依据）
+    last_used_at: str = ""
+
+    def __post_init__(self) -> None:
+        # 初始化时设置 last_used_at 为当前时间（如果未提供）
+        if not self.last_used_at:
+            from datetime import datetime, timezone
+
+            self.last_used_at = datetime.now(timezone.utc).isoformat()  # noqa: UP017
+
+    def touch(self) -> None:
+        """更新最后使用时间（每次访问会话时调用）。"""
+        from datetime import datetime, timezone
+
+        self.last_used_at = datetime.now(timezone.utc).isoformat()  # noqa: UP017
+
     def is_alive(self) -> bool:
         return self.process.poll() is None
 
 
 class BrowserSessionManager:
-    """进程级浏览器会话表（线程安全，上限 MAX_BROWSER_SESSIONS）。"""
+    """进程级浏览器会话表（线程安全，上限动态读取 settings）。"""
 
     def __init__(self) -> None:
         self._sessions: Dict[str, BrowserSession] = {}
@@ -298,7 +355,7 @@ class BrowserSessionManager:
 
         EMBEDDED 与 Electron 共享同一个 Chromium 进程（见 ``_EmbeddedProcess``），
         每开一个逻辑会话并不会多一个进程；EXTERNAL 是用户自己的标签页。
-        两者都不参与 ``MAX_BROWSER_SESSIONS`` 进程上限。
+        两者都不参与进程上限。
         """
         return sum(
             1
@@ -309,6 +366,9 @@ class BrowserSessionManager:
 
     def register(self, session: BrowserSession) -> None:
         evicted: List[BrowserSession] = []
+        # 动态读取当前上限（每次注册时读取，用户改设置后立即生效）
+        max_sessions = get_max_sessions()
+        lru_evict = get_lru_evict_enabled()
         try:
             with self._lock:
                 old = self._sessions.pop(session.browser_id, None)
@@ -332,7 +392,7 @@ class BrowserSessionManager:
                     session.browser_id != EXTENSION_BROWSER_ID
                     and getattr(session, "browser_type", None) != BrowserType.EMBEDDED
                 )
-                if needs_slot and self._counted_locked() >= MAX_BROWSER_SESSIONS:
+                if needs_slot and self._counted_locked() >= max_sessions:
                     # 渲染池是懒重建的后台实例：为前台会话让位，下次渲染按需重建。
                     # 内置池会话共享 Electron 单进程，不能个别回收（会误关其它标签页）。
                     for pool_id in [
@@ -344,12 +404,17 @@ class BrowserSessionManager:
                         )
                         and getattr(pooled, "browser_type", None) != BrowserType.EMBEDDED
                     ]:
-                        if self._counted_locked() < MAX_BROWSER_SESSIONS:
+                        if self._counted_locked() < max_sessions:
                             break
                         evicted.append(self._sessions.pop(pool_id))
-                if needs_slot and self._counted_locked() >= MAX_BROWSER_SESSIONS:
+                # P3: LRU 自动回收（用户开启时生效）
+                if lru_evict and needs_slot and self._counted_locked() >= max_sessions:
+                    lru_evicted = self._evict_lru_locked()
+                    if lru_evicted:
+                        evicted.append(lru_evicted)
+                if needs_slot and self._counted_locked() >= max_sessions:
                     raise BrowserCDPError(
-                        f"浏览器实例数已达上限 {MAX_BROWSER_SESSIONS}：请关闭 Sage 打开的"
+                        f"浏览器实例数已达上限 {max_sessions}：请关闭 Sage 打开的"
                         "浏览器窗口后重试（对话中可调用 browser_close 关闭实例）"
                     )
                 self._sessions[session.browser_id] = session
@@ -400,6 +465,8 @@ class BrowserSessionManager:
             # 重点是回收其一次性目录，否则永久遗留。
             _terminate_session(session)
             raise BrowserCDPError("浏览器进程已退出（可能被用户关闭）——请重新 browser_launch")
+        # LRU 顺序：每次真实访问都刷新最后使用时间。
+        session.touch()
         return session
 
     def remove(self, browser_id: str) -> Optional[BrowserSession]:
@@ -423,6 +490,91 @@ class BrowserSessionManager:
         for session in sessions:
             _terminate_session(session)
         return len(sessions)
+
+    def _evict_lru_locked(self) -> Optional[BrowserSession]:
+        """LRU 回收：关闭最久未使用的实例（调用方必须持有 self._lock）。
+
+        跳过：
+        - EXTENSION_BROWSER_ID（用户日常浏览器）
+        - EMBEDDED 类型（共享 Electron 进程）
+        - RESERVED_BROWSER_ID 及其前缀（渲染池，由 register 单独处理）
+
+        返回被回收的会话（供调用方加入 evicted 列表）；无可回收时返回 None。
+        """
+        candidates = [
+            (sid, s)
+            for sid, s in self._sessions.items()
+            if s.is_alive()
+            and sid != EXTENSION_BROWSER_ID
+            and getattr(s, "browser_type", None) != BrowserType.EMBEDDED
+            and sid != RESERVED_BROWSER_ID
+            and not sid.startswith(RESERVED_BROWSER_ID + "-")
+        ]
+        if not candidates:
+            return None
+
+        # 按 last_used_at 升序（最早的在前）
+        def parse_time(session: BrowserSession) -> str:
+            return session.last_used_at or "1970-01-01T00:00:00+00:00"
+
+        oldest_id, oldest = min(candidates, key=lambda x: parse_time(x[1]))
+        self._sessions.pop(oldest_id, None)
+        logger.info(
+            "LRU 回收浏览器会话: %s (name=%s, last_used=%s)",
+            oldest_id,
+            oldest.name or "(unnamed)",
+            oldest.last_used_at,
+        )
+        return oldest
+
+    def update_session_name(self, browser_id: str, name: str) -> bool:
+        """设置会话名称（P2 功能）。返回是否成功。"""
+        with self._lock:
+            session = self._sessions.get(browser_id)
+            if session is None:
+                return False
+            session.name = name
+            return True
+
+    def touch_session(self, browser_id: str) -> None:
+        """更新会话最后使用时间（访问时调用，影响 LRU 顺序）。"""
+        with self._lock:
+            session = self._sessions.get(browser_id)
+            if session is not None:
+                session.touch()
+
+    def get_status(self) -> Dict[str, Any]:
+        """返回浏览器状态摘要（P1 状态栏用）。"""
+        with self._lock:
+            active = sum(
+                1
+                for s in self._sessions.values()
+                if s.is_alive()
+                and getattr(s, "browser_type", None)
+                not in (BrowserType.EMBEDDED, BrowserType.EXTERNAL)
+                and s.browser_id != RESERVED_BROWSER_ID
+                and not s.browser_id.startswith(RESERVED_BROWSER_ID + "-")
+            )
+            sessions = [
+                {
+                    "id": s.browser_id,
+                    "name": s.name,
+                    "last_used_at": s.last_used_at,
+                    "alive": s.is_alive(),
+                    "persistent": s.persistent,
+                    "profile_name": s.profile_name,
+                }
+                for s in self._sessions.values()
+                # 内部渲染池槽位（web_fetch 懒重建）不是用户会话，面板不展示。
+                if s.browser_id != RESERVED_BROWSER_ID
+                and not s.browser_id.startswith(RESERVED_BROWSER_ID + "-")
+            ]
+        return {
+            "active": active,
+            "max": get_max_sessions(),
+            "lruEvict": get_lru_evict_enabled(),
+            "sessions": sessions,
+        }
 
 
 def _terminate_session(session: BrowserSession) -> None:
