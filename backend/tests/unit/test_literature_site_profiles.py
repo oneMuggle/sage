@@ -286,3 +286,20 @@ class TestProfileBackedAdapter:
 
         profile_store.reset_default_store()
         academic_adapters._DEFAULT_ADAPTERS.pop("demo", None)
+
+
+class TestShippedXueshu789Profile:
+    def test_shipped_profile_loads_and_matches_observed_facts(self):
+        from backend.literature.profile_store import ProfileRoot, SiteProfileStore
+
+        builtin = Path(__file__).resolve().parents[2] / "literature" / "sites"
+        store = SiteProfileStore([ProfileRoot(builtin, "builtin")])
+        profile = store.get("xueshu789")
+        assert profile.display_name == "学术资源站"
+        assert "xueshu789.cc" in profile.domains
+        assert profile.access.login.method == "form"
+        assert profile.access.login.url_contains == "/dbList/"
+        assert profile.pdf is not None
+        assert profile.pdf.entry_selector == "a.downloadlink"
+        assert profile.status == "draft"
+        assert profile.compliance.default_enabled is False
