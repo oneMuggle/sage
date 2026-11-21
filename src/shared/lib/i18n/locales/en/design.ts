@@ -122,6 +122,11 @@ export const enDesign = {
   // Tweaks
   'design.tweaks.title': 'Tweaks',
   'design.tweaks.accent': 'Accent color',
+  'design.tweaks.fontFamily': 'Font',
+  'design.tweaks.font.auto': 'System default',
+  'design.tweaks.font.sans': 'Sans-serif',
+  'design.tweaks.font.serif': 'Serif',
+  'design.tweaks.font.mono': 'Monospace',
   'design.tweaks.radius': 'Corner radius',
   'design.tweaks.fontSize': 'Font size',
   'design.tweaks.density': 'Density',

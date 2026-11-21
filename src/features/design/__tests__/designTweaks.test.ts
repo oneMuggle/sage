@@ -48,6 +48,17 @@ describe('designTweaks', () => {
       radius: 6,
       fontSize: 16,
       density: 16,
+      fontFamily: '',
     });
+  });
+
+  it('parses the font family token and injects it as an override', () => {
+    const defaults = extractTweakDefaults(':root{--font-family: Georgia, serif;}');
+    expect(defaults.fontFamily).toBe('Georgia, serif');
+
+    const out = applyTweaks('<html><head></head><body/></html>', {
+      font_family: 'Menlo, monospace',
+    });
+    expect(out).toContain('--font-family: Menlo, monospace;');
   });
 });

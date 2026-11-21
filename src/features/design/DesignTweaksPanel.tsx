@@ -23,6 +23,13 @@ interface SliderRowProps {
   onChange: (value: number) => void;
 }
 
+const FONT_OPTIONS = [
+  { key: 'auto', value: null },
+  { key: 'sans', value: 'system-ui, -apple-system, "Segoe UI", sans-serif' },
+  { key: 'serif', value: 'Georgia, "Times New Roman", serif' },
+  { key: 'mono', value: 'ui-monospace, Menlo, Consolas, monospace' },
+] as const;
+
 function SliderRow({ label, value, min, max, step, onChange }: SliderRowProps) {
   return (
     <label className="block">
@@ -80,6 +87,8 @@ export function DesignTweaksPanel({ projectId }: DesignTweaksPanelProps) {
   const radius = tweaks.radius ?? defaults.radius;
   const fontSize = tweaks.font_size ?? defaults.fontSize;
   const density = tweaks.density ?? defaults.density;
+  const selectedFontKey =
+    FONT_OPTIONS.find((option) => option.value === (tweaks.font_family ?? null))?.key ?? 'auto';
 
   return (
     <aside className="flex h-full min-h-0 flex-col rounded-lg border border-border bg-surface">
@@ -101,6 +110,25 @@ export function DesignTweaksPanel({ projectId }: DesignTweaksPanelProps) {
             />
             <code className="text-text-muted">{accent}</code>
           </div>
+        </label>
+
+        <label className="block">
+          <span className="text-text-secondary">{t('design.tweaks.fontFamily')}</span>
+          <select
+            value={selectedFontKey}
+            aria-label={t('design.tweaks.fontFamily')}
+            onChange={(event) => {
+              const option = FONT_OPTIONS.find((item) => item.key === event.target.value);
+              schedulePersist({ font_family: option?.value ?? null });
+            }}
+            className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
+          >
+            {FONT_OPTIONS.map((option) => (
+              <option key={option.key} value={option.key}>
+                {t(`design.tweaks.font.${option.key}` as const)}
+              </option>
+            ))}
+          </select>
         </label>
 
         <SliderRow
@@ -137,6 +165,7 @@ export function DesignTweaksPanel({ projectId }: DesignTweaksPanelProps) {
               radius: null,
               font_size: null,
               density: null,
+              font_family: null,
             })
           }
         >

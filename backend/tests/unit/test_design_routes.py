@@ -450,6 +450,7 @@ class TestDesignRoutes:
             "radius": None,
             "font_size": None,
             "density": None,
+            "font_family": None,
         }
         assert updated.status_code == 200
         assert updated.json()["radius"] == 8
@@ -597,6 +598,33 @@ class TestDesignRoutes:
                     },
                 )
         assert resp.status_code == 404
+
+    async def test_tweaks_reset_clears_overrides(self, studio):
+        """PUT 全空请求视为重置（前端「恢复设计系统默认」的行为）。"""
+        from backend.main import app
+
+        project = studio.create_project(kind="prototype", brief="reset")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                await client.put(
+                    f"/api/v1/design/projects/{project.id}/tweaks",
+                    json={"accent": "#1a56db", "radius": 8},
+                )
+                reset = await client.put(
+                    f"/api/v1/design/projects/{project.id}/tweaks",
+                    json={},
+                )
+
+        assert reset.status_code == 200
+        assert reset.json()["accent"] is None
+        assert reset.json()["radius"] is None
 
     async def test_create_project_invalid_kind(self, studio):
         from backend.main import app

@@ -115,6 +115,7 @@ export interface ProjectTweaks {
   radius?: number | null;
   font_size?: number | null;
   density?: number | null;
+  font_family?: string | null;
 }
 
 /** 生成阶段进度（idle / starting / composing / generating / linting / saving / complete / error） */

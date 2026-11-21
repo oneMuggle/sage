@@ -13,6 +13,7 @@ export interface TweakDefaults {
   radius: number;
   fontSize: number;
   density: number;
+  fontFamily: string;
 }
 
 const FALLBACK_DEFAULTS: TweakDefaults = {
@@ -20,6 +21,7 @@ const FALLBACK_DEFAULTS: TweakDefaults = {
   radius: 6,
   fontSize: 16,
   density: 16,
+  fontFamily: '',
 };
 
 function parsePx(css: string, name: string, fallback: number): number {
@@ -34,11 +36,13 @@ export function extractTweakDefaults(tokensCss: string): TweakDefaults {
   const accentMatch =
     tokensCss.match(/--color-accent\s*:\s*(#[0-9a-fA-F]{3,8})/) ??
     tokensCss.match(/--color-primary\s*:\s*(#[0-9a-fA-F]{3,8})/);
+  const fontMatch = tokensCss.match(/--font-family\s*:\s*([^;]+);/);
   return {
     accent: accentMatch?.[1] ?? FALLBACK_DEFAULTS.accent,
     radius: parsePx(tokensCss, '--border-radius', FALLBACK_DEFAULTS.radius),
     fontSize: parsePx(tokensCss, '--font-size-base', FALLBACK_DEFAULTS.fontSize),
     density: parsePx(tokensCss, '--space-4', FALLBACK_DEFAULTS.density),
+    fontFamily: fontMatch?.[1].trim() ?? FALLBACK_DEFAULTS.fontFamily,
   };
 }
 
@@ -57,6 +61,9 @@ export function tweakCssDeclarations(tweaks: ProjectTweaks): string[] {
   }
   if (tweaks.font_size != null) {
     declarations.push(`--font-size-base: ${tweaks.font_size}px;`);
+  }
+  if (tweaks.font_family) {
+    declarations.push(`--font-family: ${tweaks.font_family};`);
   }
   if (tweaks.density != null) {
     declarations.push(`--space-4: ${tweaks.density}px;`);

@@ -111,6 +111,7 @@ class TweaksRequest(BaseModel):
     radius: Optional[float] = None
     font_size: Optional[float] = None
     density: Optional[float] = None
+    font_family: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -401,16 +402,33 @@ async def get_tweaks(project_id: str):
 
 @router.put("/projects/{project_id}/tweaks")
 async def update_tweaks(project_id: str, req: TweaksRequest):
-    """Merge partial tweaks into the project's tweak overrides."""
+    """Merge partial tweaks into the project's tweak overrides.
+
+    A request with every field omitted/null is treated as a full reset
+    (the UI's "restore system defaults" button sends exactly that shape).
+    """
     studio = _require_studio()
     try:
-        tweaks = studio.update_tweaks(
-            project_id,
-            accent=req.accent,
-            radius=req.radius,
-            font_size=req.font_size,
-            density=req.density,
-        )
+        if all(
+            value is None
+            for value in (
+                req.accent,
+                req.radius,
+                req.font_size,
+                req.density,
+                req.font_family,
+            )
+        ):
+            tweaks = studio.clear_tweaks(project_id)
+        else:
+            tweaks = studio.update_tweaks(
+                project_id,
+                accent=req.accent,
+                radius=req.radius,
+                font_size=req.font_size,
+                density=req.density,
+                font_family=req.font_family,
+            )
     except DesignProjectNotFoundError as exc:
         return _map_design_error(exc)
     return tweaks.model_dump()

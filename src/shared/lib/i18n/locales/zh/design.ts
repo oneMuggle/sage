@@ -120,6 +120,11 @@ export const zhDesign = {
   // 微调
   'design.tweaks.title': '微调',
   'design.tweaks.accent': '强调色',
+  'design.tweaks.fontFamily': '字体',
+  'design.tweaks.font.auto': '跟随设计系统',
+  'design.tweaks.font.sans': '无衬线',
+  'design.tweaks.font.serif': '衬线',
+  'design.tweaks.font.mono': '等宽',
   'design.tweaks.radius': '圆角',
   'design.tweaks.fontSize': '字号',
   'design.tweaks.density': '密度',
