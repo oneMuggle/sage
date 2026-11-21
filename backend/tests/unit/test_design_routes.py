@@ -486,6 +486,56 @@ class TestDesignRoutes:
         assert idle.json()["stage"] == "idle"
         assert done.json()["stage"] == "complete"
 
+    async def test_review_endpoint_reports_lint_issues(self, studio):
+        """review 端点复用 DesignLinter，返回 P0 issues。"""
+        from backend.main import app
+
+        project = studio.create_project(
+            "Review", "prototype", "test-sys", "test-page", "brief",
+        )
+        studio.add_artifact(
+            project.id,
+            "<html><body><p style='color:#6366f1'>x</p></body></html>",
+            title="R",
+        )
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.get(
+                    f"/api/v1/design/projects/{project.id}/review",
+                )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is False
+        assert body["error_count"] >= 1
+        assert any(i["rule_id"] == "no_default_indigo" for i in body["issues"])
+
+    async def test_review_endpoint_without_artifact_returns_404(self, studio):
+        from backend.main import app
+
+        project = studio.create_project(
+            "NoReview", "prototype", "test-sys", "test-page", "brief",
+        )
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.get(
+                    f"/api/v1/design/projects/{project.id}/review",
+                )
+        assert resp.status_code == 404
+
     async def test_embed_chart_appends_new_version(self, studio):
         """chart 端点注入图片并追加新版本（不调 LLM）。"""
         from backend.main import app

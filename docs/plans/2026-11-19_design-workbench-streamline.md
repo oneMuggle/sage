@@ -1242,7 +1242,7 @@ git commit -m "docs(design): document streamlined workbench flow and refresh con
 - [x] M5: Tweaks 微调面板 — 已实施(2026-11-20)。后端 `tweaks_store.py` + GET/PUT `/tweaks` 端点;前端 `DesignTweaksPanel` + `designTweaks.ts`(`applyTweaks` / `extractTweakDefaults`)+ 第三 Tab + i18n;测试 83 全绿。
 - M6: 生成阶段流式进度 — 已实施(2026-11-21)。后端 `generate/iterate` 推送 starting→composing→generating→linting→saving→complete 进度(可选 `progress_queue` + 内存 `_progress`),新增 `GET /projects/{id}/progress`;SSE 路由改为 queue 驱动并抽离到 `design_streaming.py`;前端 800ms 轮询 + `DesignProgressStrip` 阶段条;220 后端 / 86 前端测试全绿。
 - [x] M7: Word 大纲 / 数据源绑定 / 图表嵌入 UI — 已实施(2026-11-21)。新增 `backend/api/v1/design_resources_routes.py`(拆分 outline + chart 端点保 800 行棘轮);`POST /projects/{id}/chart` 渲染图表无 LLM;前端 `DesignResourcesPanel`(数据源 + 图表)+ 创作器 Word 大纲导入按钮;26 个前端测试文件、88 用例、222 后端测试全绿。
-- M8: 首轮结构化简报、三方向选择、区块级局部重生成、可选评审。
+- [x] M8: 首轮结构化简报 / 模板方向预览 / 可选评审 — 已实施(2026-11-21)核心三项。创作器「快速简报」内联表单(受众/篇幅/语气→结构化 brief);高级选项渲染模板 `example_html` 预览;详情页「质量评审」按钮复用 `DesignLinter`(`GET /review`,P0/P1 摘要 + 可展开问题列表)。三方向自动生成与区块级局部重生成未做(成本高,迭代聊天已可部分覆盖),留作后续。
 
 ## Self-Review
 

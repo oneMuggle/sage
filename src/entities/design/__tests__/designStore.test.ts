@@ -162,4 +162,26 @@ describe('designStore version + message state', () => {
       vi.useRealTimers();
     }
   });
+
+  it('runReview stores the lint report', async () => {
+    vi.mocked(api.reviewArtifact).mockResolvedValue({
+      ok: false,
+      error_count: 1,
+      warning_count: 0,
+      issues: [
+        {
+          rule_id: 'no_default_indigo',
+          severity: 'error' as const,
+          message: 'indigo',
+          line: 3,
+        },
+      ],
+    });
+
+    const result = await useDesignStore.getState().runReview('p1');
+
+    expect(result?.error_count).toBe(1);
+    expect(useDesignStore.getState().review?.ok).toBe(false);
+    expect(useDesignStore.getState().review?.issues[0].rule_id).toBe('no_default_indigo');
+  });
 });
