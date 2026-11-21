@@ -58,12 +58,21 @@ export const zhDesign = {
   'design.detail.version': 'v{version}',
   'design.detail.tabIterate': '修改',
   'design.detail.tabHistory': '版本',
+  'design.detail.tabTweaks': '微调',
   'design.detail.previewing': '正在预览 v{version}（只读）',
   'design.detail.backToLatest': '返回最新',
   'design.version.preview': '预览',
   'design.version.restore': '恢复',
   'design.version.empty': '还没有版本',
   'design.version.restored': '已恢复为新版本',
+
+  // 微调
+  'design.tweaks.title': '微调',
+  'design.tweaks.accent': '强调色',
+  'design.tweaks.radius': '圆角',
+  'design.tweaks.fontSize': '字号',
+  'design.tweaks.density': '密度',
+  'design.tweaks.reset': '恢复设计系统默认',
 
   // 导出
   'design.export.title': '导出',

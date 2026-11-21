@@ -38,6 +38,7 @@ describe('designStore version + message state', () => {
       previewArtifact: null,
       artifacts: [],
       messages: [],
+      tweaks: {},
       loadingProject: false,
       errorProject: null,
     });
@@ -66,11 +67,16 @@ describe('designStore version + message state', () => {
         created_at: '2026-11-19T00:00:00Z',
       },
     ]);
+    vi.mocked(api.getTweaks).mockResolvedValue({ accent: '#123456', radius: 8 });
 
     await useDesignStore.getState().loadProject('p1');
 
     expect(useDesignStore.getState().messages).toHaveLength(1);
     expect(useDesignStore.getState().artifacts[0].version).toBe(1);
+    expect(useDesignStore.getState().tweaks).toEqual({
+      accent: '#123456',
+      radius: 8,
+    });
     expect(useDesignStore.getState().loadingProject).toBe(false);
   });
 
@@ -78,6 +84,7 @@ describe('designStore version + message state', () => {
     vi.mocked(api.getProject).mockRejectedValue(new Error('boom'));
     vi.mocked(api.listMessages).mockResolvedValue([]);
     vi.mocked(api.listArtifacts).mockResolvedValue([]);
+    vi.mocked(api.getTweaks).mockResolvedValue({});
 
     await useDesignStore.getState().loadProject('p1');
 
@@ -104,6 +111,7 @@ describe('designStore version + message state', () => {
     });
     vi.mocked(api.listMessages).mockResolvedValue([]);
     vi.mocked(api.listArtifacts).mockResolvedValue([]);
+    vi.mocked(api.getTweaks).mockResolvedValue({});
 
     await useDesignStore.getState().restoreVersion('p1', 'a1');
 

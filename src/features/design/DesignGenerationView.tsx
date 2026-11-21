@@ -11,7 +11,9 @@ import { HtmlPreviewHost } from '../../widgets/chat/preview/HtmlPreviewHost';
 
 import { DesignExportPanel } from './DesignExportPanel';
 import { DesignIterationChat } from './DesignIterationChat';
+import { DesignTweaksPanel } from './DesignTweaksPanel';
 import { DesignVersionPanel } from './DesignVersionPanel';
+import { applyTweaks } from './designTweaks';
 
 interface DesignGenerationViewProps {
   projectId: string;
@@ -43,7 +45,8 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
   const previewArtifact = useDesignStore((s) => s.previewArtifact);
   const clearPreview = useDesignStore((s) => s.clearPreview);
   const restoreVersion = useDesignStore((s) => s.restoreVersion);
-  const [panel, setPanel] = useState<'iterate' | 'history'>('iterate');
+  const tweaks = useDesignStore((s) => s.tweaks);
+  const [panel, setPanel] = useState<'iterate' | 'history' | 'tweaks'>('iterate');
 
   useEffect(() => {
     void loadProject(projectId);
@@ -149,7 +152,7 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
           )}
           {shownArtifact ? (
             <HtmlPreviewHost
-              html={shownArtifact.html_content}
+              html={applyTweaks(shownArtifact.html_content, tweaks)}
               name={`${project?.name ?? 'design'}.html`}
               heightClassName="h-[calc(100vh-14rem)] min-h-[24rem]"
             />
@@ -162,7 +165,7 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
         </section>
         <div className="flex min-h-0 flex-col gap-2">
           <div className="flex gap-1 rounded-md border border-border bg-surface p-1">
-            {(['iterate', 'history'] as const).map((option) => (
+            {(['iterate', 'history', 'tweaks'] as const).map((option) => (
               <button
                 key={option}
                 type="button"
@@ -176,15 +179,19 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
               >
                 {option === 'iterate'
                   ? t('design.detail.tabIterate')
-                  : t('design.detail.tabHistory')}
+                  : option === 'history'
+                    ? t('design.detail.tabHistory')
+                    : t('design.detail.tabTweaks')}
               </button>
             ))}
           </div>
           <div className="min-h-0 flex-1">
             {panel === 'iterate' ? (
               <DesignIterationChat projectId={projectId} />
-            ) : (
+            ) : panel === 'history' ? (
               <DesignVersionPanel projectId={projectId} />
+            ) : (
+              <DesignTweaksPanel projectId={projectId} />
             )}
           </div>
         </div>

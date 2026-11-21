@@ -30,6 +30,7 @@ from backend.design.models import (
 )
 from backend.design.systems import DesignSystemRegistry
 from backend.design.templates import DesignTemplateRegistry
+from backend.design.tweaks_store import ProjectTweaks, TweaksStore
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,7 @@ class DesignStudio:
         self._craft_rules = craft_rules
         self._lint_retry = lint_retry
         self._messages = MessageStore(workspace_dir / "design")
+        self._tweaks = TweaksStore(workspace_dir / "design")
         self._version_lock = threading.Lock()
 
     def _resolve_template_for_kind(
@@ -184,6 +186,30 @@ class DesignStudio:
         """List persisted iteration messages for a project."""
         self._repo.get_project(project_id)
         return self._messages.list(project_id)
+
+    def get_tweaks(self, project_id: str) -> ProjectTweaks:
+        """Read tweaks for a project; returns empty defaults when absent."""
+        self._repo.get_project(project_id)
+        return self._tweaks.get(project_id) or ProjectTweaks()
+
+    def update_tweaks(
+        self,
+        project_id: str,
+        *,
+        accent: Optional[str] = None,
+        radius: Optional[float] = None,
+        font_size: Optional[float] = None,
+        density: Optional[float] = None,
+    ) -> ProjectTweaks:
+        """Merge partial tweaks into the project's tweaks file."""
+        self._repo.get_project(project_id)
+        return self._tweaks.update(
+            project_id,
+            accent=accent,
+            radius=radius,
+            font_size=font_size,
+            density=density,
+        )
 
     def _record_message(
         self,

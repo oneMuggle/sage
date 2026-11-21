@@ -19,6 +19,7 @@ import type {
   GenerateRequest,
   IterateRequest,
   IterationMessage,
+  ProjectTweaks,
 } from './types';
 
 const BASE = '/api/v1/design';
@@ -126,6 +127,30 @@ export async function listMessages(projectId: string): Promise<IterationMessage[
   return backendRequest<IterationMessage[]>({
     method: 'GET',
     path: `${BASE}/projects/${projectId}/messages`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 微调参数
+// ---------------------------------------------------------------------------
+
+/** 读取项目微调参数（未设置时返回空默认值） */
+export async function getTweaks(projectId: string): Promise<ProjectTweaks> {
+  return backendRequest<ProjectTweaks>({
+    method: 'GET',
+    path: `${BASE}/projects/${projectId}/tweaks`,
+  });
+}
+
+/** 合并保存项目微调参数 */
+export async function updateTweaks(
+  projectId: string,
+  tweaks: ProjectTweaks,
+): Promise<ProjectTweaks> {
+  return backendRequest<ProjectTweaks>({
+    method: 'PUT',
+    path: `${BASE}/projects/${projectId}/tweaks`,
+    body: tweaks,
   });
 }
 
