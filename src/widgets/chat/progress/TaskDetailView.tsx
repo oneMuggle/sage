@@ -11,7 +11,7 @@
  *  - 旧抽屉是 `absolute w-96`（384px）叠在 320-560px 的右栏里，内容被裁切；
  *    本视图占满整个进度面板，实时事件流可以完整展开。
  */
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
@@ -23,8 +23,14 @@ import { findPluginToolOwner } from '../../../shared/lib/permissionInsights';
 
 import { ContextInput } from './ContextInput';
 import { EventTimeline } from './EventTimeline';
-import { TaskTranscriptPanel } from './TaskTranscriptPanel';
 import { formatDuration, formatElapsed, formatTokens } from './progressFormat';
+
+// M1: Transcript 面板按需加载 —— 主 chunk 已逼近 bundle size 门禁预算，
+// 面板与轮询 hook 拆到独立 chunk，只有切到「对话」tab 时才拉取。
+const LazyTaskTranscriptPanel = lazy(async () => {
+  const mod = await import('./TaskTranscriptPanel');
+  return { default: mod.TaskTranscriptPanel };
+});
 
 const STATUS_ICON: Record<TaskStatusValue, string> = {
   queued: '○',
@@ -269,12 +275,16 @@ export function TaskDetailView({
       {/* 详情正文 */}
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-3">
         {view === 'transcript' ? (
-          <TaskTranscriptPanel
-            runId={board.runId}
-            taskId={taskId}
-            live={state === 'running' || state === 'queued'}
-            sessionId={sessionId}
-          />
+          <Suspense
+            fallback={<div className="text-xs text-text-muted">加载对话记录…</div>}
+          >
+            <LazyTaskTranscriptPanel
+              runId={board.runId}
+              taskId={taskId}
+              live={state === 'running' || state === 'queued'}
+              sessionId={sessionId}
+            />
+          </Suspense>
         ) : (
           <>
         {/* 当前步骤 —— 大字号，这是"实时运行情况"的主答案。 */}
