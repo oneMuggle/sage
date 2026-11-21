@@ -5,8 +5,9 @@ import { Database, FileSpreadsheet, Loader2, RefreshCw, Unlink } from 'lucide-re
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { previewSource } from '../../entities/design/designApi';
 import { useDesignStore } from '../../entities/design/designStore';
-import type { ChartSpec, ChartType } from '../../entities/design/types';
+import type { ChartSpec, ChartType, SourcePreview } from '../../entities/design/types';
 import { useI18n } from '../../shared/lib/i18n';
 
 const CHART_TYPES: ChartType[] = ['bar', 'line', 'hbar', 'pie'];
@@ -45,6 +46,9 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
   const [seriesName, setSeriesName] = useState('');
   const [valuesText, setValuesText] = useState('');
   const [embedding, setEmbedding] = useState(false);
+  const [preview, setPreview] = useState<SourcePreview | null>(null);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const canPickFile =
     typeof window !== 'undefined' && Boolean(window.electronAPI?.selectFile);
@@ -57,7 +61,28 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
       filters: [{ name: 'Data', extensions: SOURCE_EXTS }],
     });
     if (!path) return;
-    await bindSource(projectId, path);
+    setPreviewPath(path);
+    setPreviewLoading(true);
+    try {
+      setPreview(await previewSource(path));
+    } catch (err) {
+      toast.error(
+        t('design.resources.previewFailed').replace(
+          '{error}',
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+      setPreviewPath(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleConfirmBind = async () => {
+    if (!previewPath) return;
+    await bindSource(projectId, previewPath);
+    setPreview(null);
+    setPreviewPath(null);
   };
 
   const values = parseNumbers(valuesText);
@@ -135,15 +160,62 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={!canPickFile}
+            disabled={!canPickFile || previewLoading}
             title={
-              canPickFile ? t('design.resources.bind') : t('design.resources.filePickerUnavailable')
+              canPickFile
+                ? t('design.resources.bind')
+                : t('design.resources.filePickerUnavailable')
             }
             onClick={() => void handleBind()}
           >
-            <FileSpreadsheet className="h-3 w-3" />
+            {previewLoading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-3 w-3" />
+            )}
             {t('design.resources.bind')}
           </button>
+
+          {preview && (
+            <div className="space-y-1.5 rounded-md border border-border p-2">
+              <div className="text-text">
+                {preview.kind} · {preview.sheets[0]?.name ?? '-'} ·{' '}
+                {t('design.resources.rows').replace(
+                  '{count}',
+                  String(preview.sheets[0]?.row_count ?? 0),
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {(preview.sheets[0]?.columns ?? []).map((column) => (
+                  <span
+                    key={column}
+                    className="rounded bg-bg-hover px-1 py-0.5 text-text-secondary"
+                  >
+                    {column}
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-0.5">
+                <button
+                  type="button"
+                  className="rounded border border-accent px-2 py-0.5 text-accent hover:bg-accent/5"
+                  onClick={() => void handleConfirmBind()}
+                >
+                  {t('design.resources.confirmBind')}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
+                  onClick={() => {
+                    setPreview(null);
+                    setPreviewPath(null);
+                  }}
+                >
+                  {t('design.resources.cancelPreview')}
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="space-y-2 border-t border-border pt-3">

@@ -655,6 +655,50 @@ class TestDesignRoutes:
         assert body["radius"] is None
         assert body["font_family"] == "Georgia, serif"
 
+    async def test_source_preview_csv_returns_columns(self, studio, tmp_path):
+        """预览 CSV 返回列名/行数/样例。"""
+        from backend.main import app
+
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text(
+            "name,value\nalpha,1\nbeta,2\n", encoding="utf-8",
+        )
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://test",
+        ) as client:
+            resp = await client.post(
+                "/api/v1/design/source/preview",
+                json={"file_path": str(csv_path)},
+            )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["kind"] == "csv"
+        assert body["sheets"][0]["columns"] == ["name", "value"]
+        assert body["sheets"][0]["row_count"] == 2
+        assert body["sheets"][0]["sample"][0] == ["alpha", "1"]
+
+    async def test_source_preview_rejects_unsupported_extension(
+        self, studio, tmp_path,
+    ):
+        from backend.main import app
+
+        bad_path = tmp_path / "data.txt"
+        bad_path.write_text("hello", encoding="utf-8")
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://test",
+        ) as client:
+            resp = await client.post(
+                "/api/v1/design/source/preview",
+                json={"file_path": str(bad_path)},
+            )
+
+        assert resp.status_code == 400
+
     async def test_create_project_invalid_kind(self, studio):
         from backend.main import app
 

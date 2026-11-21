@@ -135,6 +135,19 @@ export interface DesignSourceBinding {
   name: string;
 }
 
+export interface SourcePreviewSheet {
+  name: string;
+  row_count: number;
+  columns: string[];
+  sample: string[][];
+}
+
+export interface SourcePreview {
+  ok: boolean;
+  kind: string;
+  sheets: SourcePreviewSheet[];
+}
+
 export interface OutlineResult {
   title: string;
   source_path: string;

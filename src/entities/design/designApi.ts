@@ -26,6 +26,7 @@ import type {
   OutlineResult,
   ProjectTweaks,
   ReviewResult,
+  SourcePreview,
 } from './types';
 
 const BASE = '/api/v1/design';
@@ -181,6 +182,15 @@ export async function bindSource(
   return backendRequest<DesignSourceBinding>({
     method: 'POST',
     path: `${BASE}/projects/${projectId}/source`,
+    body: { file_path: filePath },
+  });
+}
+
+/** 绑定前预览数据源（列名/行数/样例） */
+export async function previewSource(filePath: string): Promise<SourcePreview> {
+  return backendRequest<SourcePreview>({
+    method: 'POST',
+    path: `${BASE}/source/preview`,
     body: { file_path: filePath },
   });
 }

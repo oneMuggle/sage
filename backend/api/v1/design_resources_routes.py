@@ -48,6 +48,14 @@ class EmbedChartRequest(BaseModel):
     slot: str = "{{CHART}}"
 
 
+class SourcePreviewRequest(BaseModel):
+    """POST /design/source/preview body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_path: str
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -121,6 +129,114 @@ async def extract_outline(req: OutlineRequest):
         return JSONResponse(
             status_code=500,
             content={"detail": f"Outline extraction failed: {exc}"},
+        )
+
+
+# ---------------------------------------------------------------------------
+# POST /design/source/preview — inspect a data source before binding
+# ---------------------------------------------------------------------------
+
+
+@router.post("/source/preview")
+async def preview_source(req: SourcePreviewRequest):
+    """Parse an xlsx/csv/json file and return a compact preview.
+
+    Lets the UI show columns and row counts before the user commits to a
+    data-source binding (avoids a wasted refresh on the wrong file).
+    """
+    from pathlib import Path
+
+    path = Path(req.file_path)
+    if not path.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"File not found: {req.file_path}"},
+        )
+
+    ext = path.suffix.lower()
+    try:
+        if ext in (".xlsx", ".xls", ".csv"):
+            if ext == ".csv":
+                from backend.office.excel import read_csv
+
+                result = read_csv(path)
+            else:
+                from backend.office.excel import read_xlsx
+
+                result = read_xlsx(path)
+            sheets = []
+            for sheet in result.sheets:
+                rows = sheet.rows or []
+                header_row = rows[0] if rows else []
+                headers = [
+                    str(cell).strip() or f"col{index}"
+                    for index, cell in enumerate(header_row, 1)
+                ]
+                sheets.append({
+                    "name": sheet.name,
+                    "row_count": max(len(rows) - 1, 0),
+                    "columns": headers,
+                    "sample": [
+                        [str(cell) for cell in (row or [])]
+                        for row in rows[1:6]
+                    ],
+                })
+            return {"ok": True, "kind": ext.lstrip("."), "sheets": sheets}
+
+        if ext == ".json":
+            import json as _json
+
+            data = _json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                columns = sorted({
+                    key for item in data[:50]
+                    if isinstance(item, dict)
+                    for key in item
+                })
+                return {
+                    "ok": True,
+                    "kind": "json",
+                    "sheets": [{
+                        "name": "items",
+                        "row_count": len(data),
+                        "columns": columns,
+                        "sample": [
+                            list(item.values()) if isinstance(item, dict)
+                            else [str(item)]
+                            for item in data[:5]
+                        ],
+                    }],
+                }
+            if isinstance(data, dict):
+                return {
+                    "ok": True,
+                    "kind": "json",
+                    "sheets": [{
+                        "name": "object",
+                        "row_count": 1,
+                        "columns": list(data.keys())[:20],
+                        "sample": [],
+                    }],
+                }
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Unsupported JSON shape"},
+            )
+
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": (
+                    f"Unsupported extension {ext!r}; "
+                    "use .xlsx/.csv/.json"
+                ),
+            },
+        )
+    except Exception as exc:
+        logger.exception("Source preview failed for %s", req.file_path)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Source preview failed: {exc}"},
         )
 
 
