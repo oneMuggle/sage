@@ -30,18 +30,16 @@ _BACKGROUND_COUNTS: Dict[str, int] = {}
 
 
 def resolve_main_agent(resolver: Any, stream_id: Optional[str]) -> Any:
-    """定位主 agent（用于回传完成通知）。默认经活跃聊天流注册表查找。"""
+    """定位主 agent（用于回传完成通知）。默认经域层注册表解析（api 层注册）。"""
     if resolver is not None:
         return resolver(stream_id)
     if not stream_id:
         return None
-    try:
-        from backend.api.chat_stream_state import _ACTIVE_STREAMS
+    from backend.domain.active_agent_registry import (
+        resolve_main_agent as _resolve_from_registry,
+    )
 
-        entry = _ACTIVE_STREAMS.get(stream_id)
-        return entry.get("agent") if isinstance(entry, dict) else None
-    except Exception:  # noqa: BLE001 — 注册表不可用按"无主 agent"处理
-        return None
+    return _resolve_from_registry(stream_id)
 
 
 def _notify_main_agent(main_agent: Any, note: str) -> None:

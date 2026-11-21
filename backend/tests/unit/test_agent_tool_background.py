@@ -158,6 +158,23 @@ async def test_background_limit_per_stream(monkeypatch):
         reset_tool_context(token)
 
 
+def test_default_resolution_uses_domain_registry():
+    """M2: 未注入 resolver 时经域层注册表解析主 agent（避免 tools→api import）。"""
+    from backend.domain import active_agent_registry
+    from backend.tools.agent_background import resolve_main_agent
+
+    fake = object()
+    active_agent_registry.set_main_agent_resolver(
+        lambda stream_id: fake if stream_id == "s-1" else None
+    )
+    try:
+        assert resolve_main_agent(None, "s-1") is fake
+        assert resolve_main_agent(None, "unknown") is None
+        assert resolve_main_agent(None, None) is None
+    finally:
+        active_agent_registry.set_main_agent_resolver(None)
+
+
 @pytest.mark.asyncio()
 async def test_foreground_mode_unchanged():
     fake = _BlockingSubagent()
