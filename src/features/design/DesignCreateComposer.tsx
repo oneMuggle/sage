@@ -4,7 +4,7 @@
  * 用户只需选一个意图 chip（可选）并写 brief，设计系统 / 模板 / 项目名
  * 由服务端默认值补齐；「高级选项」里才暴露完整选择。
  */
-import { ArrowLeft, ChevronDown, FileText, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, ChevronDown, FileText, Loader2, Sparkles, Wand2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -12,6 +12,7 @@ import { extractOutline } from '../../entities/design/designApi';
 import { useDesignStore } from '../../entities/design/designStore';
 import type { ProjectKind } from '../../entities/design/types';
 import { useI18n } from '../../shared/lib/i18n';
+import { HtmlPreviewHost } from '../../widgets/chat/preview/HtmlPreviewHost';
 
 interface DesignCreateComposerProps {
   onCancel: () => void;
@@ -37,6 +38,30 @@ const PRESETS: Preset[] = [
   { key: 'design.preset.pricing', kind: 'prototype', templateId: 'pricing' },
 ];
 
+type QuickAudience = 'investor' | 'team' | 'customer' | 'general';
+type QuickLength = 'short' | 'medium' | 'long' | 'single';
+type QuickTone = 'professional' | 'friendly' | 'bold';
+
+const AUDIENCE_KEYS = {
+  investor: 'design.composer.quickAudience.investor',
+  team: 'design.composer.quickAudience.team',
+  customer: 'design.composer.quickAudience.customer',
+  general: 'design.composer.quickAudience.general',
+} as const;
+
+const LENGTH_KEYS = {
+  short: 'design.composer.quickLength.short',
+  medium: 'design.composer.quickLength.medium',
+  long: 'design.composer.quickLength.long',
+  single: 'design.composer.quickLength.single',
+} as const;
+
+const TONE_KEYS = {
+  professional: 'design.composer.quickTone.professional',
+  friendly: 'design.composer.quickTone.friendly',
+  bold: 'design.composer.quickTone.bold',
+} as const;
+
 export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateComposerProps) {
   const { t } = useI18n();
   const systems = useDesignStore((s) => s.systems);
@@ -53,6 +78,10 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
   const [advanced, setAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [importingOutline, setImportingOutline] = useState(false);
+  const [quickBriefOpen, setQuickBriefOpen] = useState(false);
+  const [quickAudience, setQuickAudience] = useState<QuickAudience>('general');
+  const [quickLength, setQuickLength] = useState<QuickLength>('medium');
+  const [quickTone, setQuickTone] = useState<QuickTone>('professional');
   const [error, setError] = useState<string | null>(null);
 
   const canPickFile =
@@ -101,6 +130,19 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
     () => templates.filter((tpl) => tpl.kind === kind),
     [templates, kind],
   );
+  const previewTemplate =
+    kindTemplates.find((tpl) => tpl.id === templateId) ?? kindTemplates[0];
+
+  const applyQuickBrief = () => {
+    const kindLabel = kind === 'deck' ? t('design.kind.deck') : t('design.kind.prototype');
+    const sentence = t('design.composer.quickBriefTemplate')
+      .replace('{audience}', t(AUDIENCE_KEYS[quickAudience]))
+      .replace('{length}', t(LENGTH_KEYS[quickLength]))
+      .replace('{kindLabel}', kindLabel)
+      .replace('{tone}', t(TONE_KEYS[quickTone]));
+    setBrief((prev) => (prev.trim() ? `${prev}\n\n${sentence}` : sentence));
+    setQuickBriefOpen(false);
+  };
 
   const handlePreset = (preset: Preset) => {
     if (selectedPreset === preset.key) {
@@ -189,24 +231,34 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
                 {t('design.composer.briefHint')}
               </p>
             </div>
-            <button
-              type="button"
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-ui-xs hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!canPickFile || importingOutline}
-              title={
-                canPickFile
-                  ? t('design.composer.importOutline')
-                  : t('design.resources.filePickerUnavailable')
-              }
-              onClick={() => void handleImportOutline()}
-            >
-              {importingOutline ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <FileText className="h-3 w-3" />
-              )}
-              {t('design.composer.importOutline')}
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-ui-xs hover:bg-bg-hover"
+                onClick={() => setQuickBriefOpen((prev) => !prev)}
+              >
+                <Wand2 className="h-3 w-3" />
+                {t('design.composer.quickBrief')}
+              </button>
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-ui-xs hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={!canPickFile || importingOutline}
+                title={
+                  canPickFile
+                    ? t('design.composer.importOutline')
+                    : t('design.resources.filePickerUnavailable')
+                }
+                onClick={() => void handleImportOutline()}
+              >
+                {importingOutline ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <FileText className="h-3 w-3" />
+                )}
+                {t('design.composer.importOutline')}
+              </button>
+            </div>
           </div>
           <textarea
             id="design-brief"
@@ -216,6 +268,63 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
             rows={7}
             className="mt-2 w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-ui-sm outline-none focus:border-accent"
           />
+          {quickBriefOpen && (
+            <div className="mt-3 space-y-2 rounded-md border border-border p-3 text-ui-xs">
+              <div className="grid grid-cols-3 gap-2">
+                <label className="block">
+                  <span className="text-text-muted">{t('design.composer.quickAudience')}</span>
+                  <select
+                    value={quickAudience}
+                    onChange={(event) => setQuickAudience(event.target.value as QuickAudience)}
+                    className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
+                  >
+                    {(Object.keys(AUDIENCE_KEYS) as QuickAudience[]).map((value) => (
+                      <option key={value} value={value}>
+                        {t(AUDIENCE_KEYS[value])}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-text-muted">{t('design.composer.quickLength')}</span>
+                  <select
+                    value={quickLength}
+                    onChange={(event) => setQuickLength(event.target.value as QuickLength)}
+                    className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
+                  >
+                    {(Object.keys(LENGTH_KEYS) as QuickLength[]).map((value) => (
+                      <option key={value} value={value}>
+                        {t(LENGTH_KEYS[value])}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-text-muted">{t('design.composer.quickTone')}</span>
+                  <select
+                    value={quickTone}
+                    onChange={(event) => setQuickTone(event.target.value as QuickTone)}
+                    className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 outline-none focus:border-accent"
+                  >
+                    {(Object.keys(TONE_KEYS) as QuickTone[]).map((value) => (
+                      <option key={value} value={value}>
+                        {t(TONE_KEYS[value])}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="rounded-md bg-accent px-3 py-1 text-ui-xs text-white"
+                  onClick={applyQuickBrief}
+                >
+                  {t('design.composer.quickFill')}
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <button
@@ -298,6 +407,20 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
                 ))}
               </select>
             </div>
+            {previewTemplate?.example_html && (
+              <div>
+                <span className="text-ui-sm font-medium text-text">
+                  {t('design.composer.templatePreview')}
+                </span>
+                <div className="mt-1 overflow-hidden rounded-md border border-border">
+                  <HtmlPreviewHost
+                    html={previewTemplate.example_html}
+                    name={`${previewTemplate.id}-example.html`}
+                    heightClassName="h-56"
+                  />
+                </div>
+              </div>
+            )}
           </section>
         )}
 
