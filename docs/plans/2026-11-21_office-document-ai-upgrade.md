@@ -270,11 +270,18 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 
 ### M4 — Excel 读写对称与错误治理（P0，对应 G6/G14）
 
-- [ ] 重算后错误值扫描与 `formula_errors[]` 返回
-- [ ] op 扩展：行列增删、合并单元格、数据验证、条件格式、定义名称
-- [ ] 读侧补齐：图表、条件格式、数据验证回读，与生成侧对称
-- [ ] 与本地求值引擎交叉校验；工作台展示错误定位
+- [x] 公式健康扫描：错误值（#REF!/#DIV/0! 等）与缺失缓存；`POST /office/excel/formula-health`
+- [x] 重算结果附带 `formula_count/formula_error_count/missing_cache_count/formula_errors`
+- [x] op 扩展：`insert_rows/delete_rows/insert_cols/delete_cols/merge_cells`
+- [x] 读侧补齐：图表、条件格式、数据验证回读（`ExcelSheetContent.charts/conditional_formats/data_validations`）
+- [ ] 数据验证/条件格式的编辑 op、定义名称（后续）
+- [ ] 与本地求值引擎交叉校验关键单元格（后续）
 - [ ] 打包版图表渲染保障（matplotlib 缺失时的降级或内置替代）
+
+> **实施记录（2026-11-21，M4a Excel 读写对称）**
+> - 新增：`backend/office/excel_health.py`（`scan_formula_health` / `check_formula_health`）
+> - 扩展：`excel_recalc` 成功后扫描并返回计数；`read_xlsx` 返回图表/条件格式/数据验证；`update_xlsx` 新增行列增删与合并单元格
+> - 测试：`test_excel_m4.py`（9）；Excel 相关回归 43 通过；ruff/py38/architecture 通过
 
 ### M5 — OOXML 底层通道 + Office Skills（P1，对应 G5/G10）
 

@@ -84,7 +84,9 @@ _OP_DESCRIPTIONS = {
         "'line'|'bar'|'pie',anchor,data_ref:{min_col,min_row,max_col,max_row},"
         "titles_from_data?,from_rows?,categories_ref?,title?}（原生图表）; "
         "set_column_width{sheet,column,width}; set_number_format{sheet,cells,format}; "
-        "set_fill{sheet,cells,color（6 位 hex）}; freeze_panes{sheet,cell}"
+        "set_fill{sheet,cells,color（6 位 hex）}; freeze_panes{sheet,cell}; "
+        "insert_rows/delete_rows/insert_cols/delete_cols{sheet,index(1-based),amount?}; "
+        "merge_cells{sheet,range,merge?}"
     ),
     "ppt": (
         "ppt ops（slide index 从 0 起）: replace_text{find,replace}; set_slide_title"

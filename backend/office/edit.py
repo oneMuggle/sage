@@ -49,6 +49,9 @@ the LLM-facing version):
         set_number_format {sheet, cells: 'B2' | 'B2:B10' | [..], format}
         set_fill    {sheet, cells, color: 'FF0000'（可带 #）} — solid 填充
         freeze_panes {sheet, cell: 'B2' | 'A1'(取消冻结)}
+        insert_rows / delete_rows {sheet, index(1-based), amount?}
+        insert_cols / delete_cols {sheet, index(1-based), amount?}
+        merge_cells {sheet, range: 'A1:B2', merge?} — merge=false 取消合并
 
     ppt (slide ``index`` is 0-based, matching read_ppt):
         replace_text    {find, replace}     — all shapes' text frames
@@ -966,6 +969,57 @@ def _apply_xlsx_op(wb: Any, op: Dict[str, Any]) -> Dict[str, Any]:  # noqa: PLR0
             return {"op": op_name, "ok": False, "error": f"invalid_cell: {cell!r}"}
         wb[op["sheet"]].freeze_panes = cell.upper()
         return {"op": op_name, "ok": True, "frozen_at": cell.upper()}
+
+    if op_name in ("insert_rows", "delete_rows", "insert_cols", "delete_cols"):
+        missing = _require_fields(op, ("sheet", "index"))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        if op["sheet"] not in wb.sheetnames:
+            return {"op": op_name, "ok": False, "error": f"sheet_not_found: {op['sheet']!r}"}
+        try:
+            index = int(op["index"])
+            amount = int(op.get("amount", 1))
+        except (TypeError, ValueError):
+            return {"op": op_name, "ok": False, "error": "index_amount_must_be_int"}
+        if index < 1 or amount < 1:
+            return {"op": op_name, "ok": False, "error": "index_and_amount_must_be_positive"}
+        worksheet = wb[op["sheet"]]
+        if op_name == "insert_rows":
+            worksheet.insert_rows(index, amount)
+        elif op_name == "delete_rows":
+            worksheet.delete_rows(index, amount)
+        elif op_name == "insert_cols":
+            worksheet.insert_cols(index, amount)
+        else:
+            worksheet.delete_cols(index, amount)
+        return {
+            "op": op_name,
+            "ok": True,
+            "sheet": op["sheet"],
+            "index": index,
+            "amount": amount,
+        }
+
+    if op_name == "merge_cells":
+        missing = _require_fields(op, ("sheet", "range"))
+        if missing:
+            return {"op": op_name, "ok": False, "error": missing}
+        if op["sheet"] not in wb.sheetnames:
+            return {"op": op_name, "ok": False, "error": f"sheet_not_found: {op['sheet']!r}"}
+        from openpyxl.utils.cell import range_boundaries  # noqa: PLC0415
+
+        range_text = str(op["range"]).strip().upper()
+        try:
+            range_boundaries(range_text)
+        except ValueError:
+            return {"op": op_name, "ok": False, "error": f"invalid_range: {range_text!r}"}
+        worksheet = wb[op["sheet"]]
+        merge = bool(op.get("merge", True))
+        if merge:
+            worksheet.merge_cells(range_text)
+        else:
+            worksheet.unmerge_cells(range_text)
+        return {"op": op_name, "ok": True, "range": range_text, "merged": merge}
 
     return {"op": str(op_name), "ok": False, "error": f"unsupported_op: {op_name}"}
 

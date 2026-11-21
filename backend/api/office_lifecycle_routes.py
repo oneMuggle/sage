@@ -28,6 +28,11 @@ from backend.office.diff_preview import (
     preview_update,
 )
 from backend.office.errors import OfficeFileNotFoundError, OfficePathError
+from backend.office.excel_health import (
+    ExcelFormulaHealthRequest,
+    ExcelFormulaHealthResult,
+    check_formula_health,
+)
 from backend.office.excel_recalc import (
     ExcelRecalcRequest,
     ExcelRecalcResult,
@@ -266,6 +271,14 @@ def template_thumbnail_endpoint(req: OfficeTemplateThumbnailRequest) -> dict:
 def excel_recalc_endpoint(req: ExcelRecalcRequest) -> ExcelRecalcResult:
     """P2-C: 受管 .xlsx 公式缓存重算（soffice 就地刷新，重算前自动快照）。"""
     return refresh_formula_cache(req)
+
+
+@router.post("/excel/formula-health", response_model=ExcelFormulaHealthResult)
+def excel_formula_health_endpoint(
+    req: ExcelFormulaHealthRequest,
+) -> ExcelFormulaHealthResult:
+    """M4: 扫描公式错误值（#REF!/#DIV/0! 等）与缺失缓存，建议是否重算。"""
+    return check_formula_health(req)
 
 
 @router.post("/import/convert-legacy", response_model=LegacyImportResult)
