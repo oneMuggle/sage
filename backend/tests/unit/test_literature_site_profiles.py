@@ -246,3 +246,43 @@ class TestGuidance:
             profile, "x", page_url="https://demo.example/login", page_title="登录"
         )
         assert "登录态: 未登录" in anonymous
+
+
+class TestProfileBackedAdapter:
+    def test_satisfies_existing_adapter_protocol(self):
+        from backend.literature.academic_adapter import ProfileBackedAdapter
+        from backend.skills.builtin.academic_adapters import AcademicSiteAdapter
+
+        profile = profile_from_dict(_raw_profile())
+        adapter = ProfileBackedAdapter(profile)
+        assert adapter.name == "demo"
+        assert isinstance(adapter, AcademicSiteAdapter)
+        assert "demo.example" in adapter.build_search_url("x")
+        assert "Demo 学术站" in adapter.render_guidance("x")
+
+    def test_get_site_adapter_falls_back_to_profile_store(self, tmp_path, monkeypatch):
+        from backend.literature import profile_store
+        from backend.skills.builtin import academic_adapters
+
+        sites = tmp_path / "user-sites"
+        sites.mkdir()
+        (sites / "demo.yaml").write_text(
+            "id: demo\n"
+            "display_name: Demo\n"
+            "home_url: https://demo.example/\n"
+            "domains: [demo.example]\n"
+            "search:\n"
+            "  url_template: https://demo.example/s?q={query}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("SAGE_LITERATURE_SITES_DIR", str(sites))
+        monkeypatch.chdir(tmp_path)
+        profile_store.reset_default_store()
+        academic_adapters._DEFAULT_ADAPTERS.pop("demo", None)
+
+        adapter = academic_adapters.get_site_adapter("demo")
+        assert adapter.name == "demo"
+        assert "demo.example" in adapter.build_search_url("x")
+
+        profile_store.reset_default_store()
+        academic_adapters._DEFAULT_ADAPTERS.pop("demo", None)
