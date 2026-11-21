@@ -18,6 +18,7 @@ import {
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
+import { BrowserAccountsSection } from './BrowserAccountsSection';
 import { CredentialsSection } from './NetworkCredentialsSection';
 
 interface SiteSessionsSectionProps {
@@ -113,9 +114,7 @@ export function SiteSessionsSection({ pollIntervalMs = 2000 }: SiteSessionsSecti
         toast.error(fill(t('settings.network.sites.check_failed'), { error: result.error }));
       }
     } catch (error) {
-      toast.error(
-        fill(t('settings.network.sites.check_failed'), { error: errorText(error) }),
-      );
+      toast.error(fill(t('settings.network.sites.check_failed'), { error: errorText(error) }));
     } finally {
       setVerifying('');
     }
@@ -159,10 +158,7 @@ export function SiteSessionsSection({ pollIntervalMs = 2000 }: SiteSessionsSecti
       <h3 className="text-sm font-semibold text-text mb-3">{t('settings.network.sites')}</h3>
       <p className="text-xs text-muted mb-2">{t('settings.network.sites.hint')}</p>
 
-      <div
-        className="flex flex-wrap items-center gap-1.5 mb-3"
-        data-testid="site-login-form"
-      >
+      <div className="flex flex-wrap items-center gap-1.5 mb-3" data-testid="site-login-form">
         <select
           data-testid="site-template-select"
           aria-label={t('settings.network.sites.template')}
@@ -284,6 +280,10 @@ export function SiteSessionsSection({ pollIntervalMs = 2000 }: SiteSessionsSecti
           ))}
         </ul>
       )}
+
+      <div className="mt-4 border-t border-border pt-3">
+        <BrowserAccountsSection />
+      </div>
 
       <details className="mt-3" data-testid="site-advanced">
         <summary className="text-xs text-text-secondary cursor-pointer select-none">

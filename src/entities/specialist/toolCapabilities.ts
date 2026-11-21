@@ -165,6 +165,8 @@ export const TOOL_CAPABILITY_PACKS: readonly ToolCapabilityPack[] = [
       'browser_downloads',
       'browser_close',
       'browser_login',
+      'browser_list_accounts',
+      'browser_switch_account',
       'browser_tabs',
     ],
     requiresMode: 'full_access',

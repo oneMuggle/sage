@@ -2980,6 +2980,9 @@ class BrowserLoginTool(BaseTool):
                 "一键登录站点：打开可见浏览器窗口，导航到指定 URL，等待用户完成"
                 "登录后自动保存 cookie 到加密档案。之后 web_fetch 访问该站点会"
                 "自动携带登录态，无需手动传 credential_domain。"
+                "\n\n多账号：可传 account_id 将凭据存入指定账号（见"
+                " browser_list_accounts）；或传 account_label 新建一个命名账号并"
+                "把本次登录的凭据存入该账号。不传则沿用默认单账号行为。"
             ),
             parameters={
                 "type": "object",
@@ -2992,6 +2995,14 @@ class BrowserLoginTool(BaseTool):
                         "type": "integer",
                         "description": "等待登录完成的超时秒数（默认 300 = 5 分钟）",
                     },
+                    "account_id": {
+                        "type": "string",
+                        "description": "可选：登录后把凭据存入该账号 ID（已存在的账号）",
+                    },
+                    "account_label": {
+                        "type": "string",
+                        "description": "可选：新建一个以此命名的账号并存入本次登录凭据（与 account_id 二选一）",
+                    },
                 },
                 "required": ["url"],
             },
@@ -3001,6 +3012,8 @@ class BrowserLoginTool(BaseTool):
         self,
         url: str = "",
         timeout_seconds: int = _LOGIN_DEFAULT_TIMEOUT,
+        account_id: Optional[str] = None,
+        account_label: Optional[str] = None,
         **kwargs: Any,
     ) -> ToolResult:
         if kwargs:
@@ -3008,7 +3021,7 @@ class BrowserLoginTool(BaseTool):
                 success=False,
                 error=(
                     f"未知参数: {', '.join(sorted(kwargs))}"
-                    "（合法参数: url, timeout_seconds）"
+                    "（合法参数: url, timeout_seconds, account_id, account_label）"
                 ),
             )
         url = (url or "").strip()
@@ -3027,12 +3040,68 @@ class BrowserLoginTool(BaseTool):
         target_host = (parsed.hostname or "").lower()
         if not target_host:
             return ToolResult(success=False, error="无法从 url 解析出域名")
+
+        # 多账号：account_label 新建账号（account_id 优先，二选一）。
+        # created_account_id 非空表示本账号是本次登录刚建的——登录失败时清理，
+        # 避免账号池留下没有凭据的孤儿账号。
+        account_id = (account_id or "").strip() or None
+        account_label = (account_label or "").strip() or None
+        created_account_id: Optional[str] = None
+        if account_id and account_label:
+            return ToolResult(
+                success=False,
+                error="account_id 与 account_label 只能二选一",
+            )
+        if account_label:
+            from backend.services.browser_account_service import browser_account_service
+
+            try:
+                account = browser_account_service.create_account(
+                    label=account_label, domain=target_host
+                )
+            except ValueError as exc:
+                return ToolResult(success=False, error=f"create_account_failed: {exc}")
+            account_id = account.id
+            created_account_id = account.id
+        elif account_id:
+            from backend.services.browser_account_service import browser_account_service
+
+            account = browser_account_service.get_account(account_id)
+            if account is None:
+                return ToolResult(
+                    success=False, error=f"account_not_found: 账号 {account_id!r} 不存在"
+                )
+            # 账号域名须与登录站点匹配（含子域关系），否则凭据会存到错误 domain
+            bare = account.domain.lstrip(".")
+            if not (
+                target_host == bare
+                or target_host.endswith("." + bare)
+                or bare.endswith("." + target_host)
+            ):
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"account_domain_mismatch: 账号「{account.label}」属于 {account.domain}，"
+                        f"与登录站点 {target_host} 不匹配"
+                    ),
+                )
+
+        def _abort_and_cleanup(msg: str) -> ToolResult:
+            """失败退出：若是本次新建的账号则删除，避免孤儿账号。"""
+            if created_account_id:
+                import contextlib
+
+                from backend.services.browser_account_service import browser_account_service
+
+                with contextlib.suppress(Exception):
+                    browser_account_service.delete_account(created_account_id)
+            return ToolResult(success=False, error=msg)
+
         # I1：登录同样是导航；只应用站点策略的 block 部分（用户主动登录
         # 未知站点保持允许，不做 confirm，避免登录流程被站点确认卡住）。
         if _safety_check_site("", url) == "block":
-            return ToolResult(
-                success=False,
-                error=f"site_blocked: 用户已禁止该站点 {browser_safety.domain_of(url)}",
+            return _abort_and_cleanup(
+                f"site_blocked: 用户已禁止该站点 {browser_safety.domain_of(url)}"
             )
 
         # 检查是否已有活跃的登录浏览器（避免重复启动）
@@ -3052,9 +3121,8 @@ class BrowserLoginTool(BaseTool):
                     profile_name=_LOGIN_PROFILE_NAME,
                 )
             except BrowserCDPError as exc:
-                return ToolResult(
-                    success=False,
-                    error=f"browser_launch_failed: 无法启动浏览器（{exc}）",
+                return _abort_and_cleanup(
+                    f"browser_launch_failed: 无法启动浏览器（{exc}）"
                 )
             reuse = False
 
@@ -3064,7 +3132,7 @@ class BrowserLoginTool(BaseTool):
             created = cdp_command(session, "Target.createTarget", {"url": url})
             target_id = created.get("targetId")
             if not target_id:
-                return ToolResult(success=False, error="导航失败：无法创建标签页")
+                return _abort_and_cleanup("导航失败：无法创建标签页")
 
             # 等待页面初始加载
             _wait_for_page_load(session, target_id, timeout=15.0)
@@ -3098,7 +3166,9 @@ class BrowserLoginTool(BaseTool):
                     pass
 
             # 导出并保存 cookie（同域 localStorage 一并保存）
-            saved_domains, export_summary = self._export_cookies(session, target_host, target_id or "")
+            saved_domains, export_summary = self._export_cookies(
+                session, target_host, target_id or "", account_id=account_id
+            )
 
             if saved_domains:
                 return ToolResult(
@@ -3116,21 +3186,21 @@ class BrowserLoginTool(BaseTool):
                         ),
                         "browser_id": session.browser_id,
                         "reused": reuse,
+                        "account_id": account_id or "",
                     },
                 )
             else:
-                return ToolResult(
-                    success=False,
-                    error=(
-                        "no_cookies_saved: 未找到可保存的 cookie。"
-                        "请确认已经在浏览器窗口中完成登录。"
-                    ),
+                return _abort_and_cleanup(
+                    "no_cookies_saved: 未找到可保存的 cookie。"
+                    "请确认已经在浏览器窗口中完成登录。"
                 )
 
         except BrowserCDPError as exc:
             # 容错：若用户手动关闭了窗口/标签页，尝试检查是否已有保存的 cookies
             try:
-                saved_domains, export_summary = self._export_cookies(session, target_host, target_id or "")
+                saved_domains, export_summary = self._export_cookies(
+                    session, target_host, target_id or "", account_id=account_id
+                )
                 if saved_domains:
                     return ToolResult(
                         success=True,
@@ -3145,14 +3215,12 @@ class BrowserLoginTool(BaseTool):
                             ),
                             "browser_id": getattr(session, "browser_id", ""),
                             "reused": reuse,
+                            "account_id": account_id or "",
                         },
                     )
             except Exception:
                 pass
-            return ToolResult(
-                success=False,
-                error=f"browser_error: {exc}",
-            )
+            return _abort_and_cleanup(f"browser_error: {exc}")
         finally:
             # 关闭标签页但保持浏览器运行（用户可能还要操作其他页面）
             if target_id:
@@ -3161,7 +3229,11 @@ class BrowserLoginTool(BaseTool):
                     cdp_command(session, "Target.closeTarget", {"targetId": target_id})
 
     def _export_cookies(
-        self, session: BrowserSession, target_host: str, target_id: str = ""
+        self,
+        session: BrowserSession,
+        target_host: str,
+        target_id: str = "",
+        account_id: Optional[str] = None,
     ) -> tuple:
         """浏览器级导出 cookie 并按 domain 分组保存。
 
@@ -3230,27 +3302,69 @@ class BrowserLoginTool(BaseTool):
 
         saved = []
         profile_name = getattr(session, "profile_name", "") or ""
-        for cookie_domain, cookies in sorted(by_domain.items()):
+
+        # 多账号：命中指定账号时，把归属目标站的全部 cookie 存入该账号的
+        # domain 条目（vault key = account.domain::account_id），不另存兜底，
+        # 避免污染默认账号。
+        account_vault_id: Optional[str] = None
+        account_domain = ""
+        if account_id:
+            from backend.services.browser_account_service import browser_account_service
+
+            account = browser_account_service.get_account(account_id)
+            if account is not None:
+                account_domain = account.domain
+                if not account.is_default:
+                    account_vault_id = account.id
+
+        if account_id and account_domain:
+            allowed_cookies = [
+                item
+                for cookies in by_domain.values()
+                for item in cookies
+                if isinstance(item, dict) and item.get("name")
+            ]
             try:
-                if origins and any(
-                    _storage_domain_matches(cookie_domain, host) for host in allowed_hosts
-                ):
+                if origins:
                     save_storage_state(
-                        cookie_domain,
-                        cookies,
+                        account_domain,
+                        allowed_cookies,
                         origins,
                         source_profile=str(profile_name),
+                        account_id=account_vault_id,
                     )
                 else:
                     save_credential(
-                        cookie_domain,
-                        cookies,
+                        account_domain,
+                        allowed_cookies,
                         source_profile=str(profile_name),
+                        account_id=account_vault_id,
                     )
-                saved.append(cookie_domain)
+                saved.append(account_domain)
             except Exception:
-                # 单个 domain 保存失败不影响其他
                 pass
+        else:
+            for cookie_domain, cookies in sorted(by_domain.items()):
+                try:
+                    if origins and any(
+                        _storage_domain_matches(cookie_domain, host) for host in allowed_hosts
+                    ):
+                        save_storage_state(
+                            cookie_domain,
+                            cookies,
+                            origins,
+                            source_profile=str(profile_name),
+                        )
+                    else:
+                        save_credential(
+                            cookie_domain,
+                            cookies,
+                            source_profile=str(profile_name),
+                        )
+                    saved.append(cookie_domain)
+                except Exception:
+                    # 单个 domain 保存失败不影响其他
+                    pass
 
         # P1 跨域认证 cookie 兜底：把全量 cookie（含 host-only 跨子域认证
         # cookie）也存一份到 target_host 档案下，保留每个 cookie 的原始
@@ -3258,7 +3372,8 @@ class BrowserLoginTool(BaseTool):
         # 渲染浏览器时，跨子域的认证 cookie 能在 OAuth 跳转中被浏览器
         # 按原始 domain 自动携带（典型场景：platform.example.cn 控制台依
         # 赖 www.example.cn/_token + account.example.cn/_sid）。
-        if target_host:
+        # 多账号登录不兜底（凭据已整包存入指定账号）。
+        if target_host and not (account_id and account_domain):
             try:
                 save_credential(
                     target_host,
@@ -3281,6 +3396,161 @@ class BrowserLoginTool(BaseTool):
             ),
         }
         return saved, summary
+
+
+class BrowserListAccountsTool(BaseTool):
+    """列出浏览器多账号（可按域名过滤）。"""
+
+    risk = RiskClass.READ
+    is_blocking = False
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="browser_list_accounts",
+            description=(
+                "列出所有已登记的浏览器账号（同一网站可多个账号），返回账号 ID、"
+                "名称、所属域名、是否默认账号、以及当前浏览器激活的账号。"
+                "配合 browser_switch_account 在多账号接力流程中切换身份。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "domain": {
+                        "type": "string",
+                        "description": "可选：按域名过滤（如 cnki.net）",
+                    },
+                    "browser_id": {"type": "string", "description": "单实例可省略"},
+                },
+            },
+        )
+
+    def execute(
+        self,
+        domain: str = "",
+        browser_id: str = "",
+        **kwargs: Any,
+    ) -> ToolResult:
+        if kwargs:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: domain, browser_id）"
+                ),
+            )
+        from backend.services.browser_account_service import browser_account_service
+
+        try:
+            accounts = browser_account_service.list_accounts(domain or None)
+        except Exception as exc:  # noqa: BLE001 — 列表失败如实回传
+            return ToolResult(success=False, error=f"list_accounts_failed: {exc}")
+
+        active_id = ""
+        if browser_id:
+            active = browser_account_service.get_active_account(browser_id)
+            active_id = active.id if active else ""
+        items = []
+        for account in accounts:
+            item = account.to_dict()
+            item["active"] = bool(active_id and account.id == active_id)
+            items.append(item)
+        return ToolResult(
+            success=True,
+            content={
+                "accounts": items,
+                "count": len(items),
+                "active_account_id": active_id,
+            },
+        )
+
+
+class BrowserSwitchAccountTool(BaseTool):
+    """切换浏览器当前激活的账号（Cookie State Swap）。"""
+
+    risk = RiskClass.WRITE_LOCAL
+    is_blocking = True
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="browser_switch_account",
+            description=(
+                "把浏览器切换到指定账号：快照当前账号登录态 → 清空浏览器 cookie/"
+                "localStorage → 注入目标账号登录态 → 刷新页面。切换后浏览器只携带"
+                "目标账号凭据，账号间不串号。适用于多用户接力完成网页流程、或同一"
+                "网站多账号操作。可用 browser_list_accounts 查看可用账号。"
+                "切换前请确认用户同意（这是对外部网站的身份切换）。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "account_id": {
+                        "type": "string",
+                        "description": "目标账号 ID（从 browser_list_accounts 获取）",
+                    },
+                    "account_label": {
+                        "type": "string",
+                        "description": "或通过账号名称指定（可选域名内唯一匹配）",
+                    },
+                    "domain": {
+                        "type": "string",
+                        "description": "配合 account_label 消歧的域名",
+                    },
+                    "browser_id": {"type": "string", "description": "单实例可省略"},
+                },
+            },
+        )
+
+    def execute(  # noqa: PLR0911 — 每个拒绝/动作路径独立 return，扁平更直读
+        self,
+        account_id: str = "",
+        account_label: str = "",
+        domain: str = "",
+        browser_id: str = "",
+        **kwargs: Any,
+    ) -> ToolResult:
+        if kwargs:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: account_id, account_label, domain, browser_id）"
+                ),
+            )
+        from backend.services.browser_account_service import browser_account_service
+
+        account_id = (account_id or "").strip()
+        account_label = (account_label or "").strip()
+        if not account_id and not account_label:
+            return ToolResult(
+                success=False, error="account_id 或 account_label 至少提供一个"
+            )
+        if not account_id and account_label:
+            try:
+                accounts = browser_account_service.list_accounts(domain or None)
+            except Exception as exc:  # noqa: BLE001 — 列表失败如实回传
+                return ToolResult(success=False, error=f"list_accounts_failed: {exc}")
+            matches = [
+                a for a in accounts if a.label == account_label or account_label in a.label
+            ]
+            if not matches:
+                return ToolResult(
+                    success=False,
+                    error=f"account_not_found: 没有名称匹配 {account_label!r} 的账号",
+                )
+            if len(matches) > 1:
+                candidates = ", ".join(f"{a.label}({a.domain})" for a in matches)
+                return ToolResult(
+                    success=False,
+                    error=f"account_ambiguous: 匹配到多个账号：{candidates}；请传 domain 或 account_id 消歧",
+                )
+            account_id = matches[0].id
+
+        result = browser_account_service.switch_account(
+            account_id, browser_id=browser_id or None
+        )
+        if not result.ok:
+            return ToolResult(success=False, error=result.message or "switch_failed")
+        return ToolResult(success=True, content=result.to_dict())
 
 
 def _wait_for_page_load(

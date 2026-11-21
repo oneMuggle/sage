@@ -151,7 +151,7 @@ def test_j2_render_login_wall_then_auto_refresh_success(monkeypatch):
     tool = WebFetchTool()
     render_calls = []
 
-    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None):
+    def fake_render(url, network_policy, wait_for="", credential_domain="", repo=None, account_id=""):
         render_calls.append(credential_domain)
         if len(render_calls) == 1:
             return {
@@ -173,7 +173,7 @@ def test_j2_render_login_wall_then_auto_refresh_success(monkeypatch):
     monkeypatch.setattr(
         WebFetchTool,
         "_try_auto_refresh",
-        lambda self, d, u: "credential_auto_refreshed: 已用持久 profile 静默重导登录态（SID）",
+        lambda self, d, u, a="": "credential_auto_refreshed: 已用持久 profile 静默重导登录态（SID）",
     )
 
     static = {
@@ -206,7 +206,7 @@ def test_j3_render_failure_counts_fail_metric(monkeypatch):
 
     tool = WebFetchTool()
 
-    def boom(url, network_policy, wait_for="", credential_domain="", repo=None):
+    def boom(url, network_policy, wait_for="", credential_domain="", repo=None, account_id=""):
         raise web_render.RenderError("JS 渲染失败: boom")
 
     monkeypatch.setattr(web_render, "render_page", boom)

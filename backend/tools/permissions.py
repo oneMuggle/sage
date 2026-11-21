@@ -186,6 +186,10 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "browser_cookies": ToolCapability.WRITE,
     "browser_close": ToolCapability.WRITE,
     "browser_tabs": ToolCapability.WRITE,
+    # 多账号（2026-11-20）：列表只读；切换会清 cookie/localStorage 并刷新
+    # 外部页面（改变对外身份），按 EXECUTE 对待（同 browser_login 口径）。
+    "browser_list_accounts": ToolCapability.READ,
+    "browser_switch_account": ToolCapability.EXECUTE,
     # --- 技能 ---
     # skill 可编排任意工具调用, SKILL.md 脚本更直接跑子进程(script_runner
     # 沙箱内), 语义上是"执行任意动作"——按最严格能力对待。

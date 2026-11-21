@@ -36,10 +36,12 @@ from .browser_tool import (
     BrowserDownloadsTool,
     BrowserInteractTool,
     BrowserLaunchTool,
+    BrowserListAccountsTool,
     BrowserLoginTool,
     BrowserNavigateTool,
     BrowserScreenshotTool,
     BrowserSnapshotTool,
+    BrowserSwitchAccountTool,
     BrowserTabsTool,
 )
 from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, CheckpointRestoreTool
@@ -369,6 +371,9 @@ def _install_browser(ctx: ToolInstallContext) -> None:
     ctx.registry.register(BrowserCloseTool(policy=policy))
     # 一键登录：打开可见浏览器 → 用户登录 → 自动保存 cookie（EXTERNAL，blocking）
     ctx.registry.register(BrowserLoginTool(policy=policy))
+    # 多账号：列出账号（READ）+ 账号切换 cookie/localStorage 热切换（WRITE_LOCAL）
+    ctx.registry.register(BrowserListAccountsTool(policy=policy))
+    ctx.registry.register(BrowserSwitchAccountTool(policy=policy))
     # 标签页管理：list / create / switch / close（WRITE_LOCAL，blocking）
     ctx.registry.register(BrowserTabsTool(policy=policy))
 
