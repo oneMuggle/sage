@@ -260,6 +260,12 @@ if not report.ok:
 - 详情页右栏第四 Tab「素材」（`DesignResourcesPanel`）：数据源绑定（`selectFile` → `POST /source`；「刷新重新生成」→ `POST /refresh` SSE；「解绑」→ `DELETE /source`）与图表嵌入（类型/标题/标签/系列/数值 → `POST /projects/{id}/chart`）。
 - 创作器 brief 区新增「从 Word 导入大纲」：`selectFile(.docx)` → `POST /design/outline` → 大纲追加进 brief。
 - 后端资源端点（outline / chart）拆分至 `backend/api/v1/design_resources_routes.py`，保持 `design_routes.py` 在 800 行棘轮内；`POST /projects/{id}/chart` 复用 `ChartEmbedder` + `studio.add_artifact`（无 LLM，追加新版本）。
+
+辅助（M8，2026-11-21 新增）：
+
+- 创作器「快速简报」内联表单：受众 × 篇幅 × 语气 → 一键填入结构化 brief 句子。
+- 高级选项渲染当前模板 `example_html` 预览（`HtmlPreviewHost` sandbox），选方向前即可看版式。
+- 详情页「质量评审」按钮 → `GET /design/projects/{id}/review`（复用 `DesignLinter` P0/P1 规则，无 LLM），返回 `{ok, error_count, warning_count, issues}`，header 下方显示摘要条与可展开问题列表。
 - 预览复用 `HtmlPreviewHost` 的 sandbox 隔离（桌面端 `sage-preview://`，Web/测试回落 `srcDoc`）。
 
 ## 12. Office 融合与 Live Artifact（2026-11-13 新增）
