@@ -124,9 +124,7 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
         </div>
       )}
 
-      {loading && generationProgress && (
-        <DesignProgressStrip stage={generationProgress.stage} />
-      )}
+      {loading && generationProgress && <DesignProgressStrip stage={generationProgress.stage} />}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-h-0 overflow-y-auto">

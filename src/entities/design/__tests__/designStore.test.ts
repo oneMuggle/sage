@@ -132,7 +132,10 @@ describe('designStore version + message state', () => {
     try {
       let resolveGenerate!: (artifact: typeof sampleArtifact) => void;
       vi.mocked(api.generateArtifact).mockImplementation(
-        () => new Promise((resolve) => { resolveGenerate = resolve; }),
+        () =>
+          new Promise((resolve) => {
+            resolveGenerate = resolve;
+          }),
       );
       vi.mocked(api.getProgress).mockResolvedValue({
         stage: 'generating',
