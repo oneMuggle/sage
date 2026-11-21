@@ -25,7 +25,23 @@ def render_search_guidance(
     page_title: Optional[str] = None,
 ) -> str:
     """生成检索阶段的 LLM 指导文本；真实页面解析仍由 LLM 基于 snapshot 完成。"""
-    search_url = render_search_url(profile, query, limit=limit)
+    interactive = profile.search.mode == "interactive"
+    if interactive:
+        search_url = profile.search.entry_url or profile.search.url_template
+        url_line = f"检索入口: {search_url}"
+        input_selectors = ", ".join(profile.search.input_selectors) or "（未配置）"
+        interactive_block = (
+            f"检索模式: 交互式\n"
+            f"入口点击: {profile.search.entry_click or '（无）'}\n"
+            f"搜索输入框选择器: {input_selectors}\n"
+            f"提交方式: press {profile.search.submit_key}\n"
+            f"提交后等待: {profile.search.wait_after_s}s\n"
+            f"结果提示: {profile.search.result_hint or '（无）'}\n"
+        )
+    else:
+        search_url = render_search_url(profile, query, limit=limit)
+        url_line = f"检索 URL: {search_url}"
+        interactive_block = ""
     login_state = is_logged_in(profile, page_url, page_title)
     if login_state is True:
         login_line = "登录态: 已登录"
@@ -62,13 +78,16 @@ def render_search_guidance(
         pdf = (
             f"入口: {entry}；禁止: {', '.join(profile.pdf.forbid)}；"
             f"校验: magic={profile.pdf.magic}, title_match={profile.pdf.title_match}"
+            f"{'；点击后等待 ' + str(profile.pdf.post_click_wait_s) + 's' if profile.pdf.post_click_wait_s else ''}"
+            f"{'；备注: ' + profile.pdf.note if profile.pdf.note else ''}"
         )
 
     return (
         f"站点: {profile.display_name} ({profile.id})\n"
         f"profile 状态: {profile.status}"
         f"{'，选择器待录制' if profile.status == 'draft' else ''}\n"
-        f"检索 URL: {search_url}\n"
+        f"{url_line}\n"
+        f"{interactive_block}"
         f"{login_line}\n"
         + ("\n".join(login_hint) + "\n" if login_hint else "")
         + f"结果等待选择器: {wait_for}\n"
