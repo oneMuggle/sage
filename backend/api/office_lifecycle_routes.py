@@ -60,6 +60,21 @@ from backend.office.models import (
 )
 from backend.office.path_safety import resolve_within
 from backend.office.pdf_forms import fill_pdf_form, read_pdf_form
+from backend.office.pdf_ops import (
+    PdfMergeRequest,
+    PdfOpsResult,
+    PdfPageNumbersRequest,
+    PdfPagesRequest,
+    PdfRotateRequest,
+    PdfSplitRequest,
+    PdfWatermarkRequest,
+    merge_pdfs,
+    number_pdf_pages,
+    rotate_pdf,
+    split_pdf,
+    update_pages,
+    watermark_pdf,
+)
 from backend.office.pdf_to_word import PdfToWordRequest, PdfToWordResult, convert_pdf_to_word
 from backend.office.ppt_template import (
     PptTemplateAnalyzeRequest,
@@ -313,6 +328,42 @@ def fill_pdf_form_endpoint(req: PdfFormFillRequest) -> PdfFormFillResult:
     Service function handles all validation internally.
     """
     return fill_pdf_form(req)
+
+
+@router.post("/pdf/merge", response_model=PdfOpsResult)
+def pdf_merge_endpoint(req: PdfMergeRequest) -> PdfOpsResult:
+    """M6: 按顺序合并多个 PDF。"""
+    return merge_pdfs(req)
+
+
+@router.post("/pdf/rotate", response_model=PdfOpsResult)
+def pdf_rotate_endpoint(req: PdfRotateRequest) -> PdfOpsResult:
+    """M6: 旋转指定页（或全部页）90/180/270 度。"""
+    return rotate_pdf(req)
+
+
+@router.post("/pdf/pages", response_model=PdfOpsResult)
+def pdf_pages_endpoint(req: PdfPagesRequest) -> PdfOpsResult:
+    """M6: 抽取或删除指定页，输出新 PDF。"""
+    return update_pages(req)
+
+
+@router.post("/pdf/split", response_model=PdfOpsResult)
+def pdf_split_endpoint(req: PdfSplitRequest) -> PdfOpsResult:
+    """M6: 按区间拆分为多个 PDF。"""
+    return split_pdf(req)
+
+
+@router.post("/pdf/watermark", response_model=PdfOpsResult)
+def pdf_watermark_endpoint(req: PdfWatermarkRequest) -> PdfOpsResult:
+    """M6: 给每页添加文字水印。"""
+    return watermark_pdf(req)
+
+
+@router.post("/pdf/page-numbers", response_model=PdfOpsResult)
+def pdf_page_numbers_endpoint(req: PdfPageNumbersRequest) -> PdfOpsResult:
+    """M6: 在页面底部添加页码（模板支持 {n}）。"""
+    return number_pdf_pages(req)
 
 
 # ──────────────────────────────────────────────────────────────────────

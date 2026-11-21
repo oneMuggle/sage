@@ -295,12 +295,19 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 - [ ] `DocumentExtractor` 注册表 + markitdown 适配器（可选依赖，评估 win7）
 - [ ] docling 适配器（main only，复杂 PDF/扫描/表格场景）
 - [ ] 视觉兜底策略与设置项（Office OCR 自动策略）
-- [ ] PDF 通用操作：合并/拆分/旋转/删页/抽页/水印/页码；图片与表格读取补齐；真 appearance flatten
+- [x] PDF 通用操作：合并/拆分/旋转/抽页/删页/水印/页码（`backend/office/pdf_ops.py`）
+- [ ] PDF 读取补齐：页面图片返回 + 复杂表格兜底 + 真 appearance flatten
 - [ ] 工具面一致性：`office_create` pdf 枚举、`office_delete`/`workspace_search` 覆盖 pdf/csv、Wiki 队列 PDF 路径
 - [ ] `POST /office/compare`（Word/Excel/PPT/PDF）+ 工作台对比入口 + Markdown 报告
-- [ ] 聊天附件 docx/xlsx/pptx 富预览（对齐 PDF `MediaPdfPreview`）；Excel 图表 / PPT 图片在结构化预览中渲染；`@` Office chip 点击预览
+- [ ] 聊天附件 docx/xlsx/pptx 富预览；Excel 图表 / PPT 图片在结构化预览中渲染；`@` Office chip 点击预览
 - [ ] Word 模板 Profile/填充前端入口
 - [ ] Excel/PPT 基础规则审校（范围/锚点/只读），AI 语义审校视成本评估
+
+> **实施记录（2026-11-21，M6a PDF 页面操作）**
+> - 新增：`backend/office/pdf_ops.py`（merge/split/rotate/extract/delete/watermark/page-numbers，工作区围栏 + 原子写）
+> - 端点：`POST /office/pdf/{merge,rotate,pages,split,watermark,page-numbers}`
+> - 测试：unit 8 + integration 2；ruff/py38/architecture 通过
+> - 限制：水印默认 Helvetica（非 ASCII 自动切 `china-s`）；`split` 输出按区间顺序编号
 
 ### M7 — 前端一致性与漂移清理（P1，对应 G11/G12）
 
