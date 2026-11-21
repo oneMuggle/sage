@@ -89,3 +89,65 @@ class TestPipelineModels:
 def test_paper_json_round_trip_uses_expected_fields():
     data = json.loads(json.dumps(_paper()))
     assert paper_record_from_dict(data).title == "示例论文"
+
+
+class TestRunStore:
+    def test_create_load_and_status(self, tmp_path):
+        from backend.literature.run_store import create_run, load_run, run_status
+
+        run = create_run(tmp_path, topic="大模型综述", site_id="xueshu789", run_id="r1")
+        assert run.run_dir == tmp_path / "r1"
+        assert (run.run_dir / "meta.json").is_file()
+        loaded = load_run(run.run_dir)
+        assert loaded.topic == "大模型综述"
+        status = run_status(run)
+        assert status["papers"] == 0
+        assert status["has_draft"] is False
+
+    def test_record_papers_dedupes_by_key(self, tmp_path):
+        from backend.literature.run_store import create_run, read_jsonl, record_papers
+
+        run = create_run(tmp_path, "t", "demo", run_id="r1")
+        added = record_papers(run, [_paper("p1"), _paper("p1"), _paper("p2")])
+        assert added == 2
+        assert len(read_jsonl(run.run_dir / "papers.jsonl")) == 2
+
+    def test_record_evidence_rejects_unknown_paper(self, tmp_path):
+        from backend.literature.run_store import create_run, record_evidence
+
+        run = create_run(tmp_path, "t", "demo", run_id="r1")
+        with pytest.raises(ValueError, match="paper_key"):
+            record_evidence(
+                run,
+                [
+                    {
+                        "evidence_id": "e1",
+                        "paper_key": "missing",
+                        "kind": "finding",
+                        "text": "x",
+                    }
+                ],
+            )
+
+    def test_save_outline_and_draft(self, tmp_path):
+        from backend.literature.run_store import (
+            create_run,
+            load_outline,
+            read_draft,
+            run_status,
+            save_draft,
+            save_outline,
+        )
+
+        run = create_run(tmp_path, "t", "demo", run_id="r1")
+        save_outline(run, {"title": "x", "sections": [{"id": "s1", "title": "引言"}]})
+        assert load_outline(run).sections[0].id == "s1"
+        save_draft(run, "# 草稿\n\n正文 [cite:p1]\n")
+        assert "cite:p1" in read_draft(run)
+        assert run_status(run)["has_draft"] is True
+
+    def test_invalid_run_dir(self, tmp_path):
+        from backend.literature.run_store import load_run
+
+        with pytest.raises(ValueError, match="meta.json"):
+            load_run(tmp_path / "missing")
