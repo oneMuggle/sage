@@ -180,6 +180,8 @@ BROWSER_TOOLS = (
     "browser_downloads",
     "browser_close",
     "browser_login",
+    "browser_list_accounts",
+    "browser_switch_account",
     "browser_tabs",
 )
 
