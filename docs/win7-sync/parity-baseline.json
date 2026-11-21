@@ -3,6 +3,6 @@
   "main_only": 28,
   "actionable": 69,
   "updated_at": "2026-11-21",
-  "updated_by": "fix/parity-baseline-update (PR #3158) — 实测对齐 2026-11-21",
+  "updated_by": "fix/parity-baseline-update (PR #3159) — 实测对齐 2026-11-21",
   "note": "actionable = real + main-only。棘轮：超过该值 CI fail；收敛后请下调本文件。real=41 主要为 py310/pydantic v2 与 py38/pydantic v1 的必要兼容差异（pydantic update_forward_refs/model_rebuild 等）；main-only=28 主要为 design 内容资产（systems 5×3=15 + templates 8+2 + 2 测试），待后续 cherry-pick 到 release/win7。"
 }
