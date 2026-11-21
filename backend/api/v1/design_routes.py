@@ -22,21 +22,23 @@ import base64
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
+from backend.api.v1.design_shared import map_design_error as _map_design_error
 from backend.api.v1.design_streaming import (
     sse_event as _sse_event,
     stream_studio_call as _stream_studio_call,
 )
-from backend.design import get_design_studio
+
+# Re-exported symbol: route tests patch `design_routes.get_design_studio`.
+from backend.design import get_design_studio  # noqa: F401
 from backend.design.errors import (
     DesignError,
     DesignGenerationError,
     DesignProjectNotFoundError,
     DesignSystemNotFoundError,
-    DesignTemplateKindMismatchError,
     DesignTemplateNotFoundError,
 )
 from backend.design.export import DesignExporter
@@ -103,7 +105,11 @@ class BindSourceRequest(BaseModel):
 
 
 class TweaksRequest(BaseModel):
-    """PUT /design/projects/{id}/tweaks body."""
+    """PUT /design/projects/{id}/tweaks body.
+
+    ``replace=True`` writes the exact field set (nulls clear overrides);
+    otherwise fields are merged and nulls are ignored.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -111,6 +117,8 @@ class TweaksRequest(BaseModel):
     radius: Optional[float] = None
     font_size: Optional[float] = None
     density: Optional[float] = None
+    font_family: Optional[str] = None
+    replace: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -118,8 +126,12 @@ class TweaksRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# _map_design_error comes from design_shared; _require_studio stays local so
+# tests keep patching `design_routes.get_design_studio`.
 def _require_studio():
     """Return the global DesignStudio or raise 404."""
+    from fastapi import HTTPException
+
     studio = get_design_studio()
     if studio is None:
         raise HTTPException(
@@ -127,22 +139,6 @@ def _require_studio():
             detail="Design studio not initialised",
         )
     return studio
-
-
-def _map_design_error(exc: DesignError) -> JSONResponse:
-    """Convert a DesignError into the appropriate HTTP JSON response."""
-    not_found = (
-        DesignProjectNotFoundError,
-        DesignSystemNotFoundError,
-        DesignTemplateNotFoundError,
-    )
-    bad_request = DesignTemplateKindMismatchError
-    status = (
-        400 if isinstance(exc, bad_request)
-        else 404 if isinstance(exc, not_found)
-        else 500
-    )
-    return JSONResponse(status_code=status, content={"detail": str(exc)})
 
 
 # ---------------------------------------------------------------------------
@@ -367,23 +363,6 @@ async def list_messages(project_id: str):
 
 
 # ---------------------------------------------------------------------------
-# GET /design/projects/:project_id/progress — generation stage polling
-# ---------------------------------------------------------------------------
-
-
-@router.get("/projects/{project_id}/progress")
-async def get_progress(project_id: str):
-    """Return the latest generation stage: idle / starting / composing /
-    generating / linting / saving / complete / error."""
-    studio = _require_studio()
-    try:
-        progress = studio.get_progress(project_id)
-    except DesignProjectNotFoundError as exc:
-        return _map_design_error(exc)
-    return progress
-
-
-# ---------------------------------------------------------------------------
 # GET/PUT /design/projects/:project_id/tweaks — design parameter overrides
 # ---------------------------------------------------------------------------
 
@@ -401,16 +380,42 @@ async def get_tweaks(project_id: str):
 
 @router.put("/projects/{project_id}/tweaks")
 async def update_tweaks(project_id: str, req: TweaksRequest):
-    """Merge partial tweaks into the project's tweak overrides."""
+    """Merge partial tweaks into the project's tweak overrides.
+
+    A request with every field omitted/null is treated as a full reset
+    (the UI's "restore system defaults" button sends exactly that shape).
+    """
     studio = _require_studio()
     try:
-        tweaks = studio.update_tweaks(
-            project_id,
-            accent=req.accent,
-            radius=req.radius,
-            font_size=req.font_size,
-            density=req.density,
-        )
+        if req.replace:
+            tweaks = studio.set_tweaks(
+                project_id,
+                accent=req.accent,
+                radius=req.radius,
+                font_size=req.font_size,
+                density=req.density,
+                font_family=req.font_family,
+            )
+        elif all(
+            value is None
+            for value in (
+                req.accent,
+                req.radius,
+                req.font_size,
+                req.density,
+                req.font_family,
+            )
+        ):
+            tweaks = studio.clear_tweaks(project_id)
+        else:
+            tweaks = studio.update_tweaks(
+                project_id,
+                accent=req.accent,
+                radius=req.radius,
+                font_size=req.font_size,
+                density=req.density,
+                font_family=req.font_family,
+            )
     except DesignProjectNotFoundError as exc:
         return _map_design_error(exc)
     return tweaks.model_dump()

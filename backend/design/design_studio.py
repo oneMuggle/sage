@@ -224,6 +224,7 @@ class DesignStudio:
         radius: Optional[float] = None,
         font_size: Optional[float] = None,
         density: Optional[float] = None,
+        font_family: Optional[str] = None,
     ) -> ProjectTweaks:
         """Merge partial tweaks into the project's tweaks file."""
         self._repo.get_project(project_id)
@@ -233,6 +234,35 @@ class DesignStudio:
             radius=radius,
             font_size=font_size,
             density=density,
+            font_family=font_family,
+        )
+
+    def clear_tweaks(self, project_id: str) -> ProjectTweaks:
+        """Drop all tweak overrides for a project."""
+        self._repo.get_project(project_id)
+        return self._tweaks.clear(project_id)
+
+    def set_tweaks(
+        self,
+        project_id: str,
+        *,
+        accent: Optional[str] = None,
+        radius: Optional[float] = None,
+        font_size: Optional[float] = None,
+        density: Optional[float] = None,
+        font_family: Optional[str] = None,
+    ) -> ProjectTweaks:
+        """Write the exact tweak field set (nulls clear overrides)."""
+        self._repo.get_project(project_id)
+        return self._tweaks.put(
+            project_id,
+            ProjectTweaks(
+                accent=accent,
+                radius=radius,
+                font_size=font_size,
+                density=density,
+                font_family=font_family,
+            ),
         )
 
     def _record_message(

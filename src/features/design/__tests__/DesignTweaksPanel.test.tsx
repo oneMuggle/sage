@@ -67,6 +67,7 @@ describe('DesignTweaksPanel', () => {
       radius: null,
       font_size: null,
       density: null,
+      font_family: null,
     });
   });
 });

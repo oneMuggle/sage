@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyTweaks, extractTweakDefaults, tweakCssDeclarations } from '../designTweaks';
+import {
+  applyTweaks,
+  applyTokensCss,
+  extractTweakDefaults,
+  tweakCssDeclarations,
+} from '../designTweaks';
 
 describe('designTweaks', () => {
   it('returns html unchanged when no overrides are set', () => {
@@ -48,6 +53,27 @@ describe('designTweaks', () => {
       radius: 6,
       fontSize: 16,
       density: 16,
+      fontFamily: '',
     });
+  });
+
+  it('parses the font family token and injects it as an override', () => {
+    const defaults = extractTweakDefaults(':root{--font-family: Georgia, serif;}');
+    expect(defaults.fontFamily).toBe('Georgia, serif');
+
+    const out = applyTweaks('<html><head></head><body/></html>', {
+      font_family: 'Menlo, monospace',
+    });
+    expect(out).toContain('--font-family: Menlo, monospace;');
+  });
+
+  it('injects design-system tokens into an example document', () => {
+    const out = applyTokensCss(
+      '<html><head></head><body/></html>',
+      ':root{--color-accent:#1a56db;}',
+    );
+    expect(out).toContain('<style id="sage-design-system">');
+    expect(out).toContain('--color-accent:#1a56db;');
+    expect(out.indexOf('sage-design-system')).toBeLessThan(out.indexOf('</head>'));
   });
 });

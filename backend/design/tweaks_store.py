@@ -28,6 +28,7 @@ class ProjectTweaks(BaseModel):
     radius: Optional[float] = None  # border-radius in px, e.g. 6.0
     font_size: Optional[float] = None  # font-size-base in px, e.g. 16.0
     density: Optional[float] = None  # space-4 in px, e.g. 16.0
+    font_family: Optional[str] = None  # CSS font stack, e.g. "Georgia, serif"
 
 
 class TweaksStore:
@@ -65,6 +66,10 @@ class TweaksStore:
             tmp.replace(path)
         return tweaks
 
+    def clear(self, project_id: str) -> ProjectTweaks:
+        """Reset all overrides (write an empty tweaks object)."""
+        return self.put(project_id, ProjectTweaks())
+
     def update(
         self,
         project_id: str,
@@ -73,6 +78,7 @@ class TweaksStore:
         radius: Optional[float] = None,
         font_size: Optional[float] = None,
         density: Optional[float] = None,
+        font_family: Optional[str] = None,
     ) -> ProjectTweaks:
         """Merge partial tweaks into existing; write back."""
         existing = self.get(project_id) or ProjectTweaks()
@@ -84,6 +90,7 @@ class TweaksStore:
                     "radius": radius,
                     "font_size": font_size,
                     "density": density,
+                    "font_family": font_family,
                 }.items()
                 if v is not None
             }

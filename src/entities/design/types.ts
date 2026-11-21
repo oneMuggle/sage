@@ -115,6 +115,7 @@ export interface ProjectTweaks {
   radius?: number | null;
   font_size?: number | null;
   density?: number | null;
+  font_family?: string | null;
 }
 
 /** 生成阶段进度（idle / starting / composing / generating / linting / saving / complete / error） */
@@ -132,6 +133,19 @@ export interface DesignSourceBinding {
   kind: string;
   file_path: string;
   name: string;
+}
+
+export interface SourcePreviewSheet {
+  name: string;
+  row_count: number;
+  columns: string[];
+  sample: string[][];
+}
+
+export interface SourcePreview {
+  ok: boolean;
+  kind: string;
+  sheets: SourcePreviewSheet[];
 }
 
 export interface OutlineResult {

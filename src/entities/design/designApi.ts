@@ -26,6 +26,7 @@ import type {
   OutlineResult,
   ProjectTweaks,
   ReviewResult,
+  SourcePreview,
 } from './types';
 
 const BASE = '/api/v1/design';
@@ -152,6 +153,28 @@ export async function reviewArtifact(projectId: string): Promise<ReviewResult> {
   });
 }
 
+/**
+ * 订阅阶段进度流（Electron 事件通道可用时）。
+ * 返回取消函数；环境不支持时返回 null（调用方回退到轮询）。
+ */
+export function subscribeDesignProgress(
+  projectId: string,
+  handler: (progress: GenerationProgress) => void,
+): (() => void) | null {
+  const bridge = typeof window !== 'undefined' ? window.electronAPI : undefined;
+  if (!bridge?.listen) return null;
+  let unlisten: (() => void) | null = null;
+  void bridge
+    .listen<GenerationProgress>(`design-progress-${projectId}`, handler)
+    .then((fn) => {
+      unlisten = fn;
+    })
+    .catch(() => undefined);
+  return () => {
+    if (unlisten) unlisten();
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 资源（Word 大纲 / 数据源 / 图表）
 // ---------------------------------------------------------------------------
@@ -181,6 +204,15 @@ export async function bindSource(
   return backendRequest<DesignSourceBinding>({
     method: 'POST',
     path: `${BASE}/projects/${projectId}/source`,
+    body: { file_path: filePath },
+  });
+}
+
+/** 绑定前预览数据源（列名/行数/样例） */
+export async function previewSource(filePath: string): Promise<SourcePreview> {
+  return backendRequest<SourcePreview>({
+    method: 'POST',
+    path: `${BASE}/source/preview`,
     body: { file_path: filePath },
   });
 }
@@ -229,15 +261,16 @@ export async function getTweaks(projectId: string): Promise<ProjectTweaks> {
   });
 }
 
-/** 合并保存项目微调参数 */
+/** 合并保存项目微调参数；replace=true 时按精确字段集覆盖（null 清空） */
 export async function updateTweaks(
   projectId: string,
   tweaks: ProjectTweaks,
+  replace = false,
 ): Promise<ProjectTweaks> {
   return backendRequest<ProjectTweaks>({
     method: 'PUT',
     path: `${BASE}/projects/${projectId}/tweaks`,
-    body: tweaks,
+    body: replace ? { ...tweaks, replace: true } : tweaks,
   });
 }
 
