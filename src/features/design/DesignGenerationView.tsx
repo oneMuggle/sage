@@ -15,6 +15,7 @@ import { DesignProgressStrip } from './DesignProgressStrip';
 import { DesignResourcesPanel } from './DesignResourcesPanel';
 import { DesignTweaksPanel } from './DesignTweaksPanel';
 import { DesignVersionPanel } from './DesignVersionPanel';
+import { composeReviewFeedback } from './designReview';
 import { applyTweaks } from './designTweaks';
 
 interface DesignGenerationViewProps {
@@ -51,9 +52,10 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
   const generationProgress = useDesignStore((s) => s.generationProgress);
   const review = useDesignStore((s) => s.review);
   const runReview = useDesignStore((s) => s.runReview);
-  const [panel, setPanel] = useState<'iterate' | 'history' | 'tweaks' | 'resources'>(
-    'iterate',
-  );
+  const iterate = useDesignStore((s) => s.iterate);
+  const comparePair = useDesignStore((s) => s.comparePair);
+  const clearCompare = useDesignStore((s) => s.clearCompare);
+  const [panel, setPanel] = useState<'iterate' | 'history' | 'tweaks' | 'resources'>('iterate');
   const [reviewOpen, setReviewOpen] = useState(false);
 
   useEffect(() => {
@@ -160,15 +162,23 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
                     .replace('{errors}', String(review.error_count))
                     .replace('{warnings}', String(review.warning_count))}
             </span>
+            {review.issues.length > 0 && !review.ok && (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center gap-0.5 rounded border border-current px-1.5 py-0.5 hover:underline disabled:opacity-40"
+                disabled={loading}
+                onClick={() => void iterate(projectId, composeReviewFeedback(review))}
+              >
+                {t('design.review.fix')}
+              </button>
+            )}
             {review.issues.length > 0 && (
               <button
                 type="button"
                 className="inline-flex shrink-0 items-center gap-0.5 hover:underline"
                 onClick={() => setReviewOpen((prev) => !prev)}
               >
-                <ChevronDown
-                  className={`h-3 w-3 transition ${reviewOpen ? 'rotate-180' : ''}`}
-                />
+                <ChevronDown className={`h-3 w-3 transition ${reviewOpen ? 'rotate-180' : ''}`} />
                 {t('design.review.details')}
               </button>
             )}
@@ -177,8 +187,7 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
             <ul className="mt-1 space-y-0.5">
               {review.issues.map((issue) => (
                 <li key={`${issue.rule_id}-${issue.line ?? ''}`} className="truncate">
-                  [{issue.severity === 'error' ? 'P0' : 'P1'}] {issue.rule_id}:{' '}
-                  {issue.message}
+                  [{issue.severity === 'error' ? 'P0' : 'P1'}] {issue.rule_id}: {issue.message}
                 </li>
               ))}
             </ul>
@@ -188,43 +197,72 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-h-0 overflow-y-auto">
-          {previewArtifact && (
-            <div className="mb-2 flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-ui-xs">
-              <span>
-                {t('design.detail.previewing').replace(
-                  '{version}',
-                  String(previewArtifact.version),
-                )}
-              </span>
-              <div className="flex gap-2">
+          {comparePair ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-1.5 text-ui-xs">
+                <span className="text-text-secondary">{t('design.version.compareTitle')}</span>
                 <button
                   type="button"
                   className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
-                  onClick={clearPreview}
+                  onClick={clearCompare}
                 >
-                  {t('design.detail.backToLatest')}
-                </button>
-                <button
-                  type="button"
-                  className="rounded border border-accent px-2 py-0.5 text-accent hover:bg-accent/5"
-                  onClick={() => void restoreVersion(projectId, previewArtifact.id)}
-                >
-                  {t('design.version.restore')}
+                  {t('design.version.compareClose')}
                 </button>
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                {[comparePair.left, comparePair.right].map((side) => (
+                  <div key={side.id} className="min-w-0">
+                    <div className="mb-1 text-ui-xs text-text-secondary">v{side.version}</div>
+                    <HtmlPreviewHost
+                      html={applyTweaks(side.html_content, tweaks)}
+                      name={`v${side.version}.html`}
+                      heightClassName="h-[calc(100vh-18rem)] min-h-[20rem]"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          )}
-          {shownArtifact ? (
-            <HtmlPreviewHost
-              html={applyTweaks(shownArtifact.html_content, tweaks)}
-              name={`${project?.name ?? 'design'}.html`}
-              heightClassName="h-[calc(100vh-14rem)] min-h-[24rem]"
-            />
           ) : (
-            <div className="flex h-full min-h-[24rem] flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-center text-ui-sm text-text-secondary">
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              <p>{loading ? t('design.detail.regenerating') : t('design.detail.noArtifact')}</p>
-            </div>
+            <>
+              {previewArtifact && (
+                <div className="mb-2 flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-ui-xs">
+                  <span>
+                    {t('design.detail.previewing').replace(
+                      '{version}',
+                      String(previewArtifact.version),
+                    )}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
+                      onClick={clearPreview}
+                    >
+                      {t('design.detail.backToLatest')}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border border-accent px-2 py-0.5 text-accent hover:bg-accent/5"
+                      onClick={() => void restoreVersion(projectId, previewArtifact.id)}
+                    >
+                      {t('design.version.restore')}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {shownArtifact ? (
+                <HtmlPreviewHost
+                  html={applyTweaks(shownArtifact.html_content, tweaks)}
+                  name={`${project?.name ?? 'design'}.html`}
+                  heightClassName="h-[calc(100vh-14rem)] min-h-[24rem]"
+                />
+              ) : (
+                <div className="flex h-full min-h-[24rem] flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-center text-ui-sm text-text-secondary">
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <p>{loading ? t('design.detail.regenerating') : t('design.detail.noArtifact')}</p>
+                </div>
+              )}
+            </>
           )}
         </section>
         <div className="flex min-h-0 flex-col gap-2">

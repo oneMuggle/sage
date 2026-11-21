@@ -18,6 +18,7 @@ vi.mock('node-fetch', async () => {
 import nodeFetch from 'node-fetch';
 import {
   parseNdjsonStream,
+  parseSseStream,
   relayChatStream,
   relayNdjsonToEvent,
   WIKI_STREAM_ERROR,
@@ -438,5 +439,38 @@ describe('relayNdjsonToEvent (PR-2 Task 3: wiki_chat_stream relay)', () => {
       ),
     ).resolves.toBeUndefined();
     expect(wc.sent).toEqual([]);
+  });
+});
+
+describe('parseSseStream', () => {
+  it('parses event/data frames spread across chunks', async () => {
+    const events: Array<[string, unknown]> = [];
+    const stream = Readable.from([
+      'event: progress\ndata: {"stage":"composing"}\n\n',
+      'event: progress\ndata: {"stage":"complete"}\n\n',
+    ]);
+
+    await parseSseStream(stream, (eventType, data) => {
+      events.push([eventType, data]);
+    });
+
+    expect(events).toEqual([
+      ['progress', { stage: 'composing' }],
+      ['progress', { stage: 'complete' }],
+    ]);
+  });
+
+  it('skips malformed data frames', async () => {
+    const events: Array<[string, unknown]> = [];
+    const stream = Readable.from([
+      'event: progress\ndata: {not json}\n\n',
+      'event: progress\ndata: {"stage":"saving"}\n\n',
+    ]);
+
+    await parseSseStream(stream, (eventType, data) => {
+      events.push([eventType, data]);
+    });
+
+    expect(events).toEqual([['progress', { stage: 'saving' }]]);
   });
 });

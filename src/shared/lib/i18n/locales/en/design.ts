@@ -64,6 +64,9 @@ export const enDesign = {
   'design.detail.previewing': 'Previewing v{version} (read-only)',
   'design.detail.backToLatest': 'Back to latest',
   'design.version.preview': 'Preview',
+  'design.version.compare': 'Compare',
+  'design.version.compareTitle': 'Version compare',
+  'design.version.compareClose': 'Close compare',
   'design.version.restore': 'Restore',
   'design.version.empty': 'No versions yet',
   'design.version.restored': 'Restored as a new version',
@@ -90,12 +93,16 @@ export const enDesign = {
   'design.composer.quickBriefTemplate':
     'A {length} {kindLabel} for {audience}, with a {tone} tone.',
   'design.composer.templatePreview': 'Template preview',
+  'design.composer.directionTitle': 'Style direction',
+  'design.composer.directionHint':
+    'Pick a style card to switch the design system before generating.',
 
   // Review
   'design.review.run': 'Quality review',
   'design.review.ok': 'No P0 issues found',
   'design.review.summary': 'P0 {errors} · P1 {warnings}',
   'design.review.details': 'Details',
+  'design.review.fix': 'Fix per review',
 
   // Resources
   'design.resources.title': 'Resources',
@@ -105,6 +112,10 @@ export const enDesign = {
   'design.resources.unbind': 'Unbind',
   'design.resources.refresh': 'Refresh and regenerate',
   'design.resources.filePickerUnavailable': 'File picker is desktop-only',
+  'design.resources.rows': '{count} rows',
+  'design.resources.confirmBind': 'Bind',
+  'design.resources.cancelPreview': 'Cancel',
+  'design.resources.previewFailed': 'Preview failed: {error}',
   'design.resources.chart': 'Chart',
   'design.resources.chartType': 'Type',
   'design.resources.chartType.bar': 'Bar',
@@ -115,16 +126,29 @@ export const enDesign = {
   'design.resources.labels': 'Labels (comma-separated)',
   'design.resources.seriesName': 'Series name',
   'design.resources.values': 'Values (comma-separated)',
+  'design.resources.series': 'Series {index}',
+  'design.resources.addSeries': 'Add series',
+  'design.resources.removeSeries': 'Remove series',
   'design.resources.embed': 'Embed chart',
   'design.resources.embedded': 'Embedded as v{version}',
 
   // Tweaks
   'design.tweaks.title': 'Tweaks',
   'design.tweaks.accent': 'Accent color',
+  'design.tweaks.fontFamily': 'Font',
+  'design.tweaks.font.auto': 'System default',
+  'design.tweaks.font.sans': 'Sans-serif',
+  'design.tweaks.font.serif': 'Serif',
+  'design.tweaks.font.mono': 'Monospace',
   'design.tweaks.radius': 'Corner radius',
   'design.tweaks.fontSize': 'Font size',
   'design.tweaks.density': 'Density',
   'design.tweaks.reset': 'Reset to system defaults',
+  'design.tweaks.presets': 'Presets',
+  'design.tweaks.presetName': 'Preset name',
+  'design.tweaks.savePreset': 'Save preset',
+  'design.tweaks.applyPreset': 'Apply',
+  'design.tweaks.deletePreset': 'Delete',
 
   // Generation stages
   'design.stage.idle': 'Idle',

@@ -266,6 +266,13 @@ if not report.ok:
 - 创作器「快速简报」内联表单：受众 × 篇幅 × 语气 → 一键填入结构化 brief 句子。
 - 高级选项渲染当前模板 `example_html` 预览（`HtmlPreviewHost` sandbox），选方向前即可看版式。
 - 详情页「质量评审」按钮 → `GET /design/projects/{id}/review`（复用 `DesignLinter` P0/P1 规则，无 LLM），返回 `{ok, error_count, warning_count, issues}`，header 下方显示摘要条与可展开问题列表。
+
+后续增强（2026-11-21 新增）：
+
+- 评审条「按评审意见修复」把 P0/P1 拼进 iterate；Tweaks 增加字体族与预设（localStorage），并修复「恢复默认」不清空的 bug（全空 PUT = 重置；`replace=true` 精确覆盖）。
+- 数据源绑定前预览：`POST /design/source/preview` 返回列名/行数/样例，确认后再绑定；图表表单支持多系列。
+- 风格方向卡片（模板示例 × 最多 3 个设计系统 `tokens.css`）；版本面板「对比」→ 左右并排预览。
+- 真流式进度：`GET /design/projects/{id}/progress/stream` SSE + Electron `relaySseToEvent`（`design-progress-{id}` 订阅），前端优先流式、无桥回退 800ms 轮询；progress 端点与共享 helper 拆分至 `design_progress_routes.py` / `design_shared.py`。
 - 预览复用 `HtmlPreviewHost` 的 sandbox 隔离（桌面端 `sage-preview://`，Web/测试回落 `srcDoc`）。
 
 ## 12. Office 融合与 Live Artifact（2026-11-13 新增）
