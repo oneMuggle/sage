@@ -186,6 +186,20 @@ def test_split_invalid_range_leaves_no_partial_outputs(tmp_path: Path) -> None:
     assert not (tmp_path / "doc-1.pdf").exists()
 
 
+def test_watermark_supports_chinese_text(tmp_path: Path) -> None:
+    source = _pdf(tmp_path / "doc.pdf", 1)
+
+    result = watermark_pdf(
+        PdfWatermarkRequest(
+            workspace_path=str(tmp_path),
+            file_path=str(source),
+            text="内部资料",
+        )
+    )
+
+    assert "内部资料" in _text(tmp_path / result.outputs[0])
+
+
 def test_invalid_page_range_is_rejected(tmp_path: Path) -> None:
     source = _pdf(tmp_path / "doc.pdf", 2)
 
