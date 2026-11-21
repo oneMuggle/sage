@@ -241,7 +241,7 @@ class OfficeCreateTool(BaseTool):
                         "enum": list(_VALID_DOC_TYPES),
                         "description": (
                             "Document type (case-insensitive: word/Word/WORD "
-                            "are all accepted)."
+                            "are all accepted). pdf 请改用 office_generate_pdf。"
                         ),
                     },
                     "output_dir": {
@@ -1260,6 +1260,14 @@ class OfficeCreateTool(BaseTool):
         error = self._check_params(doc_type, output_dir, filename, content)
         if error is not None:
             return error
+        if doc_type == OfficeDocType.PDF.value:
+            return ToolResult(
+                success=False,
+                error=(
+                    "pdf_unsupported_in_office_create: office_create 不支持 pdf；"
+                    "请改用 office_generate_pdf"
+                ),
+            )
 
         verify_mode = str(verify or "auto").strip().lower()
         if verify_mode not in ("auto", "off"):

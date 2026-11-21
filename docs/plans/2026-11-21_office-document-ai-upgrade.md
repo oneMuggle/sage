@@ -297,7 +297,8 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 - [ ] 视觉兜底策略与设置项（Office OCR 自动策略）
 - [x] PDF 通用操作：合并/拆分/旋转/抽页/删页/水印/页码（`backend/office/pdf_ops.py`）
 - [ ] PDF 读取补齐：页面图片返回 + 复杂表格兜底 + 真 appearance flatten
-- [ ] 工具面一致性：`office_create` pdf 枚举、`office_delete`/`workspace_search` 覆盖 pdf/csv、Wiki 队列 PDF 路径
+- [x] `office_create` 的 pdf 枚举：明确拒绝并引导 `office_generate_pdf`（消除分派漂移）
+- [ ] `office_delete` / `workspace_search` 覆盖 pdf/csv；Wiki 队列 PDF 路径
 - [ ] `POST /office/compare`（Word/Excel/PPT/PDF）+ 工作台对比入口 + Markdown 报告
 - [ ] 聊天附件 docx/xlsx/pptx 富预览；Excel 图表 / PPT 图片在结构化预览中渲染；`@` Office chip 点击预览
 - [ ] Word 模板 Profile/填充前端入口

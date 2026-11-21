@@ -656,3 +656,18 @@ def test_create_rejects_invalid_verify_mode(tmp_path):
 
     assert result.success is False
     assert "verify_invalid" in (result.error or "")
+
+
+def test_create_pdf_points_to_generate_pdf_tool(tmp_path):
+    out_dir = tmp_path / "desktop"
+    out_dir.mkdir()
+
+    result = _tool().execute(
+        doc_type="pdf",
+        output_dir=str(out_dir),
+        filename="report.pdf",
+        content={"title": "报告", "paragraphs": [{"text": "正文"}]},
+    )
+
+    assert result.success is False
+    assert "pdf_unsupported_in_office_create" in (result.error or "")
