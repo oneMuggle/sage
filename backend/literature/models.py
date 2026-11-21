@@ -11,6 +11,7 @@ _ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _HTTP_SCHEMES = ("http", "https")
 _ACCESS_MODES = frozenset({"browser", "rest", "hybrid"})
+_SEARCH_MODES = frozenset({"url", "interactive"})
 _PROFILE_STATUSES = frozenset({"ready", "draft"})
 
 
@@ -52,6 +53,13 @@ class SearchSpec:
     wait_for: Tuple[str, ...] = ()
     pagination: Optional[PaginationSpec] = None
     result_fields: Dict[str, SiteField] = field(default_factory=dict)
+    mode: str = "url"
+    entry_url: Optional[str] = None
+    entry_click: Optional[str] = None
+    input_selectors: Tuple[str, ...] = ()
+    submit_key: str = "Enter"
+    wait_after_s: float = 0.0
+    result_hint: str = ""
 
 
 @dataclass(frozen=True)
@@ -67,6 +75,8 @@ class PdfSpec:
     forbid: Tuple[str, ...] = ("CAJ",)
     magic: str = "%PDF-"
     title_match: bool = True
+    post_click_wait_s: float = 0.0
+    note: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -235,6 +245,8 @@ def _parse_pdf(raw: Any) -> Optional[PdfSpec]:
         forbid=_str_tuple(data.get("forbid"), "pdf.forbid") or ("CAJ",),
         magic=_require_str(validate.get("magic"), "pdf.validate.magic") or "%PDF-",
         title_match=bool(validate.get("title_match", True)),
+        post_click_wait_s=float(data.get("post_click_wait_s", 0.0)),
+        note=_optional_str(data.get("note"), "pdf.note"),
     )
 
 
@@ -277,11 +289,36 @@ def profile_from_dict(
         for key, value in _require_dict(raw.get("capabilities"), "capabilities").items()
     }
     url_template = _require_str(search_raw.get("url_template"), "search.url_template")
+    mode = _require_str(search_raw.get("mode"), "search.mode") or "url"
+    if mode not in _SEARCH_MODES:
+        raise SiteProfileError(
+            f"search.mode 必须是 {sorted(_SEARCH_MODES)} 之一，收到 {mode!r}"
+        )
+    entry_url = _optional_str(search_raw.get("entry_url"), "search.entry_url")
+    entry_click = _optional_str(search_raw.get("entry_click"), "search.entry_click")
+    input_selectors = _str_tuple(
+        search_raw.get("input_selectors"), "search.input_selectors"
+    )
+    submit_key = _require_str(search_raw.get("submit_key"), "search.submit_key") or "Enter"
+    wait_after_s = float(search_raw.get("wait_after_s", 0.0))
+    result_hint = _require_str(search_raw.get("result_hint"), "search.result_hint")
     if capabilities.get("search", True):
-        if not url_template:
-            raise SiteProfileError("search.url_template 必填")
-        if "{query}" not in url_template:
-            raise SiteProfileError("search.url_template 必须包含 {query} 占位符")
+        if mode == "url":
+            if not url_template:
+                raise SiteProfileError("search.url_template 必填")
+            if "{query}" not in url_template:
+                raise SiteProfileError("search.url_template 必须包含 {query} 占位符")
+        else:
+            if not (entry_url or url_template):
+                raise SiteProfileError(
+                    "interactive 模式需要 search.entry_url 或 search.url_template"
+                )
+            if not input_selectors:
+                raise SiteProfileError(
+                    "interactive 模式需要 search.input_selectors"
+                )
+            if wait_after_s < 0:
+                raise SiteProfileError("search.wait_after_s 不能为负")
 
     pagination_raw = search_raw.get("pagination")
     pagination = None
@@ -327,6 +364,13 @@ def profile_from_dict(
             result_fields=_site_fields(
                 search_raw.get("result_fields"), "search.result_fields"
             ),
+            mode=mode,
+            entry_url=entry_url,
+            entry_click=entry_click,
+            input_selectors=input_selectors,
+            submit_key=submit_key,
+            wait_after_s=wait_after_s,
+            result_hint=result_hint,
         ),
         detail=detail,
         pdf=_parse_pdf(raw.get("pdf")),
