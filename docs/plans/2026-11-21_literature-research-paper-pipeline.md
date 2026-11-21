@@ -392,13 +392,19 @@ compliance:
 
 ### M1：Workflow 最小闭环 + literature-research v1（2–3 周）
 
+> **M1a 已完成（2026-11-21，分支 `feat/literature-research-m1`）**：
+> 运行目录 + JSONL 契约 + 确定性门禁 + Markdown/BibTeX 导出 + profile
+> 浏览器执行器 + 录制 helper + CLI + `literature-research` shipped skill。
+> 测试：`backend/tests/unit/test_literature_pipeline.py`（26 例，含
+> 端到端合成闭环）。真实网络/编排 lane 实跑留 M1b。
+
 - [ ] 落地 Workflow v1.1 的最小执行器（`workflow_spec` / `gate_eval` / `loader` / `store` / `artifacts` / `executor` / routes），或先扩展 Playbook v1.0 增加阶段 executor。
-- [ ] 新增 `literature-research` shipped skill（SKILL.md + `references/` + `scripts/`），检索阶段统一走 `SiteProfile` 注册表（xueshu789 / CNKI / 学术 API 都是同一种站点），不改动现有技能行为。
-- [ ] 实现 scoping → search → screen → evidence → outline → draft → verify（仅存在性）→ export(Markdown) 流水线。
-- [ ] 接入编排 lanes、阶段事件、运行目录与恢复；产物写入 `<workspace>/.sage/workflow/<run_id>/<stage_id>/`。
-- [ ] 硬门禁：schema 校验、引用 key 解析、检索日志完整性、参考文献只列已引用。
-- [ ] 与 `paper-writing` 的交接契约：流水线产出 `references` 条目 + 分章 Markdown，交给 `paper-writing` 生成 docx。
-- [ ] 端到端测试：用 10–20 篇真实文献跑通一篇 3000–5000 字小综述。
+- [x] 新增 `literature-research` shipped skill（SKILL.md + `references/pipeline.md`），检索阶段统一走 `SiteProfile` 注册表（xueshu789 / CNKI / 学术 API 都是同一种站点），不改动现有技能行为。
+- [x] 实现 scoping → search → screen → evidence → outline → draft → verify（仅存在性）→ export(Markdown) 的确定性骨架（run store / gates / export / CLI；语义检索与写作由 LLM 按 skill 执行）。
+- [ ] 接入编排 lanes、阶段事件、运行目录与恢复；产物写入 `<workspace>/.sage/workflow/<run_id>/<stage_id>/`（M1b）。
+- [x] 硬门禁：schema 校验、引用 key 解析、检索日志完整性、参考文献只列已引用。
+- [x] 与 `paper-writing` 的交接契约：`build_handoff` 产出 `references` 条目 + 分章 Markdown 路径（docx 实跑留 M1b）。
+- [x] 端到端测试：合成文献集跑通"检索日志→文献池→证据→大纲→草稿→门禁→导出"（真实 10–20 篇文献实跑留 M1b）。
 
 ### M2：EvidenceLedger 与引用核验（2 周）
 

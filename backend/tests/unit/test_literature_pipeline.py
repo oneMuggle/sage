@@ -492,3 +492,45 @@ class TestCli:
             ]
         )
         assert cli.main(["gate", "--run", str(root / "r1")]) == 1
+
+
+class TestEndToEnd:
+    def test_synthetic_survey_flow(self, tmp_path):
+        from backend.literature.export import export_run
+        from backend.literature.gates import run_gates
+        from backend.literature.run_store import (
+            create_run,
+            record_evidence,
+            record_papers,
+            record_query,
+            save_draft,
+            save_outline,
+        )
+
+        run = create_run(tmp_path, "合成综述", "demo", run_id="e2e")
+        record_query(run, "合成", "demo", 3)
+        record_papers(run, [_paper("p1"), _paper("p2"), _paper("p3")])
+        record_evidence(
+            run,
+            [
+                {"evidence_id": "e1", "paper_key": "p1", "kind": "finding", "text": "A"},
+                {"evidence_id": "e2", "paper_key": "p2", "kind": "method", "text": "B"},
+            ],
+        )
+        save_outline(
+            run,
+            {
+                "title": "合成综述",
+                "sections": [
+                    {"id": "s1", "title": "背景", "source_keys": ["p1"]},
+                    {"id": "s2", "title": "方法", "source_keys": ["p2"]},
+                ],
+            },
+        )
+        save_draft(run, "# 合成综述\n\n背景 [cite:p1]。\n\n方法 [cite:p2]。\n")
+        report = run_gates(run)
+        assert report.ok is True
+        assert any("p3" in warning for warning in report.warnings)
+        paths = export_run(run)
+        assert paths["final"].is_file()
+        assert paths["bibtex"].is_file()
