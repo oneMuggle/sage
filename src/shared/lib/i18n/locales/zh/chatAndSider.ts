@@ -580,8 +580,7 @@ export const zhChatAndSider = {
   'settings.network.accounts.switch': '切换',
   'settings.network.accounts.switching': '切换中…',
   'settings.network.accounts.delete': '删除',
-  'settings.network.accounts.delete.confirm':
-    '删除账号会同时删除它保存的登录凭据。确定删除吗？',
+  'settings.network.accounts.delete.confirm': '删除账号会同时删除它保存的登录凭据。确定删除吗？',
   'settings.network.accounts.default_badge': '默认',
   'settings.network.accounts.switch_success': '已切换到「{label}」',
   'settings.network.accounts.switch_failed': '切换失败：{error}',

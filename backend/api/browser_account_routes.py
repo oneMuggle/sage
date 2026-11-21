@@ -225,27 +225,20 @@ async def login_with_account(  # noqa: PLR0911 — 各拒绝路径独立 return�
         return JSONResponse(
             status_code=404, content={"ok": False, "error": "account_not_found"}
         )
-    if account_label and not account_id:
-        # 先建账号（domain 取目标站点 host），再以 account_id 启动登录
-        try:
-            account = browser_account_service.create_account(
-                label=account_label, domain=(parsed_url.hostname or "").lower()
-            )
-        except ValueError as exc:
-            return JSONResponse(
-                status_code=409, content={"ok": False, "error": str(exc)[:300]}
-            )
-        account_id = account.id
+    # account_label 不在端点预建账号：交由 browser_login 工具在登录成功后才建，
+    # 登录失败/取消时工具会清理，避免账号池留下无凭据的孤儿账号。
 
     try:
-        job_id = site_login_jobs.start(url, account_id=account_id)
+        job_id = site_login_jobs.start(
+            url, account_id=account_id, account_label=account_label
+        )
     except ValueError as exc:
         in_progress = str(exc) == "login_in_progress"
         return JSONResponse(
             status_code=409 if in_progress else 422,
             content={"ok": False, "error": str(exc)[:200]},
         )
-    return {"job_id": job_id, "url": url, "account_id": account_id}
+    return {"job_id": job_id, "url": url, "account_id": account_id, "account_label": account_label}
 
 
 __all__ = ["router"]

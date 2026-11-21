@@ -128,6 +128,27 @@ def test_storage_state_isolated_per_account(repo):
     )
 
 
+def test_merge_set_cookies_targets_correct_account(repo):
+    """HIGH 回归：Set-Cookie 续期带 account_id 时只更新命名账号，不污染默认账号。"""
+    from backend.tools.credential_vault import merge_set_cookies
+
+    save_credential(".example.com", _COOKIES_A, repo=repo)
+    save_credential(".example.com", _COOKIES_B, repo=repo, account_id="acc-b")
+
+    changed = merge_set_cookies(
+        ".example.com",
+        ["SID=fresh; Path=/; Domain=.example.com"],
+        "https://www.example.com/",
+        repo=repo,
+        account_id="acc-b",
+    )
+    assert changed == ["SID"]
+    # 命名账号续期为新值；默认账号保持原值（不串号）
+    assert load_credential(".example.com", repo=repo, account_id="acc-b")[0]["value"] == "fresh"
+    assert load_credential(".example.com", repo=repo)[0]["value"] == "acct-a"
+
+
+
 # ── BrowserAccountService CRUD ─────────────────────────────────
 
 
@@ -224,3 +245,18 @@ def test_ensure_legacy_accounts_skips_named_entries(repo):
     created = service.ensure_legacy_accounts(".named.com")
     assert created == 0
     assert service.list_accounts(".named.com") == []
+
+
+def test_ensure_legacy_accounts_with_existing_named_account(repo):
+    """已有命名账号 + 平铺凭据 → 仍补登记默认账号（不被命名账号挡住）。"""
+    service = BrowserAccountService()
+    service.create_account(label="工作号", domain=".named.com")
+    save_credential(".named.com", _COOKIES_A, repo=repo)
+
+    created = service.ensure_legacy_accounts(".named.com")
+    assert created == 1
+    accounts = service.list_accounts(".named.com")
+    assert len(accounts) == 2
+    default_accounts = [a for a in accounts if a.is_default]
+    assert len(default_accounts) == 1
+

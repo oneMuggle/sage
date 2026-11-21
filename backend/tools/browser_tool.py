@@ -3041,9 +3041,12 @@ class BrowserLoginTool(BaseTool):
         if not target_host:
             return ToolResult(success=False, error="无法从 url 解析出域名")
 
-        # 多账号：account_label 新建账号（account_id 优先，二选一）
+        # 多账号：account_label 新建账号（account_id 优先，二选一）。
+        # created_account_id 非空表示本账号是本次登录刚建的——登录失败时清理，
+        # 避免账号池留下没有凭据的孤儿账号。
         account_id = (account_id or "").strip() or None
         account_label = (account_label or "").strip() or None
+        created_account_id: Optional[str] = None
         if account_id and account_label:
             return ToolResult(
                 success=False,
@@ -3059,6 +3062,7 @@ class BrowserLoginTool(BaseTool):
             except ValueError as exc:
                 return ToolResult(success=False, error=f"create_account_failed: {exc}")
             account_id = account.id
+            created_account_id = account.id
         elif account_id:
             from backend.services.browser_account_service import browser_account_service
 
@@ -3067,13 +3071,37 @@ class BrowserLoginTool(BaseTool):
                 return ToolResult(
                     success=False, error=f"account_not_found: 账号 {account_id!r} 不存在"
                 )
+            # 账号域名须与登录站点匹配（含子域关系），否则凭据会存到错误 domain
+            bare = account.domain.lstrip(".")
+            if not (
+                target_host == bare
+                or target_host.endswith("." + bare)
+                or bare.endswith("." + target_host)
+            ):
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"account_domain_mismatch: 账号「{account.label}」属于 {account.domain}，"
+                        f"与登录站点 {target_host} 不匹配"
+                    ),
+                )
+
+        def _abort_and_cleanup(msg: str) -> ToolResult:
+            """失败退出：若是本次新建的账号则删除，避免孤儿账号。"""
+            if created_account_id:
+                import contextlib
+
+                from backend.services.browser_account_service import browser_account_service
+
+                with contextlib.suppress(Exception):
+                    browser_account_service.delete_account(created_account_id)
+            return ToolResult(success=False, error=msg)
 
         # I1：登录同样是导航；只应用站点策略的 block 部分（用户主动登录
         # 未知站点保持允许，不做 confirm，避免登录流程被站点确认卡住）。
         if _safety_check_site("", url) == "block":
-            return ToolResult(
-                success=False,
-                error=f"site_blocked: 用户已禁止该站点 {browser_safety.domain_of(url)}",
+            return _abort_and_cleanup(
+                f"site_blocked: 用户已禁止该站点 {browser_safety.domain_of(url)}"
             )
 
         # 检查是否已有活跃的登录浏览器（避免重复启动）
@@ -3093,9 +3121,8 @@ class BrowserLoginTool(BaseTool):
                     profile_name=_LOGIN_PROFILE_NAME,
                 )
             except BrowserCDPError as exc:
-                return ToolResult(
-                    success=False,
-                    error=f"browser_launch_failed: 无法启动浏览器（{exc}）",
+                return _abort_and_cleanup(
+                    f"browser_launch_failed: 无法启动浏览器（{exc}）"
                 )
             reuse = False
 
@@ -3105,7 +3132,7 @@ class BrowserLoginTool(BaseTool):
             created = cdp_command(session, "Target.createTarget", {"url": url})
             target_id = created.get("targetId")
             if not target_id:
-                return ToolResult(success=False, error="导航失败：无法创建标签页")
+                return _abort_and_cleanup("导航失败：无法创建标签页")
 
             # 等待页面初始加载
             _wait_for_page_load(session, target_id, timeout=15.0)
@@ -3159,15 +3186,13 @@ class BrowserLoginTool(BaseTool):
                         ),
                         "browser_id": session.browser_id,
                         "reused": reuse,
+                        "account_id": account_id or "",
                     },
                 )
             else:
-                return ToolResult(
-                    success=False,
-                    error=(
-                        "no_cookies_saved: 未找到可保存的 cookie。"
-                        "请确认已经在浏览器窗口中完成登录。"
-                    ),
+                return _abort_and_cleanup(
+                    "no_cookies_saved: 未找到可保存的 cookie。"
+                    "请确认已经在浏览器窗口中完成登录。"
                 )
 
         except BrowserCDPError as exc:
@@ -3190,14 +3215,12 @@ class BrowserLoginTool(BaseTool):
                             ),
                             "browser_id": getattr(session, "browser_id", ""),
                             "reused": reuse,
+                            "account_id": account_id or "",
                         },
                     )
             except Exception:
                 pass
-            return ToolResult(
-                success=False,
-                error=f"browser_error: {exc}",
-            )
+            return _abort_and_cleanup(f"browser_error: {exc}")
         finally:
             # 关闭标签页但保持浏览器运行（用户可能还要操作其他页面）
             if target_id:

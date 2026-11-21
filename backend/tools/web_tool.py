@@ -980,6 +980,7 @@ class WebFetchTool(BaseTool):
         gated_by_whitelist: bool,
         credential_headers: Optional[Dict[str, str]] = None,
         credential_domain: str = "",
+        account_id: str = "",
     ) -> tuple:
         current_url = url
         credential_stripped = False
@@ -1055,7 +1056,9 @@ class WebFetchTool(BaseTool):
                         # AU2：命中域的响应带 Set-Cookie → 合并回 cookie 档案（续期 token 不丢）
                         if credential_applied and "Cookie" in credential_headers:
                             refreshed_names.extend(
-                                self._writeback_set_cookies(response, current_url, credential_domain)
+                                self._writeback_set_cookies(
+                                    response, current_url, credential_domain, account_id
+                                )
                             )
                         if response.is_redirect:
                             location = response.headers.get("location")
@@ -1153,6 +1156,7 @@ class WebFetchTool(BaseTool):
             gated_by_whitelist,
             credential_headers,
             credential_domain,
+            account_id,
         )
         status = response.status_code
         if status in _ANTIBOT_STATUS_CODES:
@@ -1180,6 +1184,7 @@ class WebFetchTool(BaseTool):
             gated_by_whitelist,
             resolution.headers,
             credential_domain,
+            account_id,
         )
         status = response.status_code
         if status in _ANTIBOT_STATUS_CODES:
@@ -1366,14 +1371,18 @@ class WebFetchTool(BaseTool):
         return result
 
     @staticmethod
-    def _writeback_set_cookies(response: httpx.Response, url: str, credential_domain: str) -> list:
+    def _writeback_set_cookies(
+        response: httpx.Response, url: str, credential_domain: str, account_id: str = ""
+    ) -> list:
         values = response.headers.get_list("set-cookie")
         if not values:
             return []
         from .credential_vault import merge_set_cookies
 
         try:
-            return merge_set_cookies(credential_domain, values, url)
+            return merge_set_cookies(
+                credential_domain, values, url, account_id=(account_id or None)
+            )
         except Exception:  # noqa: BLE001 — 回写失败不影响本次抓取
             return []
 

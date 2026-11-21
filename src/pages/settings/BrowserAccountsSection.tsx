@@ -76,9 +76,7 @@ export function BrowserAccountsSection() {
           fill(t('settings.network.accounts.switch_success'), { label: account.label }),
       );
     } catch (error) {
-      toast.error(
-        fill(t('settings.network.accounts.switch_failed'), { error: errorText(error) }),
-      );
+      toast.error(fill(t('settings.network.accounts.switch_failed'), { error: errorText(error) }));
     } finally {
       setSwitching('');
     }
@@ -173,9 +171,7 @@ export function BrowserAccountsSection() {
                       </span>
                     )}
                     {account.notes && (
-                      <span className="text-text-secondary truncate max-w-40">
-                        {account.notes}
-                      </span>
+                      <span className="text-text-secondary truncate max-w-40">{account.notes}</span>
                     )}
                     <span className="ml-auto flex items-center gap-1">
                       <button

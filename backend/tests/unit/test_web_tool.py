@@ -1550,7 +1550,7 @@ def test_fetch_credentialled_auto_refresh_replays(monkeypatch):
     tool = _fetch_tool()
     calls = []
 
-    def fake_get(self, url, policy, gated, headers, domain):
+    def fake_get(self, url, policy, gated, headers, domain, account_id=""):
         calls.append(dict(headers or {}))
         if len(calls) == 1:
             resp = httpx.Response(
@@ -1600,7 +1600,7 @@ def test_fetch_credentialled_refresh_off_keeps_login_error(monkeypatch):
     tool = _fetch_tool()
     calls = []
 
-    def fake_get(self, url, policy, gated, headers, domain):
+    def fake_get(self, url, policy, gated, headers, domain, account_id=""):
         calls.append(1)
         resp = httpx.Response(
             200,

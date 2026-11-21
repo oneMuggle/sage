@@ -235,13 +235,13 @@ async def _swap_cookie_state(
 
     cdp = session.cdp_client  # 已有的 CDP websocket 客户端
 
-    # Step 1: 清除当前浏览器所有 cookies
+    # Step 1: 清除当前浏览器所有 cookies（浏览器级，设计明示：同一时刻只携带一个账号态）
     await cdp.send("Network.clearBrowserCookies")
 
-    # Step 2: 清除 localStorage（遍历所有 origins）
-    # 通过 DOMStorage.clear 逐 origin 清除
-    current_frame = await cdp.send("Page.getFrameTree")
-    # ... 遍历 frames 清除
+    # Step 2: 清除 localStorage（仅目标账号 domain 的页面）
+    # 遍历 http(s) 页面，按 _origin_belongs(origin, account.domain) 过滤；
+    # 无关站点（GMail / GitHub 等）的 localStorage 与标签页完全保留，不造成数据丢失。
+    # 同样 Page.reload 仅刷新归属账号 domain 的页面。
 
     # Step 3: 注入目标账号的 cookies
     target_creds = credential_vault.load_credential(

@@ -210,7 +210,7 @@ class BrowserAccountService:
             if target_domain and entry_domain != target_domain:
                 continue
             existing = self._conn().execute(
-                "SELECT id FROM browser_accounts WHERE domain = ? LIMIT 1",
+                "SELECT id FROM browser_accounts WHERE domain = ? AND is_default = 1 LIMIT 1",
                 (entry_domain,),
             ).fetchone()
             if existing:
@@ -307,11 +307,21 @@ class BrowserAccountService:
     def delete_account(self, account_id: str, delete_credentials: bool = True) -> bool:
         """删除账号（及其命名 vault 凭据）；返回是否确有删除。
 
-        若删除的是某浏览器当前激活账号，同时清除该 browser 的激活追踪。
+        若该账号正被某浏览器激活，尽力清空该浏览器中该域名的登录态
+        （cookie + localStorage），避免"账号已删、浏览器仍在线"。
         """
         account = self.get_account(account_id)
         if account is None:
             return False
+        # 先处理激活中的浏览器会话（尽力而为，不阻断删除）
+        with self._lock:
+            active_browsers = [
+                browser_id
+                for browser_id, active_id in self._active.items()
+                if active_id == account_id
+            ]
+        if active_browsers:
+            self._clear_active_browser(account, active_browsers)
         with _SQLITE_LOCK:
             conn = self._conn()
             conn.execute("DELETE FROM browser_accounts WHERE id = ?", (account_id,))
@@ -328,6 +338,23 @@ class BrowserAccountService:
                 if active_id == account_id:
                     del self._active[browser_id]
         return True
+
+    def _clear_active_browser(
+        self, account: BrowserAccount, browser_ids: List[str]
+    ) -> None:
+        """尽力清空激活该账号的浏览器中的 cookie（浏览器级）与域名 localStorage。"""
+        import contextlib
+
+        from backend.tools.browser_cdp import BrowserCDPError, cdp_command, get_browser_manager
+
+        manager = get_browser_manager()
+        for browser_id in browser_ids:
+            with contextlib.suppress(BrowserCDPError):
+                session = manager.get(browser_id)
+                if session is None:
+                    continue
+                cdp_command(session, "Network.clearBrowserCookies", {})
+                self._clear_open_page_storage(session, account.domain)
 
     # ── 激活状态追踪 ──────────────────────────────────────────
 
@@ -405,23 +432,22 @@ class BrowserAccountService:
             logger.warning("读取目标账号凭据失败: %s", exc, exc_info=True)
             cookies, origins = [], []
 
-        # 3. 清空 + 注入（失败回滚）
+        # 3. 清空 + 注入（失败则用切换前快照回滚浏览器状态）
         swapped: List[str] = []
         try:
             swapped = self._apply_state(session, account, cookies, origins)
         except Exception as exc:  # noqa: BLE001 — 注入失败尝试回滚
             logger.warning("账号状态注入失败: %s", exc, exc_info=True)
-            if current_id:
-                import contextlib
-
-                with contextlib.suppress(Exception):  # 回滚尽力而为
-                    self.snapshot_account_state(current_id, session)
+            rollback_ok = self._rollback_to_account(current_id, session)
+            message = f"账号状态注入失败：{str(exc)[:200]}"
+            if current_id and not rollback_ok:
+                message += "；浏览器可能已处于登出状态，请重新切换或登录"
             return SwitchResult(
                 ok=False,
                 account_id=account.id,
                 label=account.label,
                 domain=account.domain,
-                message=f"账号状态注入失败：{str(exc)[:200]}",
+                message=message,
             )
 
         # 4. 追踪激活状态
@@ -446,6 +472,35 @@ class BrowserAccountService:
     def _vault_account_id(account: BrowserAccount) -> Optional[str]:
         """默认账号 → vault 平铺 key（None）；命名账号 → account.id。"""
         return None if account.is_default else account.id
+
+    def _rollback_to_account(self, account_id: Optional[str], session: Any) -> bool:
+        """切换失败回滚：从 vault 用切换前账号快照把浏览器状态重新注入。
+
+        返回是否回滚成功；失败尽力而为（不抛，调用方据此提示用户）。
+        """
+        if not account_id:
+            return False
+        import contextlib
+
+        from backend.tools.credential_vault import load_credential, load_storage_origins
+
+        account = self.get_account(account_id)
+        if account is None:
+            return False
+        try:
+            cookies = (
+                load_credential(account.domain, account_id=self._vault_account_id(account))
+                or []
+            )
+            origins = load_storage_origins(
+                account.domain, account_id=self._vault_account_id(account)
+            )
+            with contextlib.suppress(Exception):  # 回滚尽力而为
+                self._apply_state(session, account, cookies, origins)
+            return True
+        except Exception:  # noqa: BLE001 — 回滚失败不覆盖原始错误
+            logger.warning("账号切换回滚失败: %s", account_id, exc_info=True)
+            return False
 
     def resolve_vault_account_id(self, account_id: Optional[str]) -> Optional[str]:
         """把账号注册表 ID 解析为 vault 维度 ID（默认账号 → None）。
@@ -587,7 +642,9 @@ class BrowserAccountService:
             cdp_command(session, "Storage.setCookies", {"cookies": cdp_cookies})
 
         # 清空所有页面 localStorage 后注入目标账号快照
-        self._clear_open_page_storage(session)
+        # 只清/刷新归属账号 domain 的页面：无关站点的 localStorage 与标签页
+        # 不受影响（cookie 仍按设计浏览器级清空——同一时刻只携带一个账号态）。
+        self._clear_open_page_storage(session, account.domain)
         for origin_item in origins:
             origin = str(origin_item.get("origin") or "")
             storage = origin_item.get("localStorage") or {}
@@ -595,10 +652,10 @@ class BrowserAccountService:
                 continue
             self._write_origin_local_storage(session, origin, storage)
 
-        self._reload_pages(session)
+        self._reload_pages(session, account.domain)
         return [account.domain]
 
-    def _clear_open_page_storage(self, session: Any) -> None:
+    def _clear_open_page_storage(self, session: Any, domain: str) -> None:
         from backend.tools.browser_cdp import BrowserCDPError, cdp_command
 
         try:
@@ -611,6 +668,9 @@ class BrowserAccountService:
                 continue
             url = str(info.get("url") or "")
             if not url.startswith(("http://", "https://")):
+                continue
+            origin = self._origin_of(url)
+            if not origin or not self._origin_belongs(origin, domain):
                 continue
             try:
                 cdp_command(
@@ -658,7 +718,7 @@ class BrowserAccountService:
                 continue
             return
 
-    def _reload_pages(self, session: Any) -> None:
+    def _reload_pages(self, session: Any, domain: str) -> None:
         from backend.tools.browser_cdp import BrowserCDPError, cdp_command
 
         try:
@@ -670,6 +730,9 @@ class BrowserAccountService:
                 continue
             url = str(info.get("url") or "")
             if not url.startswith(("http://", "https://")):
+                continue
+            origin = self._origin_of(url)
+            if not origin or not self._origin_belongs(origin, domain):
                 continue
             try:
                 cdp_command(

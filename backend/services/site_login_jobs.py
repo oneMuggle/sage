@@ -37,12 +37,19 @@ def _now() -> float:
     return time.time()
 
 
-def _run_browser_login(url: str, account_id: Optional[str] = None) -> Dict[str, Any]:
+def _run_browser_login(
+    url: str,
+    account_id: Optional[str] = None,
+    account_label: Optional[str] = None,
+) -> Dict[str, Any]:
     """默认 runner：调用现有 browser_login 工具（阻塞直到用户完成登录）。"""
     from backend.tools.browser_tool import BrowserLoginTool
 
     result = BrowserLoginTool().execute(
-        url=url, timeout_seconds=LOGIN_TIMEOUT_SECONDS, account_id=account_id
+        url=url,
+        timeout_seconds=LOGIN_TIMEOUT_SECONDS,
+        account_id=account_id,
+        account_label=account_label,
     )
     if not getattr(result, "success", False):
         return {"ok": False, "error": str(getattr(result, "error", "") or "login_failed")[:500]}
@@ -50,6 +57,7 @@ def _run_browser_login(url: str, account_id: Optional[str] = None) -> Dict[str, 
     return {
         "ok": True,
         "saved_domains": [str(d) for d in (content.get("saved_domains") or [])],
+        "account_id": content.get("account_id") or account_id,
     }
 
 
@@ -66,7 +74,12 @@ class SiteLoginJobs:
         self._runner = runner or _run_browser_login
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
 
-    def start(self, url: str, account_id: Optional[str] = None) -> str:
+    def start(
+        self,
+        url: str,
+        account_id: Optional[str] = None,
+        account_label: Optional[str] = None,
+    ) -> str:
         """启动登录任务。
 
         同一 URL 同账号已在进行中 → 复用其 job_id；不同 URL 已有任务在等待 →
@@ -78,11 +91,15 @@ class SiteLoginJobs:
         if not url:
             raise ValueError("url 不能为空")
         account_id = (account_id or "").strip() or None
+        account_label = (account_label or "").strip() or None
         with self._lock:
             active = self._active_job_locked()
             if active is not None and active["url"] == url:
                 # 同 URL：同账号幂等复用；不同账号允许排队（多账号登录）
-                if (active.get("account_id") or None) == account_id:
+                if (
+                    (active.get("account_id") or None) == account_id
+                    and (active.get("account_label") or None) == account_label
+                ):
                     return str(active["job_id"])
             elif active is not None:
                 raise ValueError("login_in_progress")
@@ -91,6 +108,7 @@ class SiteLoginJobs:
                 "job_id": job_id,
                 "url": url,
                 "account_id": account_id,
+                "account_label": account_label,
                 "status": PENDING,
                 "result": None,
                 "error": None,
@@ -98,7 +116,7 @@ class SiteLoginJobs:
                 "updated_at": _now(),
             }
             self._evict_locked()
-        self._executor.submit(self._run, job_id, url, account_id)
+        self._executor.submit(self._run, job_id, url, account_id, account_label)
         return job_id
 
     def get(self, job_id: str) -> Optional[Dict[str, Any]]:
@@ -137,7 +155,13 @@ class SiteLoginJobs:
         for job in finished[: max(0, overflow)]:
             self._jobs.pop(job["job_id"], None)
 
-    def _run(self, job_id: str, url: str, account_id: Optional[str] = None) -> None:
+    def _run(
+        self,
+        job_id: str,
+        url: str,
+        account_id: Optional[str] = None,
+        account_label: Optional[str] = None,
+    ) -> None:
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
@@ -145,9 +169,10 @@ class SiteLoginJobs:
             job["status"] = RUNNING
             job["updated_at"] = _now()
         try:
-            outcome = (
-                self._runner(url, account_id) if account_id else self._runner(url)
-            )
+            if account_id or account_label:
+                outcome = self._runner(url, account_id, account_label)
+            else:
+                outcome = self._runner(url)
         except Exception as exc:  # noqa: BLE001 — 登录失败如实回传，不吞掉任务
             outcome = {"ok": False, "error": str(exc)[:500]}
         with self._lock:
