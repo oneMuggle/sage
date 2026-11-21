@@ -197,3 +197,44 @@ export function auditOrchEventsGovernance(
     healthy: connectionStatus !== 'disconnected' && activeTaskCount >= 0,
   };
 }
+
+// ---------------------------------------------------------------------------
+// M1: task transcript — message-level subagent process records
+// Mirrors backend/data/orch_transcript_repo.py TaskTranscriptMessage
+// ---------------------------------------------------------------------------
+
+export type TranscriptMessageRole = 'user' | 'assistant' | 'tool';
+
+export type TranscriptMessageType =
+  | 'goal'
+  | 'reasoning'
+  | 'assistant'
+  | 'tool_call'
+  | 'tool_result'
+  | 'error';
+
+export interface TaskTranscriptMessage {
+  seq: number;
+  role: TranscriptMessageRole;
+  message_type: TranscriptMessageType;
+  content: string | null;
+  reasoning: string | null;
+  tool_name: string | null;
+  tool_call_id: string | null;
+  /** 后端以 JSON 存储，API 返回时已解析为对象（解析失败时为原始字符串）。 */
+  tool_args: unknown;
+  tool_result: string | null;
+  is_error: boolean;
+  duration_ms: number | null;
+  /** Unix epoch ms */
+  created_at: number;
+}
+
+export interface TaskTranscriptResponse {
+  run_id: string;
+  task_id: string;
+  messages: TaskTranscriptMessage[];
+  /** 已返回页的最后 seq；请求方作为下一次 after_seq。 */
+  next_seq: number;
+  has_more: boolean;
+}
