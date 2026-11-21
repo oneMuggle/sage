@@ -1,7 +1,7 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0 已合并 main（`96cfe619c`），M1 已实施（2026-11-21），M2–M4 待实施
-> 分支：M1 `feat/orch-subagent-transcript`
+> 状态：M0 已合并 main（`96cfe619c`），M1 已合并 main（`2f5055f0d`）；M2a/M2.2 已实施（同轮并发 + 后台模式 + 多后台派发），M2.3–M2.5 待实施
+> 分支：M2 `feat/orch-agent-background`
 > 关联：技术手册 §27（多 Agent 编排层）、§36（编排端到端）、§42（Chat-Native 编排）、§108（Plan Mode 增强）、§125（思考展示档位）、§140（插话暂存区）、§148（任务中心）
 > 调研方式：后端核心 / 前端 UI / 文档技能三路并行代码审计（本文所有 file:line 均来自实际代码）
 
@@ -130,8 +130,8 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 - [x] M1.2 transcript 分页 API
 - [x] M1.3 思考/正文按 DisplayContract 采样转发（实现改为 transcript 落盘 + 前端按档位渲染，见 M1 实施记录）
 - [x] M1.4 前端子代理详情页（过程/Transcript/思考/统计）
-- [ ] M2.1 `agent(background=true)` + 同轮并发
-- [ ] M2.2 多个后台 dispatch 并存
+- [x] M2.1 `agent(background=true)` + 同轮并发
+- [x] M2.2 多个后台 dispatch 并存
 - [ ] M2.3 子代理继续对话
 - [ ] M2.4 子代理线程 + TaskCenter task 级条目
 - [ ] M2.5 task pause/resume + run resume 端点
@@ -152,6 +152,18 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 | 思考转发增加 LLM 输出 token 成本 | 采样（每 N 秒一次快照）+ 档位控制；result 档完全不转发 |
 | 与 §140 插话 v1 不覆盖编排的旧设计冲突 | 以 canonical steer API 为准，更新技术手册 §140 |
 | 前端四套视图归一改造成本 | M4 再做，先保证事件模型单一真相源 |
+
+## M2a 实施记录（2026-11-21）
+
+| 改动 | 文件 |
+|---|---|
+| `agent(background=true)`：立即返回 `{status:"running", handle_id}`；后台任务完成/失败/取消时把结果经主 agent 的新系统通知队列注入下一次迭代边界（不落库、不发 STEER_CONSUMED）；每 stream 上限 4（`MAX_BACKGROUND_AGENTS_PER_STREAM`） | `backend/tools/agent_background.py`（新）、`backend/tools/agent_tool.py` |
+| `SageAgent.inject_system_note` + `_pending_system_notes` 队列与迭代边界注入 | `backend/core/legacy/agent.py` |
+| 同轮多个 `agent` 调用并发：执行分组新增 `agents` 组（无钩子/免审批/预算足够才成组，单个回落串行；上限 `_AGENT_CONCURRENT_LIMIT`=4），ACTING/OBSERVING 与 tool 消息仍按模型顺序 | `backend/core/legacy/agent.py` |
+| 测试 | `test_agent_system_notes.py`（4）、`test_agent_tool_background.py`（5）、`test_agent_parallel_agents.py`（1） |
+| M2.2 多个后台 dispatch 并存：`ChatDispatcher` 由单在飞互斥改为最多 `MAX_CONCURRENT_BACKGROUND_DISPATCHES`=4 并存；`wait_background` 一次 collect 全部在飞派发后聚合；`background_snapshot` 汇总所有派发状态；超限错误码 `background_dispatch_limit` | `backend/orchestration/chat_dispatcher.py`、`backend/tools/subagent_tool.py`、`test_chat_dispatcher_background.py` |
+
+验证：新增 10 用例 + agent 工具/steering/执行分组回归 163 用例全绿；ruff 干净；架构棘轮按协议更新（agent.py 4274、agent_tool.py 813 入基线）；silent-exceptions OK。
 
 ## 7. 明确不做（YAGNI）
 
