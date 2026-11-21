@@ -73,19 +73,36 @@ _DEFAULT_ADAPTERS: Dict[str, AcademicSiteAdapter] = {
 def get_site_adapter(name: str) -> AcademicSiteAdapter:
     """根据站点名获取已注册的 adapter。
 
+    先查代码注册表；未命中时回退到 ``backend.literature`` 的 YAML profile
+    存储（内置 / 用户 / 项目三级）。这样新增浏览器站点只需加 profile，
+    不需要改本模块。
+
     Args:
-        name: 站点标识,如 ``"cnki"``。
+        name: 站点标识,如 ``"cnki"`` 或 profile 里的 ``id``。
 
     Raises:
-        ValueError: 未注册的站点名。
+        ValueError: 未注册且无对应 profile 的站点名。
 
     Returns:
         满足 ``AcademicSiteAdapter`` 协议的对象。
     """
-    if name not in _DEFAULT_ADAPTERS:
-        available = sorted(_DEFAULT_ADAPTERS)
-        raise ValueError(f"Unknown academic site: {name!r}. Available: {available}")
-    return _DEFAULT_ADAPTERS[name]
+    if name in _DEFAULT_ADAPTERS:
+        return _DEFAULT_ADAPTERS[name]
+
+    from backend.literature.academic_adapter import ProfileBackedAdapter
+    from backend.literature.models import SiteProfileError
+    from backend.literature.profile_store import get_default_store
+
+    store = get_default_store()
+    try:
+        profile = store.get(name)
+    except SiteProfileError:
+        profile = None
+    if profile is not None:
+        return ProfileBackedAdapter(profile)
+
+    available = sorted(set(_DEFAULT_ADAPTERS) | set(store.list_ids()))
+    raise ValueError(f"Unknown academic site: {name!r}. Available: {available}")
 
 
 def register_site_adapter(adapter: AcademicSiteAdapter) -> None:

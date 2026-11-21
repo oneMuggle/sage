@@ -1,0 +1,58 @@
+id: xueshu789
+display_name: 学术资源站
+home_url: https://www.xueshu789.cc/
+domains:
+  - xueshu789.cc
+access:
+  mode: browser
+  login:
+    method: form
+    url: https://www.xueshu789.cc/
+    account_label: 您的卡号
+    password_label: 您的密码
+    url_contains: /dbList/
+    title_not_contains: 登录
+capabilities:
+  search: true
+  detail: true
+  pdf_download: true
+  fulltext: true
+  citation_export: false
+search:
+  url_template: "https://www.xueshu789.cc/dbItem/1?kw={query}"
+  wait_for:
+    - ".result-list"
+  pagination:
+    type: click_text
+    text: 下一页
+  result_fields:
+    title:
+      selector: ""
+    authors:
+      selector: ""
+    source:
+      selector: ""
+    year:
+      selector: ""
+detail:
+  open_by: click_text
+  fields:
+    abstract:
+      selector: ""
+pdf:
+  entry:
+    selector: a.downloadlink
+  forbid:
+    - CAJ
+  validate:
+    magic: "%PDF-"
+    title_match: true
+rate_limit:
+  min_interval_s: 5
+  max_batch: 20
+compliance:
+  note: 仅使用本人账号/机构授权；不绕过付费墙；验证码交还用户
+  default_enabled: false
+version: "0.1.0"
+status: draft
+last_verified_at: "2026-11-21"
