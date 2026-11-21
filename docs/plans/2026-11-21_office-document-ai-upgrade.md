@@ -226,8 +226,8 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 - [x] 通用确定性检查（页面/边距/字体/页码 + 空页/越界/缺图）
 - [x] REST 端点 `POST /api/v1/office/render/verify`（含 `status=passed/degraded/failed`、缩略图 data URL）
 - [x] `office_create` / `office_update` 接入 `verify: "auto" | "off"`（默认 auto；无转换器自动降级，不阻塞）
-- [ ] 可选 VLM 抽页检查（视觉模型不可用时静默降级）—— 钩子位预留，具体视觉适配随 M6 落地
-- [ ] 自动修复循环（发现 → 修复 op → 复检，≤2 轮）—— 仅对显式期望值（size/margins/page number）与 `.docx` 启用，待 M1b
+- [x] 可选 VLM 抽页检查（视觉模型不可用时静默降级）—— `visual_pages` + `visual_checker` 可插拔钩子，失败降级为 `visual_check_failed`；具体视觉模型适配随 M6 落地
+- [x] 自动修复循环（发现 → 修复 op → 复检，≤2 轮）—— `repair=true` 且请求含显式期望值（size/margins/page number）且为 `.docx` 时启用，调用 `word_fix`
 - [ ] 工作台结果卡缩略图 + 检查报告；任务中心进度 —— REST 已返回缩略图，前端接入待 M1b
 - [ ] fixture 基准：缺陷检出率 ≥80%、误报 ≤10%、无 soffice 环境不阻塞
 

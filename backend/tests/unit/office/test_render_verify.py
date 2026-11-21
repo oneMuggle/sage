@@ -14,6 +14,7 @@ import pytest
 from backend.office.errors import OfficeParseError, OfficePathError
 from backend.office.export_pdf import ExportPdfResult
 from backend.office.render_verify import (
+    RenderVerifyIssue,
     RenderVerifyRequest,
     verify_document,
     verify_rendered_pdf,
@@ -130,6 +131,44 @@ def test_verify_pdf_returns_jpeg_thumbnails(tmp_path: Path) -> None:
     assert len(thumbnails[0]) > len("data:image/jpeg;base64,")
 
 
+def test_verify_pdf_runs_visual_checker(tmp_path: Path) -> None:
+    pdf = _make_pdf(tmp_path / "visual.pdf", [{"texts": [(100, 100, "Hello", 12)]}])
+    seen: dict = {}
+
+    def checker(images: list[str]) -> list[RenderVerifyIssue]:
+        seen["count"] = len(images)
+        return [
+            RenderVerifyIssue(
+                category="visual",
+                severity="warning",
+                message="检测到疑似重叠",
+            )
+        ]
+
+    issues, warnings, _summary, thumbnails = verify_rendered_pdf(
+        pdf, visual_pages=1, visual_checker=checker
+    )
+
+    assert seen["count"] == 1
+    assert warnings == []
+    assert thumbnails == []
+    assert any(issue.category == "visual" for issue in issues)
+
+
+def test_verify_pdf_visual_checker_failure_degrades(tmp_path: Path) -> None:
+    pdf = _make_pdf(tmp_path / "visual-fail.pdf", [{"texts": [(100, 100, "Hello", 12)]}])
+
+    def checker(images: list[str]) -> list[RenderVerifyIssue]:
+        raise RuntimeError("vision unavailable")
+
+    issues, warnings, _summary, _thumbnails = verify_rendered_pdf(
+        pdf, visual_pages=1, visual_checker=checker
+    )
+
+    assert not any(issue.category == "visual" for issue in issues)
+    assert any(warning["code"] == "visual_check_failed" for warning in warnings)
+
+
 def test_verify_pdf_truncates_at_max_pages(tmp_path: Path) -> None:
     pdf = _make_pdf(
         tmp_path / "many.pdf",
@@ -231,3 +270,83 @@ def test_verify_document_rejects_oversize_file(tmp_path: Path) -> None:
         verify_document(
             RenderVerifyRequest(workspace_path=str(tmp_path), file_path=str(source))
         )
+
+
+def _letter_docx(path: Path) -> Path:
+    from docx import Document
+    from docx.shared import Inches
+
+    document = Document()
+    section = document.sections[0]
+    section.page_width = Inches(8.5)
+    section.page_height = Inches(11)
+    document.add_paragraph("Hello")
+    document.save(str(path))
+    return path
+
+
+def _size_reflecting_export(tmp_path: Path):
+    """Render a PDF whose page size mirrors the current docx section."""
+
+    def exporter(source: Path, workspace: Path, *, timeout_seconds: int = 120):
+        import fitz
+        from docx import Document
+
+        document = Document(str(source))
+        section = document.sections[0]
+        width = float(section.page_width.pt)
+        height = float(section.page_height.pt)
+        pdf = tmp_path / f"render-{int(width)}x{int(height)}.pdf"
+        pdf_doc = fitz.open()
+        try:
+            page = pdf_doc.new_page(width=width, height=height)
+            page.insert_text((100, 100), "Hello", fontname="helv", fontsize=12)
+            pdf_doc.save(str(pdf))
+        finally:
+            pdf_doc.close()
+        return ExportPdfResult(ok=True, method="libreoffice", output_path=str(pdf))
+
+    return exporter
+
+
+def test_verify_document_repairs_word_page_size(tmp_path: Path) -> None:
+    source = _letter_docx(tmp_path / "letter.docx")
+
+    result = verify_document(
+        RenderVerifyRequest(
+            workspace_path=str(tmp_path),
+            file_path=str(source),
+            expected_size="A4",
+            repair=True,
+        ),
+        export_fn=_size_reflecting_export(tmp_path),
+    )
+
+    assert result.status == "passed"
+    assert result.repairs
+    assert result.repairs[0]["fixed_count"] >= 1
+
+
+def test_verify_document_repair_unsupported_format(tmp_path: Path) -> None:
+    from openpyxl import Workbook
+
+    source = tmp_path / "book.xlsx"
+    workbook = Workbook()
+    workbook.save(str(source))
+    pdf = _make_pdf(
+        tmp_path / "letter.pdf",
+        [{"width": 612, "height": 792, "texts": [(100, 100, "Letter", 12)]}],
+    )
+
+    result = verify_document(
+        RenderVerifyRequest(
+            workspace_path=str(tmp_path),
+            file_path=str(source),
+            expected_size="A4",
+            repair=True,
+        ),
+        export_fn=_fake_export(pdf),
+    )
+
+    assert result.status == "failed"
+    assert any(warning["code"] == "repair_unsupported" for warning in result.warnings)

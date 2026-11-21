@@ -19,7 +19,7 @@ from __future__ import annotations
 import base64
 import logging
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -104,7 +104,15 @@ class RenderVerifyRequest(BaseModel):
     max_pages: int = Field(default=200, ge=1, le=MAX_VERIFY_PAGES)
     thumbnail_pages: int = Field(default=0, ge=0, le=5, description="为前 N 页生成 JPEG 缩略图")
     thumbnail_dpi: int = Field(default=96, ge=72, le=200)
+    visual_pages: int = Field(
+        default=0, ge=0, le=5, description="为前 N 页生成图像供可选视觉检查器使用"
+    )
     timeout_seconds: int = Field(default=120, ge=1, le=600)
+    repair: bool = Field(
+        default=False,
+        description="docx 且请求含显式期望值（size/margins/page number）时，失败后先确定性修复再复检",
+    )
+    max_repair_rounds: int = Field(default=2, ge=0, le=3)
 
 
 class RenderVerifyResult(BaseModel):
@@ -122,6 +130,9 @@ class RenderVerifyResult(BaseModel):
     warnings: List[Dict[str, str]] = Field(default_factory=list)
     summary: RenderVerifySummary = Field(default_factory=RenderVerifySummary)
     thumbnails: List[str] = Field(default_factory=list)
+    repairs: List[Dict[str, Any]] = Field(
+        default_factory=list, description="自动修复轮次记录（仅 repair=true）"
+    )
 
 
 def _rel(path: Path, root: Path) -> str:
@@ -148,6 +159,8 @@ def verify_rendered_pdf(
     max_pages: int = 200,
     thumbnail_pages: int = 0,
     thumbnail_dpi: int = 96,
+    visual_pages: int = 0,
+    visual_checker: Optional[Callable[[List[str]], List[RenderVerifyIssue]]] = None,
 ) -> Tuple[List[RenderVerifyIssue], List[Dict[str, str]], RenderVerifySummary, List[str]]:
     """Inspect a rendered PDF; returns (issues, warnings, summary, thumbnails).
 
@@ -195,6 +208,8 @@ def verify_rendered_pdf(
 
     summary = RenderVerifySummary(pages=total_pages, inspected_pages=inspected)
     thumbnails: List[str] = []
+    visual_images: List[str] = []
+    image_slots = max(0, int(thumbnail_pages), int(visual_pages))
 
     document = fitz.open(str(pdf_path))
     try:
@@ -253,19 +268,35 @@ def verify_rendered_pdf(
                     )
                 )
 
-            if len(thumbnails) < max(0, int(thumbnail_pages)):
+            if index < image_slots:
                 dpi = max(72, min(200, int(thumbnail_dpi)))
-                thumbnails.append(_decode_jpeg_data_url(page.get_pixmap(dpi=dpi)))
+                data_url = _decode_jpeg_data_url(page.get_pixmap(dpi=dpi))
+                if index < max(0, int(thumbnail_pages)):
+                    thumbnails.append(data_url)
+                if index < max(0, int(visual_pages)):
+                    visual_images.append(data_url)
     finally:
         document.close()
+
+    if visual_checker is not None and visual_images:
+        try:
+            issues.extend(visual_checker(visual_images))
+        except Exception as exc:  # noqa: BLE001 — 视觉检查失败降级为 warning
+            warnings.append(
+                {
+                    "code": "visual_check_failed",
+                    "message": f"视觉检查失败（{type(exc).__name__}）",
+                }
+            )
 
     return issues, warnings, summary, thumbnails
 
 
-def verify_document(
+def _verify_once(
     request: RenderVerifyRequest,
     *,
     export_fn: Optional[Callable[..., ExportPdfResult]] = None,
+    visual_checker: Optional[Callable[[List[str]], List[RenderVerifyIssue]]] = None,
 ) -> RenderVerifyResult:
     """Render a managed docx/xlsx/pptx and verify the rendered PDF."""
     workspace = validate_workspace(Path(request.workspace_path))
@@ -310,6 +341,8 @@ def verify_document(
             max_pages=request.max_pages,
             thumbnail_pages=request.thumbnail_pages,
             thumbnail_dpi=request.thumbnail_dpi,
+            visual_pages=request.visual_pages,
+            visual_checker=visual_checker,
         )
     except OfficeParseError as exc:
         return RenderVerifyResult(
@@ -353,6 +386,130 @@ def verify_document(
         summary=summary,
         thumbnails=thumbnails,
     )
+
+
+def _build_repair_rulepack(request: RenderVerifyRequest) -> Optional[Any]:
+    """Map explicit expectations to the deterministic Word fixer rule pack."""
+    from .word_rulepack_models import WordRulePack, WordRuleSpec
+
+    rules: List[Any] = []
+    if request.expected_size:
+        rules.append(
+            WordRuleSpec(
+                id="render-verify/page-size",
+                title="页面尺寸",
+                category="page",
+                severity="error",
+                kind="page.size",
+                params={"size": request.expected_size.strip().upper()},
+                fixable=True,
+            )
+        )
+    margins = request.margins_cm or {}
+    margin_params = {
+        f"{side}_cm": float(margins[side])
+        for side in ("top", "bottom", "left", "right")
+        if isinstance(margins.get(side), (int, float))  # noqa: UP038 — py38 runtime
+    }
+    if margin_params:
+        rules.append(
+            WordRuleSpec(
+                id="render-verify/page-margins",
+                title="页边距",
+                category="page",
+                severity="error",
+                kind="page.margins",
+                params=margin_params,
+                fixable=True,
+            )
+        )
+    if request.require_page_number:
+        rules.append(
+            WordRuleSpec(
+                id="render-verify/page-number",
+                title="页码",
+                category="page",
+                severity="warning",
+                kind="page.page_number",
+                params={"required": True},
+                fixable=True,
+            )
+        )
+    if not rules:
+        return None
+    return WordRulePack(
+        id="render-verify-repair",
+        name="Render & Verify 自动修复",
+        rules=rules,
+    )
+
+
+def verify_document(
+    request: RenderVerifyRequest,
+    *,
+    export_fn: Optional[Callable[..., ExportPdfResult]] = None,
+    visual_checker: Optional[Callable[[List[str]], List[RenderVerifyIssue]]] = None,
+) -> RenderVerifyResult:
+    """Render & verify, optionally repairing a failed .docx before re-checking.
+
+    Repair is opt-in (``request.repair``) and only runs when the request
+    carries explicit expectations (page size / margins / page number);
+    auto-detect-only runs never rewrite the document.
+    """
+    result = _verify_once(
+        request, export_fn=export_fn, visual_checker=visual_checker
+    )
+    if not request.repair or request.max_repair_rounds <= 0 or result.status != "failed":
+        return result
+
+    workspace = validate_workspace(Path(request.workspace_path))
+    source = resolve_within(workspace, Path(request.file_path))
+    if source.suffix.lower() != ".docx":
+        result.warnings.append(
+            {"code": "repair_unsupported", "message": "自动修复目前仅支持 .docx"}
+        )
+        return result
+    rulepack = _build_repair_rulepack(request)
+    if rulepack is None:
+        result.warnings.append(
+            {"code": "repair_no_rules", "message": "请求未提供可修复的显式期望值"}
+        )
+        return result
+
+    from .word_fix import fix_word_document
+
+    repairs: List[Dict[str, Any]] = list(result.repairs)
+    warnings: List[Dict[str, str]] = list(result.warnings)
+    current = result
+    for round_index in range(request.max_repair_rounds):
+        try:
+            fix = fix_word_document(
+                source, rulepack, overwrite=True, workspace_path=str(workspace)
+            )
+        except Exception as exc:  # noqa: BLE001 — 修复失败降级为 warning，不改主结果
+            warnings.append(
+                {"code": "repair_failed", "message": f"自动修复失败: {exc}"}
+            )
+            current.warnings = warnings
+            return current
+        warnings.extend(fix.warnings)
+        repairs.append(
+            {
+                "round": round_index + 1,
+                "fixed_count": fix.fixed_count,
+                "actions": [action.model_dump() for action in fix.actions],
+            }
+        )
+        if fix.fixed_count == 0:
+            break
+        current = _verify_once(
+            request, export_fn=export_fn, visual_checker=visual_checker
+        )
+        if current.status != "failed":
+            break
+    current.repairs = repairs
+    current.warnings = warnings + [w for w in current.warnings if w not in warnings]
+    return current
 
 
 def _compact_result(result: RenderVerifyResult) -> Dict[str, object]:
