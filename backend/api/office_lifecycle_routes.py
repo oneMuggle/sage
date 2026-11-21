@@ -64,6 +64,11 @@ from backend.office.ppt_template import (
     analyze_ppt_template,
     fill_ppt_template,
 )
+from backend.office.render_verify import (
+    RenderVerifyRequest,
+    RenderVerifyResult,
+    verify_document,
+)
 from backend.office.revision import stat_revision
 from backend.office.storage import (
     archive_document,
@@ -373,6 +378,15 @@ def pdf_preview_endpoint(req: OfficeExportPdfRequest):
         )
         prog.report("完成", 95)
     return result
+
+
+@router.post("/render/verify", response_model=RenderVerifyResult)
+def render_verify_endpoint(req: RenderVerifyRequest) -> RenderVerifyResult:
+    """M1: 渲染级校验 —— docx/xlsx/pptx → PDF → 几何/空白/溢出检查 + 缩略图。
+
+    无转换器时返回 ``status="degraded"``（HTTP 200），不阻塞调用方。
+    """
+    return verify_document(req)
 
 
 @router.get("/progress/{task_id}")

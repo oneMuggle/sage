@@ -58,7 +58,7 @@ def test_schema_requires_no_tool_context_and_exposes_fields():
     assert tool.requires_tool_context is False
     props = tool.schema.parameters["properties"]
     assert set(props.keys()) == {
-        "doc_type", "output_dir", "filename", "content", "font_family", "refresh_toc",
+        "doc_type", "output_dir", "filename", "content", "font_family", "refresh_toc", "verify",
     }
     # doc_type 合法取值必须与 models.OfficeDocType 枚举一致（单一事实来源）
     assert props["doc_type"]["enum"] == [t.value for t in OfficeDocType]
@@ -392,7 +392,15 @@ def test_create_without_binding_keeps_legacy_output_dir_behavior(tmp_path):
 
     assert result.success is True
     # 批次 3: 成功结果附带 self_check 回读摘要（best-effort，成功不改变主结果形状）
-    assert set(result.content.keys()) == {"path", "filename", "bytes", "self_check"}
+    # M1: 默认 verify=auto 在无转换器环境附加降级摘要（不阻塞生成）。
+    assert set(result.content.keys()) == {
+        "path",
+        "filename",
+        "bytes",
+        "self_check",
+        "render_verify",
+    }
+    assert result.content["render_verify"]["status"] == "degraded"
     assert (out_dir / "天气.docx").exists()
 
 
@@ -588,3 +596,63 @@ def test_managed_create_records_artifact(bound_db):
     assert artifact.workspace_path == str(workspace)
     assert "numbering" in (artifact.format_spec or "")
     assert Path(artifact.path).is_file()
+
+
+def _write_text_pdf(path: Path) -> Path:
+    import fitz
+
+    document = fitz.open()
+    try:
+        page = document.new_page(width=595.28, height=841.89)
+        page.insert_text((100, 100), "Hello", fontname="helv", fontsize=12)
+        document.save(str(path))
+    finally:
+        document.close()
+    return path
+
+
+def test_create_attaches_render_verify_when_converter_available(tmp_path, monkeypatch):
+    out_dir = tmp_path / "desktop"
+    out_dir.mkdir()
+    pdf = _write_text_pdf(out_dir / "rendered.pdf")
+
+    class _Caps:
+        pdf_export_available = True
+
+    from backend.office.export_pdf import ExportPdfResult
+
+    def fake_export(source, workspace, *, timeout_seconds=120):
+        return ExportPdfResult(ok=True, method="libreoffice", output_path=str(pdf))
+
+    monkeypatch.setattr(
+        "backend.office.capabilities.probe_capabilities", lambda force=False: _Caps()
+    )
+    monkeypatch.setattr("backend.office.render_verify.export_to_pdf", fake_export)
+
+    result = _tool().execute(**_word_args(str(out_dir)))
+
+    assert result.success is True
+    verify = result.content["render_verify"]
+    assert verify["status"] == "passed"
+    assert verify["page_count"] == 1
+    assert verify["summary"]["pages"] == 1
+
+
+def test_create_verify_off_skips_render_check(tmp_path):
+    out_dir = tmp_path / "desktop"
+    out_dir.mkdir()
+
+    result = _tool().execute(**_word_args(str(out_dir)), verify="off")
+
+    assert result.success is True
+    assert "render_verify" not in result.content
+
+
+def test_create_rejects_invalid_verify_mode(tmp_path):
+    out_dir = tmp_path / "desktop"
+    out_dir.mkdir()
+
+    result = _tool().execute(**_word_args(str(out_dir)), verify="yes")
+
+    assert result.success is False
+    assert "verify_invalid" in (result.error or "")

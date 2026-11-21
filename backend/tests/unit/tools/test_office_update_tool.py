@@ -90,7 +90,9 @@ def test_schema_has_no_workspace_path_parameter():
     props = _tool().schema.parameters["properties"]
     assert "workspace_path" not in props
     # dry_run: round-2 R4 只读预览开关（默认 false，不传即走正式编辑路径）
-    assert set(props) == {"doc_id", "file_path", "ops", "dry_run", "refresh_toc", "expected_revision"}
+    assert set(props) == {
+        "doc_id", "file_path", "ops", "dry_run", "refresh_toc", "expected_revision", "verify",
+    }
 
 
 # ── 参数校验 ──────────────────────────────────────────────────────────
@@ -463,3 +465,65 @@ def test_update_by_path_refresh_toc_rejects_non_word_upfront(tmp_path: Path):
     from backend.office.excel import read_xlsx
 
     assert read_xlsx(target, workspace_path="").sheets[0].rows == []
+
+
+def test_update_by_path_attaches_render_verify_when_converter_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import fitz
+    from openpyxl import Workbook
+
+    from backend.office.export_pdf import ExportPdfResult
+
+    target = tmp_path / "报表.xlsx"
+    wb = Workbook()
+    wb.active.title = "数据"
+    wb.save(str(target))
+
+    pdf = tmp_path / "rendered.pdf"
+    document = fitz.open()
+    try:
+        page = document.new_page(width=595.28, height=841.89)
+        page.insert_text((100, 100), "Hello", fontname="helv", fontsize=12)
+        document.save(str(pdf))
+    finally:
+        document.close()
+
+    class _Caps:
+        pdf_export_available = True
+
+    def fake_export(source, workspace, *, timeout_seconds=120):
+        return ExportPdfResult(ok=True, method="libreoffice", output_path=str(pdf))
+
+    monkeypatch.setattr(
+        "backend.office.capabilities.probe_capabilities", lambda force=False: _Caps()
+    )
+    monkeypatch.setattr("backend.office.render_verify.export_to_pdf", fake_export)
+
+    result = _tool().execute(
+        file_path=str(target),
+        ops=[{"op": "append_rows", "sheet": "数据", "rows": [["a", "1"]]}],
+    )
+
+    assert result.success is True
+    verify = result.content["render_verify"]
+    assert verify["status"] == "passed"
+    assert verify["page_count"] == 1
+
+
+def test_update_verify_off_skips_render_check(tmp_path: Path):
+    from openpyxl import Workbook
+
+    target = tmp_path / "报表.xlsx"
+    wb = Workbook()
+    wb.active.title = "数据"
+    wb.save(str(target))
+
+    result = _tool().execute(
+        file_path=str(target),
+        ops=[{"op": "append_rows", "sheet": "数据", "rows": [["a", "1"]]}],
+        verify="off",
+    )
+
+    assert result.success is True
+    assert "render_verify" not in result.content
