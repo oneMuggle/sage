@@ -8,13 +8,8 @@ import { useDesignStore } from '../../entities/design/designStore';
 import type { ProjectTweaks } from '../../entities/design/types';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { deletePreset, loadPresets, savePreset, type TweakPreset } from './designTweakPresets';
 import { extractTweakDefaults } from './designTweaks';
-import {
-  deletePreset,
-  loadPresets,
-  savePreset,
-  type TweakPreset,
-} from './designTweakPresets';
 
 interface DesignTweaksPanelProps {
   projectId: string;
@@ -99,9 +94,7 @@ export function DesignTweaksPanel({ projectId }: DesignTweaksPanelProps) {
   const density = tweaks.density ?? defaults.density;
   const selectedFontKey =
     FONT_OPTIONS.find((option) => option.value === (tweaks.font_family ?? null))?.key ?? 'auto';
-  const hasOverrides = Object.values(tweaks).some(
-    (value) => value !== null && value !== undefined,
-  );
+  const hasOverrides = Object.values(tweaks).some((value) => value !== null && value !== undefined);
 
   const handleSavePreset = () => {
     if (!presetName.trim() || !hasOverrides) return;

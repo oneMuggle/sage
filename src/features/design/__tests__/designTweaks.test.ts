@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyTweaks, applyTokensCss, extractTweakDefaults, tweakCssDeclarations } from '../designTweaks';
+import {
+  applyTweaks,
+  applyTokensCss,
+  extractTweakDefaults,
+  tweakCssDeclarations,
+} from '../designTweaks';
 
 describe('designTweaks', () => {
   it('returns html unchanged when no overrides are set', () => {

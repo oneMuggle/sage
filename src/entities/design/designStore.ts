@@ -201,9 +201,7 @@ export const useDesignStore = create<DesignState>((set) => ({
     const stopStreaming = api.subscribeDesignProgress(projectId, (progress) =>
       set({ generationProgress: progress }),
     );
-    const stopPolling = stopStreaming
-      ? () => undefined
-      : startProgressPolling(projectId, set);
+    const stopPolling = stopStreaming ? () => undefined : startProgressPolling(projectId, set);
     try {
       await api.generateArtifact(projectId, { brief });
       await useDesignStore.getState().loadProject(projectId);
@@ -225,9 +223,7 @@ export const useDesignStore = create<DesignState>((set) => ({
     const stopStreaming = api.subscribeDesignProgress(projectId, (progress) =>
       set({ generationProgress: progress }),
     );
-    const stopPolling = stopStreaming
-      ? () => undefined
-      : startProgressPolling(projectId, set);
+    const stopPolling = stopStreaming ? () => undefined : startProgressPolling(projectId, set);
     try {
       await api.iterateArtifact(projectId, { feedback });
       await useDesignStore.getState().loadProject(projectId);

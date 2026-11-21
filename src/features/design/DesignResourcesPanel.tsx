@@ -51,8 +51,7 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  const canPickFile =
-    typeof window !== 'undefined' && Boolean(window.electronAPI?.selectFile);
+  const canPickFile = typeof window !== 'undefined' && Boolean(window.electronAPI?.selectFile);
 
   const handleBind = async () => {
     const picker = window.electronAPI?.selectFile;
@@ -87,9 +86,7 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
   };
 
   const updateSeries = (index: number, patch: Partial<{ name: string; values: string }>) => {
-    setSeries((prev) =>
-      prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)),
-    );
+    setSeries((prev) => prev.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
   };
 
   const validSeries = series
@@ -114,9 +111,7 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
     try {
       const result = await embedChart(projectId, chart);
       if (result) {
-        toast.success(
-          t('design.resources.embedded').replace('{version}', String(result.version)),
-        );
+        toast.success(t('design.resources.embedded').replace('{version}', String(result.version)));
       }
     } finally {
       setEmbedding(false);
@@ -169,9 +164,7 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
             className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
             disabled={!canPickFile || previewLoading}
             title={
-              canPickFile
-                ? t('design.resources.bind')
-                : t('design.resources.filePickerUnavailable')
+              canPickFile ? t('design.resources.bind') : t('design.resources.filePickerUnavailable')
             }
             onClick={() => void handleBind()}
           >
@@ -262,19 +255,14 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
             <div key={index} className="space-y-1 rounded-md border border-border p-2">
               <div className="flex items-center justify-between">
                 <span className="text-text-muted">
-                  {t('design.resources.series').replace(
-                    '{index}',
-                    String(index + 1),
-                  )}
+                  {t('design.resources.series').replace('{index}', String(index + 1))}
                 </span>
                 {series.length > 1 && (
                   <button
                     type="button"
                     aria-label={t('design.resources.removeSeries')}
                     className="rounded border border-border px-1.5 py-0.5 hover:bg-bg-hover"
-                    onClick={() =>
-                      setSeries((prev) => prev.filter((_, i) => i !== index))
-                    }
+                    onClick={() => setSeries((prev) => prev.filter((_, i) => i !== index))}
                   >
                     ×
                   </button>

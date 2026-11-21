@@ -86,8 +86,7 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
   const [quickTone, setQuickTone] = useState<QuickTone>('professional');
   const [error, setError] = useState<string | null>(null);
 
-  const canPickFile =
-    typeof window !== 'undefined' && Boolean(window.electronAPI?.selectFile);
+  const canPickFile = typeof window !== 'undefined' && Boolean(window.electronAPI?.selectFile);
 
   const handleImportOutline = async () => {
     const picker = window.electronAPI?.selectFile;
@@ -100,14 +99,9 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
     setImportingOutline(true);
     try {
       const outline = await extractOutline(path);
-      setBrief((prev) =>
-        prev.trim() ? `${prev}\n\n${outline.outline_md}` : outline.outline_md,
-      );
+      setBrief((prev) => (prev.trim() ? `${prev}\n\n${outline.outline_md}` : outline.outline_md));
       toast.success(
-        t('design.composer.outlineLoaded').replace(
-          '{count}',
-          String(outline.slide_count),
-        ),
+        t('design.composer.outlineLoaded').replace('{count}', String(outline.slide_count)),
       );
     } catch (err) {
       toast.error(
@@ -132,11 +126,8 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
     () => templates.filter((tpl) => tpl.kind === kind),
     [templates, kind],
   );
-  const previewTemplate =
-    kindTemplates.find((tpl) => tpl.id === templateId) ?? kindTemplates[0];
-  const directionSystems = systems
-    .filter((system) => system.tokens_css.trim())
-    .slice(0, 3);
+  const previewTemplate = kindTemplates.find((tpl) => tpl.id === templateId) ?? kindTemplates[0];
+  const directionSystems = systems.filter((system) => system.tokens_css.trim()).slice(0, 3);
 
   const applyQuickBrief = () => {
     const kindLabel = kind === 'deck' ? t('design.kind.deck') : t('design.kind.prototype');

@@ -94,7 +94,8 @@ export const enDesign = {
     'A {length} {kindLabel} for {audience}, with a {tone} tone.',
   'design.composer.templatePreview': 'Template preview',
   'design.composer.directionTitle': 'Style direction',
-  'design.composer.directionHint': 'Pick a style card to switch the design system before generating.',
+  'design.composer.directionHint':
+    'Pick a style card to switch the design system before generating.',
 
   // Review
   'design.review.run': 'Quality review',

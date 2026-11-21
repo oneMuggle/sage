@@ -48,9 +48,7 @@ describe('DesignResourcesPanel', () => {
     vi.mocked(api.previewSource).mockResolvedValue({
       ok: true,
       kind: 'csv',
-      sheets: [
-        { name: 'data', row_count: 2, columns: ['name', 'value'], sample: [] },
-      ],
+      sheets: [{ name: 'data', row_count: 2, columns: ['name', 'value'], sample: [] }],
     });
 
     render(<DesignResourcesPanel projectId="p1" />);
@@ -62,10 +60,7 @@ describe('DesignResourcesPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'design.resources.confirmBind' }));
     await waitFor(() =>
-      expect(useDesignStore.getState().bindSource).toHaveBeenCalledWith(
-        'p1',
-        '/tmp/data.csv',
-      ),
+      expect(useDesignStore.getState().bindSource).toHaveBeenCalledWith('p1', '/tmp/data.csv'),
     );
   });
 
@@ -87,9 +82,7 @@ describe('DesignResourcesPanel', () => {
     fireEvent.change(screen.getAllByLabelText('design.resources.values')[0], {
       target: { value: '10, 20' },
     });
-    fireEvent.click(
-      screen.getByRole('button', { name: /design.resources.addSeries/ }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: /design.resources.addSeries/ }));
     fireEvent.change(screen.getAllByLabelText('design.resources.seriesName')[1], {
       target: { value: 'Cost' },
     });

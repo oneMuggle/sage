@@ -138,7 +138,7 @@ async def extract_outline(req: OutlineRequest):
 
 
 @router.post("/source/preview")
-async def preview_source(req: SourcePreviewRequest):
+async def preview_source(req: SourcePreviewRequest):  # noqa: PLR0911
     """Parse an xlsx/csv/json file and return a compact preview.
 
     Lets the UI show columns and row counts before the user commits to a
