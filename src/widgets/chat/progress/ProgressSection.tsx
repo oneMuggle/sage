@@ -156,9 +156,7 @@ export function ProgressSection({
         /* 任务详情 —— 整面板替换。旧的 SubagentDetailDrawer 嵌在右栏里宽度被裁切，
            且从编排 store 解析聊天任务恒为 undefined（点了没反应）；此处占满面板。 */
         <div className="flex-1 min-h-0">
-          <Suspense
-            fallback={<div className="p-3 text-xs text-text-muted">加载任务详情…</div>}
-          >
+          <Suspense fallback={<div className="p-3 text-xs text-text-muted">加载任务详情…</div>}>
             <LazyTaskDetailView
               board={taskBoard}
               taskId={selectedTaskId}

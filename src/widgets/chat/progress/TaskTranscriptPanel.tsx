@@ -42,7 +42,9 @@ function formatDuration(durationMs: number | null): string {
 function ReasoningBlock({ text, mode }: { text: string; mode: DisplayMode }) {
   const open = mode === 'detail';
   const label =
-    mode === 'result' ? `已隐藏思考过程（${text.length} 字，点击展开）` : `思考（${text.length} 字）`;
+    mode === 'result'
+      ? `已隐藏思考过程（${text.length} 字，点击展开）`
+      : `思考（${text.length} 字）`;
   return (
     <details
       open={open}
