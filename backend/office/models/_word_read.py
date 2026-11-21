@@ -78,7 +78,7 @@ class WordTrackedChange(BaseModel):
     author: Optional[str] = None
     date: Optional[str] = Field(default=None, description="OOXML w:date 原始 ISO 字符串")
     paragraph_index: Optional[int] = Field(
-        default=None, description="0 基正文段落索引（与 read_docx paragraph 对齐）"
+        default=None, description="OOXML body 段落顺序（含表格单元格）"
     )
 
 

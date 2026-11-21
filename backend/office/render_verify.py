@@ -515,6 +515,22 @@ def _request_with_path(
     return RenderVerifyRequest(**data)
 
 
+def _repair_output_name(source: Path, round_index: int) -> str:
+    """Pick a non-existing ``<stem>-repaired[-N].docx`` name."""
+    stem = source.stem
+    if round_index == 0:
+        candidate = f"{stem}-repaired.docx"
+        if not (source.parent / candidate).exists():
+            return candidate
+    counter = 2 if round_index == 0 else round_index + 1
+    while counter < 100:
+        candidate = f"{stem}-repaired-{counter}.docx"
+        if not (source.parent / candidate).exists():
+            return candidate
+        counter += 1
+    raise OfficeParseError("无法生成不冲突的修复文件名")
+
+
 def _snapshot_before_overwrite(source: Path, warnings: List[Dict[str, str]]) -> None:
     """Best-effort pre-edit snapshot before an in-place repair."""
     try:
@@ -575,8 +591,7 @@ def verify_document(
             output_name = None
         else:
             overwrite = False
-            suffix = "" if round_index == 0 else f"-{round_index + 1}"
-            output_name = f"{working_path.stem}-repaired{suffix}.docx"
+            output_name = _repair_output_name(source, round_index)
         try:
             fix = fix_word_document(
                 working_path,

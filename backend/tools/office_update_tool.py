@@ -258,7 +258,7 @@ class OfficeUpdateTool(BaseTool):
         *,
         do_refresh: bool = False,
         expected_revision: Optional[str] = None,
-        verify_mode: str = "auto",
+        verify_mode: str = "off",
     ) -> ToolResult:
         ctx = current_tool_context()
         if ctx is None or not ctx.session_id:
@@ -513,7 +513,7 @@ class OfficeUpdateTool(BaseTool):
         ops: List[Dict[str, Any]],
         *,
         do_refresh: bool = False,
-        verify_mode: str = "auto",
+        verify_mode: str = "off",
     ) -> ToolResult:
         blocked = self._enforce_workspace(file_path)
         if blocked is not None:

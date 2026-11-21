@@ -239,6 +239,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 端点：`backend/api/office_lifecycle_routes.py` → `POST /render/verify`
 > - 工具：`office_create` 默认 `verify=auto`、`office_update` 默认 `verify=off`，结果附加紧凑 `render_verify` 摘要
 > - 审查修复（H1/H2/H3）：渲染副本隔离、修复默认另存 + 可选快照覆盖、update 默认不跑转换器
+> - 后续优化：隔离渲染每次复制源文件（≤50MiB），可按 `(path, mtime, size)` 缓存校验结果
 > - 测试：`test_render_verify.py`（13）+ `test_office_render_verify_routes.py`（4）+ 工具级 5 条；Office 全量 1733 单测 + 440 集成通过；ruff / py38 / silent-exceptions / architecture 门禁通过
 > - 基线：`architecture-baseline.json` 中 `office_create_tool.py` 1625 → 1702（有意增长）
 
@@ -269,7 +270,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 模型：`WordTrackedChange`（kind/text/author/date/paragraph_index）；`OfficeWordReadResult.tracked_changes`
 > - 端点：`POST /office/word/tracked-changes`、`POST /office/word/tracked-changes/resolve`
 > - 测试：unit 6 + integration 2；Word 读取回归通过；ruff/py38/architecture 通过
-> - 已知限制：读取/接受拒绝均覆盖 OOXML body 段落（含表格单元格）；跨段落书签与删除段落标记合并语义待后续
+> - 已知限制：读取/接受拒绝均覆盖 OOXML body 段落（含表格文本）；行/单元格级修订（`w:trPr`/`w:tcPr`）读取未覆盖；跨段落书签与删除段落标记合并语义待后续
 
 ### M4 — Excel 读写对称与错误治理（P0，对应 G6/G14）
 

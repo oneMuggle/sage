@@ -152,8 +152,7 @@ def _validate_source(workspace_path: str, file_path: str) -> tuple:
         raise OfficeParseError("修订读取/接受拒绝仅支持 .docx")
     if source.stat().st_size > MAX_DOCX_BYTES:
         raise OfficeSizeLimitError(
-            f"DOCX 超过 {MAX_DOCX_BYTES // (1024 * 1024)}MiB 修订处理上限",
-            file_path=source,
+            source.stat().st_size, MAX_DOCX_BYTES, file_path=source
         )
     return workspace, source
 

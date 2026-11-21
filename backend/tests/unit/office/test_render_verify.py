@@ -368,6 +368,24 @@ def test_verify_document_repair_defaults_to_copy(tmp_path: Path) -> None:
     assert Document(str(source)).sections[0].page_width.inches == 8.5
 
 
+def test_verify_document_repair_avoids_existing_copy_name(tmp_path: Path) -> None:
+    source = _letter_docx(tmp_path / "letter.docx")
+    (tmp_path / "letter-repaired.docx").write_bytes(b"occupied")
+
+    result = verify_document(
+        RenderVerifyRequest(
+            workspace_path=str(tmp_path),
+            file_path=str(source),
+            expected_size="A4",
+            repair=True,
+        ),
+        export_fn=_size_reflecting_export(tmp_path),
+    )
+
+    assert result.status == "passed"
+    assert result.repaired_path == "letter-repaired-2.docx"
+
+
 def test_verify_document_repair_unsupported_format(tmp_path: Path) -> None:
     from openpyxl import Workbook
 

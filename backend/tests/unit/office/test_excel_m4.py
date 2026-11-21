@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from backend.office.edit import update_xlsx
-from backend.office.errors import OfficeParseError, OfficePathError
+from backend.office.errors import (
+    OfficeParseError,
+    OfficePathError,
+    OfficeSizeLimitError,
+)
 from backend.office.excel import read_xlsx
 from backend.office.excel_health import (
     ExcelFormulaHealthRequest,
@@ -110,6 +114,17 @@ def test_formula_health_counts_beyond_report_cap(tmp_path: Path) -> None:
     assert result.missing_cache_count == 201
     assert len(result.missing_cache) == 200
     assert result.issue_truncated is True
+
+
+def test_formula_health_rejects_oversize_xlsx(tmp_path: Path) -> None:
+    path = tmp_path / "huge.xlsx"
+    with path.open("wb") as handle:
+        handle.truncate(50 * 1024 * 1024 + 1)
+
+    with pytest.raises(OfficeSizeLimitError):
+        check_formula_health(
+            ExcelFormulaHealthRequest(workspace_path=str(tmp_path), file_path=str(path))
+        )
 
 
 def test_read_xlsx_exposes_charts_conditional_formats_and_validations(

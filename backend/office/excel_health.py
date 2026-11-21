@@ -198,8 +198,7 @@ def check_formula_health(request: ExcelFormulaHealthRequest) -> ExcelFormulaHeal
         raise OfficeParseError("公式健康检查仅支持 .xlsx")
     if source.stat().st_size > MAX_XLSX_BYTES:
         raise OfficeSizeLimitError(
-            f"XLSX 超过 {MAX_XLSX_BYTES // (1024 * 1024)}MiB 公式检查上限",
-            file_path=source,
+            source.stat().st_size, MAX_XLSX_BYTES, file_path=source
         )
 
     try:

@@ -8,7 +8,7 @@ import pytest
 from docx import Document
 from docx.oxml.ns import qn
 
-from backend.office.errors import OfficeParseError
+from backend.office.errors import OfficeParseError, OfficeSizeLimitError
 from backend.office.word import read_docx
 from backend.office.word_revision_writer import apply_word_revisions
 from backend.office.word_tracked_changes import (
@@ -125,3 +125,12 @@ def test_resolve_refuses_existing_output(tmp_path: Path) -> None:
                 mode="accept",
             )
         )
+
+
+def test_read_rejects_oversize_docx(tmp_path: Path) -> None:
+    path = tmp_path / "huge.docx"
+    with path.open("wb") as handle:
+        handle.truncate(50 * 1024 * 1024 + 1)
+
+    with pytest.raises(OfficeSizeLimitError):
+        read_word_tracked_changes(str(tmp_path), str(path))
