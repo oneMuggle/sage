@@ -224,3 +224,49 @@ class TestGates:
         assert "[1] 王五. 论文二[J]. 期刊B, 2023." in text
         assert "[2] 张三, 李四. 论文一[J]. 期刊A, 2024." in text
         assert [e["key"] for e in entries] == ["p2", "p1"]
+
+
+class TestExport:
+    def _run(self, tmp_path):
+        from backend.literature.gates import run_gates
+        from backend.literature.run_store import (
+            create_run,
+            record_papers,
+            record_query,
+            save_draft,
+            save_outline,
+        )
+
+        run = create_run(tmp_path, "t", "demo", run_id="r1")
+        record_query(run, "q", "demo", 2)
+        record_papers(run, [_paper("p1"), _paper("p2")])
+        save_outline(run, {"title": "x", "sections": [{"id": "s1", "title": "引言"}]})
+        save_draft(run, "# 草稿\n\n发现 [cite:p1]。\n")
+        run_gates(run)
+        return run
+
+    def test_export_writes_final_references_and_bibtex(self, tmp_path):
+        from backend.literature.export import export_run
+
+        paths = export_run(self._run(tmp_path))
+        final = paths["final"].read_text(encoding="utf-8")
+        assert "## 参考文献" in final
+        assert "[1] 张三. 示例论文[J]. 示例期刊, 2024." in final
+        assert "p2" not in paths["references"].read_text(encoding="utf-8")
+        assert "@article{p1" in paths["bibtex"].read_text(encoding="utf-8")
+
+    def test_export_fails_when_gate_fails(self, tmp_path):
+        from backend.literature.export import export_run
+        from backend.literature.run_store import save_draft
+
+        run = self._run(tmp_path)
+        save_draft(run, "坏引用 [cite:missing]")
+        with pytest.raises(ValueError, match="门禁"):
+            export_run(run)
+
+    def test_handoff_has_references(self, tmp_path):
+        from backend.literature.export import build_handoff
+
+        data = build_handoff(self._run(tmp_path))
+        assert data["references"][0]["key"] == "p1"
+        assert data["references"][0]["ref_type"] == "journal"
