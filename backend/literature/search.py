@@ -15,6 +15,10 @@ class BrowserDriver(Protocol):
     def navigate(self, url: str, wait_for: str = "") -> str: ...
     def snapshot(self) -> str: ...
     def click(self, target: str) -> None: ...
+    def click_text(self, text: str) -> None: ...
+    def type_text(self, selector: str, text: str, clear: bool = True) -> bool: ...
+    def press_key(self, key: str) -> None: ...
+    def sleep(self, seconds: float) -> None: ...
     def current_url(self) -> str: ...
     def current_title(self) -> str: ...
     def wait_download(self, timeout_s: float = 60) -> Optional[str]: ...
@@ -32,8 +36,36 @@ class SearchObservation:
 def search_with_profile(
     profile: SiteProfile, query: str, driver: BrowserDriver, limit: int = 10
 ) -> SearchObservation:
-    url = render_search_url(profile, query, limit=limit)
     wait_for = ", ".join(profile.search.wait_for)
+    if profile.search.mode == "interactive":
+        entry = profile.search.entry_url or profile.search.url_template
+        page_url = driver.navigate(entry, wait_for=wait_for)
+        if profile.search.entry_click:
+            driver.click_text(profile.search.entry_click)
+            driver.sleep(1.0)
+        typed = False
+        for selector in profile.search.input_selectors:
+            if driver.type_text(selector, query, clear=True):
+                typed = True
+                break
+        if not typed:
+            raise RuntimeError("未找到可用的搜索输入框（检查 search.input_selectors）")
+        driver.press_key(profile.search.submit_key)
+        if profile.search.wait_after_s:
+            driver.sleep(profile.search.wait_after_s)
+        snapshot = driver.snapshot()
+        guidance = render_search_guidance(
+            profile,
+            query,
+            limit=limit,
+            page_url=driver.current_url() or page_url,
+            page_title=driver.current_title(),
+        )
+        return SearchObservation(
+            entry, page_url, driver.current_title(), guidance, snapshot
+        )
+
+    url = render_search_url(profile, query, limit=limit)
     page_url = driver.navigate(url, wait_for=wait_for)
     snapshot = driver.snapshot()
     guidance = render_search_guidance(
@@ -87,7 +119,12 @@ def download_pdf(
         return DownloadResult(None, False, ["站点未配置 PDF 入口"])
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    driver.click(target)
+    if profile.pdf.entry_selector:
+        driver.click(profile.pdf.entry_selector)
+    else:
+        driver.click_text(profile.pdf.entry_text or "")
+    if profile.pdf.post_click_wait_s:
+        driver.sleep(profile.pdf.post_click_wait_s)
     downloaded = driver.wait_download(timeout_s=timeout_s)
     if not downloaded:
         return DownloadResult(None, False, ["等待下载超时"])

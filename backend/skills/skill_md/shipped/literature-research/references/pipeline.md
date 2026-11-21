@@ -125,11 +125,32 @@
 把 `references` 与分章 Markdown 交给 `paper-writing` 的 `office_create`，
 由其生成 GB/T 7714 docx 并跑 `office_lint_word`。
 
+## 交互式检索（`search.mode: interactive`）
+
+```yaml
+search:
+  mode: interactive
+  url_template: "https://example.org/entry"   # 入口页（无需 {query}）
+  entry_url: "https://example.org/entry"
+  entry_click: "检索入口"                     # 可选
+  input_selectors: ["input[placeholder*='检索词']"]
+  submit_key: Enter
+  wait_after_s: 5
+  result_hint: 结果条目结构说明
+```
+
+`search_with_profile` 会依次尝试 `input_selectors`，命中后按 `submit_key`，
+等待 `wait_after_s` 再抓快照。真实浏览器通过 `SageToolDriver(sage.call)` 接入。
+
 ## xueshu789 现状
 
-- profile：`backend/literature/sites/xueshu789.yaml`（`status: draft`）。
-- 已实测：卡号+密码登录、成功后 URL 进入 `/dbList/`、下载入口 `a.downloadlink`。
-- 待录制：搜索 URL 模板与结果字段选择器。首次使用时通过
-  `python -m backend.literature.cli draft-profile --observation <json> --out <yaml>`
-  生成用户 profile，或手动补齐后 `validate-profile` 校验。
-- 合规：仅本人账号/机构授权；不绕过付费墙；验证码交还用户。
+- profile：`backend/literature/sites/xueshu789.yaml`（`status: draft`，`version 0.2.0`）。
+- 已登录状态：首页 → `/dbList/1`；入口 `/dbItem/3` 可用，重定向到
+  `http://82.157.23.222:5888/kns8s/defaultresult/index`（「检索-中国知网」）。
+- `/dbItem/1` 代理报「出错啦」；`/dbItem/2` 触发知网滑块验证（需要人工完成）。
+- 搜索：输入框 placeholder 含「检索词」；Enter 提交，约 5 秒出结果。
+- 结果：题名/作者/来源链接均指向 `https://www.xueshu789.cc/doDownload?url=...`；
+  操作列「下载 / 原版阅读 / CNKI AI阅读」。
+- **下载未验证通过**：`doDownload` 新标签显示「参数错误」；需要后续排查
+  POST/Referer/动态 token，profile 继续 `status: draft`。
+- 合规：仅本人账号/机构授权；不绕过付费墙；验证码/滑块交还用户。

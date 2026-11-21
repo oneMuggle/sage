@@ -3,6 +3,7 @@ display_name: 学术资源站
 home_url: https://www.xueshu789.cc/
 domains:
   - xueshu789.cc
+  - 82.157.23.222
 access:
   mode: browser
   login:
@@ -19,9 +20,16 @@ capabilities:
   fulltext: true
   citation_export: false
 search:
-  url_template: "https://www.xueshu789.cc/dbItem/1?kw={query}"
-  wait_for:
-    - ".result-list"
+  mode: interactive
+  url_template: "https://www.xueshu789.cc/dbItem/3"
+  entry_url: "https://www.xueshu789.cc/dbItem/3"
+  input_selectors:
+    - "input[placeholder*='检索词']"
+    - "textarea[placeholder*='检索词']"
+  submit_key: Enter
+  wait_after_s: 5
+  result_hint: 每条结果含题名/作者/来源链接（均指向 doDownload）+ 下载/原版阅读/CNKI AI阅读；结果总数在页面上方
+  wait_for: []
   pagination:
     type: click_text
     text: 下一页
@@ -41,7 +49,9 @@ detail:
       selector: ""
 pdf:
   entry:
-    selector: a.downloadlink
+    text: 下载
+  post_click_wait_s: 8
+  note: "doDownload 新标签可能显示参数错误；下载链路待验证"
   forbid:
     - CAJ
   validate:
@@ -53,6 +63,6 @@ rate_limit:
 compliance:
   note: 仅使用本人账号/机构授权；不绕过付费墙；验证码交还用户
   default_enabled: false
-version: "0.1.0"
+version: "0.2.0"
 status: draft
 last_verified_at: "2026-11-21"
