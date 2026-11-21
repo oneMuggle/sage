@@ -304,6 +304,30 @@
 - **截图**：内嵌桥用 `Page.captureScreenshot` / `capturePage` 实现，不依赖外部驱动。
 - 功能对齐 main 分支时可整体 cherry-pick；本分支只包含 py38 可直接运行的实现。
 
+## 会话配置（2026-11-20）
+
+设置页位置：**设置 → 网络 → 浏览器**（`src/pages/settings/BrowserSettingsSection.tsx`），位于「浏览器选择」下方。
+
+| 键 | 类型 | 范围 | 默认 | 语义 |
+|---|---|---|---|---|
+| `browser.maxSessions` | 整数 | `[2, 8]` | 4 | 最大并发浏览器实例数。硬边界由后端钳制，超出范围的值会被夹到最近边界 |
+| `browser.lruEvict` | 布尔 | — | 关闭 | 达到上限时是否自动关闭最久未使用的实例。跳过 `BrowserType.EMBEDDED` 与保留渲染池（`RESERVED_BROWSER_ID` 前缀） |
+
+**相关 API**：
+
+| 端点 | 用途 |
+|---|---|
+| `GET /api/v1/browser/status` | 返回 `{active, max, lruEvict, sessions: [{id, name, browser_type, last_used_at}, ...]}`。`sessions` 过滤掉保留渲染池 |
+| `PATCH /api/v1/browser/{id}` | 重命名会话；`body = {name: str}` |
+| `GET /api/v1/browser/config` / `PATCH /api/v1/browser/config` | 读取 / 写入 `browser_config` JSON 字段（含 `maxSessions` / `lruEvict`） |
+
+**标题栏状态组件**：`src/features/browser/BrowserSessionStatus.tsx`。5 秒轮询 `/browser/status`，
+显示 `活跃/上限`；无实例时隐藏。点击展开面板，可重命名实例或把实例绑定到当前会话
+（`rememberBrowserSession(conversationId, browserId)` → `useBrowserSessionStore`）。
+
+**LRU 回收**：`BrowserSessionManager.require()` 每次被工具调用时调用 `session.touch()` 更新
+`last_used_at`；`register()` 在超限时按 `last_used_at` 升序选择最久未用者关闭。跳过保留池槽位。
+
 ## 已知限制
 
 | 限制 | 现状 / 影响 |

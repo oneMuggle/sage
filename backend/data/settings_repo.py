@@ -61,6 +61,11 @@ class SettingsRepository:
             # 外部日常浏览器扩展桥: 已配对设备注册表 (JSON, 只存 token 的 SHA-256)
             # 见 backend/services/browser_extension_bridge.py
             "browser_extension_devices",
+            # 2026-11-20: 浏览器会话配置 (JSON)
+            # - maxSessions: int (2-8, 默认 4), 并发浏览器实例上限
+            # - lruEvict: bool (默认 false), 达到上限时自动 LRU 回收
+            # 读取口径见 backend/tools/browser_cdp.py:get_max_sessions/get_lru_evict_enabled
+            "browser_config",
             # bash 工具运行参数: 超时/输出截断/后台会话上限 (JSON)
             # 见 backend/tools/bash_config.py
             "bash_config",
