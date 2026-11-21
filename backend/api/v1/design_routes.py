@@ -26,11 +26,11 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.api.v1.design_streaming import (
     sse_event as _sse_event,
     stream_studio_call as _stream_studio_call,
 )
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.design import get_design_studio
 from backend.design.errors import (
     DesignError,

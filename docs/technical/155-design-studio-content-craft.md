@@ -253,7 +253,7 @@ if not report.ok:
 
 要点：
 
-- 生成/迭代端点仍是 SSE，Electron IPC relay 会等响应完成后以 text 返回；流式进度为后续里程碑。
+- 生成/迭代端点仍是 SSE；M6 起后端按阶段推送 `starting → composing → generating → linting → saving → complete`（`DesignStudio.generate/iterate` 可选 `progress_queue` + 内存 `self._progress`），新增 `GET /design/projects/{id}/progress` 供前端 800ms 轮询，`DesignProgressStrip` 展示阶段条。Electron IPC relay 仍会缓冲 SSE 文本，故前端走轮询而非 relay。
 - 预览复用 `HtmlPreviewHost` 的 sandbox 隔离（桌面端 `sage-preview://`，Web/测试回落 `srcDoc`）。
 
 ## 12. Office 融合与 Live Artifact（2026-11-13 新增）
