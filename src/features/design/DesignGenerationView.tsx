@@ -53,6 +53,8 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
   const review = useDesignStore((s) => s.review);
   const runReview = useDesignStore((s) => s.runReview);
   const iterate = useDesignStore((s) => s.iterate);
+  const comparePair = useDesignStore((s) => s.comparePair);
+  const clearCompare = useDesignStore((s) => s.clearCompare);
   const [panel, setPanel] = useState<'iterate' | 'history' | 'tweaks' | 'resources'>(
     'iterate',
   );
@@ -200,7 +202,38 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-h-0 overflow-y-auto">
-          {previewArtifact && (
+          {comparePair ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-1.5 text-ui-xs">
+                <span className="text-text-secondary">
+                  {t('design.version.compareTitle')}
+                </span>
+                <button
+                  type="button"
+                  className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
+                  onClick={clearCompare}
+                >
+                  {t('design.version.compareClose')}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {[comparePair.left, comparePair.right].map((side) => (
+                  <div key={side.id} className="min-w-0">
+                    <div className="mb-1 text-ui-xs text-text-secondary">
+                      v{side.version}
+                    </div>
+                    <HtmlPreviewHost
+                      html={applyTweaks(side.html_content, tweaks)}
+                      name={`v${side.version}.html`}
+                      heightClassName="h-[calc(100vh-18rem)] min-h-[20rem]"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              {previewArtifact && (
             <div className="mb-2 flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-ui-xs">
               <span>
                 {t('design.detail.previewing').replace(
@@ -237,6 +270,8 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               <p>{loading ? t('design.detail.regenerating') : t('design.detail.noArtifact')}</p>
             </div>
+          )}
+            </>
           )}
         </section>
         <div className="flex min-h-0 flex-col gap-2">
