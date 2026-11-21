@@ -365,3 +365,40 @@ class TestBrowserSearch:
         result = download_pdf(self._profile(), driver, "示例论文", tmp_path)
         assert result.ok is False
         assert any("%PDF" in e for e in result.errors)
+
+
+class TestRecording:
+    def test_observation_becomes_valid_draft_profile(self, tmp_path):
+        from backend.literature.profile_store import ProfileRoot, SiteProfileStore
+        from backend.literature.recording import write_profile_draft
+
+        raw = {
+            "id": "xueshu789",
+            "display_name": "学术资源站",
+            "home_url": "https://www.xueshu789.cc/",
+            "domains": ["xueshu789.cc"],
+            "access": {
+                "mode": "browser",
+                "login": {
+                    "method": "form",
+                    "account_label": "您的卡号",
+                    "password_label": "您的密码",
+                    "url_contains": "/dbList/",
+                    "title_not_contains": "登录",
+                },
+            },
+            "search": {
+                "url_template": "https://www.xueshu789.cc/dbItem/1?kw={query}",
+                "wait_for": [".result-list"],
+                "result_fields": {"title": {"selector": ".title"}},
+            },
+            "pdf": {"entry": {"selector": "a.downloadlink"}},
+        }
+        out_dir = tmp_path / "sites"
+        out_dir.mkdir()
+        out_path = out_dir / "xueshu789.yaml"
+        profile = write_profile_draft(raw, out_path)
+        assert profile.status == "draft"
+        assert profile.last_verified_at is not None
+        store = SiteProfileStore([ProfileRoot(out_dir, "user")])
+        assert store.get("xueshu789").search.wait_for == (".result-list",)
