@@ -29,6 +29,35 @@ def _paper(key="p1", title="示例论文", authors=("张三",), year="2024"):
     }
 
 
+def _raw_profile(**overrides):
+    raw = {
+        "id": "demo",
+        "display_name": "Demo 学术站",
+        "home_url": "https://demo.example/",
+        "domains": ["demo.example"],
+        "access": {
+            "mode": "browser",
+            "login": {
+                "method": "form",
+                "account_label": "卡号",
+                "password_label": "密码",
+                "url_contains": "/home/",
+                "title_not_contains": "登录",
+            },
+        },
+        "capabilities": {"search": True, "pdf_download": True},
+        "search": {
+            "url_template": "https://demo.example/search?q={query}&n={limit}",
+            "wait_for": [".result-list"],
+            "result_fields": {"title": {"selector": ".title"}},
+        },
+        "pdf": {"entry": {"selector": "a.downloadlink"}, "forbid": ["CAJ"]},
+        "compliance": {"note": "仅个人学习", "default_enabled": False},
+    }
+    raw.update(overrides)
+    return raw
+
+
 class TestPipelineModels:
     def test_paper_record_from_dict(self):
         record = paper_record_from_dict(_paper())
@@ -270,3 +299,69 @@ class TestExport:
         data = build_handoff(self._run(tmp_path))
         assert data["references"][0]["key"] == "p1"
         assert data["references"][0]["ref_type"] == "journal"
+
+
+class _FakeDriver:
+    def __init__(self):
+        self.navigated = []
+        self.clicks = []
+        self.snapshot_text = "<tree>results</tree>"
+        self.download_path = None
+
+    def navigate(self, url, wait_for=""):
+        self.navigated.append((url, wait_for))
+        return "https://demo.example/home/1"
+
+    def snapshot(self):
+        return self.snapshot_text
+
+    def click(self, target):
+        self.clicks.append(target)
+
+    def current_url(self):
+        return "https://demo.example/home/1"
+
+    def current_title(self):
+        return "文献列表"
+
+    def wait_download(self, timeout_s=60):
+        return self.download_path
+
+
+class TestBrowserSearch:
+    def _profile(self):
+        from backend.literature.models import profile_from_dict
+
+        return profile_from_dict(_raw_profile())
+
+    def test_search_navigates_and_returns_guidance(self):
+        from backend.literature.search import search_with_profile
+
+        driver = _FakeDriver()
+        obs = search_with_profile(self._profile(), "机器学习", driver, limit=5)
+        assert "demo.example/search" in obs.url
+        assert obs.page_url.endswith("/home/1")
+        assert "Demo 学术站" in obs.guidance
+        assert driver.navigated[0][1] == ".result-list"
+
+    def test_download_validates_pdf_and_title(self, tmp_path):
+        from backend.literature.search import download_pdf
+
+        driver = _FakeDriver()
+        pdf = tmp_path / "示例论文.pdf"
+        pdf.write_bytes(b"%PDF-1.4\nfake")
+        driver.download_path = str(pdf)
+        result = download_pdf(self._profile(), driver, "示例论文", tmp_path)
+        assert result.ok is True, result.errors
+        assert driver.clicks == ["a.downloadlink"]
+
+    def test_download_rejects_bad_magic(self, tmp_path):
+        from backend.literature.search import download_pdf
+
+        driver = _FakeDriver()
+        bad = tmp_path / "示例论文.pdf"
+        bad.write_bytes(b"NOTPDF")
+        driver.download_path = str(bad)
+        result = download_pdf(self._profile(), driver, "示例论文", tmp_path)
+        assert result.ok is False
+        assert any("%PDF" in e for e in result.errors)
