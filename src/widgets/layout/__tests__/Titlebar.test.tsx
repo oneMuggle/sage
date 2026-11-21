@@ -10,10 +10,14 @@ import {
 } from '../Titlebar';
 
 // Mock dependencies
-vi.mock('../../../shared/api/windowControlsClient', () => ({
-  detectPlatform: vi.fn(),
-  isElectronDesktop: vi.fn((platform) => platform !== 'web'),
-}));
+vi.mock('../../../shared/api/windowControlsClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../shared/api/windowControlsClient')>();
+  return {
+    ...actual,
+    detectPlatform: vi.fn(),
+    isElectronDesktop: vi.fn((platform) => platform !== 'web'),
+  };
+});
 
 vi.mock('../../../shared/lib/i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),

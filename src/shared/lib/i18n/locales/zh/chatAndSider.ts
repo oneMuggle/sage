@@ -865,6 +865,27 @@ export const zhChatAndSider = {
   'settings.network.browser.saved': '浏览器选择已保存',
   'settings.network.browser.save_failed': '保存失败',
   'settings.network.browser.reset': '重置为自动发现',
+  // 2026-11-20: 浏览器会话配置（并发上限 / LRU 回收）
+  'settings.network.browser.max_sessions': '最大并发实例数',
+  'settings.network.browser.max_sessions_hint':
+    '同时运行的浏览器实例上限。每个实例约占 150–300MB 内存，数值越高越耗资源。',
+  'settings.network.browser.max_sessions_low': '2（低内存）',
+  'settings.network.browser.max_sessions_rec': '4（推荐）',
+  'settings.network.browser.max_sessions_high': '8（高性能）',
+  'settings.network.browser.lru_evict': '自动回收最久未用实例',
+  'settings.network.browser.lru_evict_hint':
+    '达到上限时，自动关闭最久未使用的实例（不影响用户日常浏览器标签页）。',
+  'settings.network.browser.config_saved': '浏览器配置已保存',
+  // 2026-11-20: 浏览器实例面板（P1 状态指示 + P2 命名/快速绑定）
+  'settings.network.browser.panel_title': '浏览器实例',
+  'settings.network.browser.panel_empty': '当前没有运行中的浏览器实例',
+  'settings.network.browser.panel_hint': '点按实例可绑定到当前会话',
+  'settings.network.browser.panel_bind': '绑定',
+  'settings.network.browser.panel_bound': '已绑定',
+  'settings.network.browser.panel_rename': '重命名',
+  'settings.network.browser.panel_last_used': '最近使用',
+  'settings.network.browser.rename_saved': '已重命名',
+  'settings.network.browser.status_dot_hint': '浏览器实例',
 
   // ─── 设置页 · 浏览器使用（M4） ────────────────
   'settings.network.browserUse.title': '浏览器使用',
