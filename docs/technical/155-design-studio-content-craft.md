@@ -254,6 +254,12 @@ if not report.ok:
 要点：
 
 - 生成/迭代端点仍是 SSE；M6 起后端按阶段推送 `starting → composing → generating → linting → saving → complete`（`DesignStudio.generate/iterate` 可选 `progress_queue` + 内存 `self._progress`），新增 `GET /design/projects/{id}/progress` 供前端 800ms 轮询，`DesignProgressStrip` 展示阶段条。Electron IPC relay 仍会缓冲 SSE 文本，故前端走轮询而非 relay。
+
+资源（2026-11-21 新增）：
+
+- 详情页右栏第四 Tab「素材」（`DesignResourcesPanel`）：数据源绑定（`selectFile` → `POST /source`；「刷新重新生成」→ `POST /refresh` SSE；「解绑」→ `DELETE /source`）与图表嵌入（类型/标题/标签/系列/数值 → `POST /projects/{id}/chart`）。
+- 创作器 brief 区新增「从 Word 导入大纲」：`selectFile(.docx)` → `POST /design/outline` → 大纲追加进 brief。
+- 后端资源端点（outline / chart）拆分至 `backend/api/v1/design_resources_routes.py`，保持 `design_routes.py` 在 800 行棘轮内；`POST /projects/{id}/chart` 复用 `ChartEmbedder` + `studio.add_artifact`（无 LLM，追加新版本）。
 - 预览复用 `HtmlPreviewHost` 的 sandbox 隔离（桌面端 `sage-preview://`，Web/测试回落 `srcDoc`）。
 
 ## 12. Office 融合与 Live Artifact（2026-11-13 新增）
