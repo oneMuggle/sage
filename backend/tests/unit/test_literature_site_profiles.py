@@ -1,0 +1,147 @@
+"""SiteProfile 领域模型 / 存储 / 适配器单元测试。"""
+
+from __future__ import annotations
+
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+
+from backend.literature.models import (
+    PaperRecord,
+    SiteProfileError,
+    is_logged_in,
+    profile_from_dict,
+    render_search_url,
+)
+
+pytestmark = pytest.mark.unit
+
+
+def _raw_profile(**overrides):
+    raw = {
+        "id": "demo",
+        "display_name": "Demo 学术站",
+        "home_url": "https://demo.example/",
+        "domains": ["demo.example"],
+        "access": {
+            "mode": "browser",
+            "login": {
+                "method": "form",
+                "account_label": "卡号",
+                "password_label": "密码",
+                "url_contains": "/home/",
+                "title_not_contains": "登录",
+            },
+        },
+        "capabilities": {"search": True, "pdf_download": True},
+        "search": {
+            "url_template": "https://demo.example/search?q={query}&n={limit}",
+            "wait_for": [".result-list"],
+            "result_fields": {"title": {"selector": ".title"}},
+        },
+        "pdf": {"entry": {"selector": "a.downloadlink"}, "forbid": ["CAJ"]},
+        "compliance": {"note": "仅个人学习", "default_enabled": False},
+    }
+    raw.update(overrides)
+    return raw
+
+
+class TestProfileModel:
+    def test_minimal_profile_parses(self):
+        profile = profile_from_dict(_raw_profile())
+        assert profile.id == "demo"
+        assert profile.display_name == "Demo 学术站"
+        assert profile.access.mode == "browser"
+        assert profile.access.login.account_label == "卡号"
+        assert profile.search.wait_for == (".result-list",)
+        assert profile.pdf is not None
+        assert profile.pdf.entry_selector == "a.downloadlink"
+        assert profile.status == "ready"
+        assert profile.source_layer == "builtin"
+
+    def test_rejects_invalid_id(self):
+        with pytest.raises(SiteProfileError, match="id"):
+            profile_from_dict(_raw_profile(id="Bad ID"))
+
+    def test_rejects_missing_domains(self):
+        with pytest.raises(SiteProfileError, match="domains"):
+            profile_from_dict(_raw_profile(domains=[]))
+
+    def test_rejects_unknown_access_mode(self):
+        raw = _raw_profile()
+        raw["access"]["mode"] = "magic"
+        with pytest.raises(SiteProfileError, match="access.mode"):
+            profile_from_dict(raw)
+
+    def test_rejects_url_template_without_query_placeholder(self):
+        raw = _raw_profile()
+        raw["search"]["url_template"] = "https://demo.example/search"
+        with pytest.raises(SiteProfileError, match="\\{query\\}"):
+            profile_from_dict(raw)
+
+    def test_rejects_non_http_home_url(self):
+        with pytest.raises(SiteProfileError, match="home_url"):
+            profile_from_dict(_raw_profile(home_url="file:///etc/passwd"))
+
+    def test_rejects_bad_last_verified_at(self):
+        with pytest.raises(SiteProfileError, match="last_verified_at"):
+            profile_from_dict(_raw_profile(last_verified_at="2026/11/21"))
+
+
+class TestUrlRendering:
+    def test_encodes_chinese_query_and_limit(self):
+        profile = profile_from_dict(_raw_profile())
+        url = render_search_url(profile, "机器学习 综述", limit=5)
+        parsed = urlparse(url)
+        assert parsed.netloc == "demo.example"
+        qs = parse_qs(parsed.query)
+        assert qs["q"] == ["机器学习 综述"]
+        assert qs["n"] == ["5"]
+
+    def test_rejects_empty_query(self):
+        profile = profile_from_dict(_raw_profile())
+        with pytest.raises(SiteProfileError, match="query"):
+            render_search_url(profile, "   ")
+
+    def test_rejects_host_outside_domains(self):
+        raw = _raw_profile()
+        raw["search"]["url_template"] = "https://evil.example/x?q={query}"
+        profile = profile_from_dict(raw)
+        with pytest.raises(SiteProfileError, match="域名"):
+            render_search_url(profile, "x")
+
+
+class TestLoginCheck:
+    def test_logged_in_when_all_checks_pass(self):
+        profile = profile_from_dict(_raw_profile())
+        assert is_logged_in(profile, "https://demo.example/home/1", "文献列表") is True
+
+    def test_not_logged_in_when_url_check_fails(self):
+        profile = profile_from_dict(_raw_profile())
+        assert is_logged_in(profile, "https://demo.example/login", "文献列表") is False
+
+    def test_not_logged_in_when_title_check_fails(self):
+        profile = profile_from_dict(_raw_profile())
+        assert is_logged_in(profile, "https://demo.example/home/1", "登录 - Demo") is False
+
+    def test_unknown_when_no_checks_configured(self):
+        raw = _raw_profile()
+        raw["access"]["login"] = {"method": "manual"}
+        profile = profile_from_dict(raw)
+        assert is_logged_in(profile, None, None) is None
+
+
+class TestPaperRecord:
+    def test_round_trip_to_dict(self):
+        record = PaperRecord(
+            paper_key="doi:10.1000/demo",
+            title="示例论文",
+            authors=("张三", "李四"),
+            year="2026",
+            source_site="demo",
+            source_query="示例",
+        )
+        data = record.to_dict()
+        assert data["authors"] == ["张三", "李四"]
+        assert data["paper_key"] == "doi:10.1000/demo"
+        assert data["source_site"] == "demo"
