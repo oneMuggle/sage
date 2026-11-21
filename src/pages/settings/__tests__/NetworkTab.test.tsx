@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   setPreference: vi.fn(),
   fetchBrowserList: vi.fn(),
   setBrowserPath: vi.fn(),
+  fetchBrowserConfig: vi.fn(),
+  setBrowserConfig: vi.fn(),
 }));
 
 vi.mock('../../../shared/api/settingsClient', () => ({
@@ -34,6 +36,8 @@ vi.mock('../../../shared/api/settingsClient', () => ({
 vi.mock('../../../shared/api/browserSettingsClient', () => ({
   fetchBrowserList: (...args: unknown[]) => mocks.fetchBrowserList(...args),
   setBrowserPath: (...args: unknown[]) => mocks.setBrowserPath(...args),
+  fetchBrowserConfig: (...args: unknown[]) => mocks.fetchBrowserConfig(...args),
+  setBrowserConfig: (...args: unknown[]) => mocks.setBrowserConfig(...args),
 }));
 
 function renderTab(): void {
@@ -62,6 +66,8 @@ describe('NetworkTab', () => {
     mocks.setPreference.mockReset();
     mocks.fetchBrowserList.mockReset();
     mocks.setBrowserPath.mockReset();
+    mocks.fetchBrowserConfig.mockReset();
+    mocks.setBrowserConfig.mockReset();
     mocks.getPreference.mockResolvedValue(null);
     mocks.setPreference.mockResolvedValue(undefined);
     mocks.fetchBrowserList.mockResolvedValue({
@@ -70,6 +76,8 @@ describe('NetworkTab', () => {
       embeddedAvailable: false,
     });
     mocks.setBrowserPath.mockResolvedValue({ success: true });
+    mocks.fetchBrowserConfig.mockResolvedValue({ maxSessions: 4, lruEvict: false });
+    mocks.setBrowserConfig.mockResolvedValue({ maxSessions: 4, lruEvict: false });
   });
 
   it('defaults to online when no stored policy', async () => {
