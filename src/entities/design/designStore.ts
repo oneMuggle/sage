@@ -8,12 +8,15 @@ import { create } from 'zustand';
 
 import * as api from './designApi';
 import type {
+  ChartSpec,
   CreateProjectInput,
   DesignArtifact,
   DesignArtifactSummary,
   DesignProject,
+  DesignSourceBinding,
   DesignSystem,
   DesignTemplate,
+  EmbedChartResult,
   GenerationProgress,
   IterationMessage,
   ProjectTweaks,
@@ -39,6 +42,8 @@ interface DesignState {
   messages: IterationMessage[];
   artifacts: DesignArtifactSummary[];
   tweaks: ProjectTweaks;
+  /** 数据源绑定（未绑定时 null） */
+  sourceBinding: DesignSourceBinding | null;
   /** 生成阶段进度（loading 期间由轮询更新，结束后清空） */
   generationProgress: GenerationProgress | null;
   loadingProject: boolean;
@@ -56,6 +61,10 @@ interface DesignState {
   restoreVersion: (projectId: string, artifactId: string) => Promise<void>;
   updateTweaksLocal: (patch: Partial<ProjectTweaks>) => void;
   persistTweaks: (projectId: string) => Promise<void>;
+  bindSource: (projectId: string, filePath: string) => Promise<void>;
+  unbindSource: (projectId: string) => Promise<void>;
+  refreshWithSource: (projectId: string) => Promise<void>;
+  embedChart: (projectId: string, chart: ChartSpec) => Promise<EmbedChartResult | null>;
   clearPreview: () => void;
   clearCurrent: () => void;
 }
@@ -98,6 +107,7 @@ export const useDesignStore = create<DesignState>((set) => ({
   messages: [],
   artifacts: [],
   tweaks: {},
+  sourceBinding: null,
   generationProgress: null,
   loadingProject: false,
   errorProject: null,
@@ -133,6 +143,13 @@ export const useDesignStore = create<DesignState>((set) => ({
         api.listArtifacts(projectId),
         api.getTweaks(projectId),
       ]);
+      // 未绑定数据源时后端返回 404，这里降级为 null 而不是让整个加载失败
+      let sourceBinding: DesignSourceBinding | null = null;
+      try {
+        sourceBinding = await api.getSource(projectId);
+      } catch {
+        sourceBinding = null;
+      }
       set({
         currentProject: detail,
         currentArtifact: detail.latest_artifact,
@@ -140,6 +157,7 @@ export const useDesignStore = create<DesignState>((set) => ({
         messages,
         artifacts,
         tweaks,
+        sourceBinding,
         loadingProject: false,
       });
     } catch (error) {
@@ -234,6 +252,46 @@ export const useDesignStore = create<DesignState>((set) => ({
     }
   },
 
+  async bindSource(projectId: string, filePath: string) {
+    try {
+      const binding = await api.bindSource(projectId, filePath);
+      set({ sourceBinding: binding });
+    } catch (error) {
+      set({ errorProject: getErrorMessage(error) });
+    }
+  },
+
+  async unbindSource(projectId: string) {
+    try {
+      await api.unbindSource(projectId);
+      set({ sourceBinding: null });
+    } catch (error) {
+      set({ errorProject: getErrorMessage(error) });
+    }
+  },
+
+  async refreshWithSource(projectId: string) {
+    set({ loadingProject: true, errorProject: null });
+    try {
+      await api.refreshArtifact(projectId);
+      await useDesignStore.getState().loadProject(projectId);
+    } catch (error) {
+      set({ errorProject: getErrorMessage(error), loadingProject: false });
+    }
+  },
+
+  async embedChart(projectId: string, chart: ChartSpec) {
+    set({ loadingProject: true, errorProject: null });
+    try {
+      const result = await api.embedChart(projectId, chart);
+      await useDesignStore.getState().loadProject(projectId);
+      return result;
+    } catch (error) {
+      set({ errorProject: getErrorMessage(error), loadingProject: false });
+      return null;
+    }
+  },
+
   clearCurrent() {
     set({
       currentProject: null,
@@ -242,6 +300,7 @@ export const useDesignStore = create<DesignState>((set) => ({
       messages: [],
       artifacts: [],
       tweaks: {},
+      sourceBinding: null,
       generationProgress: null,
       loadingProject: false,
       errorProject: null,

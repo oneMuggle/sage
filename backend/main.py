@@ -1619,6 +1619,13 @@ from backend.api.v1.design_routes import router as design_router
 
 app.include_router(design_router, prefix="/api/v1")
 
+# Design resources: /api/v1/design/{outline,projects/:id/chart}
+from backend.api.v1.design_resources_routes import (
+    router as design_resources_router,
+)
+
+app.include_router(design_resources_router, prefix="/api/v1")
+
 
 @app.get("/health/proof")
 async def health_proof(request: Request):
