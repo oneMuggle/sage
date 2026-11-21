@@ -96,6 +96,7 @@ export const enDesign = {
   'design.review.ok': 'No P0 issues found',
   'design.review.summary': 'P0 {errors} · P1 {warnings}',
   'design.review.details': 'Details',
+  'design.review.fix': 'Fix per review',
 
   // Resources
   'design.resources.title': 'Resources',

@@ -16,6 +16,7 @@ import { DesignResourcesPanel } from './DesignResourcesPanel';
 import { DesignTweaksPanel } from './DesignTweaksPanel';
 import { DesignVersionPanel } from './DesignVersionPanel';
 import { applyTweaks } from './designTweaks';
+import { composeReviewFeedback } from './designReview';
 
 interface DesignGenerationViewProps {
   projectId: string;
@@ -51,6 +52,7 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
   const generationProgress = useDesignStore((s) => s.generationProgress);
   const review = useDesignStore((s) => s.review);
   const runReview = useDesignStore((s) => s.runReview);
+  const iterate = useDesignStore((s) => s.iterate);
   const [panel, setPanel] = useState<'iterate' | 'history' | 'tweaks' | 'resources'>(
     'iterate',
   );
@@ -160,6 +162,16 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
                     .replace('{errors}', String(review.error_count))
                     .replace('{warnings}', String(review.warning_count))}
             </span>
+            {review.issues.length > 0 && !review.ok && (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center gap-0.5 rounded border border-current px-1.5 py-0.5 hover:underline disabled:opacity-40"
+                disabled={loading}
+                onClick={() => void iterate(projectId, composeReviewFeedback(review))}
+              >
+                {t('design.review.fix')}
+              </button>
+            )}
             {review.issues.length > 0 && (
               <button
                 type="button"

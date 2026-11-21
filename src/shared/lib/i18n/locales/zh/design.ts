@@ -94,6 +94,7 @@ export const zhDesign = {
   'design.review.ok': '未发现 P0 问题',
   'design.review.summary': 'P0 {errors} · P1 {warnings}',
   'design.review.details': '详情',
+  'design.review.fix': '按评审意见修复',
 
   // 资源
   'design.resources.title': '素材',
