@@ -24,7 +24,7 @@ from backend.tools.credential_vault import (
     vault_key,
 )
 
-pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("_online_network_settings")]
+pytestmark = [pytest.mark.unit]
 
 _COOKIES_A = [
     {"name": "SID", "value": "acct-a", "domain": ".example.com", "path": "/", "sameSite": "Lax"},
