@@ -71,6 +71,31 @@ export const enDesign = {
   'design.composer.importOutline': 'Import outline from Word',
   'design.composer.outlineLoaded': 'Imported outline ({count} sections)',
   'design.composer.outlineFailed': 'Failed to import outline: {error}',
+  'design.composer.quickBrief': 'Quick brief',
+  'design.composer.quickAudience': 'Audience',
+  'design.composer.quickLength': 'Length',
+  'design.composer.quickTone': 'Tone',
+  'design.composer.quickAudience.investor': 'Investors',
+  'design.composer.quickAudience.team': 'Team',
+  'design.composer.quickAudience.customer': 'Customers',
+  'design.composer.quickAudience.general': 'General readers',
+  'design.composer.quickLength.short': '5 slides',
+  'design.composer.quickLength.medium': '8 slides',
+  'design.composer.quickLength.long': '12 slides',
+  'design.composer.quickLength.single': 'Single page',
+  'design.composer.quickTone.professional': 'Professional',
+  'design.composer.quickTone.friendly': 'Friendly',
+  'design.composer.quickTone.bold': 'Bold',
+  'design.composer.quickFill': 'Fill brief',
+  'design.composer.quickBriefTemplate':
+    'A {length} {kindLabel} for {audience}, with a {tone} tone.',
+  'design.composer.templatePreview': 'Template preview',
+
+  // Review
+  'design.review.run': 'Quality review',
+  'design.review.ok': 'No P0 issues found',
+  'design.review.summary': 'P0 {errors} · P1 {warnings}',
+  'design.review.details': 'Details',
 
   // Resources
   'design.resources.title': 'Resources',

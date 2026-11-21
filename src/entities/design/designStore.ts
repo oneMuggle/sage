@@ -20,6 +20,7 @@ import type {
   GenerationProgress,
   IterationMessage,
   ProjectTweaks,
+  ReviewResult,
 } from './types';
 
 interface DesignState {
@@ -44,6 +45,8 @@ interface DesignState {
   tweaks: ProjectTweaks;
   /** 数据源绑定（未绑定时 null） */
   sourceBinding: DesignSourceBinding | null;
+  /** 最近一次质量评审结果 */
+  review: ReviewResult | null;
   /** 生成阶段进度（loading 期间由轮询更新，结束后清空） */
   generationProgress: GenerationProgress | null;
   loadingProject: boolean;
@@ -65,6 +68,7 @@ interface DesignState {
   unbindSource: (projectId: string) => Promise<void>;
   refreshWithSource: (projectId: string) => Promise<void>;
   embedChart: (projectId: string, chart: ChartSpec) => Promise<EmbedChartResult | null>;
+  runReview: (projectId: string) => Promise<ReviewResult | null>;
   clearPreview: () => void;
   clearCurrent: () => void;
 }
@@ -108,6 +112,7 @@ export const useDesignStore = create<DesignState>((set) => ({
   artifacts: [],
   tweaks: {},
   sourceBinding: null,
+  review: null,
   generationProgress: null,
   loadingProject: false,
   errorProject: null,
@@ -158,6 +163,7 @@ export const useDesignStore = create<DesignState>((set) => ({
         artifacts,
         tweaks,
         sourceBinding,
+        review: null,
         loadingProject: false,
       });
     } catch (error) {
@@ -292,6 +298,17 @@ export const useDesignStore = create<DesignState>((set) => ({
     }
   },
 
+  async runReview(projectId: string) {
+    try {
+      const result = await api.reviewArtifact(projectId);
+      set({ review: result });
+      return result;
+    } catch (error) {
+      set({ errorProject: getErrorMessage(error) });
+      return null;
+    }
+  },
+
   clearCurrent() {
     set({
       currentProject: null,
@@ -301,6 +318,7 @@ export const useDesignStore = create<DesignState>((set) => ({
       artifacts: [],
       tweaks: {},
       sourceBinding: null,
+      review: null,
       generationProgress: null,
       loadingProject: false,
       errorProject: null,

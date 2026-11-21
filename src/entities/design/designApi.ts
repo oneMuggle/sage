@@ -25,6 +25,7 @@ import type {
   IterationMessage,
   OutlineResult,
   ProjectTweaks,
+  ReviewResult,
 } from './types';
 
 const BASE = '/api/v1/design';
@@ -140,6 +141,14 @@ export async function getProgress(projectId: string): Promise<GenerationProgress
   return backendRequest<GenerationProgress>({
     method: 'GET',
     path: `${BASE}/projects/${projectId}/progress`,
+  });
+}
+
+/** 对最新产物运行设计 Lint（无 LLM） */
+export async function reviewArtifact(projectId: string): Promise<ReviewResult> {
+  return backendRequest<ReviewResult>({
+    method: 'GET',
+    path: `${BASE}/projects/${projectId}/review`,
   });
 }
 
