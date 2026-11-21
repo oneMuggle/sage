@@ -218,3 +218,31 @@ class TestProfileStore:
         store = profile_store.get_default_store()
         assert "envsite" in store.list_ids()
         profile_store.reset_default_store()
+
+
+class TestGuidance:
+    def test_contains_site_login_selectors_and_compliance(self):
+        from backend.literature.guidance import render_search_guidance
+
+        profile = profile_from_dict(_raw_profile())
+        text = render_search_guidance(profile, "机器学习", limit=5)
+        assert "Demo 学术站" in text
+        assert "demo.example" in text
+        assert "卡号" in text
+        assert ".result-list" in text
+        assert "a.downloadlink" in text
+        assert "仅个人学习" in text
+        assert "{query}" not in text
+
+    def test_reports_login_state(self):
+        from backend.literature.guidance import render_search_guidance
+
+        profile = profile_from_dict(_raw_profile())
+        logged = render_search_guidance(
+            profile, "x", page_url="https://demo.example/home/1", page_title="文献列表"
+        )
+        assert "登录态: 已登录" in logged
+        anonymous = render_search_guidance(
+            profile, "x", page_url="https://demo.example/login", page_title="登录"
+        )
+        assert "登录态: 未登录" in anonymous
