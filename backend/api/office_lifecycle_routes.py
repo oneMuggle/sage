@@ -58,6 +58,14 @@ from backend.office.models import (
     TemplateLibraryResponse,
     WordTemplateFillResult,
 )
+from backend.office.ooxml import (
+    OoxmlMergeRunsRequest,
+    OoxmlMergeRunsResult,
+    OoxmlValidateRequest,
+    OoxmlValidateResult,
+    merge_docx_runs,
+    validate_ooxml,
+)
 from backend.office.path_safety import resolve_within
 from backend.office.pdf_forms import fill_pdf_form, read_pdf_form
 from backend.office.pdf_ops import (
@@ -477,6 +485,18 @@ def word_tracked_changes_resolve_endpoint(
 ) -> WordTrackedChangesResolveResult:
     """M3: 全部接受或拒绝修订，输出新文件（或 overwrite 原地替换）。"""
     return resolve_word_tracked_changes(req)
+
+
+@router.post("/ooxml/validate", response_model=OoxmlValidateResult)
+def ooxml_validate_endpoint(req: OoxmlValidateRequest) -> OoxmlValidateResult:
+    """M5: OOXML 结构校验（必需部件/XML 合法/DTD 拒绝），可选修复 xml:space。"""
+    return validate_ooxml(req)
+
+
+@router.post("/ooxml/merge-runs", response_model=OoxmlMergeRunsResult)
+def ooxml_merge_runs_endpoint(req: OoxmlMergeRunsRequest) -> OoxmlMergeRunsResult:
+    """M5: 合并 docx 中相邻且格式相同的 run（提升 find/replace 可靠性）。"""
+    return merge_docx_runs(req)
 
 
 @router.get("/progress/{task_id}")
