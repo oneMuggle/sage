@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -145,3 +146,75 @@ class TestPaperRecord:
         assert data["authors"] == ["张三", "李四"]
         assert data["paper_key"] == "doi:10.1000/demo"
         assert data["source_site"] == "demo"
+
+
+class TestProfileStore:
+    @staticmethod
+    def _write(root: Path, filename: str, site_id: str, title: str) -> None:
+        root.mkdir(parents=True, exist_ok=True)
+        body = (
+            f"id: {site_id}\n"
+            f"display_name: {title}\n"
+            "home_url: https://demo.example/\n"
+            "domains: [demo.example]\n"
+            "search:\n"
+            "  url_template: https://demo.example/s?q={query}\n"
+        )
+        (root / filename).write_text(body, encoding="utf-8")
+
+    def test_precedence_project_over_user_over_builtin(self, tmp_path):
+        from backend.literature.profile_store import ProfileRoot, SiteProfileStore
+
+        builtin = tmp_path / "builtin"
+        user = tmp_path / "user"
+        project = tmp_path / "project"
+        self._write(builtin, "demo.yaml", "demo", "Builtin")
+        self._write(user, "demo.yaml", "demo", "User")
+        self._write(project, "demo.yaml", "demo", "Project")
+
+        store = SiteProfileStore(
+            [
+                ProfileRoot(builtin, "builtin"),
+                ProfileRoot(user, "user"),
+                ProfileRoot(project, "project"),
+            ]
+        )
+        profiles = store.discover()
+        assert profiles["demo"].display_name == "Project"
+        assert profiles["demo"].source_layer == "project"
+
+    def test_invalid_profile_is_skipped_and_get_raises(self, tmp_path):
+        from backend.literature.profile_store import ProfileRoot, SiteProfileStore
+
+        root = tmp_path / "sites"
+        root.mkdir()
+        (root / "bad.yaml").write_text("id: Bad ID\n", encoding="utf-8")
+        self._write(root, "good.yaml", "good", "Good")
+
+        store = SiteProfileStore([ProfileRoot(root, "user")])
+        profiles = store.discover()
+        assert "good" in profiles
+        with pytest.raises(SiteProfileError, match="无效"):
+            store.get("bad")
+
+    def test_get_unknown_lists_available(self, tmp_path):
+        from backend.literature.profile_store import ProfileRoot, SiteProfileStore
+
+        root = tmp_path / "sites"
+        self._write(root, "good.yaml", "good", "Good")
+        store = SiteProfileStore([ProfileRoot(root, "user")])
+        with pytest.raises(SiteProfileError, match="good"):
+            store.get("missing")
+
+    def test_default_store_uses_env_dir(self, tmp_path, monkeypatch):
+        from backend.literature import profile_store
+
+        user_dir = tmp_path / "user-sites"
+        self._write(user_dir, "envsite.yaml", "envsite", "Env Site")
+        monkeypatch.setenv("SAGE_LITERATURE_SITES_DIR", str(user_dir))
+        monkeypatch.chdir(tmp_path)
+        profile_store.reset_default_store()
+
+        store = profile_store.get_default_store()
+        assert "envsite" in store.list_ids()
+        profile_store.reset_default_store()
