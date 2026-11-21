@@ -2,7 +2,7 @@
 name: design-deck
 description: 生成 HTML 幻灯片 deck 的完整工作流——先查可用模板、再定叙事节拍与设计系统、建项目生成首版、以叙事顺序或侧重为反馈多轮迭代、产物导出。当用户要做网页版幻灯片、在线 deck、演示页、路演/发布会页面时使用。
 license: Apache-2.0
-compatibility: 需要 design 工具面（design_list_systems / design_list_templates / design_generate / design_iterate / design_export），且 DesignStudio 已初始化；随包发布 `pitch-deck` 模板（kind="deck"）。design_* 五件套仅在 **coordinator（primary）** profile 的白名单里（backend/agents/profiles.py 的 DESIGN_TOOLS），子代理 profile 看不到这些工具——子代理被要求出 deck 时，交回主对话由本流程执行
+compatibility: 需要 design 工具面（design_list_systems / design_list_templates / design_generate / design_iterate / design_export），且 DesignStudio 已初始化；随包发布 `pitch-deck` 模板（kind="deck"）。design_* 六件套仅在 **coordinator（primary）** profile 的白名单里（backend/agents/profiles.py 的 DESIGN_TOOLS），子代理 profile 看不到这些工具——子代理被要求出 deck 时，交回主对话由本流程执行
 when_to_use: 当用户要做网页版幻灯片、在线 deck、演示页、路演页面、发布会页面，或用"做个网页版的 slides""做成在线演示""做套网页 deck"等表达时使用
 allowed-tools: design_list_systems design_list_templates design_generate design_iterate design_export read_file todo_write ask_user_question
 triggers: []
@@ -32,7 +32,7 @@ triggers: []
 | `design_list_templates` | 无 | 返回 `templates[]`：`id` / `name` / `kind` / `description`；**工具本身不接过滤参数**，`kind` 要在返回值里自行筛 |
 | `design_generate` | `name`、`kind`、`system_id`、`template_id`、`brief` —— **五个全必填** | 建项目 + 生成 v1；`kind` 固定 `"deck"` |
 | `design_iterate` | `project_id`、`feedback` | 基于最新产物生成下一个版本 |
-| `design_export` | `project_id` —— 只有这一个参数 | 返回最新产物的 `html_content` 与 `file_path`；**没有 `format` 参数** |
+| `design_export` | `project_id`，可选 `format` | 默认 `format="html"` 返回 `html_content` 与 `file_path`；也支持 `pdf` / `pptx` / `zip`（返回 `file_path`） |
 
 漏掉任何必填参数返回 `missing_required_parameters`；系统 ID / 模板 ID **只能用
 `design_list_systems` / `design_list_templates` 返回值里的 ID，不要凭空编**。
@@ -50,7 +50,7 @@ triggers: []
 | `no_artifacts_found` | `design_export` 时该项目还没有任何产物 | 先 `design_generate` 出 v1 再导出 |
 | `export_failed: <原因>` | `design_export` 阶段失败 | 如实转述冒号后的原因 |
 
-> **子代理看不到 design 工具。** design_* 五件套只在 coordinator（primary）profile
+> **子代理看不到 design 工具。** design_* 六件套只在 coordinator（primary）profile
 > 白名单里。子代理被要求"做个 deck"时不要让子代理自己去调 design_*，交回主对话执行。
 
 ## 工作流（五步）
