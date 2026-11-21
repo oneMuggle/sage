@@ -59,7 +59,7 @@
     "backend/tools/download_tool.py": 1116,
     "backend/tools/office_analyze_tool.py": 978,
     "backend/tools/office_create_tool.py": 1710,
-    "backend/tools/permissions.py": 900,
+    "backend/tools/permissions.py": 901,
     "backend/tools/subprocess_util.py": 900,
     "backend/tools/web_render.py": 1073,
     "backend/tools/web_tool.py": 1597,

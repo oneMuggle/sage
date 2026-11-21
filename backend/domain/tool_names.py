@@ -116,6 +116,8 @@ OFFICE_TOOLS = (
     "office_extract_latex_project",
     # 2026-09-12 Round 12 自动修复：lint→修复→复检（WRITE_LOCAL）
     "office_repair_word",
+    # 2026-11-21 M5：OOXML 校验/run 合并（WRITE_LOCAL）
+    "office_ooxml",
     # 2026-09-18 Round 39 目录真页码：Word COM 刷新 TOC 域（WRITE_LOCAL，
     # 可选通道——需本机 Word + pywin32，缺失时降级为可读理由）
     "office_refresh_toc",

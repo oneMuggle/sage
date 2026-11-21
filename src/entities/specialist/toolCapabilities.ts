@@ -128,6 +128,7 @@ export const TOOL_CAPABILITY_PACKS: readonly ToolCapabilityPack[] = [
       'office_latexdiff',
       'office_extract_latex_project',
       'office_repair_word',
+      'office_ooxml',
       'office_refresh_toc',
     ],
     requiresMode: 'workspace_write',
