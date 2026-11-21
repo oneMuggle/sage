@@ -125,6 +125,46 @@ export interface GenerationProgress {
 }
 
 // ---------------------------------------------------------------------------
+// 资源（数据源 / 图表 / Word 大纲）
+// ---------------------------------------------------------------------------
+
+export interface DesignSourceBinding {
+  kind: string;
+  file_path: string;
+  name: string;
+}
+
+export interface OutlineResult {
+  title: string;
+  source_path: string;
+  slide_count: number;
+  outline_md: string;
+}
+
+export type ChartType = 'line' | 'bar' | 'hbar' | 'pie';
+
+export interface ChartSeriesSpec {
+  name: string;
+  x?: (string | number)[];
+  y: number[];
+}
+
+export interface ChartSpec {
+  type: ChartType;
+  title?: string | null;
+  labels?: string[] | null;
+  series: ChartSeriesSpec[];
+}
+
+export interface EmbedChartResult {
+  ok: boolean;
+  artifact_id: string;
+  version: number;
+  title: string;
+  injected_at_slot: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // 生成 & 迭代请求
 // ---------------------------------------------------------------------------
 

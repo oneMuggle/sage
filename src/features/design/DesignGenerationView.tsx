@@ -12,6 +12,7 @@ import { HtmlPreviewHost } from '../../widgets/chat/preview/HtmlPreviewHost';
 import { DesignExportPanel } from './DesignExportPanel';
 import { DesignIterationChat } from './DesignIterationChat';
 import { DesignProgressStrip } from './DesignProgressStrip';
+import { DesignResourcesPanel } from './DesignResourcesPanel';
 import { DesignTweaksPanel } from './DesignTweaksPanel';
 import { DesignVersionPanel } from './DesignVersionPanel';
 import { applyTweaks } from './designTweaks';
@@ -48,7 +49,9 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
   const restoreVersion = useDesignStore((s) => s.restoreVersion);
   const tweaks = useDesignStore((s) => s.tweaks);
   const generationProgress = useDesignStore((s) => s.generationProgress);
-  const [panel, setPanel] = useState<'iterate' | 'history' | 'tweaks'>('iterate');
+  const [panel, setPanel] = useState<'iterate' | 'history' | 'tweaks' | 'resources'>(
+    'iterate',
+  );
 
   useEffect(() => {
     void loadProject(projectId);
@@ -169,7 +172,7 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
         </section>
         <div className="flex min-h-0 flex-col gap-2">
           <div className="flex gap-1 rounded-md border border-border bg-surface p-1">
-            {(['iterate', 'history', 'tweaks'] as const).map((option) => (
+            {(['iterate', 'history', 'tweaks', 'resources'] as const).map((option) => (
               <button
                 key={option}
                 type="button"
@@ -185,7 +188,9 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
                   ? t('design.detail.tabIterate')
                   : option === 'history'
                     ? t('design.detail.tabHistory')
-                    : t('design.detail.tabTweaks')}
+                    : option === 'tweaks'
+                      ? t('design.detail.tabTweaks')
+                      : t('design.detail.tabResources')}
               </button>
             ))}
           </div>
@@ -194,8 +199,10 @@ export function DesignGenerationView({ projectId, onBack }: DesignGenerationView
               <DesignIterationChat projectId={projectId} />
             ) : panel === 'history' ? (
               <DesignVersionPanel projectId={projectId} />
-            ) : (
+            ) : panel === 'tweaks' ? (
               <DesignTweaksPanel projectId={projectId} />
+            ) : (
+              <DesignResourcesPanel projectId={projectId} />
             )}
           </div>
         </div>
