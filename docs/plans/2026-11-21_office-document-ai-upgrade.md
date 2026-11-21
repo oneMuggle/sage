@@ -225,7 +225,9 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 - [x] 抽取通用渲染服务：任意 docx/xlsx/pptx → PDF → 逐页 PNG（复用 `export_pdf.py`）→ `backend/office/render_verify.py`
 - [x] 通用确定性检查（页面/边距/字体/页码 + 空页/越界/缺图）
 - [x] REST 端点 `POST /api/v1/office/render/verify`（含 `status=passed/degraded/failed`、缩略图 data URL）
-- [x] `office_create` / `office_update` 接入 `verify: "auto" | "off"`（默认 auto；无转换器自动降级，不阻塞）
+- [x] `office_create` 默认 `verify: auto`（一次生成检查）；`office_update` 默认 `off`（避免每轮编辑等待转换器），均可显式指定
+- [x] 渲染在**工作区临时目录的副本**上执行，不覆盖用户已有 `<stem>.pdf`、不留产物（审查 H1）
+- [x] `repair=true` 默认输出 `<stem>-repaired.docx` 并保留源文件；`repair_overwrite=true` 才原地替换且先做快照（审查 H2）
 - [x] 可选 VLM 抽页检查（视觉模型不可用时静默降级）—— `visual_pages` + `visual_checker` 可插拔钩子，失败降级为 `visual_check_failed`；具体视觉模型适配随 M6 落地
 - [x] 自动修复循环（发现 → 修复 op → 复检，≤2 轮）—— `repair=true` 且请求含显式期望值（size/margins/page number）且为 `.docx` 时启用，调用 `word_fix`
 - [ ] 工作台结果卡缩略图 + 检查报告；任务中心进度 —— REST 已返回缩略图，前端接入待 M1b
@@ -235,7 +237,8 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 新增：`backend/office/render_verify.py`（`verify_rendered_pdf` / `verify_document` / `verify_for_tool`，`passed/degraded/failed`）
 > - 扩展：`backend/office/word_render_audit.py` 的 `audit_rendered_pdf(max_pages=...)`（向后兼容）
 > - 端点：`backend/api/office_lifecycle_routes.py` → `POST /render/verify`
-> - 工具：`office_create` / `office_update` 新增 `verify`（auto/off），结果附加紧凑 `render_verify` 摘要
+> - 工具：`office_create` 默认 `verify=auto`、`office_update` 默认 `verify=off`，结果附加紧凑 `render_verify` 摘要
+> - 审查修复（H1/H2/H3）：渲染副本隔离、修复默认另存 + 可选快照覆盖、update 默认不跑转换器
 > - 测试：`test_render_verify.py`（13）+ `test_office_render_verify_routes.py`（4）+ 工具级 5 条；Office 全量 1733 单测 + 440 集成通过；ruff / py38 / silent-exceptions / architecture 门禁通过
 > - 基线：`architecture-baseline.json` 中 `office_create_tool.py` 1625 → 1702（有意增长）
 
@@ -266,7 +269,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 模型：`WordTrackedChange`（kind/text/author/date/paragraph_index）；`OfficeWordReadResult.tracked_changes`
 > - 端点：`POST /office/word/tracked-changes`、`POST /office/word/tracked-changes/resolve`
 > - 测试：unit 6 + integration 2；Word 读取回归通过；ruff/py38/architecture 通过
-> - 已知限制：正文段落范围；跨段落书签/表格单元格修订与删除段落标记合并待后续
+> - 已知限制：读取/接受拒绝均覆盖 OOXML body 段落（含表格单元格）；跨段落书签与删除段落标记合并语义待后续
 
 ### M4 — Excel 读写对称与错误治理（P0，对应 G6/G14）
 

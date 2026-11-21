@@ -196,10 +196,10 @@ class OfficeUpdateTool(BaseTool):
                         "type": "string",
                         "enum": ["auto", "off"],
                         "description": (
-                            "编辑后渲染级校验（默认 auto）：本机有 PDF 转换器时"
-                            "把产物转为 PDF，检查页面尺寸/页边距/字体/页码/"
-                            "空白页/内容越界，结果附加 render_verify 摘要；"
-                            "无转换器时自动降级，不阻塞编辑。off 关闭。"
+                            "编辑后渲染级校验（默认 off，避免每轮编辑同步等待"
+                            "转换器）：auto 时本机有 PDF 转换器才把产物转为 PDF，"
+                            "检查页面尺寸/页边距/字体/页码/空白页/内容越界，结果"
+                            "附加 render_verify 摘要；无转换器自动降级。"
                             "dry_run 预览不执行校验。"
                         ),
                     },
@@ -222,7 +222,7 @@ class OfficeUpdateTool(BaseTool):
         normalized = _normalize_ops(ops)
         if normalized is None:
             return ToolResult(success=False, error="ops_required")
-        verify_mode = str(verify or "auto").strip().lower()
+        verify_mode = str(verify or "off").strip().lower()
         if verify_mode not in ("auto", "off"):
             return ToolResult(success=False, error="verify_invalid: verify 仅支持 auto / off")
         if dry_run:

@@ -200,6 +200,33 @@ def test_watermark_supports_chinese_text(tmp_path: Path) -> None:
     assert "内部资料" in _text(tmp_path / result.outputs[0])
 
 
+def test_invalid_page_number_template_is_rejected(tmp_path: Path) -> None:
+    source = _pdf(tmp_path / "doc.pdf", 1)
+
+    with pytest.raises(OfficeParseError):
+        number_pdf_pages(
+            PdfPageNumbersRequest(
+                workspace_path=str(tmp_path),
+                file_path=str(source),
+                template="{0}",
+            )
+        )
+
+
+def test_rotate_with_empty_pages_is_rejected(tmp_path: Path) -> None:
+    source = _pdf(tmp_path / "doc.pdf", 1)
+
+    with pytest.raises(OfficeParseError):
+        rotate_pdf(
+            PdfRotateRequest(
+                workspace_path=str(tmp_path),
+                file_path=str(source),
+                angle=90,
+                pages=[],
+            )
+        )
+
+
 def test_invalid_page_range_is_rejected(tmp_path: Path) -> None:
     source = _pdf(tmp_path / "doc.pdf", 2)
 

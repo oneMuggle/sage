@@ -24,7 +24,7 @@
     "backend/mcp/pool.py": 967,
     "backend/memory/episodic.py": 937,
     "backend/memory/manager.py": 1433,
-    "backend/office/edit.py": 1731,
+    "backend/office/edit.py": 1768,
     "backend/office/excel.py": 1096,
     "backend/office/staging_quarantine.py": 1383,
     "backend/office/template_library.py": 1259,

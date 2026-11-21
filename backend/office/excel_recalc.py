@@ -156,12 +156,20 @@ def _recalc_inner(request: ExcelRecalcRequest) -> ExcelRecalcResult:  # noqa: PL
     try:
         from .excel_health import scan_formula_health
 
-        total, errors, missing, _truncated = scan_formula_health(source)
+        (
+            total,
+            errors,
+            _missing,
+            error_count,
+            missing_count,
+            _truncated,
+            _issue_truncated,
+        ) = scan_formula_health(source)
         return ExcelRecalcResult(
             ok=True,
             formula_count=total,
-            formula_error_count=len(errors),
-            missing_cache_count=len(missing),
+            formula_error_count=error_count,
+            missing_cache_count=missing_count,
             formula_errors=[issue.model_dump() for issue in errors[:20]],
         )
     except Exception:  # noqa: BLE001 — 扫描失败不影响重算成功

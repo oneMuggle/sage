@@ -92,6 +92,26 @@ def test_formula_health_rejects_non_xlsx(tmp_path: Path) -> None:
         )
 
 
+def test_formula_health_counts_beyond_report_cap(tmp_path: Path) -> None:
+    from openpyxl import Workbook
+
+    path = tmp_path / "many.xlsx"
+    workbook = Workbook()
+    worksheet = workbook.active
+    for row in range(1, 202):
+        worksheet.cell(row=row, column=1, value="=1+1")
+    workbook.save(str(path))
+
+    result = check_formula_health(
+        ExcelFormulaHealthRequest(workspace_path=str(tmp_path), file_path=str(path))
+    )
+
+    assert result.total_formulas == 201
+    assert result.missing_cache_count == 201
+    assert len(result.missing_cache) == 200
+    assert result.issue_truncated is True
+
+
 def test_read_xlsx_exposes_charts_conditional_formats_and_validations(
     tmp_path: Path,
 ) -> None:

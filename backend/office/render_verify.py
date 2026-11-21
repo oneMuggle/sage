@@ -18,6 +18,9 @@ from __future__ import annotations
 
 import base64
 import logging
+import shutil
+import tempfile
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
@@ -113,6 +116,10 @@ class RenderVerifyRequest(BaseModel):
         description="docx 且请求含显式期望值（size/margins/page number）时，失败后先确定性修复再复检",
     )
     max_repair_rounds: int = Field(default=2, ge=0, le=3)
+    repair_overwrite: bool = Field(
+        default=False,
+        description="修复结果是否原地覆盖源文件；默认输出 <stem>-repaired.docx 并保留源文件",
+    )
 
 
 class RenderVerifyResult(BaseModel):
@@ -132,6 +139,9 @@ class RenderVerifyResult(BaseModel):
     thumbnails: List[str] = Field(default_factory=list)
     repairs: List[Dict[str, Any]] = Field(
         default_factory=list, description="自动修复轮次记录（仅 repair=true）"
+    )
+    repaired_path: Optional[str] = Field(
+        default=None, description="修复后的文件（相对工作区）；未修复时 None"
     )
 
 
@@ -292,6 +302,30 @@ def verify_rendered_pdf(
     return issues, warnings, summary, thumbnails
 
 
+def _render_to_isolated_dir(
+    source: Path,
+    workspace: Path,
+    exporter: Callable[..., ExportPdfResult],
+    timeout_seconds: int,
+) -> tuple:
+    """Render a throwaway copy inside the workspace so user PDFs are untouched.
+
+    ``export_to_pdf`` always writes ``<stem>.pdf`` next to the source; doing
+    that on the original document would silently overwrite a user's existing
+    export. The staged copy keeps every render artifact inside a temp dir
+    that the caller removes afterwards.
+    """
+    render_dir = Path(tempfile.mkdtemp(prefix="sage-render-verify-", dir=str(workspace)))
+    try:
+        staged = render_dir / source.name
+        shutil.copy2(str(source), str(staged))
+        export = exporter(staged, render_dir, timeout_seconds=timeout_seconds)
+        return export, render_dir
+    except Exception:
+        shutil.rmtree(str(render_dir), ignore_errors=True)
+        raise
+
+
 def _verify_once(
     request: RenderVerifyRequest,
     *,
@@ -311,9 +345,38 @@ def _verify_once(
         )
 
     exporter = export_fn or export_to_pdf
-    export = exporter(source, workspace, timeout_seconds=request.timeout_seconds)
     source_rel = _rel(source, workspace)
+    try:
+        export, render_dir = _render_to_isolated_dir(
+            source, workspace, exporter, request.timeout_seconds
+        )
+    except OSError as exc:
+        return RenderVerifyResult(
+            ok=True,
+            status="degraded",
+            source_path=source_rel,
+            rendered=False,
+            warnings=[
+                {
+                    "code": "render_unavailable",
+                    "message": f"无法创建渲染临时目录（{type(exc).__name__}）",
+                }
+            ],
+        )
 
+    try:
+        return _verify_export(export, request, source_rel, visual_checker)
+    finally:
+        shutil.rmtree(str(render_dir), ignore_errors=True)
+
+
+def _verify_export(
+    export: ExportPdfResult,
+    request: RenderVerifyRequest,
+    source_rel: str,
+    visual_checker: Optional[Callable[[List[str]], List[RenderVerifyIssue]]] = None,
+) -> RenderVerifyResult:
+    """Turn an export into a verification result (caller owns render cleanup)."""
     if not export.ok or not export.output_path:
         return RenderVerifyResult(
             ok=True,
@@ -444,6 +507,27 @@ def _build_repair_rulepack(request: RenderVerifyRequest) -> Optional[Any]:
     )
 
 
+def _request_with_path(
+    request: RenderVerifyRequest, file_path: Path
+) -> RenderVerifyRequest:
+    data = request.model_dump()
+    data["file_path"] = str(file_path)
+    return RenderVerifyRequest(**data)
+
+
+def _snapshot_before_overwrite(source: Path, warnings: List[Dict[str, str]]) -> None:
+    """Best-effort pre-edit snapshot before an in-place repair."""
+    try:
+        snapshot_dir = source.parent / ".snapshots"
+        snapshot_dir.mkdir(exist_ok=True)
+        snapshot = snapshot_dir / f"{int(time.time() * 1000)}-{source.name}"
+        shutil.copy2(str(source), str(snapshot))
+    except OSError:
+        warnings.append(
+            {"code": "repair_snapshot_failed", "message": "修复前快照失败（原地覆盖无回滚点）"}
+        )
+
+
 def verify_document(
     request: RenderVerifyRequest,
     *,
@@ -481,10 +565,25 @@ def verify_document(
     repairs: List[Dict[str, Any]] = list(result.repairs)
     warnings: List[Dict[str, str]] = list(result.warnings)
     current = result
+    working_path = source
+    repaired_path: Optional[str] = None
     for round_index in range(request.max_repair_rounds):
+        if request.repair_overwrite:
+            if round_index == 0:
+                _snapshot_before_overwrite(source, warnings)
+            overwrite = True
+            output_name = None
+        else:
+            overwrite = False
+            suffix = "" if round_index == 0 else f"-{round_index + 1}"
+            output_name = f"{working_path.stem}-repaired{suffix}.docx"
         try:
             fix = fix_word_document(
-                source, rulepack, overwrite=True, workspace_path=str(workspace)
+                working_path,
+                rulepack,
+                output_filename=output_name,
+                overwrite=overwrite,
+                workspace_path=str(workspace),
             )
         except Exception as exc:  # noqa: BLE001 — 修复失败降级为 warning，不改主结果
             warnings.append(
@@ -493,21 +592,30 @@ def verify_document(
             current.warnings = warnings
             return current
         warnings.extend(fix.warnings)
+        if fix.fixed_count:
+            working_path = Path(fix.output_path)
+            if not working_path.is_absolute():
+                working_path = workspace / working_path
+            repaired_path = _rel(working_path, workspace)
         repairs.append(
             {
                 "round": round_index + 1,
                 "fixed_count": fix.fixed_count,
                 "actions": [action.model_dump() for action in fix.actions],
+                "output_path": repaired_path,
             }
         )
         if fix.fixed_count == 0:
             break
         current = _verify_once(
-            request, export_fn=export_fn, visual_checker=visual_checker
+            _request_with_path(request, working_path),
+            export_fn=export_fn,
+            visual_checker=visual_checker,
         )
         if current.status != "failed":
             break
     current.repairs = repairs
+    current.repaired_path = repaired_path
     current.warnings = warnings + [w for w in current.warnings if w not in warnings]
     return current
 

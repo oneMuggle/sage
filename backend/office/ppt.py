@@ -196,6 +196,7 @@ def _series_values(series: Any) -> List[Any]:
 
 
 def _extract_charts(slide) -> List[Dict[str, Any]]:
+    max_points = 50
     charts: List[Dict[str, Any]] = []
     for shape in slide.shapes:
         if not getattr(shape, "has_chart", False):
@@ -206,20 +207,27 @@ def _extract_charts(slide) -> List[Dict[str, Any]]:
             continue
         categories: List[Any] = []
         series: List[Dict[str, Any]] = []
+        truncated = False
         try:
             plot = chart.plots[0]
-            categories = [
+            all_categories = [
                 None if category is None else str(category)
                 for category in list(plot.categories)
             ]
+            if len(all_categories) > max_points:
+                truncated = True
+            categories = all_categories[:max_points]
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):
             pass
         try:
             for item in chart.series:
+                values = _series_values(item)
+                if len(values) > max_points:
+                    truncated = True
                 series.append(
                     {
                         "name": str(getattr(item, "name", "") or ""),
-                        "values": _series_values(item),
+                        "values": values[:max_points],
                     }
                 )
         except (AttributeError, KeyError, TypeError, ValueError):
@@ -229,6 +237,7 @@ def _extract_charts(slide) -> List[Dict[str, Any]]:
                 "type": _enum_name(getattr(chart, "chart_type", "")),
                 "categories": categories,
                 "series": series,
+                "truncated": truncated,
             }
         )
     return charts

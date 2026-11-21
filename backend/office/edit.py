@@ -998,6 +998,7 @@ def _apply_xlsx_op(wb: Any, op: Dict[str, Any]) -> Dict[str, Any]:  # noqa: PLR0
             "sheet": op["sheet"],
             "index": index,
             "amount": amount,
+            "warnings": ["formula_refs_merged_ranges_and_charts_not_migrated"],
         }
 
     if op_name == "merge_cells":
@@ -1019,7 +1020,13 @@ def _apply_xlsx_op(wb: Any, op: Dict[str, Any]) -> Dict[str, Any]:  # noqa: PLR0
             worksheet.merge_cells(range_text)
         else:
             worksheet.unmerge_cells(range_text)
-        return {"op": op_name, "ok": True, "range": range_text, "merged": merge}
+        return {
+            "op": op_name,
+            "ok": True,
+            "range": range_text,
+            "merged": merge,
+            "warnings": ["non_top_left_values_hidden"] if merge else [],
+        }
 
     return {"op": str(op_name), "ok": False, "error": f"unsupported_op: {op_name}"}
 
@@ -1113,21 +1120,25 @@ def _find_slide_layout(prs: Any, name_or_index: Any) -> Any:
     raise ValueError(f"layout_not_found: {name_or_index}")
 
 
-def _move_slide(prs: Any, from_index: int, to_index: int) -> None:
-    """Reorder slides by moving the ``p:sldId`` entry in ``p:sldIdLst``."""
+def _move_slide(prs: Any, from_index: int, to_index: int) -> int:
+    """Reorder slides by moving the ``p:sldId`` entry in ``p:sldIdLst``.
+
+    Returns the clamped destination index (out-of-range targets are clamped).
+    """
     sld_id_lst = prs.slides._sldIdLst
     items = list(sld_id_lst)
     if not (0 <= from_index < len(items)):
         raise ValueError(f"slide_index_out_of_range: {from_index}")
     target = max(0, min(int(to_index), len(items) - 1))
     if from_index == target:
-        return
+        return target
     item = items.pop(from_index)
     items.insert(target, item)
     for child in list(sld_id_lst):
         sld_id_lst.remove(child)
     for child in items:
         sld_id_lst.append(child)
+    return target
 
 
 def _remap_slide_relationships(source_part: Any, new_part: Any, element: Any) -> None:
@@ -1302,10 +1313,27 @@ def _apply_pptx_op(prs: Any, op: Dict[str, Any], doc_path: Optional[Path] = None
                 box.text_frame.text = title
             if bullets:
                 body = None
-                for shape in slide.placeholders:
-                    if shape.placeholder_format.idx != 0 and shape.has_text_frame:
+                candidates = [shape for shape in slide.placeholders if shape.has_text_frame]
+                for shape in candidates:
+                    if shape.placeholder_format.idx == 1:
                         body = shape
                         break
+                if body is None:
+                    try:
+                        from pptx.enum.shapes import PP_PLACEHOLDER
+
+                        for shape in candidates:
+                            if shape.placeholder_format.type == PP_PLACEHOLDER.BODY:
+                                body = shape
+                                break
+                    except (ImportError, AttributeError):
+                        body = None
+                if body is None:
+                    for shape in candidates:
+                        # Skip title (0), date (10), footer (11), slide number (12).
+                        if shape.placeholder_format.idx not in (0, 10, 11, 12):
+                            body = shape
+                            break
                 if body is not None:
                     _fill_text_frame(body.text_frame, bullets)
                 else:
@@ -1363,10 +1391,10 @@ def _apply_pptx_op(prs: Any, op: Dict[str, Any], doc_path: Optional[Path] = None
         if target_value is None:
             return {"op": op_name, "ok": False, "error": "to_required"}
         try:
-            _move_slide(prs, int(op["index"]), int(target_value))
+            moved_to = _move_slide(prs, int(op["index"]), int(target_value))
         except (TypeError, ValueError) as exc:
             return {"op": op_name, "ok": False, "error": str(exc)}
-        return {"op": op_name, "ok": True, "index": int(target_value), "remaining": len(slides)}
+        return {"op": op_name, "ok": True, "index": moved_to, "remaining": len(slides)}
 
     if op_name == "set_run_format":
         missing = _require_fields(op, ("index",))
@@ -1489,6 +1517,15 @@ def _apply_pptx_op(prs: Any, op: Dict[str, Any], doc_path: Optional[Path] = None
             width=width,
             height=height,
         )
+        replacement.name = target.name
+        try:
+            alt_text = target._element.xpath("./p:nvPicPr/p:cNvPr/@descr")
+            if alt_text:
+                replacement._element.xpath("./p:nvPicPr/p:cNvPr")[0].set(
+                    "descr", alt_text[0]
+                )
+        except (AttributeError, IndexError):
+            pass
         target._element.addprevious(replacement._element)
         target._element.getparent().remove(target._element)
         return {"op": op_name, "ok": True, "index": int(op["index"])}

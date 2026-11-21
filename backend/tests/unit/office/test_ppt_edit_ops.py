@@ -202,6 +202,31 @@ def test_add_chart_and_read_back(tmp_path: Path) -> None:
     assert "COLUMN" in charts[0]["type"]
 
 
+def test_read_ppt_truncates_large_chart_series(tmp_path: Path) -> None:
+    deck = _make_deck(tmp_path / "deck.pptx")
+    categories = [f"C{index}" for index in range(60)]
+
+    saved, results = update_pptx(
+        deck,
+        [
+            {
+                "op": "add_chart",
+                "index": 0,
+                "type": "column",
+                "categories": categories,
+                "series": [{"name": "S", "values": list(range(60))}],
+            }
+        ],
+    )
+    assert saved is True
+    assert results[0]["ok"] is True
+
+    chart = read_ppt(deck).slides[0].charts[0]
+    assert len(chart["categories"]) == 50
+    assert len(chart["series"][0]["values"]) == 50
+    assert chart["truncated"] is True
+
+
 def test_read_ppt_exposes_layout_and_placeholders(tmp_path: Path) -> None:
     from pptx import Presentation
 

@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .errors import OfficeFileNotFoundError, OfficeParseError
+from .errors import OfficeFileNotFoundError, OfficeParseError, OfficeSizeLimitError
 from .path_safety import resolve_within
 from .storage import validate_workspace
 
@@ -36,6 +36,9 @@ __all__ = [
 
 #: 单次扫描的公式单元格上限（防止超大工作簿拖垮接口）。
 MAX_FORMULA_CELLS = 50_000
+
+#: 公式健康检查的源文件上限（与 Office 编辑/渲染上限同口径）。
+MAX_XLSX_BYTES = 50 * 1024 * 1024
 
 #: 返回给调用方的错误条目上限。
 MAX_REPORTED_ISSUES = 200
@@ -94,6 +97,9 @@ class ExcelFormulaHealthResult(BaseModel):
     errors: List[ExcelFormulaIssue] = Field(default_factory=list)
     missing_cache: List[ExcelFormulaIssue] = Field(default_factory=list)
     truncated: bool = False
+    issue_truncated: bool = Field(
+        default=False, description="错误/缺缓存条目超过 200 条，列表已截断（计数仍准确）"
+    )
     warnings: List[Dict[str, str]] = Field(default_factory=list)
 
 
@@ -121,19 +127,23 @@ def scan_formula_health(
             total = 0
             errors: List[ExcelFormulaIssue] = []
             missing: List[ExcelFormulaIssue] = []
+            error_count = 0
+            missing_count = 0
             truncated = False
+            issue_truncated = False
             for sheet in formulas.worksheets:
                 cached_sheet = cached[sheet.title]
                 for row in sheet.iter_rows():
                     for cell in row:
                         if not _is_formula(cell.value):
                             continue
-                        total += 1
-                        if total > max_cells:
+                        if total >= max_cells:
                             truncated = True
                             break
+                        total += 1
                         cached_value = cached_sheet[cell.coordinate].value
                         if cached_value is None:
+                            missing_count += 1
                             if len(missing) < MAX_REPORTED_ISSUES:
                                 missing.append(
                                     ExcelFormulaIssue(
@@ -143,24 +153,35 @@ def scan_formula_health(
                                         issue="missing_cache",
                                     )
                                 )
-                        elif (
-                            _is_error_value(cached_value)
-                            and len(errors) < MAX_REPORTED_ISSUES
-                        ):
-                            errors.append(
-                                ExcelFormulaIssue(
-                                    sheet=sheet.title,
-                                    cell=cell.coordinate,
-                                    formula=str(cell.value),
-                                    cached_value=str(cached_value),
-                                    issue="formula_error",
+                            else:
+                                issue_truncated = True
+                        elif _is_error_value(cached_value):
+                            error_count += 1
+                            if len(errors) < MAX_REPORTED_ISSUES:
+                                errors.append(
+                                    ExcelFormulaIssue(
+                                        sheet=sheet.title,
+                                        cell=cell.coordinate,
+                                        formula=str(cell.value),
+                                        cached_value=str(cached_value),
+                                        issue="formula_error",
+                                    )
                                 )
-                            )
+                            else:
+                                issue_truncated = True
                     if truncated:
                         break
                 if truncated:
                     break
-            return total, errors, missing, truncated
+            return (
+                total,
+                errors,
+                missing,
+                error_count,
+                missing_count,
+                truncated,
+                issue_truncated,
+            )
         finally:
             cached.close()
     finally:
@@ -175,11 +196,22 @@ def check_formula_health(request: ExcelFormulaHealthRequest) -> ExcelFormulaHeal
         raise OfficeFileNotFoundError(source)
     if source.suffix.lower() != ".xlsx":
         raise OfficeParseError("公式健康检查仅支持 .xlsx")
+    if source.stat().st_size > MAX_XLSX_BYTES:
+        raise OfficeSizeLimitError(
+            f"XLSX 超过 {MAX_XLSX_BYTES // (1024 * 1024)}MiB 公式检查上限",
+            file_path=source,
+        )
 
     try:
-        total, errors, missing, truncated = scan_formula_health(
-            source, max_cells=request.max_cells
-        )
+        (
+            total,
+            errors,
+            missing,
+            error_count,
+            missing_count,
+            truncated,
+            issue_truncated,
+        ) = scan_formula_health(source, max_cells=request.max_cells)
     except Exception as exc:  # noqa: BLE001 — 扫描失败折算为结果警告
         logger.warning("formula health scan failed: %s", type(exc).__name__)
         return ExcelFormulaHealthResult(
@@ -201,22 +233,30 @@ def check_formula_health(request: ExcelFormulaHealthRequest) -> ExcelFormulaHeal
                 "message": f"公式单元格超过上限 {request.max_cells}，结果已截断",
             }
         )
-    if missing:
+    if issue_truncated:
+        warnings.append(
+            {
+                "code": "formula_issues_truncated",
+                "message": "错误/缺缓存条目超过 200 条，列表已截断（计数仍准确）",
+            }
+        )
+    if missing_count:
         warnings.append(
             {
                 "code": "missing_formula_cache",
-                "message": f"{len(missing)} 个公式缺少缓存值，建议执行公式重算",
+                "message": f"{missing_count} 个公式缺少缓存值，建议执行公式重算",
             }
         )
     return ExcelFormulaHealthResult(
         ok=not errors,
         source_path=_rel(source, workspace),
         total_formulas=total,
-        error_count=len(errors),
-        missing_cache_count=len(missing),
+        error_count=error_count,
+        missing_cache_count=missing_count,
         errors=errors,
         missing_cache=missing,
         truncated=truncated,
+        issue_truncated=issue_truncated,
         warnings=warnings,
     )
 

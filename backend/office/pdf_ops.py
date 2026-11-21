@@ -8,6 +8,8 @@ optional PDF deps are missing (operations then raise OfficeParseError).
 from __future__ import annotations
 
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
@@ -36,6 +38,9 @@ __all__ = [
 ]
 
 MAX_PDF_OPS_BYTES = 200 * 1024 * 1024
+MAX_MERGE_SOURCES = 50
+MAX_MERGE_PAGES = 5000
+MAX_MERGE_BYTES = 500 * 1024 * 1024
 
 
 class PdfOpsResult(BaseModel):
@@ -55,7 +60,7 @@ class PdfMergeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     workspace_path: str
-    file_paths: List[str] = Field(min_length=2)
+    file_paths: List[str] = Field(default_factory=list)
     output_filename: Optional[str] = None
     overwrite: bool = False
 
@@ -83,7 +88,7 @@ class PdfPagesRequest(BaseModel):
     workspace_path: str
     file_path: str
     action: Literal["extract", "delete"]
-    pages: List[str] = Field(min_length=1)
+    pages: List[str] = Field(default_factory=list)
     output_filename: Optional[str] = None
     overwrite: bool = False
 
@@ -95,7 +100,7 @@ class PdfSplitRequest(BaseModel):
 
     workspace_path: str
     file_path: str
-    ranges: List[str] = Field(min_length=1, description="每项为 1 基区间，如 '1-3'")
+    ranges: List[str] = Field(default_factory=list, description="每项为 1 基区间，如 '1-3'")
     output_prefix: Optional[str] = None
 
 
@@ -190,7 +195,11 @@ def _resolve_output(
 
 
 def _save_pdf(document: Any, target: Path) -> None:
-    temporary = target.with_name(target.name + ".pdf-ops-tmp")
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=target.name + ".", suffix=".tmp", dir=str(target.parent)
+    )
+    os.close(descriptor)
+    temporary = Path(temporary_name)
     try:
         document.save(str(temporary), deflate=True)
         temporary.replace(target)
@@ -234,11 +243,18 @@ def _parse_pages(specs: List[str], page_count: int) -> List[int]:
 
 def merge_pdfs(request: PdfMergeRequest) -> PdfOpsResult:
     """Merge multiple PDFs in the given order."""
+    if len(request.file_paths) < 2:
+        raise OfficeParseError("合并至少需要两个 PDF")
+    if len(request.file_paths) > MAX_MERGE_SOURCES:
+        raise OfficeParseError(f"单次最多合并 {MAX_MERGE_SOURCES} 个 PDF")
     workspace, first = _validate_source(request.workspace_path, request.file_paths[0])
     sources = [first]
     for raw in request.file_paths[1:]:
         _, source = _validate_source(request.workspace_path, raw)
         sources.append(source)
+    total_bytes = sum(source.stat().st_size for source in sources)
+    if total_bytes > MAX_MERGE_BYTES:
+        raise OfficeParseError("待合并 PDF 总大小超过 500MiB 上限")
     target = _resolve_output(
         workspace, first, request.output_filename, "merged.pdf", overwrite=request.overwrite
     )
@@ -250,6 +266,8 @@ def merge_pdfs(request: PdfMergeRequest) -> PdfOpsResult:
                 merged.insert_pdf(other)
             finally:
                 other.close()
+            if merged.page_count > MAX_MERGE_PAGES:
+                raise OfficeParseError(f"合并结果超过 {MAX_MERGE_PAGES} 页上限")
         page_count = merged.page_count
         _save_pdf(merged, target)
     finally:
@@ -271,7 +289,7 @@ def rotate_pdf(request: PdfRotateRequest) -> PdfOpsResult:
     try:
         indices = (
             _parse_pages(request.pages, document.page_count)
-            if request.pages
+            if request.pages is not None
             else list(range(document.page_count))
         )
         for index in indices:
@@ -325,6 +343,8 @@ def split_pdf(request: PdfSplitRequest) -> PdfOpsResult:
     import fitz  # noqa: PLC0415
 
     workspace, source = _validate_source(request.workspace_path, request.file_path)
+    if not request.ranges:
+        raise OfficeParseError("ranges 不能为空")
     prefix = request.output_prefix or source.stem
     if Path(prefix).name != prefix or ".." in prefix:
         raise OfficeParseError("output_prefix 非法")
@@ -416,16 +436,17 @@ def number_pdf_pages(request: PdfPageNumbersRequest) -> PdfOpsResult:
         overwrite=request.overwrite,
     )
     document = _open_pdf(source)
+    warnings: List[Dict[str, str]] = []
     try:
         for offset, page in enumerate(document):
             number = request.start + offset
             try:
                 text = request.template.format(n=number)
-            except (KeyError, ValueError) as exc:
+            except (KeyError, ValueError, IndexError, AttributeError) as exc:
                 raise OfficeParseError(f"页码模板非法: {request.template!r}") from exc
             rect = page.rect
             band = fitz.Rect(0, rect.height - 36, rect.width, rect.height - 12)
-            page.insert_textbox(
+            written = page.insert_textbox(
                 band,
                 text,
                 fontsize=10,
@@ -433,8 +454,17 @@ def number_pdf_pages(request: PdfPageNumbersRequest) -> PdfOpsResult:
                 align=fitz.TEXT_ALIGN_CENTER,
                 overlay=True,
             )
+            if written < 0:
+                warnings.append(
+                    {
+                        "code": "page_number_not_fit",
+                        "message": f"第 {offset + 1} 页页码未能绘制（文本过长）",
+                    }
+                )
         page_count = document.page_count
         _save_pdf(document, target)
     finally:
         document.close()
-    return PdfOpsResult(ok=True, outputs=[_rel(target, workspace)], page_count=page_count)
+    return PdfOpsResult(
+        ok=True, outputs=[_rel(target, workspace)], page_count=page_count, warnings=warnings
+    )

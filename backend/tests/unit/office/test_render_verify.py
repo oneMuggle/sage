@@ -222,6 +222,23 @@ def test_verify_document_uses_rendered_pdf(tmp_path: Path) -> None:
     assert result.issues == []
 
 
+def test_verify_document_does_not_touch_existing_pdf(tmp_path: Path) -> None:
+    source = tmp_path / "doc.docx"
+    source.write_bytes(b"not really docx")
+    sentinel = tmp_path / "doc.pdf"
+    sentinel.write_bytes(b"user-pdf-must-survive")
+
+    def writing_export(source: Path, workspace: Path, *, timeout_seconds: int = 120):
+        output = source.parent / f"{source.stem}.pdf"
+        _make_pdf(output, [{"texts": [(100, 100, "Hello", 12)]}])
+        return ExportPdfResult(ok=True, method="libreoffice", output_path=str(output))
+
+    result = verify_document(_request(tmp_path), export_fn=writing_export)
+
+    assert result.rendered is True
+    assert sentinel.read_bytes() == b"user-pdf-must-survive"
+
+
 def test_verify_document_fails_on_error_issues(tmp_path: Path) -> None:
     pdf = _make_pdf(
         tmp_path / "letter.pdf",
@@ -318,6 +335,7 @@ def test_verify_document_repairs_word_page_size(tmp_path: Path) -> None:
             file_path=str(source),
             expected_size="A4",
             repair=True,
+            repair_overwrite=True,
         ),
         export_fn=_size_reflecting_export(tmp_path),
     )
@@ -325,6 +343,29 @@ def test_verify_document_repairs_word_page_size(tmp_path: Path) -> None:
     assert result.status == "passed"
     assert result.repairs
     assert result.repairs[0]["fixed_count"] >= 1
+    snapshots = list((tmp_path / ".snapshots").glob("*-letter.docx"))
+    assert snapshots
+
+
+def test_verify_document_repair_defaults_to_copy(tmp_path: Path) -> None:
+    source = _letter_docx(tmp_path / "letter.docx")
+
+    result = verify_document(
+        RenderVerifyRequest(
+            workspace_path=str(tmp_path),
+            file_path=str(source),
+            expected_size="A4",
+            repair=True,
+        ),
+        export_fn=_size_reflecting_export(tmp_path),
+    )
+
+    assert result.status == "passed"
+    assert result.repaired_path == "letter-repaired.docx"
+    assert (tmp_path / "letter-repaired.docx").is_file()
+    from docx import Document
+
+    assert Document(str(source)).sections[0].page_width.inches == 8.5
 
 
 def test_verify_document_repair_unsupported_format(tmp_path: Path) -> None:

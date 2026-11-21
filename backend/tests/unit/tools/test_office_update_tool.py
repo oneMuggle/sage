@@ -503,6 +503,7 @@ def test_update_by_path_attaches_render_verify_when_converter_available(
     result = _tool().execute(
         file_path=str(target),
         ops=[{"op": "append_rows", "sheet": "数据", "rows": [["a", "1"]]}],
+        verify="auto",
     )
 
     assert result.success is True

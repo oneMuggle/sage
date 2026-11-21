@@ -12,17 +12,26 @@ table-cell revisions and deleted-paragraph-mark merging are follow-ups.
 from __future__ import annotations
 
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .errors import OfficeFileNotFoundError, OfficeParseError, OfficePathError
+from .errors import (
+    OfficeFileNotFoundError,
+    OfficeParseError,
+    OfficePathError,
+    OfficeSizeLimitError,
+)
 from .models import WordTrackedChange
 from .path_safety import resolve_within
 from .storage import validate_workspace
 
 logger = logging.getLogger(__name__)
+
+MAX_DOCX_BYTES = 50 * 1024 * 1024
 
 __all__ = [
     "WordTrackedChange",
@@ -91,16 +100,21 @@ def _rel(path: Path, root: Path) -> str:
 
 
 def extract_tracked_changes(document: Any) -> List[WordTrackedChange]:
-    """Collect w:ins / w:del elements from body paragraphs."""
+    """Collect w:ins / w:del elements from all body paragraphs (tables included).
+
+    Paragraph indices follow OOXML body order, matching the resolve scope so
+    "read says no revisions" can never disagree with accept/reject.
+    """
     from docx.oxml.ns import qn  # noqa: PLC0415
 
     changes: List[WordTrackedChange] = []
-    for paragraph_index, paragraph in enumerate(document.paragraphs):
+    body = document.element.body
+    for paragraph_index, paragraph_element in enumerate(body.iter(qn("w:p"))):
         for kind, tag, text_tag in (
             ("insert", "w:ins", "w:t"),
             ("delete", "w:del", "w:delText"),
         ):
-            for element in paragraph._p.iter(qn(tag)):
+            for element in paragraph_element.iter(qn(tag)):
                 text = "".join(
                     node.text or "" for node in element.iter(qn(text_tag))
                 )
@@ -136,6 +150,11 @@ def _validate_source(workspace_path: str, file_path: str) -> tuple:
         raise OfficeFileNotFoundError(source)
     if source.suffix.lower() != ".docx":
         raise OfficeParseError("修订读取/接受拒绝仅支持 .docx")
+    if source.stat().st_size > MAX_DOCX_BYTES:
+        raise OfficeSizeLimitError(
+            f"DOCX 超过 {MAX_DOCX_BYTES // (1024 * 1024)}MiB 修订处理上限",
+            file_path=source,
+        )
     return workspace, source
 
 
@@ -208,7 +227,11 @@ def _save_document(document: Any, target: Path, *, overwrite_source: bool) -> No
         except OSError as exc:
             raise OfficeParseError(f"保存文档失败: {exc}", file_path=target) from exc
         return
-    temporary = target.with_name(target.name + ".m3-tmp")
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=target.name + ".", suffix=".m3-tmp", dir=str(target.parent)
+    )
+    os.close(descriptor)
+    temporary = Path(temporary_name)
     try:
         document.save(str(temporary))
         for delay in (0.0, 0.1, 0.3):
