@@ -402,3 +402,93 @@ class TestRecording:
         assert profile.last_verified_at is not None
         store = SiteProfileStore([ProfileRoot(out_dir, "user")])
         assert store.get("xueshu789").search.wait_for == (".result-list",)
+
+
+class TestCli:
+    def test_init_record_gate_export_flow(self, tmp_path):
+        from backend.literature import cli
+
+        root = tmp_path / "runs"
+        assert (
+            cli.main(
+                [
+                    "init",
+                    "--root",
+                    str(root),
+                    "--topic",
+                    "t",
+                    "--site",
+                    "demo",
+                    "--run-id",
+                    "r1",
+                ]
+            )
+            == 0
+        )
+        run_dir = root / "r1"
+
+        papers = tmp_path / "papers.json"
+        papers.write_text(json.dumps([_paper("p1")]), encoding="utf-8")
+        assert (
+            cli.main(
+                [
+                    "record-query",
+                    "--run",
+                    str(run_dir),
+                    "--query",
+                    "q",
+                    "--site",
+                    "demo",
+                    "--result-count",
+                    "1",
+                ]
+            )
+            == 0
+        )
+        assert (
+            cli.main(
+                ["record-papers", "--run", str(run_dir), "--json", str(papers)]
+            )
+            == 0
+        )
+
+        outline = tmp_path / "outline.json"
+        outline.write_text(
+            json.dumps({"title": "x", "sections": [{"id": "s1", "title": "引言"}]}),
+            encoding="utf-8",
+        )
+        assert (
+            cli.main(
+                ["save-outline", "--run", str(run_dir), "--json", str(outline)]
+            )
+            == 0
+        )
+
+        draft = tmp_path / "draft.md"
+        draft.write_text("# 草稿\n\n发现 [cite:p1]。\n", encoding="utf-8")
+        assert (
+            cli.main(["save-draft", "--run", str(run_dir), "--md", str(draft)]) == 0
+        )
+
+        assert cli.main(["gate", "--run", str(run_dir)]) == 0
+        assert cli.main(["export", "--run", str(run_dir)]) == 0
+        assert (run_dir / "export" / "final.md").is_file()
+
+    def test_gate_failure_exit_code(self, tmp_path):
+        from backend.literature import cli
+
+        root = tmp_path / "runs"
+        cli.main(
+            [
+                "init",
+                "--root",
+                str(root),
+                "--topic",
+                "t",
+                "--site",
+                "demo",
+                "--run-id",
+                "r1",
+            ]
+        )
+        assert cli.main(["gate", "--run", str(root / "r1")]) == 1
