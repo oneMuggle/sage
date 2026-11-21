@@ -486,6 +486,69 @@ class TestDesignRoutes:
         assert idle.json()["stage"] == "idle"
         assert done.json()["stage"] == "complete"
 
+    async def test_embed_chart_appends_new_version(self, studio):
+        """chart 端点注入图片并追加新版本（不调 LLM）。"""
+        from backend.main import app
+
+        project = studio.create_project(
+            "Chart", "prototype", "test-sys", "test-page", "brief",
+        )
+        studio.add_artifact(
+            project.id, "<html><body>{{CHART}}</body></html>", title="C",
+        )
+
+        with patch(
+            "backend.api.v1.design_resources_routes.get_design_studio",
+            return_value=studio,
+        ), patch(
+            "backend.design.chart_embedder.ChartEmbedder.spec_to_data_url",
+            return_value="data:image/png;base64,AAAA",
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    f"/api/v1/design/projects/{project.id}/chart",
+                    json={
+                        "chart": {
+                            "type": "bar",
+                            "series": [{"name": "S", "y": [1, 2]}],
+                        },
+                    },
+                )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["version"] == 2
+        assert body["injected_at_slot"] is True
+
+    async def test_embed_chart_without_artifact_returns_404(self, studio):
+        from backend.main import app
+
+        project = studio.create_project(
+            "NoChart", "prototype", "test-sys", "test-page", "brief",
+        )
+        with patch(
+            "backend.api.v1.design_resources_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    f"/api/v1/design/projects/{project.id}/chart",
+                    json={
+                        "chart": {
+                            "type": "bar",
+                            "series": [{"name": "S", "y": [1]}],
+                        },
+                    },
+                )
+        assert resp.status_code == 404
+
     async def test_create_project_invalid_kind(self, studio):
         from backend.main import app
 

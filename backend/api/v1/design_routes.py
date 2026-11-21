@@ -93,14 +93,6 @@ class ExportRequest(BaseModel):
     inline: bool = False
 
 
-class OutlineRequest(BaseModel):
-    """POST /design/outline body."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    file_path: str
-
-
 class BindSourceRequest(BaseModel):
     """POST /design/projects/{id}/source body."""
 
@@ -589,51 +581,6 @@ async def export_artifact(  # noqa: PLR0911 — 每个校验门一个返回是�
         return JSONResponse(
             status_code=500,
             content={"detail": f"Export failed: {exc}"},
-        )
-
-
-# ---------------------------------------------------------------------------
-# POST /design/outline — Word → markdown outline
-# ---------------------------------------------------------------------------
-
-
-@router.post("/outline")
-async def extract_outline(req: OutlineRequest):
-    """Extract a Word document into a slide-style markdown outline.
-
-    Returns the OutlineResult (title, slide_count, outline_md) so the
-    wizard step 4 can feed it into the project brief without a second
-    LLM round-trip.
-    """
-    from pathlib import Path
-
-    from backend.design.outline_extractor import OutlineExtractor
-
-    path = Path(req.file_path)
-    if not path.exists():
-        return JSONResponse(
-            status_code=404,
-            content={"detail": f"File not found: {req.file_path}"},
-        )
-    if path.suffix.lower() not in (".docx",):
-        return JSONResponse(
-            status_code=400,
-            content={
-                "detail": (
-                    f"Unsupported extension {path.suffix!r}; only .docx is "
-                    "supported for outline extraction."
-                ),
-            },
-        )
-
-    try:
-        result = OutlineExtractor().extract(path)
-        return result.model_dump()
-    except Exception as exc:
-        logger.exception("Outline extraction failed for %s", req.file_path)
-        return JSONResponse(
-            status_code=500,
-            content={"detail": f"Outline extraction failed: {exc}"},
         )
 
 
