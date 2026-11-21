@@ -306,14 +306,15 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 
 ### M6 — 解析适配器、PDF 操作与多文档对比（P1，对应 G4/G8/G9/G13/G16）
 
-- [ ] `DocumentExtractor` 注册表 + markitdown 适配器（可选依赖，评估 win7）
-- [ ] docling 适配器（main only，复杂 PDF/扫描/表格场景）
-- [ ] 视觉兜底策略与设置项（Office OCR 自动策略）
+- [x] `DocumentExtractor` 注册表 + `light` 默认后端（docx/xlsx/pptx/pdf/csv → 统一 Markdown + 锚点）
+- [x] `markitdown` / `docling` 可选适配器（运行时探测，不新增硬依赖；auto 优先可选后端，缺失回退 light）
+- [ ] 视觉兜底策略与设置项（Office OCR 自动策略 + 复杂版面 VLM）—— 随 M7/后续
 - [x] PDF 通用操作：合并/拆分/旋转/抽页/删页/水印/页码（`backend/office/pdf_ops.py`）
 - [ ] PDF 读取补齐：页面图片返回 + 复杂表格兜底 + 真 appearance flatten
 - [x] `office_create` 的 pdf 枚举：明确拒绝并引导 `office_generate_pdf`（消除分派漂移）
-- [ ] `office_delete` / `workspace_search` 覆盖 pdf/csv；Wiki 队列 PDF 路径
-- [ ] `POST /office/compare`（Word/Excel/PPT/PDF）+ 工作台对比入口 + Markdown 报告
+- [x] 工具面一致性：`office_delete` / `workspace_search` 覆盖 pdf/csv；Wiki 队列 PDF 路径
+- [x] `POST /office/extract`（统一提取）与 `POST /office/compare`（Word/Excel/PPT/PDF/CSV diff + Markdown 报告）
+- [ ] 工作台对比入口（前端；后端已就绪）
 - [ ] 聊天附件 docx/xlsx/pptx 富预览；Excel 图表 / PPT 图片在结构化预览中渲染；`@` Office chip 点击预览
 - [ ] Word 模板 Profile/填充前端入口
 - [ ] Excel/PPT 基础规则审校（范围/锚点/只读），AI 语义审校视成本评估
@@ -323,6 +324,13 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 端点：`POST /office/pdf/{merge,rotate,pages,split,watermark,page-numbers}`
 > - 测试：unit 8 + integration 2；ruff/py38/architecture 通过
 > - 限制：水印默认 Helvetica（非 ASCII 自动切 `china-s`）；`split` 输出按区间顺序编号
+
+> **实施记录（2026-11-21，M6b 解析适配器 + 跨文档对比 + 工具面）**
+> - 新增：`backend/office/extractors/`（base/light/optional/service）与 `backend/office/compare.py`
+> - 端点：`POST /office/extract`、`POST /office/compare`
+> - 工具面：`office_delete` 支持 pdf/csv；`workspace_search` 识别 pdf/csv；Wiki 队列 `extract_text_for_ingest` 支持 PDF（`--- page N ---`）
+> - 可选后端：`pip install markitdown` 或 `docling`（main only）后 auto 自动启用；默认 light 无新增依赖
+> - 测试：提取/对比 unit 10 + 端点 3；工具面回归 44；Office 全量 2274 passed / 2 skipped；ruff/py38/silent/architecture 绿
 
 ### M7 — 前端一致性与漂移清理（P1，对应 G11/G12）
 
@@ -408,7 +416,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 | 全量 Office 回归 | ✅ | — | 2215 passed / 2 skipped |
 | 门禁 | ✅ | — | ruff / py38 / silent-exceptions / architecture |
 | M5 OOXML + Skills | ✅ | 本轮提交 | OOXML 单测 10 + 端点 3 + 工具 6；全量 2243 passed |
-| M6b 解析适配器/对比/附件预览 | ⏳ | — | 未开始 |
+| M6b 解析适配器 + 对比 + 工具面 | ✅ 后端 | 本轮提交 | unit 10 + 端点 3 + 工具面 44；全量 2274 passed |
 | M7 前端接入 | ⏳ | — | 未开始 |
 | M8 大文件/并发/沙箱 | ⏳ | — | 未开始 |
 

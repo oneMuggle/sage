@@ -26,6 +26,8 @@ _OFFICE_SUFFIXES = {
     ".pptx": OfficeDocType.PPT,
     ".docx": OfficeDocType.WORD,
     ".xlsx": OfficeDocType.EXCEL,
+    ".pdf": OfficeDocType.PDF,
+    ".csv": OfficeDocType.EXCEL,
 }
 
 
