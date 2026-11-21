@@ -331,6 +331,10 @@ def stubbed(monkeypatch):
             "expression"
         ) == "location.href":
             return {"result": {"value": ""}}
+        # 下载目录设置是导航前的幂等预备动作：不记录、不占用结果队列，
+        # 与 location.href 守卫同理，避免打乱既有用例的 CDP 调用断言。
+        if method == "Browser.setDownloadBehavior":
+            return {}
         calls.append({"method": method, "params": params or {}, "target": target_id})
         return _fake_cdp.results.pop(0)
 
@@ -1561,6 +1565,10 @@ def autolaunch(monkeypatch):
     calls: List[Dict[str, Any]] = []
 
     def _fake_cdp(session_, method, params=None, target_id=None):
+        # 下载目录设置是导航前的幂等预备动作：不记录、不占用结果队列，
+        # 避免打乱既有用例的 CDP 调用断言。
+        if method == "Browser.setDownloadBehavior":
+            return {}
         calls.append({"method": method, "params": params or {}, "target": target_id})
         return _fake_cdp.results.pop(0)
 
