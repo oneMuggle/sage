@@ -375,3 +375,27 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 [^wps-lingxi-docs]: WPS 灵犀专业版产品文档（文档处理矩阵、执行环境、权限模式、版本更新）. https://www.lingxi.cn/docs
 [^kimi-capability]: Kimi 帮助中心，《Kimi 能做什么？》（100MB/50 个文件、K3 1M token）. https://www.kimi.ai/zh-hans/help/others/capability
 [^kimi-docs]: Kimi 帮助中心，《Kimi 文档与 Kimi 表格概览》（可编辑 docx/xlsx/pptx/pdf、批注与修订）. https://www.kimi.ai/zh-hans/help/docs-and-sheets/docs-and-sheets-overview
+
+## 10. 实施进度总览（2026-11-21）
+
+> 分支：`feat/office-document-ai-upgrade`（worktree `.worktrees/feat-office-document-ai-upgrade`，未 push）。
+
+| 里程碑 | 状态 | 提交 | 验证 |
+|---|---|---|---|
+| 方案文档 | ✅ | `ed06172ed` | — |
+| M1 Render & Verify（核心） | ✅ | `309549f65` | unit 13 + integration 4 + tool 5 |
+| M1b 修复循环 + 视觉钩子 | ✅ | `4ccfefaf4` | unit 15 |
+| M2 PPT 深度编辑/读取 | ✅ | `966e1670f` | unit 8 + PPT 回归 74 |
+| M3 Word 修订读回/接受拒绝 | ✅ | `76e8c77b6` | unit 6 + integration 2 |
+| M4 Excel 读写对称/公式健康 | ✅ | `4230094e5` | unit 9 + Excel 回归 43 |
+| M6a PDF 页面操作 | ✅ | `25cecbca1` | unit 10 + integration 2 |
+| M6a 边界修复 | ✅ | `a128c99d2` / `4bc14a695` | split 原子性 + 中文水印 |
+| 工具面 PDF 守卫 | ✅ | `4d1f52982` | tool 33 |
+| 全量 Office 回归 | ✅ | — | 2215 passed / 2 skipped |
+| 门禁 | ✅ | — | ruff / py38 / silent-exceptions / architecture |
+| M5 OOXML + Skills | ⏳ | — | 未开始 |
+| M6b 解析适配器/对比/附件预览 | ⏳ | — | 未开始 |
+| M7 前端接入 | ⏳ | — | 未开始 |
+| M8 大文件/并发/沙箱 | ⏳ | — | 未开始 |
+
+**环境说明**：本机无 LibreOffice / Word COM，渲染与重算通过注入导出器与降级路径测试；真实转换需在带转换器的机器上做验收。
