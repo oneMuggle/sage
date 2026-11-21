@@ -10,11 +10,14 @@ session binding），绝对路径 + 后缀白名单。
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Optional
 
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+
+logger = logging.getLogger(__name__)
 
 
 class OfficeOoxmlTool(BaseTool):
@@ -146,5 +149,5 @@ class OfficeOoxmlTool(BaseTool):
                 if binding is not None:
                     return Path(binding.workspace_path)
             except Exception:  # noqa: BLE001 — 无绑定/DB 异常回退文件父目录
-                pass
+                logger.debug("office_ooxml: workspace binding lookup failed", exc_info=True)
         return target.parent
