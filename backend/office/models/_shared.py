@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, conlist
 
@@ -130,6 +130,10 @@ class PptSlideContent(BaseModel):
     table_count: int = Field(ge=0, default=0)
     image_count: int = Field(ge=0, default=0)
     notes: Optional[str] = None
+    # M2: 版式/占位符/图表读取（生成与编辑端复用）。
+    layout: Optional[str] = None
+    placeholders: List[Dict[str, Any]] = Field(default_factory=list)
+    charts: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class WordMetadataSpec(BaseModel):

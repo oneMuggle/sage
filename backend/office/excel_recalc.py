@@ -22,9 +22,9 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .export_pdf import _EXPORT_LOCK, _locate_soffice
 from .path_safety import resolve_within
@@ -57,6 +57,11 @@ class ExcelRecalcResult(BaseModel):
 
     ok: bool
     error: Optional[str] = None
+    # M4: 重算后公式健康扫描（成功时填充；扫描失败保持 0）。
+    formula_count: int = 0
+    formula_error_count: int = 0
+    missing_cache_count: int = 0
+    formula_errors: List[Dict[str, str]] = Field(default_factory=list)
 
 
 def refresh_formula_cache(request: ExcelRecalcRequest) -> ExcelRecalcResult:
@@ -148,6 +153,27 @@ def _recalc_inner(request: ExcelRecalcRequest) -> ExcelRecalcResult:  # noqa: PL
                 last_exc = exc
         if last_exc is not None:
             raise last_exc
-    return ExcelRecalcResult(ok=True)
+    try:
+        from .excel_health import scan_formula_health
+
+        (
+            total,
+            errors,
+            _missing,
+            error_count,
+            missing_count,
+            _truncated,
+            _issue_truncated,
+        ) = scan_formula_health(source)
+        return ExcelRecalcResult(
+            ok=True,
+            formula_count=total,
+            formula_error_count=error_count,
+            missing_cache_count=missing_count,
+            formula_errors=[issue.model_dump() for issue in errors[:20]],
+        )
+    except Exception:  # noqa: BLE001 — 扫描失败不影响重算成功
+        logger.warning("excel recalc: formula health scan failed (ignored)", exc_info=True)
+        return ExcelRecalcResult(ok=True)
 
 

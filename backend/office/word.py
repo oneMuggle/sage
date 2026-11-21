@@ -510,6 +510,7 @@ from .models import (
     WordParagraphContent,
     WordTableContent,
 )
+from .word_tracked_changes import extract_tracked_changes
 
 logger = logging.getLogger(__name__)
 
@@ -898,6 +899,17 @@ def read_docx(
             "Failed to extract comments from %s; comments omitted", file_path.name, exc_info=True
         )
         comments = []
+    # M3: tracked changes ride along in the read result (best-effort; a
+    # corrupt revision subtree must not fail body extraction).
+    try:
+        tracked_changes = extract_tracked_changes(doc)
+    except Exception:  # noqa: BLE001 — 修订部分损坏不阻断正文读取
+        logger.warning(
+            "Failed to extract tracked changes from %s; revisions omitted",
+            file_path.name,
+            exc_info=True,
+        )
+        tracked_changes = []
 
     doc_id = document_id or file_path.stem
 
@@ -918,6 +930,7 @@ def read_docx(
         images=images,
         comments=comments,
         image_previews=image_previews,
+        tracked_changes=tracked_changes,
         headers_footers=_extract_headers_footers(doc),
         toc_fields=_extract_toc_fields(doc),
         metadata=_read_core_metadata(doc),
