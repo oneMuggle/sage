@@ -456,6 +456,36 @@ class TestDesignRoutes:
         assert updated.json()["radius"] == 8
         assert fetched.json()["accent"] == "#1a56db"
 
+    async def test_progress_endpoint_reports_idle_then_complete(self, studio):
+        """progress 端点从 idle 变为 complete。"""
+        from backend.main import app
+
+        project = studio.create_project(
+            "Prog", "prototype", "test-sys", "test-page", "brief",
+        )
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                idle = await client.get(
+                    f"/api/v1/design/projects/{project.id}/progress",
+                )
+                await client.post(
+                    f"/api/v1/design/projects/{project.id}/generate",
+                    json={"brief": "x"},
+                )
+                done = await client.get(
+                    f"/api/v1/design/projects/{project.id}/progress",
+                )
+
+        assert idle.status_code == 200
+        assert idle.json()["stage"] == "idle"
+        assert done.json()["stage"] == "complete"
+
     async def test_create_project_invalid_kind(self, studio):
         from backend.main import app
 

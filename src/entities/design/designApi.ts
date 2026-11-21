@@ -17,6 +17,7 @@ import type {
   ExportRequest,
   ExportResult,
   GenerateRequest,
+  GenerationProgress,
   IterateRequest,
   IterationMessage,
   ProjectTweaks,
@@ -127,6 +128,14 @@ export async function listMessages(projectId: string): Promise<IterationMessage[
   return backendRequest<IterationMessage[]>({
     method: 'GET',
     path: `${BASE}/projects/${projectId}/messages`,
+  });
+}
+
+/** 读取生成阶段进度（轮询用） */
+export async function getProgress(projectId: string): Promise<GenerationProgress> {
+  return backendRequest<GenerationProgress>({
+    method: 'GET',
+    path: `${BASE}/projects/${projectId}/progress`,
   });
 }
 

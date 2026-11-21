@@ -75,6 +75,16 @@ export const enDesign = {
   'design.tweaks.density': 'Density',
   'design.tweaks.reset': 'Reset to system defaults',
 
+  // Generation stages
+  'design.stage.idle': 'Idle',
+  'design.stage.starting': 'Starting…',
+  'design.stage.composing': 'Composing design system…',
+  'design.stage.generating': 'Generating…',
+  'design.stage.linting': 'Linting…',
+  'design.stage.saving': 'Saving artifact…',
+  'design.stage.complete': 'Complete',
+  'design.stage.error': 'Failed',
+
   'design.export.title': 'Export',
   'design.export.pdf': 'PDF',
   'design.export.pptx': 'PPTX',

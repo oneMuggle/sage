@@ -1,6 +1,7 @@
 # backend/tests/unit/test_design_studio.py
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 from pathlib import Path
@@ -118,6 +119,69 @@ class TestDesignStudio:
         )
         assert artifact.version == 1
         assert "Generated" in artifact.html_content
+
+    @pytest.mark.asyncio()
+    async def test_generate_emits_progress_stages(self, studio):
+        """progress_queue 按阶段推送 starting → composing → generating →
+        linting → saving → complete。"""
+        project = studio.create_project(
+            "Progress", "prototype", "test", "test-page", "brief",
+        )
+        queue: asyncio.Queue = asyncio.Queue()
+        await studio.generate(project.id, "brief", progress_queue=queue)
+        stages = []
+        while not queue.empty():
+            stages.append(queue.get_nowait()["stage"])
+        assert stages == [
+            "starting",
+            "composing",
+            "generating",
+            "linting",
+            "saving",
+            "complete",
+        ]
+
+    @pytest.mark.asyncio()
+    async def test_iterate_emits_progress_stages(self, studio):
+        """iterate 同样按阶段推送进度事件。"""
+        project = studio.create_project(
+            "IterProgress", "prototype", "test", "test-page", "brief",
+        )
+        await studio.generate(project.id, "v1 brief")
+        queue: asyncio.Queue = asyncio.Queue()
+        await studio.iterate(project.id, "darker palette", progress_queue=queue)
+        stages = []
+        while not queue.empty():
+            stages.append(queue.get_nowait()["stage"])
+        assert stages == [
+            "starting",
+            "composing",
+            "generating",
+            "linting",
+            "saving",
+            "complete",
+        ]
+
+    @pytest.mark.asyncio()
+    async def test_generate_without_progress_queue_still_works(self, studio):
+        """progress_queue 为 None 时行为不变（向后兼容）。"""
+        project = studio.create_project(
+            "NoQueue", "prototype", "test", "test-page", "brief",
+        )
+        artifact = await studio.generate(project.id, "brief")
+        assert artifact.version == 1
+
+    @pytest.mark.asyncio()
+    async def test_get_progress_tracks_stages(self, studio):
+        """get_progress 从 idle 变为 complete。"""
+        project = studio.create_project(
+            "Prog", "prototype", "test", "test-page", "brief",
+        )
+        assert studio.get_progress(project.id)["stage"] == "idle"
+        await studio.generate(project.id, "brief")
+        progress = studio.get_progress(project.id)
+        assert progress["stage"] == "complete"
+        assert progress["updated_at"]
 
     @pytest.mark.asyncio()
     async def test_iterate_increments_version(self, studio):

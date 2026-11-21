@@ -8,7 +8,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from backend.data.design_repo import DesignRepo
 from backend.design.async_bridge import run_sync
@@ -73,6 +73,24 @@ class DesignStudio:
         self._messages = MessageStore(workspace_dir / "design")
         self._tweaks = TweaksStore(workspace_dir / "design")
         self._version_lock = threading.Lock()
+        self._progress: Dict[str, dict] = {}
+
+    def _progress_update(
+        self, project_id: str, stage: str, message: str,
+    ) -> None:
+        """Record the latest generation stage for polling clients."""
+        self._progress[project_id] = {
+            "stage": stage,
+            "message": message,
+            "updated_at": datetime.now(timezone.utc).isoformat(),  # noqa: UP017
+        }
+
+    def get_progress(self, project_id: str) -> dict:
+        """Return the latest generation stage (idle when never started)."""
+        self._repo.get_project(project_id)
+        return self._progress.get(
+            project_id, {"stage": "idle", "message": ""},
+        )
 
     def _resolve_template_for_kind(
         self, template_id: str, kind: str,
@@ -370,9 +388,23 @@ class DesignStudio:
         return html
 
     async def generate(
-        self, project_id: str, brief: Optional[str] = None,
+        self,
+        project_id: str,
+        brief: Optional[str] = None,
+        progress_queue: Optional[asyncio.Queue] = None,
     ) -> DesignArtifact:
-        """Generate an artifact for a project, appending a new version."""
+        """Generate an artifact for a project, appending a new version.
+
+        When ``progress_queue`` is provided, the method pushes progress
+        events (``{"stage": ..., "message": ...}``) to it at key stages:
+        starting → composing → generating → linting → saving → complete.
+        """
+        async def _emit(stage: str, message: str) -> None:
+            self._progress_update(project_id, stage, message)
+            if progress_queue is not None:
+                await progress_queue.put({"stage": stage, "message": message})
+
+        await _emit("starting", "Initialising generation")
         project = self._repo.get_project(project_id)
         system = self._systems.get_system(project.system_id)
         template = self._resolve_template_for_kind(
@@ -383,10 +415,12 @@ class DesignStudio:
 
         try:
             use_brief = brief or project.brief
+            await _emit("composing", "Composing prompt with design system")
 
             # C1: delegate LLM call to bridge loop so the cached
             # httpx.AsyncClient always runs on its owning loop.
             caller_loop = asyncio.get_event_loop()
+            await _emit("generating", "Calling LLM")
             result = await caller_loop.run_in_executor(
                 None,
                 lambda: run_sync(
@@ -399,6 +433,7 @@ class DesignStudio:
             await asyncio.sleep(0)
 
             # M2-4: lint + auto-fix + optional one-shot retry on P0
+            await _emit("linting", "Linting generated HTML")
             html_content = await self._apply_lint(
                 result.bundled_html,
                 system=system,
@@ -410,6 +445,7 @@ class DesignStudio:
 
             # C2: hold the version lock across read + insert so two
             # concurrent callers cannot compute the same version number.
+            await _emit("saving", "Saving artifact")
             with self._version_lock:
                 latest = self._repo.get_latest_artifact(project_id)
                 new_version = latest.version + 1 if latest else 1
@@ -439,19 +475,35 @@ class DesignStudio:
                 artifact_id=artifact.id,
                 artifact_version=artifact.version,
             )
+            await _emit("complete", "Generation finished")
             return artifact
 
         except asyncio.CancelledError:
             self._repo.update_project_status(project_id, "error")
+            self._progress_update(project_id, "error", "Cancelled")
             raise
         except Exception:
             self._repo.update_project_status(project_id, "error")
+            self._progress_update(project_id, "error", "Failed")
             raise
 
     async def iterate(
-        self, project_id: str, feedback: str,
+        self,
+        project_id: str,
+        feedback: str,
+        progress_queue: Optional[asyncio.Queue] = None,
     ) -> DesignArtifact:
-        """Iterate on the latest artifact with user feedback."""
+        """Iterate on the latest artifact with user feedback.
+
+        When ``progress_queue`` is provided, emits progress events at key
+        stages: starting → composing → generating → linting → saving → complete.
+        """
+        async def _emit(stage: str, message: str) -> None:
+            self._progress_update(project_id, stage, message)
+            if progress_queue is not None:
+                await progress_queue.put({"stage": stage, "message": message})
+
+        await _emit("starting", "Initialising iteration")
         project = self._repo.get_project(project_id)
         latest = self._repo.get_latest_artifact(project_id)
         if latest is None:
@@ -468,8 +520,11 @@ class DesignStudio:
         self._record_message(project_id, "user", feedback)
 
         try:
+            await _emit("composing", "Composing prompt with feedback")
+
             # C1: delegate LLM call to bridge loop.
             caller_loop = asyncio.get_event_loop()
+            await _emit("generating", "Calling LLM with iteration context")
             result = await caller_loop.run_in_executor(
                 None,
                 lambda: run_sync(
@@ -487,6 +542,7 @@ class DesignStudio:
             await asyncio.sleep(0)
 
             # M2-4: lint + auto-fix + optional one-shot retry on P0
+            await _emit("linting", "Linting generated HTML")
             html_content = await self._apply_lint(
                 result.bundled_html,
                 system=system,
@@ -501,6 +557,7 @@ class DesignStudio:
             )
 
             # C2: re-read latest inside lock for safe version assignment.
+            await _emit("saving", "Saving artifact")
             with self._version_lock:
                 latest = self._repo.get_latest_artifact(project_id)
                 new_version = latest.version + 1 if latest else 1
@@ -530,11 +587,14 @@ class DesignStudio:
                 artifact_id=artifact.id,
                 artifact_version=artifact.version,
             )
+            await _emit("complete", "Iteration finished")
             return artifact
 
         except asyncio.CancelledError:
             self._repo.update_project_status(project_id, "error")
+            self._progress_update(project_id, "error", "Cancelled")
             raise
         except Exception:
             self._repo.update_project_status(project_id, "error")
+            self._progress_update(project_id, "error", "Failed")
             raise

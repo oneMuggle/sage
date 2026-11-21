@@ -1240,7 +1240,7 @@ git commit -m "docs(design): document streamlined workbench flow and refresh con
 ## 后续里程碑（本计划范围外,列出以防遗漏）
 
 - [x] M5: Tweaks 微调面板 — 已实施(2026-11-20)。后端 `tweaks_store.py` + GET/PUT `/tweaks` 端点;前端 `DesignTweaksPanel` + `designTweaks.ts`(`applyTweaks` / `extractTweakDefaults`)+ 第三 Tab + i18n;测试 83 全绿。
-- M6: 生成阶段流式进度（复用聊天 SSE 通道,替代 IPC text relay）。
+- M6: 生成阶段流式进度 — 已实施(2026-11-21)。后端 `generate/iterate` 推送 starting→composing→generating→linting→saving→complete 进度(可选 `progress_queue` + 内存 `_progress`),新增 `GET /projects/{id}/progress`;SSE 路由改为 queue 驱动并抽离到 `design_streaming.py`;前端 800ms 轮询 + `DesignProgressStrip` 阶段条;220 后端 / 86 前端测试全绿。
 - M7: Word 大纲导入 / 数据源绑定 / 图表嵌入的前端入口（后端端点均已存在）。
 - M8: 首轮结构化简报、三方向选择、区块级局部重生成、可选评审。
 
