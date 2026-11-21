@@ -335,6 +335,27 @@ def _has_user_browser_session() -> bool:
     return False
 
 
+def _apply_download_behavior(session: BrowserSession, workspace_root: Optional[str]) -> None:
+    """把浏览器内触发的下载重定向到工作区（或数据目录）。
+
+    Electron 内嵌桥在 ``will-download`` 时若拿不到保存目录会弹系统保存对话框，
+    受控/隐藏窗口下无人可点 → 下载卡死。``browser_launch`` 原本单独设置；
+    ``browser_navigate`` 自动拉起与 ``browser_login`` 复用/新建会话路径也必须
+    显式设置，否则首次由 navigate 拉起的浏览器永远收不到该指令。
+    设置失败只告警，不阻断主流程。
+    """
+    download_dir = Path(workspace_root) / "downloads" if workspace_root else browser_downloads_root()
+    try:
+        download_dir.mkdir(parents=True, exist_ok=True)
+        cdp_command(
+            session,
+            "Browser.setDownloadBehavior",
+            {"behavior": "allow", "downloadPath": str(download_dir)},
+        )
+    except BrowserCDPError as exc:
+        logger.warning("setDownloadBehavior 失败（不影响主流程）: %s", exc)
+
+
 def _capture_step_thumbnail(session: BrowserSession) -> Optional[str]:
     """截当前页步骤缩略图到数据目录；任何失败静默返回 None。"""
     if not _step_thumbnails_enabled():
@@ -1386,6 +1407,9 @@ class BrowserNavigateTool(BaseTool):
         started = time.monotonic()
         try:
             session = _resolve_session(browser_id or None)
+            # 自动拉起/复用会话后确保下载目录已设置——否则 Electron 内嵌桥
+            # 会在 will-download 时弹保存对话框（受控窗口下无人可点 → 卡死）。
+            _apply_download_behavior(session, self._policy.workspace_root)
             blocked = _blocked_by_control(session, "browser_navigate")
             if blocked is not None:
                 return blocked
@@ -3125,6 +3149,9 @@ class BrowserLoginTool(BaseTool):
                     f"browser_launch_failed: 无法启动浏览器（{exc}）"
                 )
             reuse = False
+
+        # 登录会话同样确保下载目录已设置（登录后可能直接触发下载）。
+        _apply_download_behavior(session, self._policy.workspace_root)
 
         # 创建新标签页并导航到目标 URL
         target_id: Optional[str] = None
