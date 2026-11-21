@@ -424,8 +424,11 @@ export function useChatMessageActions({
     async (runId: string) => {
       try {
         await orchRunClient.cancelRun(runId);
+        toast.info('已取消编排运行');
       } catch {
-        // 409 等照常清理
+        // 409 等（run 已终态）照常清理本地任务板，但要明确告知取消未送达 ——
+        // 此前静默清空，用户分不清"取消了"还是"界面丢了"。
+        toast.warning('取消请求未送达（运行可能已结束），已清理本地进度');
       }
       clearTaskBoard();
     },
