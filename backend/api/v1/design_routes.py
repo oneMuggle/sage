@@ -417,6 +417,50 @@ async def update_tweaks(project_id: str, req: TweaksRequest):
 
 
 # ---------------------------------------------------------------------------
+# GET /design/projects/:project_id/review — lint latest artifact (no LLM)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/projects/{project_id}/review")
+async def review_artifact(project_id: str):
+    """Run the design linter against the latest artifact.
+
+    Reuses ``DesignLinter`` (the same P0/P1 rules used during generation)
+    so users can re-check the current artifact after manual tweaks or
+    historical restores. No LLM call.
+    """
+    from backend.design.lint import DesignLinter
+
+    studio = _require_studio()
+    try:
+        studio.get_project(project_id)
+        latest = studio.get_latest_artifact(project_id)
+    except DesignProjectNotFoundError as exc:
+        return _map_design_error(exc)
+    if latest is None:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"Project {project_id} has no artifacts yet"},
+        )
+
+    report = DesignLinter().lint(latest.html_content)
+    return {
+        "ok": report.ok,
+        "error_count": report.error_count,
+        "warning_count": report.warning_count,
+        "issues": [
+            {
+                "rule_id": issue.rule_id,
+                "severity": issue.severity.value,
+                "message": issue.message,
+                "line": issue.line,
+            }
+            for issue in report.issues
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
 # POST /design/projects/:project_id/generate (SSE)
 # ---------------------------------------------------------------------------
 
