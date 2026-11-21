@@ -40,8 +40,18 @@ export async function steerActiveOrchTask(
   content: string,
 ): Promise<boolean> {
   if (!runId) return false;
-  const run = useRunControlStore.getState().runs.get(runId);
-  if (!run || TERMINAL_RUN.has(run.status)) return false;
+  let run = useRunControlStore.getState().runs.get(runId) ?? null;
+  if (!run) {
+    // 订阅尚未建立（页面刚打开 / run 刚派发）时快照还不在 store 里。
+    // 按需拉一次，避免把本可送达的插话误降级成排队。
+    try {
+      run = await orchRunControlClient.getSnapshot(runId);
+      useRunControlStore.getState().setRunSnapshot(run);
+    } catch {
+      return false;
+    }
+  }
+  if (TERMINAL_RUN.has(run.status)) return false;
   const task = pickSteerableTask(run.tasks);
   if (!task) return false;
   try {

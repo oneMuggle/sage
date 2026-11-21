@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { StepConfirmDialog } from '../components/StepConfirmDialog';
 import type { StepConfirmAction } from '../components/StepConfirmDialog';
 import { useCompactionArchives } from '../entities/chat/compactionArchivesStore';
+import { useOrchEventSubscription } from '../entities/orchestration/useOrchEventSubscription';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
 import { useSessionMemoryPause } from '../features/chat/useSessionMemoryPause';
@@ -99,6 +100,15 @@ export function Chat() {
     pendingSteer, // 2026-11-07: 已注入 run、尚未被 AI 消费的插话（可撤回）
     cancelSteer, // 2026-11-07: 撤回一条暂存插话
   } = useChat();
+
+  // 编排 canonical 事件订阅：任务详情的事件时间线与聊天框插话入口都依赖
+  // runControlStore 里的 run 快照。此前该订阅 hook 无任何生产调用点，
+  // 导致 knownRun 恒空（时间线/ContextInput 不渲染）、编排插话静默降级排队。
+  // 只订阅真实编排 run（`orch-` 前缀）；`agent-task-*` 是单 agent 委派的
+  // 临时合成板，没有 canonical run，不应发事件请求。
+  const orchSubscriptionRunId =
+    taskBoard?.runId && taskBoard.runId.startsWith('orch-') ? taskBoard.runId : null;
+  useOrchEventSubscription(orchSubscriptionRunId);
   // right-panel R1 批次 A: 开合上抬 rightPanelStore（自动唤起/内联卡片需要
   // 跨组件写面板状态）；localStorage 迁移进 store，此处只读订阅。
   const isMobile = useIsMobile();
@@ -814,6 +824,7 @@ export function Chat() {
                 statuses: restored.statuses,
                 progress: restored.progress,
                 dispatchedAt: restored.dispatchedAt,
+                confirmedAt: restored.confirmedAt,
                 endedAt: restored.endedAt,
               });
             }

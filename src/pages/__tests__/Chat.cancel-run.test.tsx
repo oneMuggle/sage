@@ -31,6 +31,12 @@ vi.mock('../../features/manage-settings/useSettings', () => ({
 
 const useChatMock = vi.fn();
 const clearTaskBoardMock = vi.fn();
+// 编排 canonical 事件订阅在 M0 接线进 Chat；本套件只关心取消路径，
+// mock 掉以免走真实 IPC/fetch，同时断言订阅按当前任务板 runId 建立。
+const { orchSubscriptionMock } = vi.hoisted(() => ({ orchSubscriptionMock: vi.fn() }));
+vi.mock('../../entities/orchestration/useOrchEventSubscription', () => ({
+  useOrchEventSubscription: orchSubscriptionMock,
+}));
 // P1-6: 合并 P1-6 新增字段的默认值，用例只描述自己关心的字段。
 const useChatDefaults = {
   pendingMessages: [] as Array<{ id: string; content: string; sid?: string }>,
@@ -165,6 +171,7 @@ describe('Chat — handleCancelRun 统一取消 (Wave 3 C4+H1)', () => {
     });
     useStore.setState({ messages: [], currentSessionId: 'session-ws', sessions: [] });
     clearTaskBoardMock.mockClear();
+    orchSubscriptionMock.mockClear();
     cancelRunMock.mockReset();
     cancelRunMock.mockResolvedValue({ ok: true, run_id: 'orch-run-1', status: 'cancelled' });
   });
@@ -172,6 +179,7 @@ describe('Chat — handleCancelRun 统一取消 (Wave 3 C4+H1)', () => {
   it('未派发：点 plan-cancel → cancelRun(runId) + clearTaskBoard (H1)', async () => {
     useChatMock.mockReturnValue(baseChat({ taskBoard: board(null) }));
     renderChat();
+    expect(orchSubscriptionMock).toHaveBeenCalledWith('orch-run-1');
     expect(screen.getByTestId('plan-cancel')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('plan-cancel'));
     await waitFor(() => expect(cancelRunMock).toHaveBeenCalledWith('orch-run-1'));
