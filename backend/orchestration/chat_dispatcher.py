@@ -44,6 +44,7 @@ from backend.orchestration.topology import (
     downstream_closure,
     find_cycle,
 )
+from backend.orchestration.transcript import TaskTranscriptRecorder
 from backend.services.usage_tracker import set_current_task_id
 
 logger = logging.getLogger(__name__)
@@ -1535,6 +1536,19 @@ class ChatDispatcher:
                 request_id, state.task_id
             ),
         )
+
+        # M1: 与状态事件并行落盘过程消息（思考/正文/工具全文），供任务详情
+        # 的 Transcript 视图回看；recorder 自身吞错，不影响执行与状态投影。
+        transcript = TaskTranscriptRecorder(
+            run_id=self.run_id,
+            task_id=state.task_id,
+            goal=state.goal,
+            agent_id=state.agent_id,
+        )
+
+        async def _event_sink(evt: Any) -> None:
+            await sink(evt)
+            await transcript(evt)
 
         executor = LaneExecutor(
             lane_registry=self.lane_registry,

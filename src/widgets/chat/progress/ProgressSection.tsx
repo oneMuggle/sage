@@ -155,6 +155,7 @@ export function ProgressSection({
             taskId={selectedTaskId}
             onBack={closeTaskDetail}
             onRetryTask={onRetryTask}
+            sessionId={sessionId}
           />
         </div>
       ) : (
