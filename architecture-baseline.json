@@ -2,7 +2,7 @@
   "version": 1,
   "files": {
     "backend/adapters/out/skill/inproc.py": 1178,
-    "backend/agents/profiles.py": 1292,
+    "backend/agents/profiles.py": 1293,
     "backend/api/arena_routes.py": 873,
     "backend/api/legacy_routes.py": 3097,
     "backend/api/llm_proxy_routes.py": 1216,
