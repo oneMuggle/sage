@@ -161,7 +161,8 @@ def test_create_and_list_accounts():
     labels = [a.label for a in accounts]
 
     assert a1.id != a2.id
-    assert "工作号" in labels and "审批号" in labels
+    assert "工作号" in labels
+    assert "审批号" in labels
     # 默认账号排前
     assert accounts[0].label == "审批号"
     assert accounts[0].is_default is True
@@ -170,7 +171,7 @@ def test_create_and_list_accounts():
 def test_create_account_duplicate_label_raises():
     service = BrowserAccountService()
     service.create_account(label="工作号", domain=".example.com")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="已存在账号"):
         service.create_account(label="工作号", domain=".example.com")
 
 
@@ -180,7 +181,8 @@ def test_create_default_account_demotes_previous_default():
     second = service.create_account(label="B", domain=".example.com", is_default=True)
 
     refreshed_first = service.get_account(first.id)
-    assert refreshed_first is not None and refreshed_first.is_default is False
+    assert refreshed_first is not None
+    assert refreshed_first.is_default is False
     assert service.get_account(second.id).is_default is True
     assert service.get_default_account(".example.com").id == second.id
 
