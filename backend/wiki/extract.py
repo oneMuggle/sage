@@ -302,6 +302,7 @@ def extract_text_for_ingest(
     * ``.md`` / ``.markdown`` / ``.txt`` — pass through ``read_text``.
     * ``.docx`` / ``.pptx`` / ``.xlsx`` — use the existing office
       readers to flatten the document.
+    * ``.pdf`` — PyMuPDF page text with ``--- page N ---`` markers.
     * anything else — raise :class:`ValueError`.
 
     Args:
@@ -383,6 +384,25 @@ def extract_text_for_ingest(
             return reader(parse_path)
 
         text = _time_limited_call(_read_checked_office, (), {}, cap_seconds)
+    elif suffix == ".pdf":
+        meta["doc_type"] = "pdf"
+        cap_seconds = max_seconds if max_seconds is not None else MAX_PARSE_SECONDS
+
+        def _read_pdf_text() -> str:
+            try:
+                import fitz  # noqa: PLC0415 — lazy heavy import
+            except Exception as exc:  # noqa: BLE001
+                raise ValueError(f"PyMuPDF 不可用: {exc}") from exc
+            document = fitz.open(str(parse_path))
+            try:
+                return "\n\n".join(
+                    f"--- page {index + 1} ---\n{page.get_text()}"
+                    for index, page in enumerate(document)
+                )
+            finally:
+                document.close()
+
+        text = _time_limited_call(_read_pdf_text, (), {}, cap_seconds)
     else:
         raise ValueError(
             f"unsupported_suffix: {suffix!r} not handled by "

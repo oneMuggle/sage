@@ -202,6 +202,15 @@ def test_delete_by_absolute_path(tmp_path: Path):
     assert not target.exists()
 
 
+def test_delete_by_path_supports_pdf_and_csv(tmp_path: Path):
+    for name in ("报告.pdf", "数据.csv"):
+        target = tmp_path / name
+        target.write_bytes(b"placeholder")
+        result = _tool().execute(file_path=str(target))
+        assert result.success is True
+        assert not target.exists()
+
+
 def test_delete_by_path_rejects_non_office_extension(tmp_path: Path):
     target = tmp_path / "重要.txt"
     target.write_text("keep me")
