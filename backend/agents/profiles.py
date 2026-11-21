@@ -548,6 +548,8 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_render_audit",
                 # Round 12 自动修复: lint→修复→复检（WRITE_LOCAL）
                 "office_repair_word",
+                # 2026-11-21 M5: OOXML 校验/run 合并（WRITE_LOCAL）
+                "office_ooxml",
                 # Round 39 目录真页码: Word COM 刷新 TOC 域（WRITE_LOCAL，
                 # 可选通道——缺失 Word/pywin32 时降级为可读理由）
                 "office_refresh_toc",
@@ -801,6 +803,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     "office_batch_audit", "office_render_audit",
     # 2026-09-12 Round 12: 自动修复（与 writer.tools 同步）。
     "office_repair_word",
+    # 2026-11-21 M5: OOXML 校验/run 合并（与 writer.tools 同步）。
+    "office_ooxml",
     # 2026-09-18 Round 39: 目录真页码刷新（与 writer.tools 同步）。
     "office_refresh_toc",
     # 2026-10-31 LaTeX 读取：.tex 结构化预览（与 writer.tools 同步）。

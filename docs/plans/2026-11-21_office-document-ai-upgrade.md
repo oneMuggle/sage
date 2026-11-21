@@ -289,10 +289,20 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 
 ### M5 — OOXML 底层通道 + Office Skills（P1，对应 G5/G10）
 
-- [ ] `ooxml/` 安全解包/打包、XSD 子集校验、`merge_runs`、comment helper、accept_changes
-- [ ] 四个内置 Office Skills 包 + 受控执行器接入技能系统
-- [ ] 安全测试：zip 炸弹、路径穿越、symlink、XML 实体、脚本注入
-- [ ] Demo：按模板生成带批注与修订的合同，并在 Sage 内接受/拒绝
+- [x] `backend/office/ooxml/`：安全解包/打包（成员数/大小/压缩比/路径穿越/symlink 拒绝）、结构校验（必需部件/XML 合法性/DTD 拒绝）、`xml:space` 修复、`merge_docx_runs`
+- [x] `office_ooxml` 工具（validate/merge_runs）接入 office_quality 能力包/权限/工具快照
+- [x] shipped skills：`office-ooxml`（结构维护）、`office-xlsx`（表格工作流）、`office-pdf`（读取/生成/表单）；docx/ppt 起草沿用 `report-writing` / `ppt-making`
+- [x] 安全测试：zip 炸弹/路径穿越/symlink/DTD-ENTITY/坏 ZIP
+- [ ] XSD 全量校验（当前为必需部件 + XML 合法性的结构子集）
+- [ ] docx comment helper 收敛进 ooxml 包（现由 `office_update add_comment` / `office_revise_word` 提供）
+- [ ] Demo：按模板生成带批注与修订的合同并在 Sage 内接受/拒绝
+
+> **实施记录（2026-11-21，M5a OOXML 通道 + 技能）**
+> - 新增：`backend/office/ooxml/archive.py` / `validate.py` / `runs.py`
+> - 端点：`POST /office/ooxml/validate`、`POST /office/ooxml/merge-runs`
+> - 工具：`office_ooxml`（WRITE_LOCAL，validate/merge_runs），已同步 `tool_names` / 权限 / bundle / 前端能力包 / 工具快照
+> - 技能：`shipped/office-ooxml|office-xlsx|office-pdf/SKILL.md`
+> - 测试：OOXML 单测 10 + 端点 3 + 工具 6；技能/工具注册回归 209；Office 全量 2243 passed / 2 skipped；ruff/py38/architecture 绿
 
 ### M6 — 解析适配器、PDF 操作与多文档对比（P1，对应 G4/G8/G9/G13/G16）
 
@@ -397,7 +407,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 | 工具面 PDF 守卫 | ✅ | `4d1f52982` | tool 33 |
 | 全量 Office 回归 | ✅ | — | 2215 passed / 2 skipped |
 | 门禁 | ✅ | — | ruff / py38 / silent-exceptions / architecture |
-| M5 OOXML + Skills | ⏳ | — | 未开始 |
+| M5 OOXML + Skills | ✅ | 本轮提交 | OOXML 单测 10 + 端点 3 + 工具 6；全量 2243 passed |
 | M6b 解析适配器/对比/附件预览 | ⏳ | — | 未开始 |
 | M7 前端接入 | ⏳ | — | 未开始 |
 | M8 大文件/并发/沙箱 | ⏳ | — | 未开始 |
