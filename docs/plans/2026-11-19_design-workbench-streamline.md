@@ -1244,6 +1244,19 @@ git commit -m "docs(design): document streamlined workbench flow and refresh con
 - [x] M7: Word 大纲 / 数据源绑定 / 图表嵌入 UI — 已实施(2026-11-21)。新增 `backend/api/v1/design_resources_routes.py`(拆分 outline + chart 端点保 800 行棘轮);`POST /projects/{id}/chart` 渲染图表无 LLM;前端 `DesignResourcesPanel`(数据源 + 图表)+ 创作器 Word 大纲导入按钮;26 个前端测试文件、88 用例、222 后端测试全绿。
 - [x] M8: 首轮结构化简报 / 模板方向预览 / 可选评审 — 已实施(2026-11-21)核心三项。创作器「快速简报」内联表单(受众/篇幅/语气→结构化 brief);高级选项渲染模板 `example_html` 预览;详情页「质量评审」按钮复用 `DesignLinter`(`GET /review`,P0/P1 摘要 + 可展开问题列表)。三方向自动生成与区块级局部重生成未做(成本高,迭代聊天已可部分覆盖),留作后续。
 
+## 后续增强 A/B/C(2026-11-21,分支 feat/design-followups-ab)
+
+- A 文档修正:计划 M6 勾选;`design-deck/SKILL.md` export 支持 `format`、design 工具"六件套"。
+- B 体验:
+  - 评审条「按评审意见修复」一键把 P0/P1 拼进 iterate。
+  - Tweaks:字体族选择;预设保存/应用/删除(localStorage);修复「恢复默认」被后端 None 过滤吞掉的 bug(PUT 全空=重置;`replace=true` 精确覆盖)。
+  - 数据源:绑定前预览(`POST /design/source/preview`,列名/行数/样例)再确认绑定。
+  - 图表:多系列编辑(name+values 行、增删)。
+- C 进阶:
+  - 风格方向卡片:模板 `example_html` × 最多 3 个设计系统 `tokens.css` 实时预览,点击切换设计系统。
+  - 版本并排对比:版本面板「对比」→ 左=上一版、右=所选版;`comparePair` 状态。
+  - 真流式进度:`GET /progress/stream` SSE + Electron `relaySseToEvent`(`design-progress-{id}` 订阅);前端优先流、无桥时回退 800ms 轮询;progress 端点与共享 helper 拆分(`design_progress_routes.py` / `design_shared.py`,design_routes 767 行)。
+
 ## Self-Review
 
 - 覆盖对照：P0 减步骤 → Task 1/6；迭代闭环 → Task 2/3/5/7；导出直达 → Task 4/8；文档 → Task 9。P1.5/P2 明确列入后续里程碑,不在本次范围。
