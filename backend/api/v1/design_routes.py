@@ -18,10 +18,7 @@ Endpoints:
 """
 from __future__ import annotations
 
-import asyncio
 import base64
-import contextlib
-import json
 import logging
 from typing import Optional
 
@@ -29,6 +26,10 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
+from backend.api.v1.design_streaming import (
+    sse_event as _sse_event,
+    stream_studio_call as _stream_studio_call,
+)
 from backend.design import get_design_studio
 from backend.design.errors import (
     DesignError,
@@ -150,11 +151,6 @@ def _map_design_error(exc: DesignError) -> JSONResponse:
         else 500
     )
     return JSONResponse(status_code=status, content={"detail": str(exc)})
-
-
-def _sse_event(event_type: str, payload: dict) -> str:
-    """Format a single SSE event frame."""
-    return f"event: {event_type}\ndata: {json.dumps(payload)}\n\n"
 
 
 # ---------------------------------------------------------------------------
@@ -449,55 +445,15 @@ async def generate_artifact(project_id: str, req: GenerateRequest):
         return _map_design_error(exc)
 
     async def event_stream():
-        progress_queue: asyncio.Queue = asyncio.Queue()
-
-        async def run_generation():
-            try:
-                artifact = await studio.generate(
-                    project_id,
-                    brief=req.brief,
-                    progress_queue=progress_queue,
-                )
-                await progress_queue.put(("complete", artifact))
-            except Exception as exc:
-                await progress_queue.put(("error", exc))
-
-        task = asyncio.create_task(run_generation())
-
-        try:
-            while True:
-                item = await progress_queue.get()
-
-                if isinstance(item, tuple):
-                    kind, payload = item
-                    if kind == "complete":
-                        yield _sse_event("complete", {
-                            "artifact": payload.model_dump(mode="json"),
-                        })
-                    else:
-                        exc = payload
-                        if isinstance(  # noqa: UP038 — py38 兼容
-                            exc,
-                            (
-                                DesignProjectNotFoundError,
-                                DesignGenerationError,
-                                DesignTemplateKindMismatchError,
-                            ),
-                        ):
-                            yield _sse_event("error", {"detail": str(exc)})
-                        else:
-                            logger.exception("Design generation failed")
-                            yield _sse_event("error", {
-                                "detail": f"Generation failed: {exc}",
-                            })
-                    break
-
-                # Progress dict pushed by DesignStudio._emit
-                yield _sse_event("progress", item)
-        finally:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        async for frame in _stream_studio_call(
+            lambda queue: studio.generate(
+                project_id,
+                brief=req.brief,
+                progress_queue=queue,
+            ),
+            "Generation",
+        ):
+            yield frame
 
     return StreamingResponse(
         event_stream(),
@@ -528,55 +484,15 @@ async def iterate_artifact(project_id: str, req: IterateRequest):
         return _map_design_error(exc)
 
     async def event_stream():
-        progress_queue: asyncio.Queue = asyncio.Queue()
-
-        async def run_iteration():
-            try:
-                artifact = await studio.iterate(
-                    project_id,
-                    feedback=req.feedback,
-                    progress_queue=progress_queue,
-                )
-                await progress_queue.put(("complete", artifact))
-            except Exception as exc:
-                await progress_queue.put(("error", exc))
-
-        task = asyncio.create_task(run_iteration())
-
-        try:
-            while True:
-                item = await progress_queue.get()
-
-                if isinstance(item, tuple):
-                    kind, payload = item
-                    if kind == "complete":
-                        yield _sse_event("complete", {
-                            "artifact": payload.model_dump(mode="json"),
-                        })
-                    else:
-                        exc = payload
-                        if isinstance(  # noqa: UP038 — py38 兼容
-                            exc,
-                            (
-                                DesignProjectNotFoundError,
-                                DesignGenerationError,
-                                DesignTemplateKindMismatchError,
-                            ),
-                        ):
-                            yield _sse_event("error", {"detail": str(exc)})
-                        else:
-                            logger.exception("Design iteration failed")
-                            yield _sse_event("error", {
-                                "detail": f"Iteration failed: {exc}",
-                            })
-                    break
-
-                # Progress dict pushed by DesignStudio._emit
-                yield _sse_event("progress", item)
-        finally:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        async for frame in _stream_studio_call(
+            lambda queue: studio.iterate(
+                project_id,
+                feedback=req.feedback,
+                progress_queue=queue,
+            ),
+            "Iteration",
+        ):
+            yield frame
 
     return StreamingResponse(
         event_stream(),
