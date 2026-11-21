@@ -21,6 +21,11 @@ from backend.office.apply_update import (
     OfficeDocUpdateResult,
     apply_doc_update,
 )
+from backend.office.compare import (
+    CompareRequest,
+    CompareResult,
+    compare_documents,
+)
 from backend.office.diff_preview import (
     DiffPreviewResult,
     OfficeExportPdfRequest,
@@ -38,6 +43,7 @@ from backend.office.excel_recalc import (
     ExcelRecalcResult,
     refresh_formula_cache,
 )
+from backend.office.extractors import ExtractRequest, ExtractResult, extract_document
 from backend.office.legacy_import import (
     LegacyImportRequest,
     LegacyImportResult,
@@ -497,6 +503,18 @@ def ooxml_validate_endpoint(req: OoxmlValidateRequest) -> OoxmlValidateResult:
 def ooxml_merge_runs_endpoint(req: OoxmlMergeRunsRequest) -> OoxmlMergeRunsResult:
     """M5: 合并 docx 中相邻且格式相同的 run（提升 find/replace 可靠性）。"""
     return merge_docx_runs(req)
+
+
+@router.post("/extract", response_model=ExtractResult)
+def extract_document_endpoint(req: ExtractRequest) -> ExtractResult:
+    """M6b: 统一文档提取（light 默认；markitdown/docling 可选后端）。"""
+    return extract_document(req)
+
+
+@router.post("/compare", response_model=CompareResult)
+def compare_documents_endpoint(req: CompareRequest) -> CompareResult:
+    """M6b: 任意两份文档对比（Word/Excel/PPT/PDF/CSV），返回统一 diff 报告。"""
+    return compare_documents(req)
 
 
 @router.get("/progress/{task_id}")
