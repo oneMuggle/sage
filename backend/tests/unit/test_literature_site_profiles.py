@@ -297,9 +297,65 @@ class TestShippedXueshu789Profile:
         profile = store.get("xueshu789")
         assert profile.display_name == "学术资源站"
         assert "xueshu789.cc" in profile.domains
+        assert "82.157.23.222" in profile.domains
         assert profile.access.login.method == "form"
         assert profile.access.login.url_contains == "/dbList/"
+        assert profile.search.mode == "interactive"
+        assert profile.search.entry_url == "https://www.xueshu789.cc/dbItem/3"
+        assert "input[placeholder*='检索词']" in profile.search.input_selectors
         assert profile.pdf is not None
-        assert profile.pdf.entry_selector == "a.downloadlink"
+        assert profile.pdf.entry_text == "下载"
+        assert profile.pdf.post_click_wait_s == 8.0
         assert profile.status == "draft"
         assert profile.compliance.default_enabled is False
+
+
+class TestInteractiveSearchProfile:
+    def _interactive_raw(self):
+        raw = _raw_profile()
+        raw["search"] = {
+            "mode": "interactive",
+            "url_template": "https://demo.example/entry",
+            "entry_url": "https://demo.example/entry",
+            "input_selectors": ["input[placeholder*='检索词']"],
+            "submit_key": "Enter",
+            "wait_after_s": 5,
+            "result_hint": "每条结果含下载链接",
+        }
+        return raw
+
+    def test_interactive_profile_parses(self):
+        profile = profile_from_dict(self._interactive_raw())
+        assert profile.search.mode == "interactive"
+        assert profile.search.entry_url == "https://demo.example/entry"
+        assert profile.search.input_selectors == ("input[placeholder*='检索词']",)
+        assert profile.search.submit_key == "Enter"
+        assert profile.search.wait_after_s == 5.0
+
+    def test_interactive_requires_input_selectors(self):
+        raw = self._interactive_raw()
+        raw["search"].pop("input_selectors")
+        with pytest.raises(SiteProfileError, match="input_selectors"):
+            profile_from_dict(raw)
+
+    def test_interactive_guidance_contains_flow(self):
+        from backend.literature.guidance import render_search_guidance
+
+        profile = profile_from_dict(self._interactive_raw())
+        text = render_search_guidance(profile, "机器学习")
+        assert "检索模式: 交互式" in text
+        assert "https://demo.example/entry" in text
+        assert "input[placeholder*='检索词']" in text
+        assert "press Enter" in text
+        assert "每条结果含下载链接" in text
+
+    def test_pdf_post_click_and_note(self):
+        raw = _raw_profile()
+        raw["pdf"] = {
+            "entry": {"text": "下载"},
+            "post_click_wait_s": 8,
+            "note": "待验证",
+        }
+        profile = profile_from_dict(raw)
+        assert profile.pdf.post_click_wait_s == 8.0
+        assert profile.pdf.note == "待验证"

@@ -534,3 +534,150 @@ class TestEndToEnd:
         paths = export_run(run)
         assert paths["final"].is_file()
         assert paths["bibtex"].is_file()
+
+
+class _InteractiveDriver(_FakeDriver):
+    def __init__(self):
+        super().__init__()
+        self.calls = []
+        self.type_ok = {"input[placeholder*='检索词']": True}
+        self._url = "https://demo.example/entry"
+        self._title = "入口"
+
+    def navigate(self, url, wait_for=""):
+        self.calls.append(("navigate", url, wait_for))
+        self._url = "http://proxy.example/search"
+        self._title = "检索-中国知网"
+        return self._url
+
+    def type_text(self, selector, text, clear=True):
+        self.calls.append(("type", selector, text, clear))
+        return self.type_ok.get(selector, False)
+
+    def press_key(self, key):
+        self.calls.append(("press", key))
+
+    def sleep(self, seconds):
+        self.calls.append(("sleep", seconds))
+
+    def click_text(self, text):
+        self.calls.append(("click_text", text))
+
+    def current_url(self):
+        return self._url
+
+    def current_title(self):
+        return self._title
+
+
+class TestInteractiveSearch:
+    def _profile(self):
+        from backend.literature.models import profile_from_dict
+
+        raw = _raw_profile()
+        raw["search"] = {
+            "mode": "interactive",
+            "url_template": "https://demo.example/entry",
+            "entry_url": "https://demo.example/entry",
+            "input_selectors": ["#missing", "input[placeholder*='检索词']"],
+            "submit_key": "Enter",
+            "wait_after_s": 5,
+            "result_hint": "结果条目含下载链接",
+        }
+        return profile_from_dict(raw)
+
+    def test_interactive_search_calls_type_and_press(self):
+        from backend.literature.search import search_with_profile
+
+        driver = _InteractiveDriver()
+        obs = search_with_profile(self._profile(), "机器学习 综述", driver, limit=5)
+        assert ("navigate", "https://demo.example/entry", "") in driver.calls
+        assert ("type", "#missing", "机器学习 综述", True) in driver.calls
+        assert (
+            "type",
+            "input[placeholder*='检索词']",
+            "机器学习 综述",
+            True,
+        ) in driver.calls
+        assert ("press", "Enter") in driver.calls
+        assert ("sleep", 5.0) in driver.calls
+        assert "结果条目含下载链接" in obs.guidance
+        assert obs.page_url == "http://proxy.example/search"
+        assert obs.page_title == "检索-中国知网"
+
+    def test_interactive_search_raises_when_no_input_matches(self):
+        from backend.literature.search import search_with_profile
+
+        driver = _InteractiveDriver()
+        driver.type_ok = {}
+        with pytest.raises(RuntimeError, match="搜索输入框"):
+            search_with_profile(self._profile(), "x", driver)
+
+
+class _FakeCall:
+    def __init__(self):
+        self.calls = []
+        self.responses = {}
+
+    def __call__(self, name, **kwargs):
+        self.calls.append((name, kwargs))
+        value = self.responses.get(name, {})
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+
+class TestSageToolDriver:
+    def test_maps_calls_and_tracks_page(self):
+        from backend.literature.sage_driver import SageToolDriver
+
+        call = _FakeCall()
+        call.responses["browser_navigate"] = {
+            "url": "https://demo.example/entry",
+            "title": "入口",
+            "browser_meta": {"url": "https://demo.example/entry", "title": "入口"},
+        }
+        call.responses["browser_snapshot"] = {
+            "url": "http://proxy.example/search",
+            "title": "检索",
+            "elements": [],
+        }
+        driver = SageToolDriver(call)
+        assert driver.navigate("https://demo.example/entry") == "https://demo.example/entry"
+        snap = json.loads(driver.snapshot())
+        assert snap["url"] == "http://proxy.example/search"
+        assert driver.current_title() == "检索"
+        assert driver.type_text("input[placeholder*='检索词']", "机器学习") is True
+        driver.press_key("Enter")
+        driver.click_text("下载")
+        names = [name for name, _ in call.calls]
+        assert names == [
+            "browser_navigate",
+            "browser_snapshot",
+            "browser_interact",
+            "browser_interact",
+            "browser_interact",
+        ]
+        assert call.calls[2][1]["action"] == "type"
+        assert call.calls[3][1]["key"] == "Enter"
+        assert call.calls[4][1]["text"] == "下载"
+
+    def test_type_text_returns_false_on_tool_error(self):
+        from backend.literature.sage_driver import SageToolDriver
+
+        call = _FakeCall()
+        call.responses["browser_interact"] = RuntimeError("no match")
+        assert SageToolDriver(call).type_text("#missing", "x") is False
+
+    def test_wait_download_picks_latest_completed(self):
+        from backend.literature.sage_driver import SageToolDriver
+
+        call = _FakeCall()
+        call.responses["browser_downloads"] = {
+            "downloads": [
+                {"path": "/a.pdf", "state": "completed", "modified_at": 1},
+                {"path": "/b.pdf", "state": "completed", "modified_at": 2},
+                {"path": "/c.crdownload", "state": "in_progress", "modified_at": 3},
+            ]
+        }
+        assert SageToolDriver(call).wait_download() == "/b.pdf"
