@@ -74,6 +74,16 @@ export const zhDesign = {
   'design.tweaks.density': '密度',
   'design.tweaks.reset': '恢复设计系统默认',
 
+  // 生成进度
+  'design.stage.idle': '空闲',
+  'design.stage.starting': '初始化…',
+  'design.stage.composing': '组装设计规范…',
+  'design.stage.generating': '正在生成…',
+  'design.stage.linting': '质量检查…',
+  'design.stage.saving': '保存产物…',
+  'design.stage.complete': '已完成',
+  'design.stage.error': '失败',
+
   // 导出
   'design.export.title': '导出',
   'design.export.pdf': 'PDF',
