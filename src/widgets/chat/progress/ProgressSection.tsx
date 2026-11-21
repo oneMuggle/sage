@@ -8,7 +8,7 @@
 //   概览 = StatusBar(常驻顶栏) + 焦点卡 + 任务清单 + 历史运行
 //   任务 = 任务树（点击行 → 整面板切到 TaskDetailView 看实时运行情况）
 //   轨迹 = 完整轨迹（原样保留）
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 
 import {
   useChatStreamStore,
@@ -23,12 +23,18 @@ import { BackgroundShellsSection } from './BackgroundShellsSection';
 import { CurrentTaskFocus } from './CurrentTaskFocus';
 import { SessionRunHistory } from './SessionRunHistory';
 import { StatusBar } from './StatusBar';
-import { TaskDetailView } from './TaskDetailView';
 import { TaskTreeSection } from './TaskTreeSection';
 // P1 todo 接线 (2026-08-21): agent 自维护任务清单
 import { TodoListSection } from './TodoListSection';
 
 type ProgressSubTab = 'overview' | 'tasks' | 'trajectory';
+
+// 任务详情仅在点开某个任务时才需要。主 chunk 已贴着 bundle size 门禁预算，
+// 将 TaskDetailView（含 EventTimeline/ContextInput）拆到独立 chunk 按需加载。
+const LazyTaskDetailView = lazy(async () => {
+  const mod = await import('./TaskDetailView');
+  return { default: mod.TaskDetailView };
+});
 
 interface ProgressSectionProps {
   iteration: number;
@@ -150,12 +156,15 @@ export function ProgressSection({
         /* 任务详情 —— 整面板替换。旧的 SubagentDetailDrawer 嵌在右栏里宽度被裁切，
            且从编排 store 解析聊天任务恒为 undefined（点了没反应）；此处占满面板。 */
         <div className="flex-1 min-h-0">
-          <TaskDetailView
-            board={taskBoard}
-            taskId={selectedTaskId}
-            onBack={closeTaskDetail}
-            onRetryTask={onRetryTask}
-          />
+          <Suspense fallback={<div className="p-3 text-xs text-text-muted">加载任务详情…</div>}>
+            <LazyTaskDetailView
+              board={taskBoard}
+              taskId={selectedTaskId}
+              onBack={closeTaskDetail}
+              onRetryTask={onRetryTask}
+              sessionId={sessionId}
+            />
+          </Suspense>
         </div>
       ) : (
         <>
