@@ -78,3 +78,10 @@ export function applyTweaks(html: string, tweaks: ProjectTweaks): string {
   const style = `<style id="sage-design-tweaks">:root{${declarations.join(' ')}}</style>`;
   return html.includes('</head>') ? html.replace('</head>', `${style}</head>`) : `${style}${html}`;
 }
+
+/** Inject a design system's tokens.css into an example HTML document. */
+export function applyTokensCss(html: string, tokensCss: string): string {
+  if (!tokensCss.trim()) return html;
+  const style = `<style id="sage-design-system">${tokensCss}</style>`;
+  return html.includes('</head>') ? html.replace('</head>', `${style}</head>`) : `${style}${html}`;
+}

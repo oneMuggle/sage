@@ -14,6 +14,8 @@ import type { ProjectKind } from '../../entities/design/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { HtmlPreviewHost } from '../../widgets/chat/preview/HtmlPreviewHost';
 
+import { applyTokensCss } from './designTweaks';
+
 interface DesignCreateComposerProps {
   onCancel: () => void;
   onCreated: (projectId: string) => void;
@@ -132,6 +134,9 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
   );
   const previewTemplate =
     kindTemplates.find((tpl) => tpl.id === templateId) ?? kindTemplates[0];
+  const directionSystems = systems
+    .filter((system) => system.tokens_css.trim())
+    .slice(0, 3);
 
   const applyQuickBrief = () => {
     const kindLabel = kind === 'deck' ? t('design.kind.deck') : t('design.kind.prototype');
@@ -407,6 +412,50 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
                 ))}
               </select>
             </div>
+            {previewTemplate?.example_html && directionSystems.length > 1 && (
+              <div>
+                <span className="text-ui-sm font-medium text-text">
+                  {t('design.composer.directionTitle')}
+                </span>
+                <p className="mt-0.5 text-ui-xs text-text-muted">
+                  {t('design.composer.directionHint')}
+                </p>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {directionSystems.map((system) => {
+                    const selected = systemId === system.id;
+                    return (
+                      <button
+                        key={system.id}
+                        type="button"
+                        aria-pressed={selected}
+                        className={`overflow-hidden rounded-md border text-left transition ${
+                          selected ? 'border-accent' : 'border-border hover:border-accent/60'
+                        }`}
+                        onClick={() => setSystemId(selected ? undefined : system.id)}
+                      >
+                        <div className="pointer-events-none">
+                          <HtmlPreviewHost
+                            html={applyTokensCss(
+                              previewTemplate.example_html ?? '',
+                              system.tokens_css,
+                            )}
+                            name={`${system.id}-${previewTemplate.id}.html`}
+                            heightClassName="h-28"
+                          />
+                        </div>
+                        <div
+                          className={`border-t border-border px-2 py-1 text-ui-xs ${
+                            selected ? 'text-accent' : 'text-text-secondary'
+                          }`}
+                        >
+                          {system.name}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {previewTemplate?.example_html && (
               <div>
                 <span className="text-ui-sm font-medium text-text">

@@ -88,6 +88,8 @@ export const zhDesign = {
   'design.composer.quickFill': '填入简报',
   'design.composer.quickBriefTemplate': '面向{audience}的{length}{kindLabel}，整体语气{tone}。',
   'design.composer.templatePreview': '模板示例',
+  'design.composer.directionTitle': '风格方向',
+  'design.composer.directionHint': '点击卡片切换设计系统，再生成完整设计。',
 
   // 评审
   'design.review.run': '质量评审',
