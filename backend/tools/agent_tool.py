@@ -275,6 +275,7 @@ class AgentTool(BaseTool):
         policy: Optional[ToolPolicy] = None,
         llm_client: Any = None,
         subagent_factory: Any = None,
+        main_agent_resolver: Any = None,
     ) -> None:
         """
         Args:
@@ -285,10 +286,14 @@ class AgentTool(BaseTool):
             subagent_factory: Injectable callable ``(tool_registry) -> agent``
                 exposing ``async run_loop(messages, max_iterations)`` yielding
                 AgentEvents (tests). Defaults to a restricted ``SageAgent``.
+            main_agent_resolver: M2: ``(stream_id) -> main agent`` resolver used
+                by background mode to deliver completion notes. Defaults to the
+                active chat stream registry (lazy import).
         """
         super().__init__(policy=policy)
         self._injected_llm_client = llm_client
         self._subagent_factory = subagent_factory
+        self._main_agent_resolver = main_agent_resolver
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
@@ -316,6 +321,15 @@ class AgentTool(BaseTool):
                     "subagent_type": {
                         "type": "string",
                         "description": "Reserved for future specialized sub-agents (ignored)",
+                    },
+                    "background": {
+                        "type": "boolean",
+                        "description": (
+                            "Run the sub-agent in the background and return immediately. "
+                            "When it finishes, a 【后台子代理完成】 note is injected into "
+                            "your context at the next iteration boundary. Use for work "
+                            "that can proceed while you keep working."
+                        ),
                     },
                 },
                 "required": ["description", "prompt"],
@@ -441,6 +455,7 @@ class AgentTool(BaseTool):
         prompt: str = "",
         subagent_type: Optional[str] = None,  # reserved for future specialization
         _tool_call_id: Optional[str] = None,  # run_loop 注入的 conductor 工具调用 ID
+        background: bool = False,
         **kwargs: Any,  # forward-compat: tolerate extra LLM-provided params
     ) -> ToolResult:
         """异步执行子代理 —— 原生协程,落在事件循环上（live-events P2）。
@@ -464,6 +479,19 @@ class AgentTool(BaseTool):
             return ToolResult(
                 success=False,
                 error="agent tool requires non-empty 'description' and 'prompt'",
+            )
+
+        # M2: 后台模式 —— 立即返回句柄；子代理完成后经主 agent 的系统通知
+        # 队列在下一迭代边界回传结果（不阻塞主循环）。实现见 agent_background。
+        if background:
+            from backend.tools.agent_background import start_background
+
+            return await start_background(
+                tool=self,
+                resolver=self._main_agent_resolver,
+                description=description,
+                prompt=prompt,
+                subagent_type=subagent_type,
             )
 
         # O5 (2026-09-08): 嵌套深度守卫 —— 编排子代理（depth ≥ 1）不允许
