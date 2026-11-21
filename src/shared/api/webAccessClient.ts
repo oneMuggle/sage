@@ -182,6 +182,101 @@ export function isHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value.trim());
 }
 
+// ── 浏览器多账号（2026-11-20 browser-multi-account） ──────────────
+
+export interface BrowserAccount {
+  id: string;
+  label: string;
+  domain: string;
+  color: string | null;
+  notes: string | null;
+  is_default: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface AccountSwitchResult {
+  ok: boolean;
+  account_id: string;
+  label: string;
+  domain: string;
+  swapped_domains: string[];
+  message: string;
+}
+
+export async function fetchBrowserAccounts(domain?: string): Promise<BrowserAccount[]> {
+  const query = domain ? `?domain=${encodeURIComponent(domain)}` : '';
+  const data = await requestJson<{ accounts?: BrowserAccount[] }>(
+    `/api/v1/browser-accounts${query}`,
+  );
+  return data.accounts ?? [];
+}
+
+export async function createBrowserAccount(input: {
+  label: string;
+  domain: string;
+  color?: string;
+  notes?: string;
+  is_default?: boolean;
+}): Promise<BrowserAccount> {
+  const data = await requestJson<{ account?: BrowserAccount }>('/api/v1/browser-accounts', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!data.account) throw new Error('missing_account');
+  return data.account;
+}
+
+export async function updateBrowserAccount(
+  accountId: string,
+  patch: { label?: string; color?: string; notes?: string; is_default?: boolean },
+): Promise<BrowserAccount> {
+  const data = await requestJson<{ account?: BrowserAccount }>(
+    `/api/v1/browser-accounts/${encodeURIComponent(accountId)}`,
+    { method: 'PUT', body: JSON.stringify(patch) },
+  );
+  if (!data.account) throw new Error('missing_account');
+  return data.account;
+}
+
+export async function deleteBrowserAccount(accountId: string): Promise<void> {
+  await requestJson(`/api/v1/browser-accounts/${encodeURIComponent(accountId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function switchBrowserAccount(
+  accountId: string,
+  browserId?: string,
+): Promise<AccountSwitchResult> {
+  return requestJson<AccountSwitchResult>('/api/v1/browser-accounts/switch', {
+    method: 'POST',
+    body: JSON.stringify({ account_id: accountId, browser_id: browserId }),
+  });
+}
+
+export async function startAccountLogin(input: {
+  url: string;
+  accountId?: string;
+  accountLabel?: string;
+}): Promise<{ jobId: string; accountId: string | null }> {
+  const data = await requestJson<{
+    job_id?: string;
+    account_id?: string | null;
+    error?: string;
+  }>('/api/v1/browser-accounts/login', {
+    method: 'POST',
+    body: JSON.stringify({
+      url: input.url,
+      account_id: input.accountId,
+      account_label: input.accountLabel,
+      approved: true,
+    }),
+  });
+  if (!data.job_id) throw new Error(data.error || 'missing_job_id');
+  return { jobId: data.job_id, accountId: data.account_id ?? null };
+}
+
 /**
  * 轮询登录任务直到成功/失败/超时。
  *

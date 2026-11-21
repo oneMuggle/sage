@@ -1113,7 +1113,7 @@ def test_browser_login_execute_success_returns_instruction(monkeypatch):
     monkeypatch.setattr(browser_tool, "_wait_for_page_load", lambda *a, **kw: None)
     monkeypatch.setattr(browser_tool, "_check_login_status", lambda *a, **kw: "logged_in")
     monkeypatch.setattr(browser_tool, "cdp_command", lambda *a, **kw: {"targetId": "t-1"})
-    monkeypatch.setattr(tool, "_export_cookies", lambda sess, host, target_id="": (["example.com"], {"total_cookies": 5, "domain_count": 1, "domains": ["example.com"], "auth_candidates": 1}))
+    monkeypatch.setattr(tool, "_export_cookies", lambda sess, host, target_id="", account_id=None: (["example.com"], {"total_cookies": 5, "domain_count": 1, "domains": ["example.com"], "auth_candidates": 1}))
 
     result = tool.execute(url="https://example.com/settings")
     assert result.success is True

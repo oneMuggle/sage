@@ -52,6 +52,26 @@ _STORAGE_ACCOUNT_PREFIX = "browser-origin:"
 KIND_COOKIE = "cookie"
 KIND_HEADER = "header"
 
+#: 多账号 vault key 分隔符：命名账号的 key 为 ``domain::account_id``。
+#: 默认账号（向后兼容）继续使用平铺的 ``domain`` key，零迁移。
+_ACCOUNT_SEP = "::"
+
+
+def vault_key(domain: str, account_id: Optional[str] = None) -> str:
+    """解析 vault dict key：默认账号 → 平铺 domain；命名账号 → domain::account_id。"""
+    domain = (domain or "").strip().lower()
+    if not account_id or account_id == "default":
+        return domain
+    return f"{domain}{_ACCOUNT_SEP}{account_id}"
+
+
+def split_vault_key(key: str) -> Tuple[str, Optional[str]]:
+    """反向解析 vault key → (domain, account_id)；默认账号的 account_id 为 None。"""
+    if _ACCOUNT_SEP in key:
+        domain, account_id = key.split(_ACCOUNT_SEP, 1)
+        return domain, account_id
+    return key, None
+
 #: 档案是 preferences KV 上的「整表读-改-写」；后台登录导出与渲染池回写
 #: 可能并发，必须串行化（可重入：save_storage_state 内部会调 save_credential）。
 _VAULT_LOCK = threading.RLock()
@@ -267,6 +287,7 @@ def save_credential(
     cookies: List[Dict[str, Any]],
     repo: Optional[Any] = None,
     source_profile: str = "",
+    account_id: Optional[str] = None,
 ) -> None:
     """把某 cookie domain 的 cookie 列表加密存入档案（覆盖旧值，kind=cookie）。
 
@@ -274,6 +295,8 @@ def save_credential(
         domain:  CDP cookie 的 domain 属性（如 ``.cnki.net``）。
         cookies: ``[{"name", "value", "domain", "path", "expires"?, "secure"?, ...}, ...]``
                  （多余字段忽略；``expires`` 为 epoch 秒，≤0 视为 session）。
+        account_id: 可选，命名账号 ID。``None`` / ``"default"`` 写入默认（平铺）
+                    key，向后兼容；其他值写入 ``domain::account_id`` 复合 key。
     """
     domain = (domain or "").strip().lower()
     if not domain or not cookies:
@@ -284,28 +307,31 @@ def save_credential(
     store = _get_repo(repo)
     vault = _load_vault(store)
     now = _now_ms()
+    vkey = vault_key(domain, account_id)
     entry = {
         "kind": KIND_COOKIE,
         "cookies_enc": encrypt_secret(
-            json.dumps(cleaned, ensure_ascii=False), account=_VAULT_ACCOUNT_PREFIX + domain
+            json.dumps(cleaned, ensure_ascii=False), account=_VAULT_ACCOUNT_PREFIX + vkey
         ),
         "saved_at": now,
         "updated_at": now,
     }
+    if account_id and account_id != "default":
+        entry["account_id"] = account_id
     source_profile = (source_profile or "").strip()
     if source_profile:
         entry["source_profile"] = source_profile
     # cookie 续期（save_credential）不能顺带清掉已保存的 localStorage 快照
-    old_entry = vault.get(domain)
+    old_entry = vault.get(vkey)
     if isinstance(old_entry, dict) and old_entry.get("origins_enc"):
         entry["origins_enc"] = old_entry["origins_enc"]
         if old_entry.get("storage_saved_at"):
             entry["storage_saved_at"] = old_entry["storage_saved_at"]
-    vault[domain] = entry
+    vault[vkey] = entry
     _save_vault(store, vault)
     if current_scheme() == "none":
         # X4：平台加密不可用，诚实降级为明文落库——至少要让用户知道
-        logger.warning("平台加密不可用，凭据档案 %s 以明文落库", domain)
+        logger.warning("平台加密不可用，凭据档案 %s 以明文落库", vkey)
 
 
 def _decrypt_cookies(entry: Dict[str, Any], domain: str) -> Optional[List[Dict[str, Any]]]:
@@ -319,15 +345,23 @@ def _decrypt_cookies(entry: Dict[str, Any], domain: str) -> Optional[List[Dict[s
     return cookies if isinstance(cookies, list) else None
 
 
-def load_credential(domain: str, repo: Optional[Any] = None) -> Optional[List[Dict[str, Any]]]:
-    """取某 domain 的 cookie 列表（已解密、含元数据）；无档案 / 非 cookie 档案 / 解密失败返回 ``None``。"""
+def load_credential(
+    domain: str,
+    repo: Optional[Any] = None,
+    account_id: Optional[str] = None,
+) -> Optional[List[Dict[str, Any]]]:
+    """取某 domain（可指定账号）的 cookie 列表；无档案 / 非 cookie 档案 / 解密失败返回 ``None``。
+
+    ``account_id=None`` / ``"default"`` 读取默认（平铺）key，向后兼容。
+    """
     domain = (domain or "").strip().lower()
     if not domain:
         return None
-    entry = _load_vault(_get_repo(repo)).get(domain)
+    vkey = vault_key(domain, account_id)
+    entry = _load_vault(_get_repo(repo)).get(vkey)
     if _entry_kind(entry) != KIND_COOKIE:
         return None
-    return _decrypt_cookies(entry, domain)
+    return _decrypt_cookies(entry, vkey)
 
 
 # ----------------------------------------------------------------- storage_state
@@ -425,8 +459,9 @@ def save_storage_state(
     origins: List[Dict[str, Any]],
     repo: Optional[Any] = None,
     source_profile: str = "",
+    account_id: Optional[str] = None,
 ) -> None:
-    """保存 cookie + localStorage 会话快照（覆盖同 domain 旧值）。
+    """保存 cookie + localStorage 会话快照（覆盖同 domain/账号旧值）。
 
     先复用 ``save_credential`` 完成 cookie 加密落库，再在同一档案条目上追加
     ``origins_enc``。``origins`` 为空时只保存 cookie（向后兼容）。
@@ -434,34 +469,42 @@ def save_storage_state(
     domain = (domain or "").strip().lower()
     if not domain:
         raise ValueError("save_storage_state: domain 不能为空")
-    save_credential(domain, cookies, repo=repo, source_profile=source_profile)
+    save_credential(
+        domain, cookies, repo=repo, source_profile=source_profile, account_id=account_id
+    )
     cleaned = _clean_origins(origins)
     store = _get_repo(repo)
     vault = _load_vault(store)
-    entry = vault.get(domain)
+    vkey = vault_key(domain, account_id)
+    entry = vault.get(vkey)
     if not isinstance(entry, dict):
         return
     if cleaned:
         entry["origins_enc"] = encrypt_secret(
             json.dumps(cleaned, ensure_ascii=False),
-            account=_STORAGE_ACCOUNT_PREFIX + domain,
+            account=_STORAGE_ACCOUNT_PREFIX + vkey,
         )
         entry["storage_saved_at"] = _now_ms()
     else:
         entry.pop("origins_enc", None)
         entry.pop("storage_saved_at", None)
     entry["updated_at"] = _now_ms()
-    vault[domain] = entry
+    vault[vkey] = entry
     _save_vault(store, vault)
 
 
-def load_storage_origins(domain: str, repo: Optional[Any] = None) -> List[Dict[str, Any]]:
-    """取某 domain 的 origin → localStorage 快照（已解密）；无档案返回空列表。"""
+def load_storage_origins(
+    domain: str,
+    repo: Optional[Any] = None,
+    account_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """取某 domain（可指定账号）的 origin → localStorage 快照（已解密）；无档案返回空列表。"""
     domain = (domain or "").strip().lower()
     if not domain:
         return []
-    entry = _load_vault(_get_repo(repo)).get(domain)
-    return _decrypt_origins(entry, domain)
+    vkey = vault_key(domain, account_id)
+    entry = _load_vault(_get_repo(repo)).get(vkey)
+    return _decrypt_origins(entry, vkey)
 
 
 def _origin_host_matches(origin: str, domain: str) -> bool:
@@ -475,7 +518,10 @@ def _origin_host_matches(origin: str, domain: str) -> bool:
 
 @_vault_write
 def merge_storage_origins(
-    domain: str, origins: List[Dict[str, Any]], repo: Optional[Any] = None
+    domain: str,
+    origins: List[Dict[str, Any]],
+    repo: Optional[Any] = None,
+    account_id: Optional[str] = None,
 ) -> bool:
     """把渲染/登录过程中刷新的 localStorage 合并回档案（按 origin/键覆盖）。
 
@@ -489,11 +535,12 @@ def merge_storage_origins(
         return False
     store = _get_repo(repo)
     vault = _load_vault(store)
-    entry = vault.get(domain)
+    vkey = vault_key(domain, account_id)
+    entry = vault.get(vkey)
     if _entry_kind(entry) != KIND_COOKIE:
         return False
     merged: Dict[str, Dict[str, str]] = {}
-    for item in _decrypt_origins(entry, domain):
+    for item in _decrypt_origins(entry, vkey):
         merged[item["origin"]] = dict(item["localStorage"])
     for item in cleaned:
         merged.setdefault(item["origin"], {}).update(item["localStorage"])
@@ -513,11 +560,11 @@ def merge_storage_origins(
         return False
     entry["origins_enc"] = encrypt_secret(
         json.dumps(payload, ensure_ascii=False),
-        account=_STORAGE_ACCOUNT_PREFIX + domain,
+        account=_STORAGE_ACCOUNT_PREFIX + vkey,
     )
     entry["storage_saved_at"] = _now_ms()
     entry["updated_at"] = entry["storage_saved_at"]
-    vault[domain] = entry
+    vault[vkey] = entry
     _save_vault(store, vault)
     return True
 
@@ -713,12 +760,18 @@ def resolve_credential(  # noqa: PLR0911 — 各状态独立 return，扁平更�
     url: Optional[str] = None,
     repo: Optional[Any] = None,
     now: Optional[float] = None,
+    account_id: Optional[str] = None,
 ) -> CredentialResolution:
-    """按档案类型解析要附加的请求头（AU1 过期过滤 + AU4 头部凭据统一入口）。"""
+    """按档案类型解析要附加的请求头（AU1 过期过滤 + AU4 头部凭据统一入口）。
+
+    ``account_id`` 可选：指定命名账号（vault key 为 ``domain::account_id``）；
+    ``None`` / ``"default"`` 读取默认（平铺）key。
+    """
     domain = (domain or "").strip().lower()
     if not domain:
         return CredentialResolution("not_found", domain=domain)
-    entry = _load_vault(_get_repo(repo)).get(domain)
+    vkey = vault_key(domain, account_id)
+    entry = _load_vault(_get_repo(repo)).get(vkey)
     kind = _entry_kind(entry)
     if kind is None:
         return CredentialResolution("not_found", domain=domain)
@@ -869,6 +922,7 @@ def merge_set_cookies(
     set_cookie_values: List[str],
     request_url: str,
     repo: Optional[Any] = None,
+    account_id: Optional[str] = None,
 ) -> List[str]:
     """把响应 ``Set-Cookie`` 合并回 cookie 档案（AU2 续期回写）。
 
@@ -880,10 +934,11 @@ def merge_set_cookies(
         return []
     store = _get_repo(repo)
     vault = _load_vault(store)
-    entry = vault.get(domain)
+    vkey = vault_key(domain, account_id)
+    entry = vault.get(vkey)
     if _entry_kind(entry) != KIND_COOKIE:
         return []
-    cookies = _decrypt_cookies(entry, domain)
+    cookies = _decrypt_cookies(entry, vkey)
     if cookies is None:
         return []
     # RFC 6265 §5.3 step 6：请求主机必须落在 cookie 归属域内（host_only 精确、
@@ -921,13 +976,13 @@ def merge_set_cookies(
         return []
     if cookies:
         entry["cookies_enc"] = encrypt_secret(
-            json.dumps(cookies, ensure_ascii=False), account=_VAULT_ACCOUNT_PREFIX + domain
+            json.dumps(cookies, ensure_ascii=False), account=_VAULT_ACCOUNT_PREFIX + vkey
         )
         entry["kind"] = KIND_COOKIE
         entry["updated_at"] = _now_ms()
-        vault[domain] = entry
+        vault[vkey] = entry
     else:
-        vault.pop(domain, None)
+        vault.pop(vkey, None)
     _save_vault(store, vault)
     return changed
 
@@ -942,6 +997,7 @@ def merge_cdp_cookies(
     request_url: str,
     repo: Optional[Any] = None,
     now: Optional[float] = None,
+    account_id: Optional[str] = None,
 ) -> List[str]:
     """把 Storage.getCookies 返回的 cookie dict 合并回 cookie 档案（AU5 渲染回写）。
 
@@ -956,10 +1012,11 @@ def merge_cdp_cookies(
         return []
     store = _get_repo(repo)
     vault = _load_vault(store)
-    entry = vault.get(domain)
+    vkey = vault_key(domain, account_id)
+    entry = vault.get(vkey)
     if _entry_kind(entry) != KIND_COOKIE:
         return []
-    stored = _decrypt_cookies(entry, domain)
+    stored = _decrypt_cookies(entry, vkey)
     if stored is None:
         return []
     request_host = (urlparse(request_url or "").hostname or "").lower()
@@ -1031,23 +1088,25 @@ def merge_cdp_cookies(
         return []
     if stored:
         entry["cookies_enc"] = encrypt_secret(
-            json.dumps(stored, ensure_ascii=False), account=_VAULT_ACCOUNT_PREFIX + domain
+            json.dumps(stored, ensure_ascii=False), account=_VAULT_ACCOUNT_PREFIX + vkey
         )
         entry["kind"] = KIND_COOKIE
         entry["updated_at"] = _now_ms()
-        vault[domain] = entry
+        vault[vkey] = entry
     else:
-        vault.pop(domain, None)
+        vault.pop(vkey, None)
     _save_vault(store, vault)
     return changed
 
 
-def get_source_profile(domain: str, repo: Optional[Any] = None) -> Optional[str]:
+def get_source_profile(
+    domain: str, repo: Optional[Any] = None, account_id: Optional[str] = None
+) -> Optional[str]:
     """取档案记录的来源持久 profile 名（AU6）；无档案 / 未记录返回 ``None``。"""
     domain = (domain or "").strip().lower()
     if not domain:
         return None
-    entry = _load_vault(_get_repo(repo)).get(domain)
+    entry = _load_vault(_get_repo(repo)).get(vault_key(domain, account_id))
     if not isinstance(entry, dict):
         return None
     source = entry.get("source_profile")
@@ -1055,83 +1114,46 @@ def get_source_profile(domain: str, repo: Optional[Any] = None) -> Optional[str]
 
 
 @_vault_write
-def delete_credential(domain: str, repo: Optional[Any] = None) -> bool:
-    """删除某 domain 档案；返回是否确有删除。"""
+def delete_credential(
+    domain: str, repo: Optional[Any] = None, account_id: Optional[str] = None
+) -> bool:
+    """删除某 domain/账号档案；返回是否确有删除。"""
     domain = (domain or "").strip().lower()
     if not domain:
         return False
+    vkey = vault_key(domain, account_id)
     store = _get_repo(repo)
     vault = _load_vault(store)
-    if domain not in vault:
+    if vkey not in vault:
         return False
-    del vault[domain]
+    del vault[vkey]
     _save_vault(store, vault)
     return True
 
 
-def find_credential_for_host(hostname: str, repo: Optional[Any] = None) -> Optional[str]:
-    """为给定 hostname 查找最匹配的凭据档案 domain。
-
-    遍历所有档案，用 ``cookie_domain_matches()`` 判定匹配；多候选时取域名最长者
-    （最具体匹配）。跳过已过期档案。无匹配返回 ``None``。
-
-    供 ``web_fetch`` 在未显式传 ``credential_domain`` 时自动推断使用。
-    """
-    hostname = (hostname or "").strip().lower()
-    if not hostname:
-        return None
-    store = _get_repo(repo)
-    vault = _load_vault(store)
-    now = time.time()
-
-    best_match: Optional[str] = None
-    best_len = -1
-
-    for domain, entry in vault.items():
-        if not cookie_domain_matches(hostname, domain):
-            continue
-        # 检查是否过期
-        kind = _entry_kind(entry)
-        if kind == KIND_HEADER:
-            expires_at = entry.get("expires_at") if isinstance(entry, dict) else None
-            if isinstance(expires_at, (int, float)) and expires_at > 0 and expires_at / 1000 <= now:
-                continue  # 已过期
-        else:
-            cookies = _decrypt_cookies(entry, domain) if isinstance(entry, dict) else None
-            if not cookies:
-                continue
-            usable, _ = _split_cookies(cookies, None, now)
-            if not usable:
-                continue  # 全部过期
-
-        # 取最具体匹配（域名最长）
-        domain_clean = domain.lstrip(".").rstrip(".")
-        if len(domain_clean) > best_len:
-            best_len = len(domain_clean)
-            best_match = domain
-
-    return best_match
-
-
 def list_credentials(repo: Optional[Any] = None) -> List[Dict[str, Any]]:
-    """档案清单（脱敏：domain / kind / 名字列表 / 保存时间 / 最短剩余时效，不含值）。"""
+    """档案清单（脱敏：domain / account_id / kind / 名字列表 / 保存时间 / 最短剩余时效，不含值）。
+
+    ``account_id`` 为命名账号的 ID；默认账号该字段为 ``None``。
+    """
     store = _get_repo(repo)
     entries: List[Dict[str, Any]] = []
     now = time.time()
-    for domain, entry in sorted(_load_vault(store).items()):
+    for vkey, entry in sorted(_load_vault(store).items()):
+        domain, account_id = split_vault_key(vkey)
         kind = _entry_kind(entry) or KIND_COOKIE
         names: List[str] = []
         expires_in: Optional[int] = None
         expired = False
         if kind == KIND_HEADER:
-            headers = _decrypt_headers(entry, domain) if isinstance(entry, dict) else None
+            headers = _decrypt_headers(entry, vkey) if isinstance(entry, dict) else None
             names = sorted(headers) if headers else ["<解密失败>"]
             expires_at = entry.get("expires_at") if isinstance(entry, dict) else None
             if isinstance(expires_at, (int, float)) and expires_at > 0:
                 expires_in = int(expires_at / 1000 - now)
                 expired = expires_in <= 0
         else:
-            cookies = _decrypt_cookies(entry, domain) if isinstance(entry, dict) else None
+            cookies = _decrypt_cookies(entry, vkey) if isinstance(entry, dict) else None
             if cookies is None:
                 names = ["<解密失败>"]
             else:
@@ -1141,6 +1163,7 @@ def list_credentials(repo: Optional[Any] = None) -> List[Dict[str, Any]]:
                 expires_in = _min_expires_in(usable, now)
         record: Dict[str, Any] = {
             "domain": domain,
+            "account_id": account_id,
             "kind": kind,
             "cookie_names": names if kind == KIND_COOKIE else [],
             "saved_at": entry.get("saved_at") if isinstance(entry, dict) else None,
@@ -1148,7 +1171,7 @@ def list_credentials(repo: Optional[Any] = None) -> List[Dict[str, Any]]:
             "expired": expired,
         }
         if kind == KIND_COOKIE:
-            origin_items = _decrypt_origins(entry, domain)
+            origin_items = _decrypt_origins(entry, vkey)
             record["has_storage"] = bool(origin_items)
             record["origin_count"] = len(origin_items)
         if kind == KIND_HEADER:
@@ -1165,6 +1188,62 @@ def list_credentials(repo: Optional[Any] = None) -> List[Dict[str, Any]]:
         record["encrypted"] = bool(isinstance(enc_value, str) and enc_value.startswith("enc:"))
         entries.append(record)
     return entries
+
+
+def find_credential_for_host(
+    hostname: str, repo: Optional[Any] = None, account_id: Optional[str] = None
+) -> Optional[str]:
+    """为给定 hostname 查找最匹配的凭据档案 domain（可限定账号）。
+
+    遍历所有档案，用 ``cookie_domain_matches()`` 判定匹配；多候选时取域名最长者
+    （最具体匹配）。跳过已过期档案。无匹配返回 ``None``。
+
+    ``account_id`` 给定时只考虑该账号的命名条目（``domain::account_id``）；
+    ``None`` 时只考虑默认条目（平铺 key），保持既有行为。
+
+    供 ``web_fetch`` 在未显式传 ``credential_domain`` 时自动推断使用。
+    """
+    hostname = (hostname or "").strip().lower()
+    if not hostname:
+        return None
+    store = _get_repo(repo)
+    vault = _load_vault(store)
+    now = time.time()
+
+    best_match: Optional[str] = None
+    best_len = -1
+
+    for vkey, entry in vault.items():
+        key_domain, key_account = split_vault_key(vkey)
+        # 账号过滤：默认查询只看平铺条目；指定账号只看该账号的命名条目
+        if account_id is None or account_id == "default":
+            if key_account is not None:
+                continue
+        elif key_account != account_id:
+            continue
+        if not cookie_domain_matches(hostname, key_domain):
+            continue
+        # 检查是否过期
+        kind = _entry_kind(entry)
+        if kind == KIND_HEADER:
+            expires_at = entry.get("expires_at") if isinstance(entry, dict) else None
+            if isinstance(expires_at, (int, float)) and expires_at > 0 and expires_at / 1000 <= now:
+                continue  # 已过期
+        else:
+            cookies = _decrypt_cookies(entry, vkey) if isinstance(entry, dict) else None
+            if not cookies:
+                continue
+            usable, _ = _split_cookies(cookies, None, now)
+            if not usable:
+                continue  # 全部过期
+
+        # 取最具体匹配（域名最长）
+        domain_clean = key_domain.lstrip(".").rstrip(".")
+        if len(domain_clean) > best_len:
+            best_len = len(domain_clean)
+            best_match = key_domain
+
+    return best_match
 
 
 __all__ = [
@@ -1191,4 +1270,6 @@ __all__ = [
     "save_credential",
     "save_header_credential",
     "save_storage_state",
+    "split_vault_key",
+    "vault_key",
 ]
