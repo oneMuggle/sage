@@ -8,7 +8,7 @@
 //
 // 预算（实测留 ~10% 余量，超限即失败）：
 //   - dist/assets 总体积   ≤ 12MB   （2026-09-24 实测 ~9.9MB）
-//   - 最大单个 .js chunk   ≤ 1.95MB （2026-11-08 CI 实测 1960KB）
+//   - 最大单个 .js chunk   ≤ 2.25MB （2026-11-21 CI 实测 2253KB）
 //
 // 2026-10-30 棘轮上调：设置页 IA 收敛（#2657）把设置项 i18n 词典拆入
 // settingsUi.ts 并随默认语言包静态加载，主 chunk 由 1.45MB 增至 1.70MB，
@@ -42,6 +42,15 @@
 // ~30KB）现在合入主 Office chunk，CI 实测 2176KB，超 1.95MB 预算
 // 约 176KB。按棘轮协议上调至 2.2MB（保留 ~24KB 余量）。
 //
+<<<<<<< HEAD
+=======
+// 2026-11-21 棘轮上调：Design Studio 后续增强（#3174：评审修复 / Tweaks
+// 预设 / 数据源预览 / 多系列图表 / 方向卡片 / 版本对比 / 真流式进度）
+// 新增设计 i18n 词典与共享 design store/api 代码，主 chunk CI 实测
+// 2253KB，超 2.2MB（2252.8KB）预算约 0.2KB。按棘轮协议上调至
+// 2.25MB（保留 ~50KB 余量），不在本 PR 做前端代码分割。
+//
+>>>>>>> origin/main
 // 用法：npm run build 之后执行 `node scripts/check-bundle-size.mjs`。
 // 退出码：0 = 全部预算内；1 = 超限或 dist 不存在。
 // 若为有意的功能增长导致超限，更新本文件 BUDGETS 并在 PR 说明依据
@@ -53,7 +62,11 @@ const ASSETS = 'dist/assets';
 
 const BUDGETS = [
   { name: 'dist/assets 总体积', max: 12 * 1024 * 1024 },
+<<<<<<< HEAD
   { name: '最大单个 .js chunk', max: 2.2 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
+=======
+  { name: '最大单个 .js chunk', max: 2.25 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
+>>>>>>> origin/main
 ];
 
 if (!readdirSync('.').includes('dist')) {

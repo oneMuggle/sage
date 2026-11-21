@@ -241,7 +241,7 @@ class OfficeCreateTool(BaseTool):
                         "enum": list(_VALID_DOC_TYPES),
                         "description": (
                             "Document type (case-insensitive: word/Word/WORD "
-                            "are all accepted)."
+                            "are all accepted). pdf 请改用 office_generate_pdf。"
                         ),
                     },
                     "output_dir": {
@@ -275,6 +275,16 @@ class OfficeCreateTool(BaseTool):
                             "不可用时生成照常成功，结果附加 toc_refresh.error"
                             " 说明（此时可在 Word 中 Ctrl+A → F9 手动更新）。"
                             "仅 doc_type=word 可传。"
+                        ),
+                    },
+                    "verify": {
+                        "type": "string",
+                        "enum": ["auto", "off"],
+                        "description": (
+                            "生成后渲染级校验（默认 auto）：本机有 PDF 转换器时"
+                            "把产物转为 PDF，检查页面尺寸/页边距/字体/页码/"
+                            "空白页/内容越界，结果附加 render_verify 摘要；"
+                            "无转换器时自动降级，不阻塞生成。off 关闭。"
                         ),
                     },
                     "content": {
@@ -1233,7 +1243,7 @@ class OfficeCreateTool(BaseTool):
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911 — verify/refresh/params 多路径逐条早退
         self,
         doc_type: Optional[str] = None,
         output_dir: Optional[str] = None,
@@ -1241,6 +1251,7 @@ class OfficeCreateTool(BaseTool):
         content: Optional[Dict[str, Any]] = None,
         font_family: Optional[str] = None,
         refresh_toc: Optional[bool] = None,
+        verify: Optional[str] = None,
         **kwargs: Any,
     ) -> ToolResult:
         # doc_type 大小写容错（T6 实测模型传 "Word"）：归一化后再校验。
@@ -1249,6 +1260,21 @@ class OfficeCreateTool(BaseTool):
         error = self._check_params(doc_type, output_dir, filename, content)
         if error is not None:
             return error
+        if doc_type == OfficeDocType.PDF.value:
+            return ToolResult(
+                success=False,
+                error=(
+                    "pdf_unsupported_in_office_create: office_create 不支持 pdf；"
+                    "请改用 office_generate_pdf"
+                ),
+            )
+
+        verify_mode = str(verify or "auto").strip().lower()
+        if verify_mode not in ("auto", "off"):
+            return ToolResult(
+                success=False,
+                error="verify_invalid: verify 仅支持 auto / off",
+            )
 
         # Round 40: refresh_toc 一步到位刷新目录域（word 专用，strict——
         # 非 word 显式报错而非静默忽略，防 LLM 误以为已刷新）。
@@ -1271,6 +1297,8 @@ class OfficeCreateTool(BaseTool):
         if delegated is not None:
             if do_refresh and delegated.success:
                 delegated = self._attach_toc_refresh_managed(delegated)
+            if delegated.success:
+                delegated = self._attach_render_verify_managed(delegated, verify_mode)
             return delegated
 
         doc_type_enum = OfficeDocType(doc_type)
@@ -1289,6 +1317,8 @@ class OfficeCreateTool(BaseTool):
             result = self._attach_toc_refresh_local(
                 result, Path(result.content["path"])
             )
+        if result.success:
+            result = self._attach_render_verify_local(result, verify_mode)
         return result
 
     def _attach_toc_refresh_managed(self, result: ToolResult) -> ToolResult:
@@ -1321,6 +1351,61 @@ class OfficeCreateTool(BaseTool):
         """legacy output_dir 路径刷新：无绑定时以输出父目录为围栏。"""
         workspace = self._binding_workspace_or_none() or path.parent
         return self._refresh_and_attach(result, path, workspace)
+
+    def _attach_render_verify_managed(
+        self, result: ToolResult, verify_mode: str
+    ) -> ToolResult:
+        """受管路径渲染校验：doc_id 定位落盘文件，摘要不含绝对路径。"""
+        content = dict(result.content or {})
+        doc_id = content.get("document_id")
+        if not isinstance(doc_id, str) or not doc_id:
+            return result
+        ctx = current_tool_context()
+        if ctx is None or not ctx.session_id:
+            return result
+        try:
+            conn = get_database().get_connection()
+            binding = get_active_workspace(
+                conn, ctx.session_id, expected_generation=ctx.binding_generation
+            )
+            doc = (
+                get_document_in_workspace(conn, doc_id, binding.workspace_path)
+                if binding is not None
+                else None
+            )
+            if doc is None:
+                return result
+            path = document_path(doc)
+            workspace = Path(binding.workspace_path)
+        except Exception:  # noqa: BLE001 — 定位失败不毁生成结果
+            return result
+        return self._render_verify_attach(result, path, workspace, verify_mode)
+
+    def _attach_render_verify_local(
+        self, result: ToolResult, verify_mode: str
+    ) -> ToolResult:
+        """legacy output_dir 路径：以输出父目录（或绑定工作区）为围栏。"""
+        content = dict(result.content or {})
+        raw_path = content.get("path")
+        if not isinstance(raw_path, str) or not raw_path:
+            return result
+        path = Path(raw_path)
+        workspace = self._binding_workspace_or_none() or path.parent
+        return self._render_verify_attach(result, path, workspace, verify_mode)
+
+    @staticmethod
+    def _render_verify_attach(
+        result: ToolResult, path: Path, workspace: Path, verify_mode: str
+    ) -> ToolResult:
+        """调用渲染校验并把紧凑摘要附加到结果（失败不改写成功态）。"""
+        from backend.office.render_verify import verify_for_tool
+
+        summary = verify_for_tool(file_path=path, workspace=workspace, mode=verify_mode)
+        if summary is None:
+            return result
+        content = dict(result.content or {})
+        content["render_verify"] = summary
+        return ToolResult(success=result.success, content=content)
 
     def _binding_workspace_or_none(self) -> Optional[Path]:
         """有活动绑定 → 绑定工作区 Path；否则 ``None``（DB 不可用同样吞掉）。"""

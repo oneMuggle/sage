@@ -15,7 +15,7 @@
 | | 能力 | 说明 |
 |---|---|---|
 | 📝 | **Office 全链路** | 对话生成 / 修订 Word、Excel、PPT、PDF；版式即配置（FormatSpec）、格式 Linter 与一键自动修复、GB/T 7714 / APA 引用体系、目录域、期刊模板；改前快照可回滚。详见 [用户手册 §9](./docs/user-manual/09-office.md) |
-| 🧠 | **持久记忆** | 工作 / 情景 / 语义三层记忆 + 用户画像，跨会话记住偏好与上下文；所有记忆本地存储、可查看可删除。详见 [记忆系统](./docs/04-memory.md) |
+| 🧠 | **持久记忆** | 工作 / 情景 / 语义三层记忆 + 用户画像，跨会话记住偏好与上下文；所有记忆本地存储、可查看可删除。详见 [记忆系统](./docs/technical/04-memory.md) |
 | 🛠️ | **编码与本地代理** | 文件读写 / patch / bash / git / LSP 级符号搜索 / 浏览器 / 子代理并行编排；危险操作需人工审批 |
 | 🧩 | **技能与 MCP** | `SKILL.md` 技能（含 paper-writing / report-writing 等内置技能）、多 MCP 服务器接入、Prompt 模板库与斜杠命令 |
 | 📚 | **知识库** | 本地 Wiki + RAG 服务 + 浏览器剪藏扩展，`@` 引用文件 / 文档 / 表格进入对话 |
@@ -144,9 +144,9 @@ Electron 自带 Chromium 与打包的 Python 运行时。这是为了 Win7 LTS �
 | 文档 | 说明 |
 |---|---|
 | [docs/README.md](./docs/README.md) | 全部文档导航 |
-| [02 系统架构](./docs/02-architecture.md) · [18 六边形架构](./docs/technical/18-hexagonal.md) | 整体架构与分层约束 |
-| [04 记忆系统](./docs/04-memory.md) · [39 用户画像](./docs/technical/39-memory-user-profile.md) | 三层记忆、检索、画像 |
-| [05 Agent 引擎](./docs/05-agent.md) · [27 多代理编排](./docs/technical/27-multi-agent-orchestration.md) | 对话引擎、工具执行、子代理 |
+| [02 系统架构](./docs/technical/02-architecture.md) · [18 六边形架构](./docs/technical/18-hexagonal.md) | 整体架构与分层约束 |
+| [04 记忆系统](./docs/technical/04-memory.md) · [39 用户画像](./docs/technical/39-memory-user-profile.md) | 三层记忆、检索、画像 |
+| [05 Agent 引擎](./docs/technical/05-agent.md) · [27 多代理编排](./docs/technical/27-multi-agent-orchestration.md) | 对话引擎、工具执行、子代理 |
 | [24 技能系统](./docs/technical/24-skills-system.md) · [34 MCP 多服务器](./docs/technical/34-mcp-multi-server.md) | 技能与 MCP |
 | [用户手册 09 Office](./docs/user-manual/09-office.md) · [54 Office 对标追踪](./docs/technical/54-office-parity-tracking.md) | Office 能力 |
 | [15 质量门禁](./docs/technical/15-quality-gates.md) · [CONTRIBUTING.md](./CONTRIBUTING.md) | 贡献流程、CI、pre-commit |

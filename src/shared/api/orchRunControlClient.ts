@@ -9,7 +9,7 @@
  */
 
 import { invoke } from './desktopInvoke';
-import type { RunSnapshot } from './orchEvents';
+import type { RunSnapshot, TaskTranscriptResponse } from './orchEvents';
 
 export interface SteerTaskParams {
   run_id: string;
@@ -71,6 +71,26 @@ export const orchRunControlClient = {
   /** GET /orch/runs/{runId}/snapshot */
   async getSnapshot(runId: string): Promise<RunSnapshot> {
     return invoke<RunSnapshot>('orchestration_get_run_snapshot', { run_id: runId });
+  },
+
+  /**
+   * GET /orch/runs/{runId}/tasks/{taskId}/transcript
+   *
+   * M1: 子代理消息级过程记录（goal / reasoning / assistant / tool_call /
+   * tool_result / error），支持 after_seq 轮询续接。
+   */
+  async getTaskTranscript(
+    runId: string,
+    taskId: string,
+    afterSeq = 0,
+    limit = 200,
+  ): Promise<TaskTranscriptResponse> {
+    return invoke<TaskTranscriptResponse>('orchestration_get_task_transcript', {
+      run_id: runId,
+      task_id: taskId,
+      after_seq: afterSeq,
+      limit,
+    });
   },
 
   /**

@@ -1,7 +1,12 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
+<<<<<<< HEAD
 > 状态：M0 已实施（2026-11-21），M1–M4 待评审
 > 分支：`fix/orch-run-control-wiring`
+=======
+> 状态：M0 已合并 main（`96cfe619c`），M1 已实施（2026-11-21），M2–M4 待实施
+> 分支：M1 `feat/orch-subagent-transcript`
+>>>>>>> origin/main
 > 关联：技术手册 §27（多 Agent 编排层）、§36（编排端到端）、§42（Chat-Native 编排）、§108（Plan Mode 增强）、§125（思考展示档位）、§140（插话暂存区）、§148（任务中心）
 > 调研方式：后端核心 / 前端 UI / 文档技能三路并行代码审计（本文所有 file:line 均来自实际代码）
 
@@ -126,10 +131,17 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 - [x] M0.1 挂载 `useOrchEventSubscription`，验证事件时间线渲染
 - [x] M0.2 steer 真正路由 + 降级提示
 - [x] M0.3 取消/中断 toast + 计划待批准状态恢复
+<<<<<<< HEAD
 - [ ] M1.1 `orch_task_messages` 表 + 落库
 - [ ] M1.2 transcript 分页 API
 - [ ] M1.3 思考/正文按 DisplayContract 采样转发
 - [ ] M1.4 前端子代理详情页（过程/Transcript/思考/统计）
+=======
+- [x] M1.1 `orch_task_messages` 表 + 落库
+- [x] M1.2 transcript 分页 API
+- [x] M1.3 思考/正文按 DisplayContract 采样转发（实现改为 transcript 落盘 + 前端按档位渲染，见 M1 实施记录）
+- [x] M1.4 前端子代理详情页（过程/Transcript/思考/统计）
+>>>>>>> origin/main
 - [ ] M2.1 `agent(background=true)` + 同轮并发
 - [ ] M2.2 多个后台 dispatch 并存
 - [ ] M2.3 子代理继续对话
@@ -173,3 +185,23 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 | 新增/更新测试 | `orchSteer.test.ts`、`planApprovalStorage.test.ts`、`TaskDetailView.test.tsx`、`Chat.cancel-run.test.tsx` |
 
 验证：`tsc --noEmit` 通过；相关 5 个套件 38 用例通过；编排链路相关 101 个测试文件 / 537 用例全绿；ESLint 无新增错误（2 条为既有 warning）。
+<<<<<<< HEAD
+=======
+
+## 9. M1 实施记录（2026-11-21）
+
+| 改动 | 文件 |
+|---|---|
+| 新表 `orch_task_messages`（消息级：goal/reasoning/assistant/tool_call/tool_result/error） | `backend/data/database.py`、`backend/data/orch_transcript_repo.py` |
+| `TaskTranscriptRecorder`：与状态事件 sink 并行消费 run_loop 事件，按迭代边界聚合落盘；seq 从 repo `max_seq` 续接；每任务 2000 行封顶；recorder 吞错不影响执行 | `backend/orchestration/transcript.py`、`backend/orchestration/chat_dispatcher.py` |
+| `GET /orch/runs/{run_id}/tasks/{task_id}/transcript?after_seq=&limit=`（分页 + has_more） | `backend/api/orch_run_control.py` |
+| IPC 路由 `orchestration_get_task_transcript` + manifest 重新生成 | `electron/commandRoutes/orchestration.ts`、`electron/ipc-manifest.json` |
+| 前端 `useTaskTranscript`（2s 增量轮询、切任务重置、最多 5 页/轮） | `src/widgets/chat/progress/useTaskTranscript.ts` |
+| `TaskTranscriptPanel`：goal/思考/正文/工具调用与结果全文；思考遵守 detail/trace/result 档位 | `src/widgets/chat/progress/TaskTranscriptPanel.tsx` |
+| `TaskDetailView` 增加「过程 / 对话」tab，ProgressSection 透传 sessionId | `src/widgets/chat/progress/TaskDetailView.tsx`、`ProgressSection.tsx` |
+| 测试 | `test_task_transcript.py`（10）、`test_orch_transcript_api.py`（5）、`TaskTranscriptPanel.test.tsx`（3）、TaskDetailView +1 |
+
+**设计偏差说明（M1.3）**：计划原写"按展示契约转发生成事件"，实现改为**落盘全量 + 前端按档位渲染**——后端无需知道用户档位（档位是前端设置），实时性由 2s 轮询保障，避免在事件白名单/EventHub 中新增高噪声事件类型。后续如需逐字实时，可在此模型上加轻量 `task.transcript.appended` 事件。
+
+验证：后端新测试 15 + 调度器/编排回归 152 全绿；前端 transcript/任务详情/进度 102 用例全绿；`tsc --noEmit`、ESLint、架构棘轮（database 2767 / chat_dispatcher 2432）、silent-exceptions 均通过。
+>>>>>>> origin/main

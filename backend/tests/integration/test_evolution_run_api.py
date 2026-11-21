@@ -68,6 +68,7 @@ class TestEvolutionRunApi:
         assert body["result"] == {"promoted": 2, "decayed": 3, "total": 5}
         task.run.assert_called_once()
 
+<<<<<<< HEAD
     def test_run_serializes_consolidation_result(
         self, scheduler: SchedulerService, client: TestClient
     ) -> None:
@@ -82,6 +83,8 @@ class TestEvolutionRunApi:
         assert r.status_code == 200
         assert r.json()["result"] == {"promoted": 2, "decayed": 3, "total": 5}
 
+=======
+>>>>>>> origin/main
     def test_run_wraps_scalar_result_as_total(
         self, scheduler: SchedulerService, client: TestClient
     ) -> None:

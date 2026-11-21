@@ -9,6 +9,8 @@ _PHASE_2_EXPORTS = {
     "DesignGenerator": (".generator", "DesignGenerator"),
     "DesignSystemRegistry": (".systems", "DesignSystemRegistry"),
     "DesignTemplateRegistry": (".templates", "DesignTemplateRegistry"),
+    "CraftRule": (".craft_loader", "CraftRule"),
+    "CraftRuleRegistry": (".craft_loader", "CraftRuleRegistry"),
 }
 
 

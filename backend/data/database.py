@@ -203,6 +203,7 @@ def _segment_for_index(text: Optional[str]) -> str:
     return " ".join(w.strip() for w in jieba.cut_for_search(text) if w.strip())
 
 
+<<<<<<< HEAD
 def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     """Add source_turn_id / source_message_id / memory_category columns and
     supporting indexes to ``memories_episodic``.
@@ -233,6 +234,8 @@ def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     db.commit()
 
 
+=======
+>>>>>>> origin/main
 def warm_jieba() -> None:
     """预热 jieba 词典，避免首次 FTS 写入冷启动 500ms+。
 
@@ -851,6 +854,20 @@ class Database:
             cursor.execute(
                 "ALTER TABLE memories_episodic ADD COLUMN agent_id TEXT"
             )
+<<<<<<< HEAD
+=======
+        # M3-Task 4 / Gap A: 记忆可追溯性三列（来源 turn/message + 分类）。
+        # 与 win7 #2878 同口径；存量行保持 NULL。
+        for _col, _typedef in (
+            ("source_turn_id", "TEXT"),
+            ("source_message_id", "TEXT"),
+            ("memory_category", "TEXT"),
+        ):
+            if _col not in _episodic_columns:
+                cursor.execute(
+                    f"ALTER TABLE memories_episodic ADD COLUMN {_col} {_typedef}"
+                )
+>>>>>>> origin/main
         # 2026-11-17 记忆详情化：结构化标题（写入时确定性生成/LLM 提取/用户手填）。
         # 存量行为 NULL —— 读取路径（_enrich_memory_records）按 content 兜底推导。
         if "title" not in _episodic_columns:
@@ -964,6 +981,15 @@ class Database:
         # 持久化"关于用户的知识"（偏好 / 沟通风格 / 工作习惯 / 身份）,
         # 与通用记忆分离, 以冻结快照方式始终注入 system prompt。
         # category 取值: preference / communication_style / workflow_habit / identity
+        #   / goal / environment
+        #
+        # v2 治理列 (2026-11-18 fix/user-profile-memory-governance):
+        #   supersedes_id       — 旧行 id, 本条覆盖了它（冲突消解链）
+        #   invalidated_at      — 0 或 NULL 表示生效; >0 表示被覆盖的时间戳 ms
+        #   source              — 写入来源: per_turn / evolution / manual
+        #   evidence_session_id — 来源会话 id, 用于来源溯源
+        #   last_confirmed_at   — 最近一次被确认（重复命中）的时间戳 ms
+        #   dimension           — 结构化维度键（如 response_length），NULL 表示自由文本
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_profile (
                 id TEXT PRIMARY KEY,
@@ -971,7 +997,13 @@ class Database:
                 category TEXT NOT NULL DEFAULT 'preference',
                 importance INTEGER DEFAULT 5 CHECK (importance BETWEEN 1 AND 10),
                 created_at INTEGER NOT NULL,
-                updated_at INTEGER
+                updated_at INTEGER,
+                supersedes_id TEXT,
+                invalidated_at INTEGER,
+                source TEXT DEFAULT 'manual',
+                evidence_session_id TEXT,
+                last_confirmed_at INTEGER,
+                dimension TEXT
             )
         """)
         cursor.execute("""
@@ -981,6 +1013,38 @@ class Database:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_user_profile_importance
             ON user_profile(importance DESC)
+        """)
+        # v2 治理列迁移 (2026-11-18 fix/user-profile-memory-governance):
+        # 老库 user_profile 表可能缺 supersedes_id / invalidated_at / source /
+        # evidence_session_id / last_confirmed_at / dimension 这些列；新库走
+        # CREATE TABLE 直接带上，老库用 ALTER ADD COLUMN 增量补。双进程防御：
+        # try/except 吞 "duplicate column name"。
+        # 必须在建 idx_user_profile_active 之前执行——部分索引引用 invalidated_at，
+        # 老库缺列时先建索引会直接抛 "no such column" 导致 init_db 失败。
+        cursor.execute("PRAGMA table_info(user_profile)")
+        _profile_columns = {row["name"] for row in cursor.fetchall()}
+        _profile_v2_cols = [
+            ("supersedes_id", "TEXT"),
+            ("invalidated_at", "INTEGER"),
+            ("source", "TEXT DEFAULT 'manual'"),
+            ("evidence_session_id", "TEXT"),
+            ("last_confirmed_at", "INTEGER"),
+            ("dimension", "TEXT"),
+        ]
+        for _col_name, _col_def in _profile_v2_cols:
+            if _col_name not in _profile_columns:
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE user_profile ADD COLUMN {_col_name} {_col_def}"
+                    )
+                    conn.commit()
+                except sqlite3.OperationalError:
+                    pass
+        # 仅含"生效中"条目的部分索引 —— get_core_items / list 走它避免全表扫
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_profile_active
+            ON user_profile(category, dimension)
+            WHERE invalidated_at = 0 OR invalidated_at IS NULL
         """)
 
         # 项目画像表 (P2 scope 轴: 项目级 "MEMORY.md")
@@ -2343,6 +2407,31 @@ class Database:
         )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_orch_events_run_seq ON orch_events(run_id, seq)"
+        )
+        # M1 (2026-11-21): 子代理 transcript —— 消息级过程记录（goal /
+        # reasoning / assistant / tool_call / tool_result / error），供任务
+        # 详情回看；canonical 状态事件仍走 orch_events。写入方为
+        # TaskTranscriptRecorder，读取方为 /orch/runs/{run}/tasks/{task}/transcript。
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orch_task_messages (
+                run_id TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                message_type TEXT NOT NULL,
+                content TEXT,
+                reasoning TEXT,
+                tool_name TEXT,
+                tool_call_id TEXT,
+                tool_args TEXT,
+                tool_result TEXT,
+                is_error INTEGER NOT NULL DEFAULT 0,
+                duration_ms INTEGER,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (run_id, task_id, seq)
+            )
+            """
         )
         # C3 (2026-09-09): orch_steps 死表退役 —— 表/repo 曾建好但生产路径
         # 零写入，step 事实已由 orch_events 的 task.step.* payload 承载（可

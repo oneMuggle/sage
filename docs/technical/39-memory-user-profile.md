@@ -19,7 +19,8 @@
 
 `MemoryAdapter`（`backend/adapters/out/memory/adapter.py`）桥接 `MemoryPort` 协议：
 `store()` 自动生成 embedding 入 VectorStore（sqlite-vec），`retrieve()` 用 **RRF 融合**
-（关键词 0.4 + 向量 0.6）多路检索。
+多路检索。语义嵌入器（ONNX）下权重为关键词 0.2 + 向量 0.8；字面哈希
+（HashEmbedder）下跳向量路，只用关键词（权重 1.0/0.0）。
 
 ## 1A. 检索召回调优（2026-10 PR #2125 / #2149）
 
@@ -91,32 +92,57 @@ Phase 1（PR #2125）与 Phase 2（PR #2149）在三层架构之上叠加了 6 �
 ## 2. 用户画像（USER.md 概念, 2026-08-02 PR #269）
 
 借鉴 hermes-agent 的 `USER.md` frozen snapshot 模式：把"关于用户的知识"
-（偏好 / 沟通风格 / 工作习惯 / 身份 / 目标）与通用记忆分离，以**冻结快照**方式
-始终注入 system prompt（不依赖每轮检索命中）。
+（偏好 / 沟通风格 / 工作习惯 / 身份 / 目标 / 环境）与通用记忆分离，以**冻结快照**
+方式始终注入 system prompt（不依赖每轮检索命中）。
 
 ### 2.1 UserProfileStore（`backend/memory/user_profile.py`）
 
-持久画像库，SQLite `user_profile` 表：
+持久画像库，SQLite `user_profile` 表（v2 治理，2026-11-18）：
 
 ```sql
 CREATE TABLE user_profile (
     id TEXT PRIMARY KEY,
     content TEXT NOT NULL,
-    category TEXT NOT NULL DEFAULT 'preference',   -- preference/communication_style/workflow_habit/identity/goal
+    category TEXT NOT NULL DEFAULT 'preference',
+    -- preference/communication_style/workflow_habit/identity/goal/environment
     importance INTEGER DEFAULT 5 CHECK (importance BETWEEN 1 AND 10),
-    created_at INTEGER NOT NULL,                    -- ms epoch
-    updated_at INTEGER
+    created_at INTEGER NOT NULL,       -- ms epoch
+    updated_at INTEGER,
+    supersedes_id TEXT,                -- 旧行 id：本条覆盖了它（冲突消解链）
+    invalidated_at INTEGER,            -- 0/NULL=生效；>0=被覆盖时间戳 ms
+    source TEXT DEFAULT 'manual',      -- per_turn / evolution / manual
+    evidence_session_id TEXT,          -- 来源会话（per_turn 路径）
+    last_confirmed_at INTEGER,         -- 最近一次重复命中确认时间 ms
+    dimension TEXT                     -- 结构化维度键（如 response_length），NULL=自由文本
 );
+-- 仅含生效中条目的部分索引，get_core_items / list 走它避免全表扫
+CREATE INDEX idx_user_profile_active ON user_profile(category, dimension)
+    WHERE invalidated_at = 0 OR invalidated_at IS NULL;
 ```
+
+老库由 `Database` 的幂等迁移补齐新增列（`PRAGMA table_info` 检查 + 条件
+`ALTER TABLE ADD COLUMN`，双进程重复 ALTER 由 `OperationalError` 兜底）。
 
 设计要点：
 
 - **冻结快照**：`load()` 时从 DB 读取并计算 `_snapshot_entries` + `_snapshot`；
-  `add()` 只更新 DB，**不刷新快照**（保 prefix cache）。显式 `invalidate()` 才刷新。
-- **字符上限**：快照按重要性降序截断到 `DEFAULT_CHAR_LIMIT = 1400`。
-- **去重**：完全一致 / 子串包含 / `SequenceMatcher` 相似度 ≥ 0.95 视为重复，拒绝写入。
+  `upsert()` 只更新 DB，**不刷新快照**（保 prefix cache）。显式 `invalidate()` 才刷新。
+- **会话级快照**：`preload_for_session(session_id)` / `get_snapshot_for(session_id)`
+  为每个会话维护独立冻结切面（LRU，上限 `_SESSION_CACHE_MAX = 64`）。新会话首轮
+  注入时立即看到最新画像，无需重启进程；已开会话保持启动时刻的切面。
+  `ChatService.create_session()` 预热、`delete_session()` 逐出。
+- **Upsert 语义**：按结构化维度（`dimension`）或自由文本相似度覆盖旧行——
+  旧行 `invalidated_at` 标记失效，新行 `supersedes_id` 链回旧行；
+  完全相等的内容只 bump `last_confirmed_at`，不新增。
+- **去重规则**：仅"完全相等"与 `SequenceMatcher ≥ DEDUPE_RATIO(0.95)` 判定重复；
+  旧版 `existing in content` 子串规则已删除（"细化被当重复"的根因）。
+- **注入过滤**：`_query_all` / `list` / `get_core_items` 仅返回生效中条目。
+- **字符上限**：快照按重要性降序截断到 `DEFAULT_CHAR_LIMIT = 1400`；超长条目
+  `continue` 跳过，不阻断后续短条目填充。
+- **类别**：`VALID_CATEGORIES` = preference / communication_style / workflow_habit /
+  identity / goal / environment；`environment` 最多保留 3 条（超出删最旧）。
 - **安全**：写入前 `get_scanner().scan_write()`（Hermes 风格三级威胁扫描）。
-- **importance 钳制**：`add()` 钳制到 1-10（防 DB CHECK 越界抛 IntegrityError）。
+- **importance 钳制**：钳制到 1-10（防 DB CHECK 越界抛 IntegrityError）。
 - 全局单例 `get_user_profile()` / `reset_user_profile()`。
 
 ### 2.2 分类路由（`extract_and_store_memory`）
@@ -124,7 +150,7 @@ CREATE TABLE user_profile (
 记忆写入统一走 `chat_service.extract_and_store_memory`（hex ChatService 与 legacy
 `/chat/stream` 共用）。按 extractor 产出的 `category` 分流：
 
-- `preference` / `goal` → `memory_port.store_profile()`（画像库）
+- `preference` / `goal` / `environment` → `memory_port.store_profile()`（画像库）
 - `fact` / `event` 及其余 → `memory_port.store()`（通用三层记忆）
 
 结构探测用**类级** `hasattr(type(memory_port), "store_profile")`（非实例 getattr），
@@ -133,12 +159,14 @@ CREATE TABLE user_profile (
 
 ### 2.3 双路径注入
 
-画像快照经两条路径注入，保证 legacy（当前生效）与 hex 都能拿到同一份用户知识：
+画像快照经两条路径注入，保证 legacy（当前生效）与 hex 都能拿到同一份用户知识。
+两条路径都带 `session_id` 时取**会话级冻结切面**（`get_snapshot_for(session_id)`），
+无 `session_id` 时回退进程级单例快照：
 
 | 路径 | 注入点 | 快照来源 |
 |------|--------|----------|
-| legacy | `MemoryManager.get_context()` 前置 `## USER PROFILE` 块 | `get_snapshot()`（冻结 + char 受限） |
-| hex | `MemoryAdapter.retrieve()` → `MemoryContext.core` | `get_core_items()`（基于 `_snapshot_entries`，同源） |
+| legacy | `MemoryManager.get_context()` 前置 `## USER PROFILE` 块 | `get_snapshot_for(session_id).get_snapshot()`（冻结 + char 受限） |
+| hex | `MemoryAdapter.retrieve()` → `MemoryContext.core` | `get_snapshot_for(session_id).get_core_items()`（基于 `_snapshot_entries`，同源） |
 
 ### 2.4 core 独立预算
 
@@ -154,11 +182,15 @@ core = core_profile[:_CORE_PROFILE_LIMIT] + core_retrieved[:_CORE_RETRIEVED_LIMI
 ## 3. 相关文件
 
 - 新增：`backend/memory/user_profile.py`、`backend/tests/unit/test_user_profile.py`
-- 修改：`backend/adapters/out/memory/adapter.py`（`store_profile` + core 预算）、
-  `backend/memory/manager.py`（`get_context` 前置画像）、
-  `backend/application/services/chat_service.py`（分类路由）、
-  `backend/data/database.py`（新表 `user_profile`）
-- 新表：`user_profile`（幂等建表）
+- 修改：`backend/adapters/out/memory/adapter.py`（`store_profile` + core 预算 +
+  会话级 core 注入）、
+  `backend/memory/manager.py`（`get_context` 前置会话级画像）、
+  `backend/application/services/chat_service.py`（分类路由 + 会话创建预热 /
+  删除逐出）、
+  `backend/scheduler/evolution.py`（偏好学习 `source='evolution'` + `dimension`）、
+  `backend/api/legacy_memory_routes.py`（手动 CRUD `source='manual'`）、
+  `backend/data/database.py`（`user_profile` 表 v2 列 + 幂等迁移 + 部分索引）
+- 新表：`user_profile`（幂等建表 + v2 增量迁移）
 
 ## 4. Background Review 自主进化系统（2026-08-03 实施）
 

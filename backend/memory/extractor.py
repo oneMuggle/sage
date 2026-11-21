@@ -152,6 +152,50 @@ def _select_existing_facts(
 
     return selected
 
+<<<<<<< HEAD
+=======
+# 提取提示词（借鉴 Mem0 的 fact extraction prompt）
+# 注意：category 只允许 preference/goal/environment，与
+# extract_and_store_memory() 的 profile_categories 路由白名单完全对齐。
+# 若允许 fact/event 等类别，会被路由到 episodic memory 而非用户画像库，
+# 导致画像长期为空（review 2026-10 发现此问题）。
+EXTRACTION_PROMPT = """从以下对话中提取值得记住的关键事实。每个事实应该是：
+- 独立的、原子化的（一个事实一句话）
+- 长期有效的（不是临时的状态）
+- 关于用户的偏好、习惯、身份、目标等
+- 或关于本机运行环境的长期事实（category=environment）：如操作系统/PowerShell
+  版本限制及可用替代写法、python/node 的实际路径与版本、环境类报错的
+  已验证解决方案。这类事实 importance 给 8-10，tags 含 "environment"
+
+工具执行观察（本轮工具返回的环境事实，如 shell 降级提示；可作为
+environment 类事实的直接来源）：
+{tool_observations}
+
+对话内容：
+[用户]: {user_message}
+[助手]: {assistant_message}
+
+已知事实（避免重复）：
+{existing_facts}
+
+以 JSON 数组格式输出，每项包含：
+- content: 事实内容（一句话，中文）
+- title: 事实的短标题（≤ 20 字，可独立概括内容，不要照抄整句；
+  例："用户偏好函数式编程"）
+- importance: 重要性 1-10（环境/版本类 8-10，偏好/身份类 7-9，普通事实 4-6）
+- category: **只允许以下三种**：
+  - preference：用户偏好、沟通风格、工作习惯、身份特征
+  - goal：用户当前目标、计划、关注方向
+  - environment：本机运行环境的长期事实（工具链/版本/路径/限制）
+- tags: 相关标签（1-3 个）
+
+**重要**：不要把 category 写成 fact 或 event，这两类无法被记忆系统正确处理。
+所有关于用户的事实都应归入 preference 或 goal；环境事实归入 environment。
+
+如果没有值得提取的事实，返回空数组 []。
+只输出 JSON，不要其他文字。"""
+
+>>>>>>> origin/main
 
 class MemoryExtractor:
     """基于 LLM 的记忆事实提取器

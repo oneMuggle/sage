@@ -31,7 +31,10 @@ from backend.api.v1.design_streaming import (
     sse_event as _sse_event,
     stream_studio_call as _stream_studio_call,
 )
+<<<<<<< HEAD
 from backend.compat.win7.pydantic_compat import ConfigDict
+=======
+>>>>>>> origin/main
 
 # Re-exported symbol: route tests patch `design_routes.get_design_studio`.
 from backend.design import get_design_studio  # noqa: F401

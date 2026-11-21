@@ -229,6 +229,24 @@ def _extract_document_text(content: bytes, ext: str) -> str:
     raise ValueError(f"unsupported document extension: {ext}")
 
 
+<<<<<<< HEAD
+=======
+def load_pdf_figure_manifest(store, media_ref, content):
+    """发送侧门面：读取/构建 PDF 图表清单（调用方在线程池执行）。
+
+    清单缓存到媒体同目录 ``<id>.figures.json``；裁图经 MediaStore 落盘。
+    失败返回空列表，不阻断附件注入。
+    """
+    from backend.services.attachment_pdf import get_or_build_figure_manifest
+
+    try:
+        return get_or_build_figure_manifest(store, media_ref, content)
+    except Exception:  # noqa: BLE001 — fail-safe：图清单不影响文本注入
+        logger.exception("PDF 图表清单构建失败，跳过")
+        return []
+
+
+>>>>>>> origin/main
 def _extract_pptx_text(content: bytes) -> str:
     """PPTX → 文本：逐页标题 / 正文段落 / 表格单元格 / 备注。
 
@@ -308,6 +326,7 @@ def _guard_office_zip_budget(content: bytes) -> None:
                 )
 
 
+<<<<<<< HEAD
 def load_pdf_figure_manifest(store, media_ref, content):
     """发送侧门面：读取/构建 PDF 图表清单（调用方在线程池执行）。
 
@@ -323,6 +342,8 @@ def load_pdf_figure_manifest(store, media_ref, content):
         return []
 
 
+=======
+>>>>>>> origin/main
 @router.get("/chat/attachments/{media_id}/text")
 async def get_chat_attachment_text(media_id: str) -> dict:
     """R37/R39: 读取已上传文档附件的全文（txt 直读、pdf/docx/xlsx/pptx 提取）。

@@ -102,6 +102,10 @@ _LAZY_TOOL_EXPORTS: Dict[str, str] = {
     "OfficeLatexdiffTool": ".office_latex_build_tool",
     "OfficeLintWordTool": ".office_lint_tool",
     "OfficeListTool": ".office_tool",
+<<<<<<< HEAD
+=======
+    "OfficeOoxmlTool": ".office_ooxml_tool",
+>>>>>>> origin/main
     "OfficeReadLatexTool": ".office_latex_tool",
     "OfficeReadPdfFormTool": ".office_pdf_tool",
     "OfficeReadPdfTool": ".office_pdf_tool",
@@ -319,6 +323,10 @@ __all__ = [
     "OfficeLatexdiffTool",
     "OfficeLintWordTool",
     "OfficeListTool",
+<<<<<<< HEAD
+=======
+    "OfficeOoxmlTool",
+>>>>>>> origin/main
     "OfficeReadLatexTool",
     "OfficeReadPdfFormTool",
     "OfficeReadPdfTool",

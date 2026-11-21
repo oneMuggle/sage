@@ -278,8 +278,13 @@ Sage **并非没有**浏览器工具：`browser_*` 工具组（CDP 驱动，含 
   - 前端：`BrowserPanel.test.tsx` 时间线、暂停/接管、i18n；
   - 漂移测试：`test_tool_bundles_parity`、`test_specialist_tool_packs_drift`、profiles 默认工具链、架构棘轮（两分支数值独立实测）。
 - **文档**：新增技术章节（main / win7 按各自最新编号顺延，约 §157）说明架构、安全模型、设置项；用户手册新增"让 Sage 操作网页"章节（含接管、站点授权、隐私说明）；i18n zh/en。
+<<<<<<< HEAD
   **实际编号**：技术 §162（[162-controlled-browser-use.md](../technical/162-controlled-browser-use.md)）、
   用户手册 §55（[55-browser-use.md](../user-manual/55-browser-use.md)）；zh/en 文案均已补齐。
+=======
+  **实际编号**：技术 §159（[159-controlled-browser-use.md](../technical/159-controlled-browser-use.md)）、
+  用户手册 §54（[54-browser-use.md](../user-manual/54-browser-use.md)）；zh/en 文案均已补齐。
+>>>>>>> origin/main
 - **指标**：`web_metrics` 扩展快照字符数、步骤数、确认次数、接管次数、失败原因分布，作为后续调优依据。
   **未实现**：本次未接入指标埋点，排障依赖日志与 `browser_action_log` 审计表。
 
@@ -320,7 +325,11 @@ Sage **并非没有**浏览器工具：`browser_*` 工具组（CDP 驱动，含 
 ### M6 测试、文档、双分支（1–2 人日）
 - [x] 全量测试 + win7 py38 适配（本分支直接基于 release/win7；main 同步另行处理）
 - [ ] cherry-pick main（pydantic v1/v2 适配）—— 不属于本分支范围
+<<<<<<< HEAD
 - [x] 技术/用户文档与 i18n（技术 §162 / 用户手册 §55，zh/en 均补齐）
+=======
+- [x] 技术/用户文档与 i18n（技术 §159 / 用户手册 §54，zh/en 均补齐）
+>>>>>>> origin/main
 - [ ] 指标埋点与基线 —— 未实现（未接入 `web_metrics`）
 
 ### 最终整分支审查修复波（2026-11-17，已完成）

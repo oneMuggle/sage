@@ -228,6 +228,7 @@ def _probe_chrome_major_safe() -> Optional[int]:
         return None
 
 
+<<<<<<< HEAD
 # ==================== 浏览器环境诊断（Phase D） ====================
 
 
@@ -254,6 +255,8 @@ def browser_check() -> dict:
     return run_all_checks()
 
 
+=======
+>>>>>>> origin/main
 # ---------------------------------------------------------------------------
 # 浏览器发现列表 API（设置页浏览器选择用）
 # ---------------------------------------------------------------------------
@@ -292,7 +295,11 @@ def _discover_all_browsers() -> List[DiscoveredBrowser]:
 
     def _get_version(exe_path: str) -> Optional[str]:
         """读取大版本号：版本目录扫描（Windows 上 --version 不输出且会拉起窗口）。"""
+<<<<<<< HEAD
         from backend.tools.browser_launcher import chromium_major_version
+=======
+        from backend.tools.browser_cdp import chromium_major_version
+>>>>>>> origin/main
 
         major = chromium_major_version(exe_path)
         return str(major) if major is not None else None

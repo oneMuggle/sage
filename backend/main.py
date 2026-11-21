@@ -519,6 +519,26 @@ def _finalize_pending_modules(reason: str) -> None:
             mark_module(name, STATE_DEGRADED, {"detail": reason})
 
 
+<<<<<<< HEAD
+=======
+def _mark_llm_configured() -> None:
+    """L2 就绪条件：LLM 端点是否已配置（只查配置，不发起网络请求）。
+
+    未配置时不记为 degraded —— 首次安装本来就是这种状态，设置页会引导
+    配置；detail 里保留 ``configured: False`` 供状态详情展示。
+    """
+    try:
+        from backend.orchestration.llm_factory import build_httpx_adapter_from_settings
+
+        if build_httpx_adapter_from_settings() is None:
+            mark_module("llm", STATE_READY, {"configured": False, "hint": "未配置 LLM 端点"})
+        else:
+            mark_module("llm", STATE_READY, {"configured": True})
+    except Exception as exc:  # noqa: BLE001 — 配置探测失败不阻断启动
+        mark_module("llm", STATE_DEGRADED, {"detail": str(exc)})
+
+
+>>>>>>> origin/main
 async def _deferred_startup_init(
     app: FastAPI,
     main_loop: asyncio.AbstractEventLoop,
@@ -558,7 +578,10 @@ async def _deferred_startup_init(
         # ── Scheduler 启动 + evolution 任务 + 定时备份 ──
         mark_module("scheduler", STATE_WARMING)
         scheduler_service.start()
+<<<<<<< HEAD
         _startup_mark("scheduler")
+=======
+>>>>>>> origin/main
         mark_module("scheduler", STATE_READY)
         from backend.services._evolution_register import _register_evolution_tasks
 
@@ -703,6 +726,7 @@ async def _deferred_startup_init(
 
             _arena_cfg = load_arena_automation_config()
             if _arena_cfg.enabled:
+<<<<<<< HEAD
                 from backend.services.arena_accounts import crypto_available
 
                 if not crypto_available():
@@ -736,6 +760,23 @@ async def _deferred_startup_init(
                     )
                     _startup_mark("arena")
                     mark_module("arena", STATE_READY, {"enabled": True})
+=======
+                _arena_dir = os.environ.get("SAGE_USER_DATA_DIR") or "backend/data"
+                _arena_db = str(Path(_arena_dir) / "arena_accounts.sqlite")
+                _arena_service = init_arena_service(
+                    db_path=_arena_db,
+                    encryption_key=get_or_create_master_key(),
+                    config=_arena_cfg,
+                )
+                init_registration_service(
+                    config=_arena_cfg, account_service=_arena_service
+                )
+                logger.info(
+                    "[deferred] Arena 自动化已启用（db=%s）", _arena_db
+                )
+                _startup_mark("arena")
+                mark_module("arena", STATE_READY, {"enabled": True})
+>>>>>>> origin/main
             else:
                 logger.info(
                     "[deferred] Arena 自动化未启用（enabled=false）"
@@ -748,6 +789,7 @@ async def _deferred_startup_init(
         # ── Design Studio ──
         try:
             from backend.data.design_repo import DesignRepo
+            from backend.design.craft_loader import CraftRuleRegistry
             from backend.design.design_studio import DesignStudio
             from backend.design.generator import DesignGenerator
             from backend.design.systems import DesignSystemRegistry
@@ -781,6 +823,10 @@ async def _deferred_startup_init(
                     systems=DesignSystemRegistry(_design_content_dir),
                     templates=DesignTemplateRegistry(_design_content_dir),
                     workspace_dir=_design_workspace,
+<<<<<<< HEAD
+=======
+                    craft_rules=CraftRuleRegistry(_design_content_dir),
+>>>>>>> origin/main
                 )
                 app.state.design_studio = design_studio
                 from backend.design import init_design_studio
@@ -1333,9 +1379,33 @@ async def lifespan(app: FastAPI):
     # S7-1 (P7): ChatService 无条件装配 —— runtime 路由复用其 tools 路径,
     # 与 API_MODE 无关 (此前 lifespan 默认 "hex" 恰好让 runtime 可用, 属于
     # 矛盾默认值的巧合而非设计); hex /chat 是否挂载由模块级 API_MODE 决定。
+<<<<<<< HEAD
     # Wire the MemoryLifecycleManager into ChatService so run_turn drives
     # set_current_turn (F4 — production caller for source_turn_id).
     # 2026-09-24 Win7 exit-code-3 诊断: try/except 包裹, 失败写 stderr.
+=======
+    from backend.api.hex_routes import get_chat_service
+
+    # 2026-09 修复: 覆盖工厂此前每个请求都新建 ChatService —— prompt
+    # 快照缓存(_system_prompt_snapshots)跨请求永不命中, app.state 上的
+    # 单例反而无人使用。注入单例访问器。
+    mark_module("memory", STATE_WARMING)
+    mark_module("chat_service", STATE_WARMING)
+    app.state.chat_service = _build_chat_service()
+    mark_module("memory", STATE_READY)
+    app.dependency_overrides[get_chat_service] = lambda: app.state.chat_service
+    # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
+    # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
+    app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
+    # M4: 定时任务 execute 模式装配 —— 把 ChatService 桥接到 APScheduler 后台线程。
+    # 任一依赖缺失会降级为 deliver（不阻塞启动）。
+    _wire_scheduler_executor(app, main_loop)
+
+    # M7 (2026-10-21): Harness 自进化埋点装配——工具/技能每次调用写入
+    # harness_components 累积 effectiveness 指标（usage_count / success_rate
+    # / avg_latency_ms），供 GET /api/v1/harness/components 消费。
+    # 装配顺序：必须在 harness_routes 挂载之前（依赖覆盖工厂依赖注入）。
+>>>>>>> origin/main
     try:
         from backend.api.hex_routes import get_chat_service
 
@@ -1371,6 +1441,7 @@ async def lifespan(app: FastAPI):
             )
             from backend.application.services.harness_service import HarnessService
 
+<<<<<<< HEAD
             install_recorder(HarnessRecorder(HarnessService(SqliteHarnessAdapter())))
             logger.info("harness recorder 已装配（工具/技能 effectiveness 埋点）")
         except Exception as exc:  # noqa: BLE001 — 埋点装配失败不得阻塞启动
@@ -1381,6 +1452,18 @@ async def lifespan(app: FastAPI):
         if app.state.memory_adapter is not None:
             try:
                 from backend.memory.tag_graph import build_tag_graph_async
+=======
+        install_recorder(HarnessRecorder(HarnessService(SqliteHarnessAdapter())))
+        logger.info("harness recorder 已装配（工具/技能 effectiveness 埋点）")
+    except Exception as exc:  # noqa: BLE001 — 埋点装配失败不得阻塞启动
+        logger.warning("harness recorder 装配失败（埋点变 no-op）: %s", exc)
+    mark_module("chat_service", STATE_READY)
+    _mark_llm_configured()
+    logger.info(
+        "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
+        API_MODE,
+    )
+>>>>>>> origin/main
 
                 build_tag_graph_async(
                     app.state.memory_adapter.memory_manager.episodic,
@@ -1891,9 +1974,12 @@ from backend.api.v1.design_routes import router as design_router
 
 app.include_router(design_router, prefix="/api/v1")
 
+<<<<<<< HEAD
 # Plugins: /api/v1/plugins/{status,invoke,install,...}
 app.include_router(plugin_router, prefix="/api/v1")
 
+=======
+>>>>>>> origin/main
 # Design resources: /api/v1/design/{outline,projects/:id/chart,source/preview}
 from backend.api.v1.design_resources_routes import (
     router as design_resources_router,

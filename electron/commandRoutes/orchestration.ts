@@ -10,6 +10,23 @@ export const orchestrationRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/snapshot`,
   },
 
+  // M1: subagent transcript — GET /orch/runs/{run_id}/tasks/{task_id}/transcript
+  // Message-level process records (goal/reasoning/assistant/tool_call/...).
+  orchestration_get_task_transcript: {
+    method: 'GET',
+    path: (a) => {
+      const search = new URLSearchParams();
+      if (a.after_seq !== undefined) search.set('after_seq', String(a.after_seq));
+      if (a.limit !== undefined) search.set('limit', String(a.limit));
+      const qs = search.toString();
+      return (
+        `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}` +
+        `/tasks/${encodeURIComponent(String(a.task_id ?? a.taskId))}/transcript` +
+        (qs ? `?${qs}` : '')
+      );
+    },
+  },
+
   // Phase 3: parent agent steering — POST /orch/runs/{run_id}/tasks/{task_id}/steer
   // Appends a context message (constraint/clarification/additional_context/...)
   // that the executor drains at the next boundary. Returns 409 task_state_changed

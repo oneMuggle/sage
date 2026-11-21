@@ -24,6 +24,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -149,6 +150,7 @@ def _windows_candidates() -> List[Path]:
     return [Path(base) / rel for base in bases if base for rel in (chrome_rel, edge_rel)]
 
 
+<<<<<<< HEAD
 def _discover_embedded_env() -> Optional[Dict[str, Any]]:
     """读取 Electron 注入的内置浏览器环境（端口/token）；不完整返回 None。"""
     if os.environ.get("SAGE_EMBEDDED_BROWSER", "").strip() != "1":
@@ -189,6 +191,55 @@ def discover_browser_executable() -> Optional[str]:
     """按 环境变量 → 用户设置 → 内置兜底 → 平台能力发现 顺序找浏览器。"""
     cap = discover_and_select(_get_user_browser_path())
     return cap.executable if cap else None
+=======
+def _get_user_browser_path() -> Optional[str]:
+    """从设置中读取用户配置的浏览器路径。
+
+    `(embedded)` 是设置页「Sage 内置浏览器」选项的哨兵值，不是文件路径，
+    需要原样返回交由发现链解析。
+    """
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        path = SettingsRepository().get("browser_path")
+        if path == EMBEDDED_EXECUTABLE:
+            return EMBEDDED_EXECUTABLE
+        if path and Path(path).is_file():
+            return path
+    except Exception as exc:  # noqa: BLE001 — 设置读取失败时回退到平台发现
+        logger.debug("读取用户浏览器路径设置失败: %s", exc)
+    return None
+
+
+def discover_browser_executable() -> Optional[str]:  # noqa: PLR0911 — 浏览器发现逻辑需要多级 fallback
+    """按 环境变量 → 用户设置 → 内置兜底 → 平台路径/PATH 顺序找 Chromium 系浏览器。"""
+    # 环境变量覆盖（运维/CI/排障）
+    env_override = os.environ.get("SAGE_BROWSER_PATH")
+    if env_override and Path(env_override).is_file():
+        return env_override
+    # 用户设置覆盖（设置页显式选择；"(embedded)" 哨兵 → 内置内核）
+    user_override = _get_user_browser_path()
+    if user_override == EMBEDDED_EXECUTABLE:
+        user_override = EMBEDDED_EXECUTABLE if _discover_embedded_env() else None
+    if user_override:
+        return user_override
+    # 内置兜底（仅 Win7 / 强制开关时注入）
+    if _discover_embedded_env():
+        return EMBEDDED_EXECUTABLE
+    # Windows 平台路径
+    if os.name == "nt":
+        for candidate in _windows_candidates():
+            if candidate.is_file():
+                return str(candidate)
+        return None
+    # POSIX：Linux/WSL 走 PATH
+    for name in _LINUX_CANDIDATES:
+        found = shutil.which(name)
+        if found:
+            return found
+    # macOS 应用包路径
+    return _darwin_candidates()
+>>>>>>> origin/main
 
 
 def _darwin_candidates() -> Optional[str]:
@@ -201,6 +252,64 @@ def _darwin_candidates() -> Optional[str]:
         if candidate.is_file():
             return str(candidate)
     return None
+
+
+#: Chromium 在 exe 同级保留的版本目录名（如 107.0.5304.87）
+_VERSION_DIR_RE = re.compile(r"(\d+)\.\d+\.\d+\.\d+")
+
+#: --headless=new 自 Chrome 109 起提供；更老内核（Win7 的 Edge 100 /
+#: Chrome 107）只能使用旧无头模式。
+NEW_HEADLESS_MIN_MAJOR = 109
+
+
+def _major_from_version_dirs(executable: str) -> Optional[int]:
+    """exe 同级 ``X.Y.Z.W/`` 版本目录的最大大版本号；无则 None（不 spawn 进程）。"""
+    try:
+        exe_dir = os.path.dirname(executable)
+        versions = [
+            int(match.group(1))
+            for name in os.listdir(exe_dir)
+            for match in [_VERSION_DIR_RE.fullmatch(name)]
+            if match and os.path.isdir(os.path.join(exe_dir, name))
+        ]
+        if versions:
+            return max(versions)
+    except OSError:
+        pass
+    return None
+
+
+def chromium_major_version(executable: str) -> Optional[int]:
+    """探测 Chromium 系浏览器大版本（版本目录优先；Windows 不执行 --version）。"""
+    major = _major_from_version_dirs(executable)
+    if major is not None:
+        return major
+    if os.name == "nt":
+        return None
+    try:
+        completed = subprocess.run(  # noqa: S603 — 可执行路径来自受控发现逻辑
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = _VERSION_DIR_RE.search(completed.stdout or "")
+    return int(match.group(1)) if match else None
+
+
+def headless_flag(executable: str) -> str:
+    """按内核版本选择无头开关：旧内核（< 109）回退旧无头模式。
+
+    每次启动命令构造都会调用，因此只做目录扫描（不 spawn 子进程）；
+    版本未知时保持现行默认新无头。
+    """
+    major = _major_from_version_dirs(executable)
+    if major is not None and major < NEW_HEADLESS_MIN_MAJOR:
+        return "--headless"
+    return "--headless=new"
 
 
 # ---------------------------------------------------------------------------
@@ -793,6 +902,7 @@ def launch_browser(
     Raises:
         BrowserCDPError: 找不到浏览器 / 启动超时 / 实例数超限。
     """
+<<<<<<< HEAD
     # 设置页选择的浏览器优先于 Win7 内置兜底；显式环境变量仍最高（见 discover_and_select）
     cap = discover_and_select(_get_user_browser_path())
     if not cap:
@@ -800,6 +910,15 @@ def launch_browser(
             "未找到 Chrome/Edge/Firefox 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH / SAGE_FIREFOX_PATH 指定可执行文件路径"
         )
     if cap.browser_type == BrowserType.EMBEDDED:
+=======
+    embedded = _discover_embedded_env()
+    env_override = os.environ.get("SAGE_BROWSER_PATH", "")
+    env_path_ok = bool(env_override) and Path(env_override).is_file()
+    user_choice = _get_user_browser_path()
+    # 优先级与 discover_browser_executable 保持一致：显式环境变量 / 用户选择
+    # 的真实浏览器优先于 Win7 内置兜底内核；仅未选择或显式选择内置时用内置。
+    if embedded and not env_path_ok and user_choice in (None, EMBEDDED_EXECUTABLE):
+>>>>>>> origin/main
         session_id = browser_id or uuid.uuid4().hex[:12]
         bridge_token = getattr(cap.launcher, "token", "")
         bridge_query = (

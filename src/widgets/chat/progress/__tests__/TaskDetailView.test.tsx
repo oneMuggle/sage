@@ -21,6 +21,18 @@ vi.mock('../../../../shared/api/orchRunClient', () => ({
   },
 }));
 
+vi.mock('../../../../shared/api/orchRunControlClient', () => ({
+  orchRunControlClient: {
+    getTaskTranscript: vi.fn().mockResolvedValue({
+      run_id: 'run-1',
+      task_id: 't1',
+      messages: [],
+      next_seq: 0,
+      has_more: false,
+    }),
+  },
+}));
+
 // R114: 有工具名事件时视图会启用插件名单钩子；本套件不测归属后缀
 // （见 PluginOwnerSuffix.test.tsx），固定返回 null 避免真实取数。
 vi.mock('../../../../shared/lib/hooks/usePluginNames', () => ({
@@ -56,6 +68,20 @@ describe('TaskDetailView', () => {
     useRunControlStore.getState().resetAll();
   });
 
+<<<<<<< HEAD
+=======
+  it('切换到「对话」tab 渲染 Transcript 面板', async () => {
+    const board = buildBoard();
+    render(<TaskDetailView board={board} taskId="t1" onBack={vi.fn()} />);
+
+    expect(screen.queryByTestId('task-transcript-panel')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('task-detail-tab-transcript'));
+
+    expect(await screen.findByTestId('task-transcript-panel')).toBeInTheDocument();
+  });
+
+>>>>>>> origin/main
   it('run 已登记进 runControlStore 时渲染事件时间线与 steering 入口', () => {
     const board = buildBoard();
     const store = useRunControlStore.getState();
