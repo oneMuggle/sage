@@ -31,7 +31,7 @@ from backend.services.browser_control import (
     get_browser_control,
     reset_browser_control_for_tests,
 )
-from backend.tools import browser_cdp, browser_observe, browser_tool, web_render
+from backend.tools import browser_cdp, browser_frames, browser_observe, browser_tool, web_render
 from backend.tools.browser_cdp import BrowserSession, BrowserSessionManager
 from backend.tools.browser_tool import (
     BrowserCloseTool,
@@ -335,12 +335,23 @@ def stubbed(monkeypatch):
         # 与 location.href 守卫同理，避免打乱既有用例的 CDP 调用断言。
         if method == "Browser.setDownloadBehavior":
             return {}
+        # 全帧巡检：Page.* 缺省应答不消耗结果队列（默认只有主 frame）。
+        if method == "Page.enable":
+            return {}
+        if method == "Page.getFrameTree":
+            return _fake_cdp.frame_tree
+        if method == "Page.createIsolatedWorld":
+            return {"executionContextId": 1}
         calls.append({"method": method, "params": params or {}, "target": target_id})
         return _fake_cdp.results.pop(0)
 
     _fake_cdp.results = []  # type: ignore[attr-defined]
+    _fake_cdp.frame_tree = {  # type: ignore[attr-defined]
+        "frameTree": {"frame": {"id": "main", "url": "https://x/"}}
+    }
     monkeypatch.setattr(browser_tool, "cdp_command", _fake_cdp)
     monkeypatch.setattr(web_render, "cdp_command", _fake_cdp)
+    monkeypatch.setattr(browser_frames, "cdp_command", _fake_cdp)
 
     class _FakeClock:
         def __init__(self) -> None:
@@ -353,7 +364,7 @@ def stubbed(monkeypatch):
             self.now += seconds
 
     monkeypatch.setattr(web_render, "time", _FakeClock())
-    return SimpleNamespace(session=session, calls=calls, results=_fake_cdp.results)
+    return SimpleNamespace(session=session, calls=calls, results=_fake_cdp.results, cdp=_fake_cdp)
 
 
 def _tool(cls):
@@ -519,6 +530,74 @@ def test_snapshot_non_json_payload_returns_failure(stubbed):
     result = _tool(BrowserSnapshotTool).execute(browser_id="b1")
     assert result.success is False
     assert "页面快照返回异常" in result.error
+
+
+def _frame_tree(*children):
+    return {
+        "frameTree": {
+            "frame": {"id": "main", "url": "https://x/"},
+            "childFrames": [{"frame": dict(child)} for child in children],
+        }
+    }
+
+
+def test_snapshot_merges_child_frame_elements(stubbed):
+    stubbed.cdp.frame_tree = _frame_tree(
+        {"id": "f1", "url": "https://x/brief.aspx", "name": "iframeResult"}
+    )
+    stubbed.results.append(
+        {"result": {"value": _snapshot_payload([_snapshot_element("e1")], text="主")}}
+    )
+    stubbed.results.append(
+        {
+            "result": {
+                "value": _snapshot_payload(
+                    [_snapshot_element("e2", role="link", name="论文A")], text="结果"
+                )
+            }
+        }
+    )
+
+    result = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+
+    assert result.success is True
+    assert [el["ref"] for el in result.content["elements"]] == ["e1", "e2"]
+    assert result.content["elements"][1]["frame_url"] == "https://x/brief.aspx"
+    assert result.content["iframes_scanned"] == 1
+    assert result.content["frames"][0]["state"] == "scanned"
+    assert browser_tool._SNAPSHOT_FRAME_REFS["b1"]["e2"]["frame_id"] == "f1"
+
+
+def test_snapshot_skips_blocked_child_frame(stubbed, monkeypatch):
+    stubbed.cdp.frame_tree = _frame_tree({"id": "f1", "url": "https://other.test/brief"})
+    monkeypatch.setattr(browser_tool, "_safety_check_site", lambda sid, url: "block")
+    stubbed.results.append({"result": {"value": _snapshot_payload([_snapshot_element("e1")])}})
+
+    result = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+
+    assert result.success is True
+    assert result.content["iframes_scanned"] == 0
+    assert result.content["frames"][0]["state"] == "blocked"
+    assert [el["ref"] for el in result.content["elements"]] == ["e1"]
+
+
+def test_snapshot_falls_back_when_frame_api_unavailable(stubbed, monkeypatch):
+    def boom(*args, **kwargs):
+        raise browser_cdp.BrowserCDPError("no frame tree")
+
+    monkeypatch.setattr(browser_frames, "list_frames", boom)
+    stubbed.results.append({"result": {"value": _snapshot_payload([_snapshot_element("e1")])}})
+    stubbed.results.append({"result": {"value": _snapshot_payload([_snapshot_element("e1")])}})
+
+    result = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+
+    assert result.success is True
+    expressions = [
+        call["params"].get("expression", "")
+        for call in stubbed.calls
+        if call["method"] == "Runtime.evaluate"
+    ]
+    assert "var INCLUDE_IFRAMES = true;" in expressions[-1]
 
 
 
@@ -1567,12 +1646,23 @@ def autolaunch(monkeypatch):
         # 避免打乱既有用例的 CDP 调用断言。
         if method == "Browser.setDownloadBehavior":
             return {}
+        # 全帧巡检：Page.* 缺省应答不消耗结果队列（默认只有主 frame）。
+        if method == "Page.enable":
+            return {}
+        if method == "Page.getFrameTree":
+            return _fake_cdp.frame_tree
+        if method == "Page.createIsolatedWorld":
+            return {"executionContextId": 1}
         calls.append({"method": method, "params": params or {}, "target": target_id})
         return _fake_cdp.results.pop(0)
 
     _fake_cdp.results = []  # type: ignore[attr-defined]
+    _fake_cdp.frame_tree = {  # type: ignore[attr-defined]
+        "frameTree": {"frame": {"id": "main", "url": "https://x/"}}
+    }
     monkeypatch.setattr(browser_tool, "cdp_command", _fake_cdp)
     monkeypatch.setattr(web_render, "cdp_command", _fake_cdp)
+    monkeypatch.setattr(browser_frames, "cdp_command", _fake_cdp)
 
     class _FakeClock:
         def __init__(self) -> None:

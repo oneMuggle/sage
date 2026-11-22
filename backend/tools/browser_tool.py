@@ -36,6 +36,7 @@ from backend.services.browser_control import (
     get_browser_control,
 )
 
+from . import browser_frames
 from .base import BaseTool, ToolResult, ToolSchema
 from .browser_cdp import (
     RESERVED_BROWSER_ID,
@@ -59,8 +60,12 @@ from .browser_observe import (
     SNAPSHOT_INTERACTIVE_MAX_DEFAULT,
     STALE_REF_ERROR,
     STALE_REF_INFO,
+    TARGET_NAME_SOURCE_JS,
+    build_frame_ref_expression,
+    build_frame_target_expression,
     build_ref_expression,
     build_snapshot_expression,
+    merge_snapshot_payloads,
     parse_key_combo,
     parse_snapshot_payload,
 )
@@ -137,6 +142,10 @@ _LAST_PAGE: Dict[str, Dict[str, str]] = {}
 
 #: 受控浏览器每会话最近一次快照的登录墙判断
 _LAST_LOGIN_WALL: Dict[str, bool] = {}
+
+#: 最近一次快照中 ref → 所属子 frame 的归属（跨 frame 交互定位用）。
+#: 结构：browser_id -> ref -> {frame_id, frame_url, name}；新快照覆盖写入。
+_SNAPSHOT_FRAME_REFS: Dict[str, Dict[str, Dict[str, str]]] = {}
 
 
 def _error(exc: BrowserCDPError) -> ToolResult:
@@ -1502,6 +1511,121 @@ class BrowserNavigateTool(BaseTool):
         )
 
 
+def _coerce_frame_payload(value: Any) -> Optional[Dict[str, Any]]:
+    """把 frame 快照返回值（dict 或 JSON 字符串）归一为 dict；异常返回 None。"""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def _collect_frame_snapshot(
+    session: BrowserSession,
+    main_payload: Dict[str, Any],
+    mode: str,
+    include_offscreen: bool,
+) -> Optional[
+    Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Dict[str, str]]]
+]:
+    """CDP 巡检所有子 frame 的快照（跨域 / frameset / 多层嵌套）。
+
+    返回 ``(payloads, frames_meta, ref_map)``；``payloads`` 与 ``frames_meta``
+    一一对应（被策略拦截或读取失败的 frame 对应空 payload）。CDP frame API
+    不可用时返回 ``None``，由调用方回退页面内同源 iframe 遍历。
+    """
+    try:
+        frames = browser_frames.list_frames(session)
+    except BrowserCDPError as exc:
+        logger.debug("CDP frame tree 不可用，回退页面内 iframe 遍历: %s", exc)
+        return None
+    children = [frame for frame in frames if not frame.is_main]
+    if not children:
+        return [], [], {}
+    try:
+        next_ref = max(1, int(main_payload.get("next_ref") or 0))
+    except (TypeError, ValueError):
+        next_ref = 1
+
+    payloads: List[Dict[str, Any]] = []
+    metas: List[Dict[str, Any]] = []
+    ref_map: Dict[str, Dict[str, str]] = {}
+    scanned_children = children[: browser_frames.MAX_FRAMES]
+    truncated_children = children[browser_frames.MAX_FRAMES :]
+    for frame in scanned_children:
+        meta: Dict[str, Any] = {
+            "frame_id": frame.frame_id,
+            "url": frame.url,
+            "name": frame.name,
+            "state": "scanned",
+            "elements": 0,
+            "text_len": 0,
+        }
+        # 跨 frame 读取绕过同源策略：先过站点策略，非 allow 一律不读内容。
+        decision = _safety_check_site(session.browser_id, frame.url) if frame.url else "allow"
+        if decision != "allow":
+            meta["state"] = "blocked" if decision == "block" else "needs_confirmation"
+            payloads.append({})
+            metas.append(meta)
+            continue
+        try:
+            context_id = browser_frames.create_world(session, frame.frame_id)
+            expression = build_snapshot_expression(
+                mode=mode,
+                max_collect=SNAPSHOT_HARD_COLLECT_CAP,
+                include_offscreen=include_offscreen,
+                include_iframes=False,
+                ref_offset=next_ref,
+                frame_url=frame.url,
+            )
+            payload = _coerce_frame_payload(
+                browser_frames.evaluate_in_context(session, expression, context_id)
+            )
+            if payload is None:
+                raise BrowserCDPError("frame 快照返回异常")
+        except BrowserCDPError as exc:
+            logger.debug("frame 快照失败 frame=%s: %s", frame.frame_id, exc)
+            meta["state"] = "error"
+            payloads.append({})
+            metas.append(meta)
+            continue
+        payloads.append(payload)
+        metas.append(meta)
+        elements = [item for item in payload.get("elements") or [] if isinstance(item, dict)]
+        meta["elements"] = len(elements)
+        meta["text_len"] = len(str(payload.get("text") or ""))
+        for item in elements:
+            ref = str(item.get("ref") or "")
+            if ref:
+                ref_map[ref] = {
+                    "frame_id": frame.frame_id,
+                    "frame_url": frame.url,
+                    "name": str(item.get("name") or ""),
+                }
+        try:
+            next_ref = max(next_ref, int(payload.get("next_ref") or 0))
+        except (TypeError, ValueError):
+            continue
+
+    for frame in truncated_children:
+        payloads.append({})
+        metas.append(
+            {
+                "frame_id": frame.frame_id,
+                "url": frame.url,
+                "name": frame.name,
+                "state": "truncated",
+                "elements": 0,
+                "text_len": 0,
+            }
+        )
+    return payloads, metas, ref_map
+
+
 class BrowserSnapshotTool(BaseTool):
     """读取当前页面：无障碍树交互元素（带 ref）/ 文本正文。"""
 
@@ -1582,8 +1706,45 @@ class BrowserSnapshotTool(BaseTool):
                 mode=mode,
                 max_collect=SNAPSHOT_HARD_COLLECT_CAP,
                 include_offscreen=bool(include_offscreen),
+                include_iframes=False,
             )
-            payload = _evaluate_json(session, expression, None)
+            raw_payload = _evaluate_json(session, expression, None)
+            payload_dict = _coerce_frame_payload(raw_payload)
+            if payload_dict is None:
+                # 非 JSON 交由 parse_snapshot_payload 统一报错，不重复抓取
+                payload: Any = raw_payload
+                _SNAPSHOT_FRAME_REFS.pop(session.browser_id, None)
+            else:
+                frame_result = _collect_frame_snapshot(
+                    session, payload_dict, mode, bool(include_offscreen)
+                )
+                if frame_result is None:
+                    # CDP frame API 不可用：回退页面内同源 iframe 遍历（旧路径）
+                    payload = _evaluate_json(
+                        session,
+                        build_snapshot_expression(
+                            mode=mode,
+                            max_collect=SNAPSHOT_HARD_COLLECT_CAP,
+                            include_offscreen=bool(include_offscreen),
+                            include_iframes=True,
+                        ),
+                        None,
+                    )
+                    _SNAPSHOT_FRAME_REFS.pop(session.browser_id, None)
+                else:
+                    frame_payloads, frames_meta, ref_map = frame_result
+                    if frame_payloads:
+                        payload = merge_snapshot_payloads(
+                            payload_dict, frame_payloads, frames_meta
+                        )
+                    elif frames_meta:
+                        payload = dict(payload_dict)
+                        payload["frames"] = frames_meta
+                    else:
+                        payload = payload_dict
+                    if any(meta.get("state") == "truncated" for meta in frames_meta):
+                        payload["iframes_truncated"] = True
+                    _SNAPSHOT_FRAME_REFS[session.browser_id] = ref_map
         except BrowserCDPError as exc:
             return _meta_error(exc, session, "snapshot")
         content = parse_snapshot_payload(
@@ -1596,6 +1757,21 @@ class BrowserSnapshotTool(BaseTool):
         if content.get("error"):
             return _meta_result(
                 ToolResult(success=False, error=str(content["error"])), session, "snapshot"
+            )
+        pending_frames = [
+            frame
+            for frame in content.get("frames") or []
+            if isinstance(frame, dict)
+            and frame.get("state") in ("blocked", "needs_confirmation")
+        ]
+        if pending_frames:
+            note = "；".join(
+                f"{frame.get('state')}: {browser_safety.domain_of(str(frame.get('url') or ''))}"
+                for frame in pending_frames
+            )
+            hint = str(content.get("hint") or "")
+            content["hint"] = (hint + "；" if hint else "") + (
+                f"部分子 frame 未读取（{note}）；可在设置→网络→浏览器站点策略中放行"
             )
         # M4 注入告警：命中只标注 trust/injection_warning，保留原有字段，不阻断
         injection_warning = browser_safety.scan_untrusted_text(
@@ -2201,6 +2377,7 @@ class BrowserCloseTool(BaseTool):
         get_browser_control().reset(session.browser_id)
         browser_safety.reset_session(session.browser_id)
         _LAST_PAGE.pop(session.browser_id, None)
+        _SNAPSHOT_FRAME_REFS.pop(session.browser_id, None)
         _LAST_LOGIN_WALL.pop(session.browser_id, None)
         return ToolResult(
             success=True,
