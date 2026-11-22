@@ -37,11 +37,16 @@ triggers: []
    不要立即判断失败——SPA 搜索请求可能还在进行，请等待 2–3 秒后重新
    `browser_snapshot`；或改用 `browser_navigate wait_for=...` 直接导航到
    结果 URL（见上方）。
-5. **知网内网镜像库**部分版本把搜索结果放在 `<iframe>` 内，
-   `browser_snapshot` 会自动扫描 same-origin iframe 内容并标注 `frame_url`；
-   若 `elements` 中出现 `role: "iframe"` 且 `frame_url` 指向结果页，
-   可用 `browser_navigate url=<frame_url>` 直接进入该 frame。
-6. 热门/高频检索可能触发滑块验证码：停下来请用户在窗口中完成，
+5. **知网内网镜像库 / 旧版 KNS 5.5** 部分版本把搜索结果放在 `<iframe>` / `frameset/<frame>` 内，
+   `browser_snapshot` 现已通过 CDP 自动扫描**任意子 frame**（同源 / 跨域 / frameset / 多层嵌套），
+   结果里直接含结果链接。每个来自子 frame 的元素都带 `frame_url` 字段标注来源；
+   若仍有 `frames_needing_confirmation` 提示，说明该 frame 域名未授权，请在设置→网络→浏览器站点策略中放行。
+   **旧版入口 URL 形态**：`https://<host>/kns/brief/result.aspx?dbprefix=...` 或 `.../Kns55/brief/...`。
+   结果页面 URL 不要直接复制到新窗口——`QueryID` 会话态缺失会让页面空白。
+6. **翻页 / 详情点击**：
+   - 翻页按钮 `#Page_next`、条目里的详情链接都在结果 frame 内——**必须用 `browser_interact ref=<ref>` 点击**，不要按文本定位（`text=` 只作用于顶层文档）。
+   - 每次翻页 / 进详情后**重新 `browser_snapshot`**，旧 ref 失效。
+7. 热门/高频检索可能触发滑块验证码：停下来请用户在窗口中完成，
    不要自动破解。
 
 ## 2. 打开文献详情
