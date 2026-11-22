@@ -20,18 +20,21 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from .export import export_run
-from .gates import run_gates
+from .gates import extract_claims, run_gates, verify_claims
 from .guidance import render_search_guidance
 from .models import profile_from_dict
 from .profile_store import get_default_store
 from .recording import write_profile_draft
 from .run_store import (
     create_run,
+    list_papers,
     load_run,
+    read_draft,
     record_evidence,
     record_papers,
     record_query,
     run_status,
+    save_claims,
     save_draft,
     save_outline,
 )
@@ -102,6 +105,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     gate = sub.add_parser("gate")
     gate.add_argument("--run", required=True)
+
+    extract = sub.add_parser("extract-claims")
+    extract.add_argument("--run", required=True)
+
+    verify = sub.add_parser("verify-claims")
+    verify.add_argument("--run", required=True)
 
     export = sub.add_parser("export")
     export.add_argument("--run", required=True)
@@ -187,6 +196,30 @@ def _dispatch(args: argparse.Namespace) -> int:  # noqa: PLR0911 — 每个子�
         report = run_gates(run)
         _print(report.to_dict())
         return 0 if report.ok else 1
+
+    if args.command == "extract-claims":
+        claims = extract_claims(read_draft(run))
+        save_claims(run, claims)
+        _print({"ok": True, "claims": len(claims)})
+        return 0
+
+    if args.command == "verify-claims":
+        claims = extract_claims(read_draft(run))
+        paper_keys = {p.paper_key for p in list_papers(run)}
+        verified = verify_claims(claims, paper_keys)
+        save_claims(run, verified)
+        verdicts: Dict[str, int] = {}
+        for claim in verified:
+            verdicts[claim.verdict] = verdicts.get(claim.verdict, 0) + 1
+        _print(
+            {
+                "ok": True,
+                "claims": len(verified),
+                "verdicts": verdicts,
+                "items": [claim.to_dict() for claim in verified],
+            }
+        )
+        return 0 if not verdicts.get("unresolved") and not verdicts.get("unsupported") else 1
 
     if args.command == "export":
         paths = export_run(run)

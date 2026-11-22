@@ -408,10 +408,16 @@ compliance:
 
 ### M2：EvidenceLedger 与引用核验（2 周）
 
-- [ ] 统一 EvidenceLedger 接口，收敛 Word references、附件 ChunkCitation、Wiki S1/S2、专家 knowledge sources、Zotero BibTeX 的引用记录。
-- [ ] 三层引用核验：标记解析、DOI/元数据 2-of-3、claim support（含 PDF 页定位）。
-- [ ] 核验报告 UI（artifact）：支持、待复核、不支持、无法核验四态；不静默删除引用。
-- [ ] Rubric 评审：方法、覆盖、逻辑、写作四维评分 + 问题清单；明确"模拟评审，非同行评审"。
+> **M2a 实施中（2026-11-22）**：Claims 账本 + 存在性/元数据 schema 核验 + CLI。
+
+- [ ] 统一 EvidenceLedger 接口，收敛 Word references、附件 ChunkCitation、Wiki S1/S2、专家 knowledge sources、Zotero BibTeX 的引用记录（M2b）。
+- [x] Claims 账本：`claims.jsonl`（claim_id / section / text / citation_keys / verdict / notes）。
+- [x] 提取 claim：从 draft.md 按段落抽取带 `[cite:KEY]` 的主张。
+- [x] 存在性 + 元数据 schema 核验（Layer 1 + Layer 2a）：引用 key 在文献池、DOI/arXiv/标题/作者/年份字段完整。
+- [ ] 外部 DOI/元数据 2-of-3 共识核验（Layer 2b，需 REST 调用，M2b）。
+- [ ] 核验报告 UI：支持 / 待复核 / 不支持 / 无法核验四态（M2b）。
+- [ ] claim support（Layer 3，含 PDF 页定位，需 LLM 调用，M2b）。
+- [ ] Rubric 评审：方法/覆盖/逻辑/写作四维评分 + 问题清单；明确"模拟评审，非同行评审"。
 - [ ] 引用样式：在 GB/T 7714 / APA 基础上评估 CSL/citeproc 或至少补 IEEE。
 
 ### M3：产出层集成（2–3 周）
