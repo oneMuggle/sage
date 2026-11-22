@@ -258,8 +258,8 @@ def apply_evidence_support(
         if claim.verdict in (ClaimVerdict.UNRESOLVED, ClaimVerdict.UNSUPPORTED):
             result.append(claim)
             continue
-        supported_keys = [key for key in claim.citation_keys if key in evidence_keys]
-        if not supported_keys:
+        missing = [key for key in claim.citation_keys if key not in evidence_keys]
+        if missing:
             result.append(
                 Claim(
                     claim_id=claim.claim_id,
@@ -267,7 +267,10 @@ def apply_evidence_support(
                     text=claim.text,
                     citation_keys=claim.citation_keys,
                     verdict=ClaimVerdict.FLAGGED,
-                    notes="引用文献未抽取证据；语义支持待人工/LLM 核验",
+                    notes=(
+                        f"引用文献未抽取证据: {', '.join(missing)}；"
+                        "语义支持待人工/LLM 核验"
+                    ),
                     metadata_schema_ok=claim.metadata_schema_ok,
                 )
             )

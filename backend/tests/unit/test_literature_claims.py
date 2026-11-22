@@ -212,6 +212,16 @@ class TestEvidenceSupport:
         result = apply_evidence_support(claims, evidence)
         assert result[0].verdict == "supported"
 
+    def test_claim_missing_some_evidence_is_flagged(self):
+        from backend.literature.pipeline_models import Claim, EvidenceRecord
+        from backend.literature.verify import apply_evidence_support
+
+        claims = [Claim("c1", "body", "x", ("p1", "p2"), verdict="supported")]
+        evidence = [EvidenceRecord("e1", "p1", "finding", "发现")]
+        result = apply_evidence_support(claims, evidence)
+        assert result[0].verdict == "flagged"
+        assert "p2" in result[0].notes
+
     def test_unresolved_claim_is_unchanged(self):
         from backend.literature.pipeline_models import Claim
         from backend.literature.verify import apply_evidence_support
