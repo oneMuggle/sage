@@ -74,6 +74,7 @@ from backend.orchestration.orch_settings import load_orch_settings, resolve_tool
 from backend.orchestration.subagent_events import SubagentEventSink
 from backend.orchestration.task_registry import TaskRegistry
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
+from backend.tools.bash_tool import BashOutputTool, BashTool
 from backend.tools.browser_tool import (
     BrowserCloseTool,
     BrowserCookiesTool,
@@ -85,10 +86,20 @@ from backend.tools.browser_tool import (
     BrowserSnapshotTool,
 )
 from backend.tools.download_tool import HttpDownloadTool
-from backend.tools.file_tool import ListDirTool, ReadFileTool
+from backend.tools.edit_tool import EditTool
+from backend.tools.file_tool import ListDirTool, ReadFileTool, WriteFileTool
 from backend.tools.memory_tool import MemorySearchTool
 from backend.tools.network_config import load_network_policy
+from backend.tools.patch_tool import ApplyPatchTool
 from backend.tools.registry import ToolRegistry
+from backend.tools.subagent_roles import (
+    EXPLORE_SYSTEM_PROMPT,
+    SubagentRole,
+    resolve_subagent_role,
+    role_max_iterations,
+    role_system_prompt,
+    schema_role_options,
+)
 from backend.tools.web_tool import WebFetchTool, WebSearchTool
 
 logger = logging.getLogger(__name__)
@@ -167,17 +178,9 @@ def _resolve_timeout() -> float:
 # docstring. Overridable via env for tests/ops.
 SUBAGENT_TIMEOUT_S: float = _resolve_timeout()
 
-SUBAGENT_SYSTEM_PROMPT = (
-    "You are a focused Sage sub-agent performing a delegated task. "
-    "You have READ-ONLY tools: file reading, directory listing, web search/fetch, "
-    "memory search — plus a controlled browser channel "
-    "(browser_launch/navigate/snapshot/interact/cookies/close) for pages that "
-    "need JavaScript rendering or a login state. You cannot modify files or run "
-    "commands. File tools can only read the delegated scratch/workspace content; "
-    "web fetch and browser navigation reject private or local destinations and "
-    "are subject to network mode and approval gates. Complete the task concisely "
-    "and return your final answer as plain text."
-)
+#: 默认（explore）子代理提示词 —— 文本定义在 subagent_roles，保留本名字供
+#: 既有导入方使用。
+SUBAGENT_SYSTEM_PROMPT = EXPLORE_SYSTEM_PROMPT
 
 
 def _new_subagent_workspace() -> Path:
@@ -256,6 +259,7 @@ def build_readonly_tool_registry(
     registry.register(BrowserCloseTool(policy=policy))
     registry.register(MemorySearchTool(policy=policy))
     registry._owned_workspace_root = owned_root  # noqa: SLF001 — lifecycle metadata
+    registry._resolved_policy = policy  # noqa: SLF001 — M3.1 角色工具集复用同一隔离策略
     return registry
 
 
@@ -295,16 +299,20 @@ class AgentTool(BaseTool):
         self._main_agent_resolver = main_agent_resolver
 
     def _build_schema(self) -> ToolSchema:
+        try:
+            role_ids, role_desc = schema_role_options()
+        except Exception:  # noqa: BLE001 — DB 不可用时降级内置三角色
+            role_ids = ["explore", "plan", "general-purpose"]
+            role_desc = "可选子代理角色（缺省 explore）：explore / plan / general-purpose"
         return ToolSchema(
             name="agent",
             description=(
-                "Launch a focused sub-agent to handle a delegated task. The sub-agent "
-                "has read-only tools (file/directory reading, web search/fetch, memory "
-                "search) and a controlled browser channel "
-                "(browser_launch/navigate/snapshot/interact/cookies/close, subject to "
-                "the same approval and network-mode gates), and returns a final answer. "
-                "Use it to parallelize investigation work without polluting the main "
-                "context."
+                "Launch a focused sub-agent to handle a delegated task. The default "
+                "'explore' role has read-only tools (file/directory reading, web "
+                "search/fetch, memory search) and a controlled browser channel; "
+                "'general-purpose' may also modify files and run commands (subject "
+                "to the same policy/approval gates). Returns a final answer. Use it "
+                "to parallelize investigation work without polluting the main context."
             ),
             parameters={
                 "type": "object",
@@ -319,7 +327,8 @@ class AgentTool(BaseTool):
                     },
                     "subagent_type": {
                         "type": "string",
-                        "description": "Reserved for future specialized sub-agents (ignored)",
+                        "enum": role_ids,
+                        "description": role_desc,
                     },
                     "background": {
                         "type": "boolean",
@@ -339,7 +348,7 @@ class AgentTool(BaseTool):
         self,
         description: str = "",
         prompt: str = "",
-        subagent_type: Optional[str] = None,  # reserved for future specialization
+        subagent_type: Optional[str] = None,
         **kwargs: Any,  # forward-compat: tolerate extra LLM-provided params
     ) -> ToolResult:
         """Run the sub-agent synchronously (worker thread) and mirror to a lane."""
@@ -349,6 +358,15 @@ class AgentTool(BaseTool):
             return ToolResult(
                 success=False,
                 error="agent tool requires non-empty 'description' and 'prompt'",
+            )
+        role, known = resolve_subagent_role(subagent_type)
+        if not known:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"unknown_subagent_type: {subagent_type!r}。"
+                    "可用角色见工具 schema 的 subagent_type 枚举"
+                ),
             )
 
         llm_client = self._injected_llm_client
@@ -391,7 +409,9 @@ class AgentTool(BaseTool):
         lane_registry.mark_running(lane.lane_id)
 
         try:
-            answer, error = self._run_subagent_sync(llm_client, description, prompt)
+            answer, error = self._run_subagent_sync(
+                llm_client, description, prompt, role=role
+            )
         except concurrent.futures.TimeoutError:
             # Wait bound exceeded — the worker thread is abandoned (it drains
             # in the background; see module docstring residual-risk note). The
@@ -448,7 +468,7 @@ class AgentTool(BaseTool):
             },
         )
 
-    async def execute_async(
+    async def execute_async(  # noqa: PLR0911 — 角色/后台/深度/LLM/超时多出口语义清晰
         self,
         description: str = "",
         prompt: str = "",
@@ -478,6 +498,17 @@ class AgentTool(BaseTool):
             return ToolResult(
                 success=False,
                 error="agent tool requires non-empty 'description' and 'prompt'",
+            )
+
+        # M3.1: subagent_type 角色解析（空值 = explore，行为与历史一致）。
+        role, known = resolve_subagent_role(subagent_type)
+        if not known:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"unknown_subagent_type: {subagent_type!r}。"
+                    "可用角色见工具 schema 的 subagent_type 枚举"
+                ),
             )
 
         # M2: 后台模式 —— 立即返回句柄；子代理完成后经主 agent 的系统通知
@@ -587,6 +618,8 @@ class AgentTool(BaseTool):
                 self._run_subagent_async, "session_id"
             ):
                 inner_kwargs["session_id"] = session_id
+            if func_accepts_kwarg(self._run_subagent_async, "role"):
+                inner_kwargs["role"] = role
             answer, error = await asyncio.wait_for(
                 self._run_subagent_async(
                     llm_client, description, prompt, **inner_kwargs
@@ -682,6 +715,7 @@ class AgentTool(BaseTool):
         llm_client: Any,
         description: str,
         prompt: str,
+        role: Optional[SubagentRole] = None,
     ) -> Tuple[str, Optional[str]]:
         """Run the async sub-agent loop on a worker thread (sync façade).
 
@@ -695,9 +729,19 @@ class AgentTool(BaseTool):
         # until the hung worker finishes — defeating SUBAGENT_TIMEOUT_S.
         pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sage-subagent")
         try:
+            # M3.1: role 仅在非 None 且内层方法接受时透传 —— 兼容窄签名测试桩。
+            from backend.orchestration.subagent_runner import func_accepts_kwarg
+
+            inner_kwargs: Dict[str, Any] = {}
+            if role is not None and func_accepts_kwarg(
+                self._run_subagent_async, "role"
+            ):
+                inner_kwargs["role"] = role
             future = pool.submit(
                 asyncio.run,
-                self._run_subagent_async(llm_client, description, prompt),
+                self._run_subagent_async(
+                    llm_client, description, prompt, **inner_kwargs
+                ),
             )
             return future.result(timeout=SUBAGENT_TIMEOUT_S)
         finally:
@@ -712,6 +756,7 @@ class AgentTool(BaseTool):
         prompt: str,
         event_sink: Optional[SubagentEventSink] = None,
         session_id: Optional[str] = None,
+        role: Optional[SubagentRole] = None,
     ) -> Tuple[str, Optional[str]]:
         """Drive ``run_loop`` to completion; return (answer, error).
 
@@ -721,15 +766,18 @@ class AgentTool(BaseTool):
         ``session_id``（O3, 2026-09-08）非空时透传 child.run_loop 做
         usage_events 会话归因 —— 单委派子代理的 LLM 消耗自此计入主会话。
         """
-        subagent = self._build_subagent()
+        subagent = self._build_subagent(role)
         try:
             # Inject the LLM client post-construction so tests can pass mocks and
             # production reuses the settings-derived client without SageAgent
             # building its own.
             subagent.llm_client = llm_client
 
+            system_prompt = (
+                role_system_prompt(role) if role is not None else SUBAGENT_SYSTEM_PROMPT
+            )
             messages = [
-                {"role": "system", "content": SUBAGENT_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
                     "content": f"Delegated task ({description}):\n\n{prompt}",
@@ -748,7 +796,11 @@ class AgentTool(BaseTool):
                 run_loop_accepts_session_id,
             )
 
-            subagent_iterations = _resolve_subagent_iterations()
+            subagent_iterations = (
+                role_max_iterations(role)
+                if role is not None and role_max_iterations(role) is not None
+                else _resolve_subagent_iterations()
+            )
             run_kwargs: Dict[str, Any] = {}
             if run_loop_accepts_dynamic_budget(subagent):
                 # 2026-11-01: 委派子代理接入动态预算 —— 以
@@ -780,10 +832,14 @@ class AgentTool(BaseTool):
         finally:
             _cleanup_subagent_workspace(getattr(subagent, "_owned_workspace_root", None))
 
-    def _build_subagent(self) -> Any:
-        """Construct a SageAgent with the restricted read-only registry."""
+    def _build_subagent(self, role: Optional[SubagentRole] = None) -> Any:
+        """Construct a SageAgent with the role-appropriate tool registry."""
+        if role is None:
+            from backend.tools.subagent_roles import BUILTIN_ROLES
+
+            role = BUILTIN_ROLES["explore"]
+        registry = self._build_role_registry(role)
         if self._subagent_factory is not None:
-            registry = build_readonly_tool_registry(self._policy)
             try:
                 subagent = self._subagent_factory(registry)
             except Exception:
@@ -803,9 +859,63 @@ class AgentTool(BaseTool):
         # plain SageAgent() would be discarded immediately below. The sub-run
         # only drives run_loop, which needs neither the memory stack nor the
         # default tools.
-        subagent = SageAgent(bare=True)
-        # Structural whitelist: install the read-only registry directly.
-        registry = build_readonly_tool_registry(self._policy)
+        agent_kwargs: Dict[str, Any] = {"bare": True}
+        # M3.1: DB profile 角色透传 agent_id —— profile 的 max_iterations /
+        # 记忆归属等运行时配置随之生效（system prompt 仍由角色决定）。
+        if role.kind == "profile" and role.profile:
+            agent_kwargs["agent_id"] = role.role_id
+        subagent = SageAgent(**agent_kwargs)
         subagent.tool_registry = registry
         subagent._owned_workspace_root = getattr(registry, "_owned_workspace_root", None)
         return subagent
+
+    def _build_role_registry(self, role: SubagentRole) -> ToolRegistry:
+        """M3.1: 角色 → 子代理工具注册表。
+
+        - explore / plan：只读白名单（历史行为）；
+        - general-purpose：只读 + 写/编辑/补丁/命令（全部受 ToolPolicy、
+          工作区隔离与审批门禁约束）；
+        - DB profile：从子代理可用全集中按 profile.tools 白名单过滤；
+          tools 缺省（None）→ 只读，显式空列表 → 无工具。
+        """
+        if role.kind in ("explore", "plan"):
+            return build_readonly_tool_registry(self._policy)
+
+        full = self._build_full_registry()
+        if role.kind == "general":
+            return full
+
+        allowed = role.profile.get("tools") if role.profile else None
+        if not isinstance(allowed, list):
+            _cleanup_subagent_workspace(getattr(full, "_owned_workspace_root", None))
+            return build_readonly_tool_registry(self._policy)
+        filtered = ToolRegistry()
+        names = {str(name) for name in allowed}
+        for name in full.list_names():
+            if name in names:
+                tool = full.get(name)
+                if tool is not None:
+                    filtered.register(tool)
+        filtered._owned_workspace_root = getattr(full, "_owned_workspace_root", None)  # noqa: SLF001
+        filtered._resolved_policy = getattr(full, "_resolved_policy", None)  # noqa: SLF001
+        return filtered
+
+    def _build_full_registry(self) -> ToolRegistry:
+        """只读全集 + 写/编辑/补丁/命令（同一隔离策略与 scratch 根）。"""
+        readonly = build_readonly_tool_registry(self._policy)
+        policy = getattr(readonly, "_resolved_policy", None) or _subagent_policy(
+            self._policy
+        )[0]
+        registry = ToolRegistry()
+        for name in readonly.list_names():
+            tool = readonly.get(name)
+            if tool is not None:
+                registry.register(tool)
+        registry.register(WriteFileTool(policy=policy))
+        registry.register(EditTool(policy=policy))
+        registry.register(ApplyPatchTool(policy=policy))
+        registry.register(BashTool(policy=policy))
+        registry.register(BashOutputTool(policy=policy))
+        registry._owned_workspace_root = getattr(readonly, "_owned_workspace_root", None)  # noqa: SLF001
+        registry._resolved_policy = policy  # noqa: SLF001
+        return registry
