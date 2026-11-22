@@ -4,11 +4,19 @@
 // 只在 features 层（shared 不得导入 features，见 eslint.config.js FSD 规则）。
 import type { Goal, GoalStatus } from '../../entities/autonomous-goals/types';
 import type { Lane, LaneStatus, ScheduledTask, Todo, TodoItemStatus } from '../../shared/api/types';
+import type { TaskStatusValue } from '../../shared/api/types/chatAndEventTypes';
 
 import type { TaskCenterEntry, TaskCenterStatus } from './taskCenterStore';
 import { TERMINAL_TASK_STATUSES } from './taskCenterStore';
 
-export type UnifiedTaskSource = 'registry' | 'chat' | 'lane' | 'goal' | 'todo' | 'scheduled';
+export type UnifiedTaskSource =
+  | 'registry'
+  | 'chat'
+  | 'lane'
+  | 'subagent'
+  | 'goal'
+  | 'todo'
+  | 'scheduled';
 
 /**
  * 点击语义覆盖：缺省（null）表示"走 detailPath 路由跳转"。
@@ -17,7 +25,13 @@ export type UnifiedTaskSource = 'registry' | 'chat' | 'lane' | 'goal' | 'todo' |
 export type UnifiedTaskOpenTarget =
   | { kind: 'shell'; shellId: string }
   | { kind: 'lane-delivery'; laneId: string }
-  | { kind: 'office-delivery'; entryId: string };
+  | { kind: 'office-delivery'; entryId: string }
+  | {
+      kind: 'subagent-thread';
+      sessionId: string;
+      runId: string;
+      taskId: string;
+    };
 
 export interface UnifiedTaskEntry {
   /** 全局唯一：`<source>:<rawId>` */
@@ -75,6 +89,23 @@ export const LANE_STATUS_MAP: Readonly<Record<LaneStatus, TaskCenterStatus>> = {
   stopped: 'cancelled',
   cancelled: 'cancelled',
 };
+
+/** M2.4: 编排任务板子任务状态 → 任务中心状态。 */
+export const SUBAGENT_STATUS_MAP: Readonly<
+  Record<TaskStatusValue, TaskCenterStatus>
+> = {
+  queued: 'queued',
+  running: 'running',
+  done: 'succeeded',
+  failed: 'failed',
+  cancelled: 'cancelled',
+  skipped: 'cancelled',
+};
+
+/** M2.4: 任务中心只展示活跃 + 失败的子代理任务（done 在 run 摘要/transcript 回看）。 */
+export function isSubagentTaskVisible(status: TaskStatusValue): boolean {
+  return status === 'queued' || status === 'running' || status === 'failed';
+}
 
 export const STATUS_PRIORITY: Readonly<Record<TaskCenterStatus, number>> = {
   failed: 0,
@@ -181,6 +212,60 @@ export function normalizeChatTask(input: ChatTaskInput): UnifiedTaskEntry {
     openTarget: null,
     cancelRef: { source: 'chat', rawId: input.sessionId },
     meta: { sessionId: input.sessionId },
+  };
+}
+
+export interface SubagentTaskInput {
+  sessionId: string;
+  sessionTitle: string;
+  runId: string;
+  taskId: string;
+  agentId: string;
+  goal: string;
+  status: TaskStatusValue;
+  liveStep: string | null;
+  waitingApproval: string | null;
+  /** running 状态的本地首见时间（epoch ms）。 */
+  startedAt: number | null;
+  error: string | null;
+}
+
+/** M2.4: 编排任务板子任务 → 任务中心条目（活跃/失败可见）。 */
+export function normalizeSubagentTask(
+  input: SubagentTaskInput,
+): UnifiedTaskEntry | null {
+  if (!isSubagentTaskVisible(input.status)) return null;
+  const mapped = input.waitingApproval
+    ? 'awaiting_approval'
+    : SUBAGENT_STATUS_MAP[input.status];
+  const goal = (input.goal || '').trim();
+  return {
+    id: `subagent:${input.sessionId}:${input.runId}:${input.taskId}`,
+    source: 'subagent',
+    title: goal ? goal.slice(0, 80) : `${input.taskId} · ${input.agentId}`,
+    status: mapped,
+    startedAt: input.startedAt,
+    updatedAt: null,
+    percent: null,
+    error: input.error,
+    cancellable: false,
+    detailPath: `/chat?session=${encodeURIComponent(input.sessionId)}`,
+    openTarget: {
+      kind: 'subagent-thread',
+      sessionId: input.sessionId,
+      runId: input.runId,
+      taskId: input.taskId,
+    },
+    cancelRef: null,
+    meta: {
+      sessionId: input.sessionId,
+      sessionTitle: input.sessionTitle,
+      runId: input.runId,
+      taskId: input.taskId,
+      agentId: input.agentId,
+      liveStep: input.liveStep,
+      waitingApproval: input.waitingApproval,
+    },
   };
 }
 

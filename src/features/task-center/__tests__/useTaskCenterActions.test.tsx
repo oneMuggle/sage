@@ -22,6 +22,7 @@ vi.mock('../../../shared/api/scheduledClient', () => ({
 vi.mock('../../send-message/useChat', () => ({ cancelSessionStream: vi.fn() }));
 
 import { cancelGoal, pauseGoal, startGoal } from '../../../entities/autonomous-goals/goalApi';
+import { useOrchestrationFocusStore } from '../../../entities/orchestration/orchestrationFocusStore';
 import { invoke } from '../../../shared/api/desktopInvoke';
 import { scheduledClient } from '../../../shared/api/scheduledClient';
 import { cancelSessionStream } from '../../send-message/useChat';
@@ -67,6 +68,34 @@ describe('useTaskCenterActions', () => {
     probedPath = '';
     // open() 会写 taskCenterStore 的抽屉状态，跨用例清理避免顺序耦合
     useTaskCenterStore.setState({ shellStream: null, delivery: null });
+  });
+
+  it('M2.4: subagent-thread 打开 → 记录 focus 请求并路由到会话', () => {
+    useOrchestrationFocusStore.setState({ request: null });
+    const { result } = renderHook(() => useTaskCenterActions(), { wrapper });
+
+    act(() =>
+      result.current.open(
+        entry({
+          source: 'subagent',
+          detailPath: '/chat?session=s1',
+          openTarget: {
+            kind: 'subagent-thread',
+            sessionId: 's1',
+            runId: 'run-1',
+            taskId: 't1',
+          },
+          cancelRef: null,
+        }),
+      ),
+    );
+
+    expect(useOrchestrationFocusStore.getState().request).toEqual({
+      sessionId: 's1',
+      runId: 'run-1',
+      taskId: 't1',
+    });
+    expect(probedPath).toBe('/chat?session=s1');
   });
 
   it('goal cancel 调 cancelGoal', async () => {
