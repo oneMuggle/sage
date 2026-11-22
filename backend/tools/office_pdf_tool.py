@@ -250,6 +250,19 @@ class OfficeReadPdfTool(BaseTool):
                             "chat workspace (when no doc_id)."
                         ),
                     },
+                    "include_images": {
+                        "type": "boolean",
+                        "description": (
+                            "返回页内嵌图片 data_url（默认 false；单图 ≤1.5MB，"
+                            "单次总预算 20MB）"
+                        ),
+                    },
+                    "max_images_per_page": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10,
+                        "description": "每页最多返回的图片数（默认 3）",
+                    },
                 },
                 "required": [],
             },
@@ -259,6 +272,8 @@ class OfficeReadPdfTool(BaseTool):
         self,
         doc_id: Optional[str] = None,
         file_path: Optional[str] = None,
+        include_images: bool = False,
+        max_images_per_page: int = 3,
         **kwargs: Any,
     ) -> ToolResult:
         ctx = current_tool_context()
@@ -277,6 +292,8 @@ class OfficeReadPdfTool(BaseTool):
                 path,
                 workspace_path=workspace,
                 document_id=doc.id if doc is not None else None,
+                include_images=bool(include_images),
+                max_images_per_page=int(max_images_per_page),
             )
         except OfficeError as exc:
             return _office_error_result(exc, "read_failed")

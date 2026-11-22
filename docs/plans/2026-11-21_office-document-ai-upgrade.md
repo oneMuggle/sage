@@ -308,9 +308,10 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 
 - [x] `DocumentExtractor` 注册表 + `light` 默认后端（docx/xlsx/pptx/pdf/csv → 统一 Markdown + 锚点）
 - [x] `markitdown` / `docling` 可选适配器（运行时探测，不新增硬依赖；auto 优先可选后端，缺失回退 light）
-- [ ] 视觉兜底策略与设置项（Office OCR 自动策略 + 复杂版面 VLM）—— 随 M7/后续
+- [x] 视觉兜底基础：Office/PDF 扫描页 OCR 已有设置开关（`ocr_config.office_enabled`）；复杂版面 VLM 抽页检查仍待后续
 - [x] PDF 通用操作：合并/拆分/旋转/抽页/删页/水印/页码（`backend/office/pdf_ops.py`）
-- [ ] PDF 读取补齐：页面图片返回 + 复杂表格兜底 + 真 appearance flatten
+- [x] PDF 读取补齐：页面图片返回（opt-in、单图 ≤1.5MB/总预算 20MB、`image_count`）+ 真 appearance flatten（旧版 PyMuPDF 回退只读位）
+- [ ] PDF 复杂表格兜底（Docling/TableFormer 路线随可选后端）
 - [x] `office_create` 的 pdf 枚举：明确拒绝并引导 `office_generate_pdf`（消除分派漂移）
 - [x] 工具面一致性：`office_delete` / `workspace_search` 覆盖 pdf/csv；Wiki 队列 PDF 路径
 - [x] `POST /office/extract`（统一提取）与 `POST /office/compare`（Word/Excel/PPT/PDF/CSV diff + Markdown 报告）
@@ -331,6 +332,13 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 工具面：`office_delete` 支持 pdf/csv；`workspace_search` 识别 pdf/csv；Wiki 队列 `extract_text_for_ingest` 支持 PDF（`--- page N ---`）
 > - 可选后端：`pip install markitdown` 或 `docling`（main only）后 auto 自动启用；默认 light 无新增依赖
 > - 测试：提取/对比 unit 10 + 端点 3；工具面回归 44；Office 全量 2274 passed / 2 skipped；ruff/py38/silent/architecture 绿
+
+> **实施记录（2026-11-22，M6c PDF 图片与 flatten）**
+> - `read_pdf` / `PdfReadRequest` 新增 `include_images`、`max_images_per_page`；`PdfPageContent.image_count` 恒回填
+> - 图片预算：单图 ≤1.5MB、单次总预算 20MB，返回 `data_url`（JPEG/PNG）
+> - `office_read_pdf` 工具与 `/office/pdf/read` 同步参数；默认关闭，避免普通读取膨胀
+> - `fill_pdf_form(flatten=True)` 使用 `Document.bake(widgets=True)` 真扁平化；旧版 PyMuPDF 回退只读位
+> - 测试：PDF 读取/表单/工具 58 passed；Office 全量 2260 passed / 2 skipped；门禁绿
 
 ### M7 — 前端一致性与漂移清理（P1，对应 G11/G12）
 
@@ -417,6 +425,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 | 门禁 | ✅ | — | ruff / py38 / silent-exceptions / architecture |
 | M5 OOXML + Skills | ✅ | 本轮提交 | OOXML 单测 10 + 端点 3 + 工具 6；全量 2243 passed |
 | M6b 解析适配器 + 对比 + 工具面 | ✅ 后端 | 本轮提交 | unit 10 + 端点 3 + 工具面 44；全量 2274 passed |
+| M6c PDF 图片读取 + 真 flatten | ✅ | 本轮提交 | 58 PDF 相关测试；全量 2260 passed |
 | M7 前端接入 | ⏳ | — | 未开始 |
 | M8 大文件/并发/沙箱 | ⏳ | — | 未开始 |
 

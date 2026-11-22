@@ -59,6 +59,45 @@ def test_read_pdf_metadata(simple_pdf: Path):
     assert result.summary.doc_type.value == "pdf"
 
 
+def _pdf_with_image(tmp_path: Path) -> Path:
+    import io
+
+    import pymupdf
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (20, 20), "red").save(buffer, format="PNG")
+    path = tmp_path / "with-image.pdf"
+    doc = pymupdf.open()
+    try:
+        page = doc.new_page(width=400, height=300)
+        page.insert_image(pymupdf.Rect(50, 50, 150, 150), stream=buffer.getvalue())
+        doc.save(str(path))
+    finally:
+        doc.close()
+    return path
+
+
+def test_read_pdf_images_are_opt_in(tmp_path: Path):
+    from backend.office.pdf import read_pdf
+
+    path = _pdf_with_image(tmp_path)
+
+    default = read_pdf(path, workspace_path=str(tmp_path))
+    assert default.pages[0].image_count == 1
+    assert default.pages[0].images == []
+
+    with_images = read_pdf(
+        path, workspace_path=str(tmp_path), include_images=True, max_images_per_page=2
+    )
+    page = with_images.pages[0]
+    assert page.image_count == 1
+    assert len(page.images) == 1
+    assert page.images[0]["data_url"].startswith("data:image/")
+    assert page.images[0]["width"] == 20
+    assert page.images[0]["height"] == 20
+
+
 def test_read_nonexistent_pdf(tmp_path: Path):
     from backend.office.pdf import read_pdf
 

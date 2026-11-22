@@ -16,6 +16,7 @@ Scanned / image-only PDFs still yield no tables — OCR remains a non-goal.
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import logging
 import time
@@ -63,6 +64,9 @@ def __getattr__(name: str) -> Any:
 MAX_PDF_SIZE = 50 * 1024 * 1024  # 50 MiB
 MAX_PDF_PAGES = 10_000
 MAX_PDF_OUTPUT_SIZE = 200 * 1024 * 1024  # 200 MiB
+# M6b: 页内图片返回预算（单图/单次读取总量）。
+MAX_EMBEDDED_IMAGE_BYTES = 1_500_000
+MAX_TOTAL_EMBEDDED_IMAGE_BYTES = 20_000_000
 
 #: Round 2 R2a: per-page cap on extracted table cells. Pathological PDFs
 #: (huge ruled grids, or dense line art misread as tables) are truncated
@@ -208,11 +212,56 @@ def _extract_page_tables(page: pymupdf.Page, *, page_number: int) -> List[List[L
     return tables
 
 
+def _extract_page_images(
+    doc: Any,
+    page: Any,
+    max_images: int,
+    remaining_budget: int,
+) -> tuple:
+    """Extract up to ``max_images`` embedded images under a byte budget."""
+    if max_images <= 0 or remaining_budget <= 0:
+        return [], 0
+    images: List[Dict[str, Any]] = []
+    used = 0
+    try:
+        infos = page.get_images(full=True)
+    except Exception:  # noqa: BLE001 — 图片表损坏时跳过
+        return [], 0
+    for order, info in enumerate(infos[:max_images]):
+        xref = info[0] if info else 0
+        try:
+            payload = doc.extract_image(xref)
+        except Exception:  # noqa: BLE001 — 单张图失败不影响其余
+            continue
+        raw = payload.get("image") or b""
+        if not raw or len(raw) > MAX_EMBEDDED_IMAGE_BYTES:
+            continue
+        if used + len(raw) > remaining_budget:
+            break
+        ext = str(payload.get("ext") or "png").lower()
+        mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
+        images.append(
+            {
+                "index": order,
+                "width": payload.get("width"),
+                "height": payload.get("height"),
+                "ext": ext,
+                "size_bytes": len(raw),
+                "data_url": f"data:{mime};base64,"
+                + base64.b64encode(raw).decode("ascii"),
+            }
+        )
+        used += len(raw)
+    return images, used
+
+
 def read_pdf(
     file_path: Path,
     *,
     workspace_path: str,
     document_id: Optional[str] = None,
+    include_images: bool = False,
+    max_images_per_page: int = 3,
 ) -> PdfReadResult:
     """Read a PDF file and extract text, tables, images, and metadata.
 
@@ -243,6 +292,7 @@ def read_pdf(
         raise OfficePdfParseError("Failed to open PDF", file_path=file_path) from exc
 
     pages: List[PdfPageContent] = []
+    image_budget = MAX_TOTAL_EMBEDDED_IMAGE_BYTES
     try:
         for page_num in range(len(doc)):
             page = doc[page_num]
@@ -256,12 +306,23 @@ def read_pdf(
             if ocr_text is not None:
                 text = ocr_text
                 ocr_used = True
+            try:
+                image_count = len(page.get_images(full=True))
+            except Exception:  # noqa: BLE001 — 图片表损坏时按无图处理
+                image_count = 0
+            page_images: List[Dict[str, Any]] = []
+            if include_images:
+                page_images, used = _extract_page_images(
+                    doc, page, max_images_per_page, image_budget
+                )
+                image_budget -= used
             pages.append(
                 PdfPageContent(
                     page_number=page_num + 1,
                     text=text,
                     tables=_extract_page_tables(page, page_number=page_num + 1),
-                    images=[],
+                    images=page_images,
+                    image_count=image_count,
                     ocr=ocr_used,
                 )
             )

@@ -208,14 +208,21 @@ def fill_pdf_form(req: PdfFormFillRequest) -> PdfFormFillResult:
                     filled_count += 1
 
         if req.flatten:
-            for page in doc:
-                widgets = page.widgets()
-                if not widgets:
-                    continue
-                for widget in widgets:
-                    # Set the read-only bit (bit 0) in field_flags.
-                    widget.field_flags = widget.field_flags | 1
-                    widget.update()
+            bake = getattr(doc, "bake", None)
+            if bake is not None:
+                # True flatten: render widget appearances into page content
+                # and remove the fields (annotations stay untouched).
+                bake(annots=False, widgets=True)
+            else:
+                # Older PyMuPDF (release/win7 1.24.x may lack bake): at least
+                # make fields read-only (bit 0 of field_flags).
+                for page in doc:
+                    widgets = page.widgets()
+                    if not widgets:
+                        continue
+                    for widget in widgets:
+                        widget.field_flags = widget.field_flags | 1
+                        widget.update()
 
         doc.save(str(output_path))
     except OfficePdfFormError:
