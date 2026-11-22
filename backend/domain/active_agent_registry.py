@@ -10,6 +10,8 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 _resolver: Optional[Callable[[Optional[str]], Any]] = None
+#: M3.2: 按 session_id 解析主 agent（dispatcher 只知道 session_id）。
+_session_resolver: Optional[Callable[[Optional[str]], Any]] = None
 
 
 def set_main_agent_resolver(fn: Optional[Callable[[Optional[str]], Any]]) -> None:
@@ -25,5 +27,24 @@ def resolve_main_agent(stream_id: Optional[str]) -> Any:
         return None
     try:
         return resolver(stream_id)
+    except Exception:  # noqa: BLE001 — 解析失败按"无主 agent"处理
+        return None
+
+
+def set_main_agent_session_resolver(
+    fn: Optional[Callable[[Optional[str]], Any]],
+) -> None:
+    """由 api 层注册：``(session_id) -> 主 agent | None``。"""
+    global _session_resolver
+    _session_resolver = fn
+
+
+def resolve_main_agent_for_session(session_id: Optional[str]) -> Any:
+    """按 session_id 解析当前主 agent；未注册/无匹配返回 None。"""
+    resolver = _session_resolver
+    if resolver is None:
+        return None
+    try:
+        return resolver(session_id)
     except Exception:  # noqa: BLE001 — 解析失败按"无主 agent"处理
         return None
