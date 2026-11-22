@@ -14,8 +14,10 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from .models import PaperRecord
 from .pipeline_models import (
+    Claim,
     EvidenceRecord,
     Outline,
+    claim_from_dict,
     evidence_from_dict,
     outline_from_dict,
     paper_record_from_dict,
@@ -169,6 +171,19 @@ def record_evidence(run: LiteratureRun, rows: Sequence[Dict[str, Any]]) -> int:
     return len(new_rows)
 
 
+def save_claims(run: LiteratureRun, claims: Sequence[Claim]) -> Path:
+    """把 claims 账本写入 claims.jsonl（覆盖写，整账本重新生成）。"""
+    path = run.run_dir / "claims.jsonl"
+    if path.exists():
+        path.unlink()
+    append_jsonl(path, [c.to_dict() for c in claims])
+    return path
+
+
+def load_claims(run: LiteratureRun) -> List[Claim]:
+    return [claim_from_dict(row) for row in read_jsonl(run.run_dir / "claims.jsonl")]
+
+
 def save_outline(run: LiteratureRun, raw: Dict[str, Any]) -> Outline:
     outline = outline_from_dict(raw)
     write_json(run.run_dir / "outline.json", outline.to_dict())
@@ -208,7 +223,9 @@ def run_status(run: LiteratureRun) -> Dict[str, Any]:
         "queries": len(read_jsonl(run.run_dir / "query_log.jsonl")),
         "papers": len(_papers(run)),
         "evidence": len(read_jsonl(run.run_dir / "evidence.jsonl")),
+        "claims": len(read_jsonl(run.run_dir / "claims.jsonl")),
         "has_outline": (run.run_dir / "outline.json").is_file(),
         "has_draft": (run.run_dir / "draft.md").is_file(),
         "has_verification": (run.run_dir / "verification.json").is_file(),
+        "has_claims": (run.run_dir / "claims.jsonl").is_file(),
     }

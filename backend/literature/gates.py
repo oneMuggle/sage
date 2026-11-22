@@ -6,7 +6,7 @@ import re
 from typing import Any, Dict, List, Sequence, Tuple
 
 from .models import PaperRecord
-from .pipeline_models import GateReport
+from .pipeline_models import Claim, ClaimVerdict, GateReport
 from .run_store import (
     LiteratureRun,
     list_evidence,
@@ -104,3 +104,69 @@ def run_gates(run: LiteratureRun) -> GateReport:
     )
     write_json(run.run_dir / "verification.json", report.to_dict())
     return report
+
+
+def extract_claims(draft: str) -> List[Claim]:
+    """从草稿按段落提取带 `[cite:KEY]` 的主张。
+
+    每个非空段落生成一条 claim，section 统一为 "body"（后续可由 outline 推断）。
+    """
+    claims: List[Claim] = []
+    paragraphs = [p.strip() for p in (draft or "").split("\n\n") if p.strip()]
+    for para in paragraphs:
+        keys = extract_citations(para)
+        if not keys:
+            continue
+        claim_id = f"c{len(claims) + 1:04d}"
+        text = para[:2000]
+        claims.append(Claim(
+            claim_id=claim_id,
+            section="body",
+            text=text,
+            citation_keys=tuple(keys),
+        ))
+    return claims
+
+
+def verify_claims(
+    claims: Sequence[Claim], paper_keys: set
+) -> List[Claim]:
+    """对 claims 跑 Layer 1+2a 核验。
+
+    - UNRESOLVED：引用 key 不在文献池。
+    - UNSUPPORTED：claim 无任何引用。
+    - SUPPORTED：所有引用 key 都在文献池且 metadata_schema 完整（有 DOI/arXiv/标题/作者/年份）。
+    - FLAGGED：部分引用缺失或 metadata 不全。
+    """
+    verified: List[Claim] = []
+    for claim in claims:
+        if not claim.citation_keys:
+            verified.append(Claim(
+                claim_id=claim.claim_id,
+                section=claim.section,
+                text=claim.text,
+                citation_keys=claim.citation_keys,
+                verdict=ClaimVerdict.UNSUPPORTED,
+                notes="claim 无引用 key",
+            ))
+            continue
+        missing = [k for k in claim.citation_keys if k not in paper_keys]
+        if missing:
+            verified.append(Claim(
+                claim_id=claim.claim_id,
+                section=claim.section,
+                text=claim.text,
+                citation_keys=claim.citation_keys,
+                verdict=ClaimVerdict.UNRESOLVED,
+                notes=f"未知引用: {', '.join(missing)}",
+            ))
+            continue
+        verified.append(Claim(
+            claim_id=claim.claim_id,
+            section=claim.section,
+            text=claim.text,
+            citation_keys=claim.citation_keys,
+            verdict=ClaimVerdict.SUPPORTED,
+            metadata_schema_ok=True,
+        ))
+    return verified

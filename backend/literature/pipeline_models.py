@@ -170,3 +170,61 @@ class GateReport:
             "warnings": list(self.warnings),
             "citations": list(self.citations),
         }
+
+
+class ClaimVerdict(str):
+    """Claim 核验结果。"""
+
+    UNVERIFIED = "unverified"
+    SUPPORTED = "supported"
+    FLAGGED = "flagged"
+    UNSUPPORTED = "unsupported"
+    UNRESOLVED = "unresolved"
+
+
+VALID_VERDICTS = frozenset(
+    {ClaimVerdict.UNVERIFIED, ClaimVerdict.SUPPORTED, ClaimVerdict.FLAGGED,
+     ClaimVerdict.UNSUPPORTED, ClaimVerdict.UNRESOLVED}
+)
+
+
+@dataclass(frozen=True)
+class Claim:
+    """一条可审计的主张：论断 + 支撑引用 + 核验结果。"""
+
+    claim_id: str
+    section: str
+    text: str
+    citation_keys: Tuple[str, ...]
+    verdict: str = ClaimVerdict.UNVERIFIED
+    notes: str = ""
+    metadata_schema_ok: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "claim_id": self.claim_id,
+            "section": self.section,
+            "text": self.text,
+            "citation_keys": list(self.citation_keys),
+            "verdict": self.verdict,
+            "notes": self.notes,
+            "metadata_schema_ok": self.metadata_schema_ok,
+        }
+
+
+def claim_from_dict(raw: Dict[str, Any]) -> Claim:
+    if not isinstance(raw, dict):
+        raise ValueError("claim 必须是对象")
+    claim_id = _require_str(raw.get("claim_id"), "claim_id")
+    verdict = _require_str(raw.get("verdict"), "verdict") or ClaimVerdict.UNVERIFIED
+    if verdict not in VALID_VERDICTS:
+        raise ValueError(f"verdict 必须是 {sorted(VALID_VERDICTS)} 之一")
+    return Claim(
+        claim_id=claim_id,
+        section=_require_str(raw.get("section"), "section"),
+        text=_require_str(raw.get("text"), "text"),
+        citation_keys=_str_tuple(raw.get("citation_keys"), "citation_keys"),
+        verdict=verdict,
+        notes=_require_str(raw.get("notes"), "notes", required=False),
+        metadata_schema_ok=bool(raw.get("metadata_schema_ok", False)),
+    )
