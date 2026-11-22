@@ -18,8 +18,11 @@
 - 结果条目：题名/作者/来源链接均指向
   `https://www.xueshu789.cc/doDownload?url=<encoded kns.cnki.net kcms2 abstract>`；
   操作列有「下载 / 原版阅读 / CNKI AI阅读」。
-- **下载未验证通过**：点击「下载」会打开新标签 `doDownload/?url=...`，页面显示「参数错误」；
-  直接 GET 同样失败。需要后续排查（可能是 POST/Referer/动态 token），profile 保持 `status: draft`。
+- **下载已实测通过（2026-11-22）**：`a.downloadlink` 的真实 href 还带
+  `&ddata=<文件名>|<库>|<题名>|<库>|<hash>`；点击该元素会经
+  `oversea.cnki.net/docdown/fulltext/download` 落盘 PDF（实测 787KB / 26 页）。
+  之前「参数错误」是因为用快照里截断的 `doDownload?url=...` 直连，缺少 `ddata`；
+  修复后 profile `status: ready`。
 
 ## Global Constraints
 
@@ -115,7 +118,7 @@ search:
 pdf:
   entry_text: 下载
   post_click_wait_s: 8
-  note: "doDownload 新标签可能显示参数错误；下载链路待验证"
+  note: "点击 a.downloadlink（href 含 &ddata=文件名|库|题名|库|hash）；不要用快照截断 URL 直连"
 ```
 
 - `domains` 追加代理 IP `82.157.23.222`。

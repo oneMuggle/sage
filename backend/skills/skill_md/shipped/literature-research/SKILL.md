@@ -35,7 +35,8 @@ triggers: []
 - 从 profile 注册表选择站点：`xueshu789`（学术资源站，`status: draft`）、
   `cnki`，或用户在 `~/.sage/literature_sites/` 自建的站点。
 - xueshu789 实测：`/dbItem/3` 可用（重定向到知网代理检索页）；`/dbItem/1`
-  代理报错、`/dbItem/2` 触发滑块验证；下载链路仍待验证。
+  代理报错、`/dbItem/2` 触发滑块验证；下载已实测通过（点击 `a.downloadlink`，
+  完整 href 含 `&ddata=`）。
 - 需要登录时调用 `browser_login`，让用户在自己的可见窗口完成登录；
   **不要代填密码、不要导出 cookie、不要绕过付费墙**；验证码/滑块交还用户。
 - 第三方站点默认禁用，用户显式同意后再使用。
@@ -82,9 +83,11 @@ print(obs.snapshot[:3000])
 ```
 
 驱动会自动：打开入口页 → 尝试 `search.input_selectors` → `press Enter` →
-等待 `wait_after_s` → 抓取快照。下载仍需单独点击结果条目的「下载」并
-`browser_downloads` 校验；xueshu789 的 `doDownload` 目前可能返回「参数错误」，
-遇到时如实报告。
+等待 `wait_after_s` → 抓取快照。下载时点击结果条目里的 `a.downloadlink`
+（真实 href 含 `&ddata=文件名|库|题名|库|hash`），**不要**用快照里截断的
+`doDownload?url=...` 直连（缺少 `ddata` 会报「参数错误」）；点击后
+`browser_downloads` 等待并校验 `%PDF-` 与题名。xueshu789 下载完成后新标签
+可能显示「页面不存在」，以浏览器下载目录为准。
 3. 从 snapshot 解析文献列表为 JSON；每条必须有 `paper_key`（DOI / arXiv ID /
    站点导出 ID / 规范化标题+作者+年份）与 `title`。
 4. 用 `execute_code` 记录：
