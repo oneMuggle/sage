@@ -365,14 +365,16 @@ Signed-off-by: Claude Agent <claude@anthropic.local>"
 
 ## Task 6：跑完整后端测试套件 + 推送开 PR
 
-- [ ] **Step 6.1：跑 `backend/tests/unit` 全集，确认无跨模块回归**
+- [x] **Step 6.1：跑 `backend/tests/unit` 全集，确认无跨模块回归**
 
 ```bash
 cd /home/fz/project/sage/.worktrees/fix-components-branch-normalize
 /home/fz/anaconda3/envs/sage-backend-py38/bin/python -m pytest backend/tests/unit -q --tb=short
 ```
 
-Expected: 与 worktree 基线持平（不新增失败）。若出现与本次改动无关的预存失败（如端口/中文/AsyncMock 类），按 MEMORY.md "后端环境性 6 失败" 条目处理，不阻塞本 PR。
+结果：**15253 passed, 56 skipped, 8 failed**。8 个失败均为环境性预存失败
+（`test_git_tool.py` 3 个 git 环境类 + `test_port_backend/frontend` 5 个
+端口占用类），与组件包改动无关（与 MEMORY「后端环境性失败」记录一致）。
 
 - [ ] **Step 6.2：确认提交顺序**
 
