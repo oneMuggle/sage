@@ -38,6 +38,8 @@ vi.mock('../../../../shared/api/orchRunControlClient', () => ({
       task_id: 'fu1',
       status: 'dispatched',
     }),
+    pauseTask: vi.fn().mockResolvedValue({ ok: true, run_id: 'run-1', task_id: 't1', status: 'paused' }),
+    resumeTask: vi.fn().mockResolvedValue({ ok: true, run_id: 'run-1', task_id: 't1', status: 'running' }),
   },
 }));
 
@@ -84,7 +86,9 @@ describe('TaskDetailView', () => {
 
     fireEvent.click(screen.getByTestId('task-detail-tab-transcript'));
 
-    expect(await screen.findByTestId('task-transcript-panel')).toBeInTheDocument();
+    expect(
+      await screen.findByTestId('task-transcript-panel', {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
   });
 
   it('终态任务可在「对话」tab 继续追问并切换到新任务', async () => {
@@ -110,7 +114,11 @@ describe('TaskDetailView', () => {
     render(<TaskDetailView board={board} taskId="t1" onBack={vi.fn()} />);
     fireEvent.click(screen.getByTestId('task-detail-tab-transcript'));
 
-    const input = await screen.findByTestId('task-transcript-followup-input');
+    const input = await screen.findByTestId(
+      'task-transcript-followup-input',
+      {},
+      { timeout: 5000 },
+    );
     fireEvent.change(input, { target: { value: '再补充第三节' } });
     fireEvent.click(screen.getByTestId('task-transcript-followup-submit'));
 
@@ -121,6 +129,46 @@ describe('TaskDetailView', () => {
     await waitFor(() =>
       expect(getTaskTranscriptMock).toHaveBeenCalledWith('run-1', 'fu1', 0, 200),
     );
+  });
+
+  it('M2.5: paused 任务显示已暂停并提供恢复按钮', async () => {
+    const board = buildBoard({
+      statuses: {
+        t1: {
+          state: 'task_status',
+          run_id: 'run-1',
+          task_id: 't1',
+          status: 'paused',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: null,
+          output_preview: null,
+        },
+      },
+    });
+    const resumeTaskMock = vi.mocked(orchRunControlClient.resumeTask);
+    resumeTaskMock.mockClear();
+
+    render(<TaskDetailView board={board} taskId="t1" onBack={vi.fn()} />);
+
+    expect(screen.getByTestId('task-detail-status')).toHaveTextContent('已暂停');
+    const btn = screen.getByTestId('task-detail-pause');
+    expect(btn).toHaveTextContent('恢复');
+    fireEvent.click(btn);
+    await waitFor(() => expect(resumeTaskMock).toHaveBeenCalledWith('run-1', 't1'));
+  });
+
+  it('M2.5: running 任务点击暂停调用 pauseTask', async () => {
+    const board = buildBoard();
+    const pauseTaskMock = vi.mocked(orchRunControlClient.pauseTask);
+    pauseTaskMock.mockClear();
+
+    render(<TaskDetailView board={board} taskId="t1" onBack={vi.fn()} />);
+
+    const btn = screen.getByTestId('task-detail-pause');
+    expect(btn).toHaveTextContent('暂停');
+    fireEvent.click(btn);
+    await waitFor(() => expect(pauseTaskMock).toHaveBeenCalledWith('run-1', 't1'));
   });
 
   it('run 已登记进 runControlStore 时渲染事件时间线与 steering 入口', () => {

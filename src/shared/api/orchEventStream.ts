@@ -27,6 +27,8 @@ const EVENT_TYPES: ReadonlySet<string> = new Set([
   'task.cancel_requested',
   'task.cancelled',
   'task.blocked',
+  'task.paused',
+  'task.resumed',
   'task.progress',
   'task.step.created',
   'task.step.started',

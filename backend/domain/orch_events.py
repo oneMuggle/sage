@@ -63,6 +63,7 @@ class TaskStatus(str, Enum):
     WAITING_APPROVAL = "waiting_approval"
     RETRYING = "retrying"
     CANCELLING = "cancelling"
+    PAUSED = "paused"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -80,6 +81,7 @@ class TaskStatus(str, Enum):
         return self in (
             TaskStatus.QUEUED,
             TaskStatus.RUNNING,
+            TaskStatus.PAUSED,
             TaskStatus.WAITING_INPUT,
             TaskStatus.WAITING_APPROVAL,
             TaskStatus.RETRYING,
@@ -254,6 +256,8 @@ class TaskEventType(str, Enum):
     TASK_CANCEL_REQUESTED = "task.cancel_requested"
     TASK_CANCELLED = "task.cancelled"
     TASK_BLOCKED = "task.blocked"
+    TASK_PAUSED = "task.paused"
+    TASK_RESUMED = "task.resumed"
 
 
 class StepEventType(str, Enum):

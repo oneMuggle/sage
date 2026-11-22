@@ -168,6 +168,7 @@ class SubagentRunner:
         context_repo: Optional[Any] = None,
         context_task_id: Optional[str] = None,
         agent_id: Optional[str] = None,
+        pause_state: Optional[Any] = None,
     ) -> None:
         self._llm_config = llm_config
         # P0-3 (2026-08-20): 取消事件 —— ChatDispatcher._cancelled 传入，
@@ -196,6 +197,9 @@ class SubagentRunner:
         # 绑定的专家层，而非上下文缺省值 "primary"。显式传入优先；
         # 为 None 时按「父会话绑定 > 环境工具上下文」解析。
         self._agent_id = agent_id
+        # M2.5: 任务级暂停控制器 —— ChatDispatcher 每任务一份，透传给子
+        # SageAgent.run_loop（迭代边界 wait_if_paused）。
+        self._pause_state = pause_state
 
     async def __call__(self, task: Any, agent_id: Optional[str]) -> Dict[str, Any]:
         """Run one subtask via SageAgent.run_loop; return executor-usable dict.
@@ -271,7 +275,13 @@ class SubagentRunner:
             )
 
         agent_cls = load_attr(_AGENT_MODULE, "SageAgent", globals())
-        child = agent_cls(agent_id=agent_id, policy=policy)
+        child_kwargs: Dict[str, Any] = {"agent_id": agent_id, "policy": policy}
+        # M2.5: 窄签名测试桩不含 pause_state —— 探测后透传。
+        if self._pause_state is not None and func_accepts_kwarg(
+            agent_cls, "pause_state"
+        ):
+            child_kwargs["pause_state"] = self._pause_state
+        child = agent_cls(**child_kwargs)
         # live-events P1: auto 模式注入自动批准包装 enforcer（非危险工具
         # 放行，破坏性/可疑/边界升级仍转人工）。构造失败 → None → 子代理
         # 走默认路径（从 settings 现读，逐次审批）。

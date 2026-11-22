@@ -46,6 +46,28 @@ export const orchestrationRoutes: Record<string, CommandRoute> = {
     body: (a) => ({ content: a.content }),
   },
 
+  // M2.5: 任务级暂停/恢复 —— 下一迭代边界生效，暂停期间不消耗 token。
+  orchestration_pause_task: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/tasks/${encodeURIComponent(String(a.task_id ?? a.taskId))}/pause`,
+  },
+  orchestration_resume_task: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/tasks/${encodeURIComponent(String(a.task_id ?? a.taskId))}/resume`,
+  },
+
+  // M2.5: run 级暂停/恢复 —— 批量作用于运行中/已暂停任务。
+  orchestration_pause_run: {
+    method: 'POST',
+    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/pause`,
+  },
+  orchestration_resume_run: {
+    method: 'POST',
+    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/resume`,
+  },
+
   // Phase 3: run cancellation control — POST /orch/runs/{run_id}/cancel
   // Broadcasts run.cancel_requested; executor-driven abort belongs to Phase 4.
   orchestration_cancel_run_control: {
