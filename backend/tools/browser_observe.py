@@ -217,6 +217,15 @@ _INTERACTIVE_JS = r"""
   // refOffset: 起始 ref 序号（主框架从 1 开始，iframe 接着排）
   // frameUrl: null 表示主框架，非 null 表示子 frame（写入元素的 frame_url 字段）
   function collect(doc, refOffset, frameUrl){
+    // 清理上一代 ref 属性：同一 ref 号在多次快照后可能残留在多个元素上，
+    // 子 frame 依赖属性定位时会造成点错元素（主 frame 注册表可兜底）。
+    var staleRefs = doc.querySelectorAll('[data-sage-ref]');
+    for (var sr = 0; sr < staleRefs.length; sr++) {
+      try {
+        staleRefs[sr].removeAttribute('data-sage-ref');
+        staleRefs[sr].removeAttribute('data-sage-ref-name');
+      } catch (e) {}
+    }
     var raw = doc.querySelectorAll(SELECTOR);
     var unique = [];
     for (var i = 0; i < raw.length; i++) {
@@ -321,6 +330,7 @@ _INTERACTIVE_JS = r"""
 
   return JSON.stringify({
     url: location.href,
+    origin: location.origin,
     title: document.title,
     viewport: {
       width: window.innerWidth || 0,
@@ -344,18 +354,22 @@ _INTERACTIVE_JS = r"""
 _TEXT_JS = r"""
 (function(){
   var TEXT_CAP = __TEXT_CAP__;
+  var INCLUDE_IFRAMES = __INCLUDE_IFRAMES__;
   var parts = [(document.body && document.body.innerText || '').slice(0, TEXT_CAP)];
-  var iframes = document.querySelectorAll('iframe');
-  for (var f = 0; f < iframes.length && f < __IFRAME_MAX_FRAMES__; f++) {
-    var iframeDoc = null;
-    try { iframeDoc = iframes[f].contentDocument || null; } catch(e){}
-    if (iframeDoc && iframeDoc.body) {
-      var subText = (iframeDoc.body.innerText || '').slice(0, TEXT_CAP);
-      if (subText) parts.push(subText);
+  if (INCLUDE_IFRAMES) {
+    var iframes = document.querySelectorAll('iframe');
+    for (var f = 0; f < iframes.length && f < __IFRAME_MAX_FRAMES__; f++) {
+      var iframeDoc = null;
+      try { iframeDoc = iframes[f].contentDocument || null; } catch(e){}
+      if (iframeDoc && iframeDoc.body) {
+        var subText = (iframeDoc.body.innerText || '').slice(0, TEXT_CAP);
+        if (subText) parts.push(subText);
+      }
     }
   }
   return JSON.stringify({
     url: location.href,
+    origin: location.origin,
     title: document.title,
     text: parts.join('\n').slice(0, TEXT_CAP),
     frameset_count: document.querySelectorAll('frame').length
@@ -399,6 +413,7 @@ def build_snapshot_expression(
         return (
             _TEXT_JS.replace("__TEXT_CAP__", str(int(SNAPSHOT_TEXT_CAP)))
             .replace("__IFRAME_MAX_FRAMES__", str(int(IFRAME_MAX_FRAMES)))
+            .replace("__INCLUDE_IFRAMES__", "true" if include_iframes else "false")
         )
 
     try:
@@ -498,6 +513,14 @@ def parse_snapshot_payload(
     total = len(elements)
     limit = _clamp_max_nodes(max_nodes)
     truncated = total > limit
+    if truncated:
+        # 子 frame 元素优先保留：检索类页面的结果列表在 frame 内，不能被主
+        # 框架导航/筛选元素挤出返回窗口。
+        frame_items = [item for item in elements if item.get("frame_url")]
+        main_items = [item for item in elements if not item.get("frame_url")]
+        returned_elements = (frame_items + main_items)[:limit]
+    else:
+        returned_elements = elements[:limit]
     viewport = data.get("viewport")
     iframes_scanned = int(data.get("iframes_scanned") or 0)
     iframes_truncated = bool(data.get("iframes_truncated"))
@@ -506,7 +529,7 @@ def parse_snapshot_payload(
         "url": url,
         "title": title,
         "viewport": viewport if isinstance(viewport, dict) else {},
-        "elements": elements[:limit],
+        "elements": returned_elements,
         "elements_total": total,
         "truncated": truncated,
         "mode": normalized,
@@ -526,7 +549,7 @@ def parse_snapshot_payload(
         )
     if iframes_truncated:
         hints.append(
-            f"iframe 数量超过上限 {IFRAME_MAX_FRAMES}，部分子 frame 内容未采集；"
+            "子 frame 数量超过上限，部分 frame 内容未采集；"
             "可用 query 过滤目标 frame 内的元素"
         )
     if frameset_count > 0 and iframes_scanned == 0:
@@ -662,12 +685,18 @@ def build_frame_ref_expression(action_js: str, ref: str, expected_name: str = ""
     )
 
 
-def build_frame_target_expression(ref: str) -> str:
-    """按 ``data-sage-ref`` 属性读取子 frame 目标元数据（敏感动作分类用）。"""
+def build_frame_target_expression(ref: str, expected_name: str = "") -> str:
+    """按 ``data-sage-ref`` 属性读取子 frame 目标元数据（敏感动作分类用）。
+
+    ``expected_name`` 与快照时记录的可访问名比对，防止同一 ref 号在旧 DOM
+    属性上指向别的元素而影响敏感动作分类。
+    """
     return (
         "(function(){var __sageRef=" + json.dumps(str(ref)) + ";"
+        "var __sageName=" + json.dumps(str(expected_name), ensure_ascii=False) + ";"
         "var el=document.querySelector('[data-sage-ref=\"'+__sageRef+'\"]');"
         "if(!el)return null;"
+        "if(el.getAttribute('data-sage-ref-name')!==__sageName)return null;"
         + TARGET_NAME_SOURCE_JS
         + "return{"
         "tag:(el.tagName||'').toLowerCase(),"

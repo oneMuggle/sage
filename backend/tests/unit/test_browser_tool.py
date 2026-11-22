@@ -581,6 +581,113 @@ def test_snapshot_skips_blocked_child_frame(stubbed, monkeypatch):
     assert [el["ref"] for el in result.content["elements"]] == ["e1"]
 
 
+def _frame_info(frame_id, parent_id, url, name="", is_main=False, security_origin=""):
+    return browser_frames.FrameInfo(frame_id, parent_id, url, name, is_main, security_origin)
+
+
+def test_frame_site_decision_inherits_ancestor_for_originless_child(monkeypatch):
+    monkeypatch.setattr(
+        browser_tool,
+        "_safety_check_site",
+        lambda sid, url: "block" if "evil" in url else "allow",
+    )
+    main = _frame_info(
+        "main", "", "https://good.test/", is_main=True, security_origin="https://good.test"
+    )
+    evil = _frame_info("f1", "main", "https://evil.test/", security_origin="https://evil.test")
+    blank = _frame_info("f2", "f1", "about:blank", security_origin="null")
+
+    decision, policy_url = browser_tool._frame_site_decision(
+        "b1", blank, {"main": main, "f1": evil, "f2": blank}
+    )
+
+    assert decision == "block"
+    assert "evil.test" in policy_url
+
+
+def test_frame_site_decision_uses_security_origin_over_url(monkeypatch):
+    monkeypatch.setattr(
+        browser_tool,
+        "_safety_check_site",
+        lambda sid, url: "block" if "evil" in url else "allow",
+    )
+    frame = _frame_info("f1", "main", "about:blank", security_origin="https://evil.test")
+
+    decision, _ = browser_tool._frame_site_decision("b1", frame, {"f1": frame})
+
+    assert decision == "block"
+
+
+def test_frame_site_decision_blocks_disallowed_scheme(monkeypatch):
+    frame = _frame_info("f1", "main", "file:///etc/passwd", security_origin="file://")
+
+    decision, _ = browser_tool._frame_site_decision("b1", frame, {"f1": frame})
+
+    assert decision == "block"
+
+
+def test_frame_site_decision_allows_originless_child_of_allowed_ancestor(monkeypatch):
+    monkeypatch.setattr(browser_tool, "_safety_check_site", lambda sid, url: "allow")
+    main = _frame_info(
+        "main", "", "https://good.test/", is_main=True, security_origin="https://good.test"
+    )
+    blank = _frame_info("f2", "main", "about:blank", security_origin="null")
+
+    decision, policy_url = browser_tool._frame_site_decision(
+        "b1", blank, {"main": main, "f2": blank}
+    )
+
+    assert decision == "allow"
+    assert policy_url == "https://good.test"
+
+
+def test_snapshot_blocks_originless_child_with_blocked_security_origin(stubbed, monkeypatch):
+    stubbed.cdp.frame_tree = _frame_tree(
+        {
+            "id": "f1",
+            "parentId": "main",
+            "url": "about:blank",
+            "securityOrigin": "https://evil.test",
+        }
+    )
+    monkeypatch.setattr(
+        browser_tool,
+        "_safety_check_site",
+        lambda sid, url: "block" if "evil" in url else "allow",
+    )
+    stubbed.results.append({"result": {"value": _snapshot_payload([_snapshot_element("e1")])}})
+
+    result = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+
+    assert result.success is True
+    assert result.content["iframes_scanned"] == 0
+    assert result.content["frames"][0]["state"] == "blocked"
+
+
+def test_snapshot_discards_frame_content_when_origin_changes_after_check(stubbed, monkeypatch):
+    """TOCTOU：检查时 URL 允许、采集时已导航到被禁域名 → 内容丢弃。"""
+    stubbed.cdp.frame_tree = _frame_tree({"id": "f1", "url": "https://good.test/brief"})
+    monkeypatch.setattr(
+        browser_tool,
+        "_safety_check_site",
+        lambda sid, url: "block" if "evil" in url else "allow",
+    )
+    stubbed.results.append({"result": {"value": _snapshot_payload([_snapshot_element("e1")])}})
+    sub = json.loads(
+        _snapshot_payload([_snapshot_element("e2", role="link", name="秘密结果")], text="秘密正文")
+    )
+    sub["url"] = "https://evil.test/new"
+    sub["origin"] = "https://evil.test"
+    stubbed.results.append({"result": {"value": json.dumps(sub)}})
+
+    result = _tool(BrowserSnapshotTool).execute(browser_id="b1")
+
+    assert result.success is True
+    assert result.content["iframes_scanned"] == 0
+    assert result.content["frames"][0]["state"] == "blocked"
+    assert not any("秘密结果" in str(item.get("name")) for item in result.content["elements"])
+
+
 def test_snapshot_falls_back_when_frame_api_unavailable(stubbed, monkeypatch):
     def boom(*args, **kwargs):
         raise browser_cdp.BrowserCDPError("no frame tree")
@@ -623,7 +730,19 @@ def test_interact_frame_ref_click_uses_child_context(stubbed, monkeypatch):
     _snapshot_with_child_frame(stubbed)
     monkeypatch.setattr(browser_frames, "wait_frames_settled", lambda *a, **k: True)
     stubbed.results.append(
+        {
+            "result": {
+                "value": json.dumps(
+                    {"href": "https://x/brief.aspx", "origin": "https://x"}
+                )
+            }
+        }
+    )
+    stubbed.results.append(
         {"result": {"value": {"ok": True, "info": "clicked A 论文A"}}}
+    )
+    stubbed.results.append(
+        {"result": {"value": {"url": "https://x/brief.aspx", "title": "R"}}}
     )
 
     result = _tool(BrowserInteractTool).execute(action="click", ref="e2", browser_id="b1")
@@ -642,6 +761,18 @@ def test_interact_frame_ref_click_uses_child_context(stubbed, monkeypatch):
 
 def test_interact_frame_ref_respects_blocked_frame(stubbed, monkeypatch):
     _snapshot_with_child_frame(stubbed)
+    stubbed.results.append(
+        {
+            "result": {
+                "value": json.dumps(
+                    {
+                        "href": "https://brief.example/result",
+                        "origin": "https://brief.example",
+                    }
+                )
+            }
+        }
+    )
     monkeypatch.setattr(
         browser_tool,
         "_safety_check_site",

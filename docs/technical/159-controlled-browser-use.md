@@ -169,6 +169,23 @@
   - **就绪等待**：`browser_interact click` 后的等待改为 `_wait_after_click`：若
     frame tree 包含子 frame，调用 `browser_frames.wait_frames_settled`（每 0.3s
     轮询所有 frame 的 readyState + 文本长度稳定度），否则沿用顶层网络空闲等待。
+  - **安全判定（来源优先 + TOCTOU 防护）**：子 frame 是否可读/可交互按**真实来源**
+    判定——优先用采集时 `location.origin`、其次 CDP `securityOrigin`，再退回
+    `location.href` / frame tree `url`；`about:blank`/`srcdoc`/`data:`/空 URL 等
+    originless frame 继承最近有 host 的祖先 frame 的判定，无法确定来源或 scheme
+    不在 `{http, https, about, data, blob}` 白名单时 fail-closed（block）。读取后
+    用 payload 自带的采集时刻 `url/origin` **再判一次**，检查后发生自导航到被禁
+    站点则丢弃内容。子 frame 交互前在隔离世界读取当前 `location` 再过
+    `_site_access_gate(tool="browser_interact")`，无可靠来源直接拒绝；敏感动作
+    审批指纹额外绑定 `frame_id` + policy URL，防止跨 frame 重放批准。
+  - **隔离世界生命周期**：`wait_frames_settled` 开始时为子 frame 建世界并复用，
+    结束后 `Page.removeIsolatedWorld` 回收；探活只覆盖站点策略 allow 的 frame，
+    连续两次探活失败的 frame 不再重试。
+  - **去重与截断**：CDP 逐帧巡检时主/子 frame 的快照 JS 都关闭页面内 iframe
+    遍历（text 模式同样尊重 `include_iframes`），避免同源正文重复；返回节点数
+    超过 `max_nodes` 时**子 frame 元素优先保留**，避免检索结果被主框架导航元素
+    挤出窗口。每次采集先清理文档内上一代 `data-sage-ref` 属性，防止同一 ref 号
+    指向多个元素。
   - 快照输出里 `frames` 中未授权/读取失败的 frame 还会在 hint 中提示用户到
     设置→网络→浏览器站点策略中放行。
 - **网络空闲等待（AJAX 适配）**：`web_render.py` 在每次 `Page.navigate` 前通过

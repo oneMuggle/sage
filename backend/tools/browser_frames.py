@@ -25,7 +25,7 @@ from .browser_cdp import BrowserCDPError, BrowserSession, cdp_command
 
 logger = logging.getLogger(__name__)
 
-#: 单次巡检最多处理的 frame 数（主 frame 也计入）。超出部分由调用方标注截断。
+#: 单次巡检最多处理的子 frame 数。超出部分由调用方标注截断。
 MAX_FRAMES = 20
 
 #: 隔离世界名。每次快照可复用同名；世界内状态不跨调用依赖（定位走 DOM 属性）。
@@ -51,13 +51,19 @@ _PROBE_EXPRESSION = (
 
 @dataclass(frozen=True)
 class FrameInfo:
-    """单个 frame 的静态信息。"""
+    """单个 frame 的静态信息。
+
+    ``security_origin`` 来自 CDP ``Page.Frame.securityOrigin``：它反映 frame
+    的真实来源（about:blank / srcdoc 继承创建者 origin；data: 为 opaque），
+    站点策略必须用它而不是 ``url`` 判定，否则 originless 子 frame 会绕过。
+    """
 
     frame_id: str
     parent_id: str
     url: str
     name: str
     is_main: bool
+    security_origin: str = ""
 
 
 def flatten_frame_tree(tree: Dict[str, Any]) -> List[FrameInfo]:
@@ -88,6 +94,7 @@ def flatten_frame_tree(tree: Dict[str, Any]) -> List[FrameInfo]:
                         url=str(frame.get("url") or ""),
                         name=str(frame.get("name") or ""),
                         is_main=not frames,
+                        security_origin=str(frame.get("securityOrigin") or ""),
                     )
                 )
         children = node.get("childFrames")
@@ -142,7 +149,7 @@ def _evaluate_json_raw(
     params: Dict[str, Any] = {"expression": expression, "returnByValue": True}
     if context_id is not None:
         params["contextId"] = int(context_id)
-    result = cdp_command(session, "Runtime.evaluate", params, target_id=target_id)
+    result = cdp_command(session, "Runtime.evaluate", params, target_id=target_id) or {}
     details = result.get("exceptionDetails")
     if details:
         raise BrowserCDPError(f"frame 脚本执行失败: {json.dumps(details)[:300]}")
@@ -220,6 +227,21 @@ def all_frames_settled(probes: List[Dict[str, Any]]) -> bool:
     )
 
 
+def remove_world(
+    session: BrowserSession, frame_id: str, target_id: Optional[str] = None
+) -> None:
+    """删除本模块创建的隔离世界；frame 已销毁时失败只记录。"""
+    try:
+        cdp_command(
+            session,
+            "Page.removeIsolatedWorld",
+            {"frameId": frame_id, "worldName": ISOLATED_WORLD_NAME},
+            target_id=target_id,
+        )
+    except BrowserCDPError as exc:
+        logger.debug("removeIsolatedWorld 失败 frame=%s: %s", frame_id, exc)
+
+
 def wait_frames_settled(
     session: BrowserSession,
     target_id: Optional[str] = None,
@@ -228,8 +250,9 @@ def wait_frames_settled(
 ) -> bool:
     """等待所有 frame 就绪且正文长度连续 ``SETTLE_STABLE_ROUNDS`` 轮不变。
 
-    frame 上下文随导航销毁时探活失败，按未就绪处理并在下一轮重建世界。
-    超时返回 False（不抛错，调用方继续后续逻辑）。
+    隔离世界在等待开始时创建并复用（避免每轮 ``createIsolatedWorld``），
+    结束后统一 ``removeIsolatedWorld``；frame 导航销毁上下文时重建一次，
+    连续两次探活失败的 frame 不再重试。超时返回 False（不抛错）。
     """
     if frames is None:
         try:
@@ -242,32 +265,67 @@ def wait_frames_settled(
 
     deadline = time.monotonic() + max(0.0, float(timeout))
     contexts: Dict[str, int] = {}
+    created_frames = set()
+    error_counts: Dict[str, int] = {}
+    active_frames = list(frames)
     last_lengths: Optional[List[int]] = None
     stable_rounds = 0
-    while True:
-        probes = [
-            probe_frame(
-                session,
-                frame,
-                target_id=target_id,
-                context_id=contexts.get(frame.frame_id),
-            )
-            for frame in frames
-        ]
-        for frame, probe in zip(frames, probes):  # noqa: B905 — py3.8 无 strict
-            if probe.get("error") and not frame.is_main:
-                contexts.pop(frame.frame_id, None)
-        lengths = [int(probe.get("text_len") or 0) for probe in probes]
-        if all_frames_settled(probes) and lengths == last_lengths:
-            stable_rounds += 1
-            if stable_rounds >= SETTLE_STABLE_ROUNDS:
-                return True
-        else:
-            stable_rounds = 0
-        last_lengths = lengths
-        if time.monotonic() >= deadline:
-            return False
-        time.sleep(SETTLE_POLL_SECONDS)
+    try:
+        while True:
+            live_frames: List[FrameInfo] = []
+            probes: List[Dict[str, Any]] = []
+            for frame in active_frames:
+                if not frame.is_main and frame.frame_id not in contexts:
+                    try:
+                        contexts[frame.frame_id] = create_world(
+                            session, frame.frame_id, target_id=target_id
+                        )
+                        created_frames.add(frame.frame_id)
+                    except BrowserCDPError as exc:
+                        logger.debug(
+                            "全帧等待建世界失败 frame=%s: %s", frame.frame_id, exc
+                        )
+                        error_counts[frame.frame_id] = (
+                            error_counts.get(frame.frame_id, 0) + 1
+                        )
+                        if error_counts[frame.frame_id] < 2:
+                            live_frames.append(frame)
+                        continue
+                probe = probe_frame(
+                    session,
+                    frame,
+                    target_id=target_id,
+                    context_id=contexts.get(frame.frame_id),
+                )
+                if probe.get("error") and not frame.is_main:
+                    contexts.pop(frame.frame_id, None)
+                    error_counts[frame.frame_id] = (
+                        error_counts.get(frame.frame_id, 0) + 1
+                    )
+                    if error_counts[frame.frame_id] >= 2:
+                        continue
+                live_frames.append(frame)
+                probes.append(probe)
+            if not probes:
+                return False
+            if len(live_frames) != len(active_frames):
+                last_lengths = None
+                stable_rounds = 0
+            lengths = [int(probe.get("text_len") or 0) for probe in probes]
+            if all_frames_settled(probes) and lengths == last_lengths:
+                stable_rounds += 1
+                if stable_rounds >= SETTLE_STABLE_ROUNDS:
+                    return True
+            else:
+                stable_rounds = 0
+            last_lengths = lengths
+            active_frames = live_frames
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(SETTLE_POLL_SECONDS)
+    finally:
+        for frame_id in created_frames:
+            remove_world(session, frame_id, target_id=target_id)
 
 
 __all__ = [
@@ -284,5 +342,6 @@ __all__ = [
     "flatten_frame_tree",
     "list_frames",
     "probe_frame",
+    "remove_world",
     "wait_frames_settled",
 ]

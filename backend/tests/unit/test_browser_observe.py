@@ -331,7 +331,7 @@ def test_parse_interactive_passes_through_iframes_scanned_and_truncated():
     content = parse_snapshot_payload(payload)
     assert content["iframes_scanned"] == 3
     assert content["iframes_truncated"] is True
-    assert "iframe 数量超过上限" in content["hint"]
+    assert "子 frame 数量超过上限" in content["hint"]
 
 
 def test_parse_iframes_truncated_false_no_hint():
@@ -529,3 +529,36 @@ def test_build_frame_target_expression_locates_by_data_attribute():
     assert "e12" in expression
     assert "placeholder" in expression
     assert "return null" in expression
+
+
+def test_text_expression_respects_include_iframes_flag():
+    expression = build_snapshot_expression(mode="text", include_iframes=False)
+
+    assert "var INCLUDE_IFRAMES = false;" in expression
+
+
+def test_interactive_expression_clears_stale_ref_attributes():
+    expression = build_snapshot_expression()
+
+    assert "removeAttribute('data-sage-ref')" in expression
+
+
+def test_parse_truncation_prioritizes_frame_elements():
+    main_items = [_element(f"e{index}") for index in range(1, 4)]
+    frame_item = _element("e9", role="link", name="论文A")
+    frame_item["frame_url"] = "https://kns/brief"
+    payload = _payload(main_items + [frame_item], text="x" * 400)
+
+    content = parse_snapshot_payload(payload, max_nodes=2)
+
+    refs = [item["ref"] for item in content["elements"]]
+    assert refs[0] == "e9"
+    assert len(refs) == 2
+    assert content["truncated"] is True
+
+
+def test_build_frame_target_expression_guards_expected_name():
+    expression = build_frame_target_expression("e12", "论文A")
+
+    assert "data-sage-ref-name" in expression
+    assert "论文A" in expression

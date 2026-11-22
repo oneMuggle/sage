@@ -180,6 +180,39 @@ def test_all_frames_settled_requires_all_ready():
     assert browser_frames.all_frames_settled(probes) is True
 
 
+def test_wait_frames_settled_reuses_and_removes_worlds(monkeypatch):
+    monkeypatch.setattr(
+        browser_frames,
+        "create_world",
+        lambda session, frame_id, target_id=None: 7,
+    )
+    removed = []
+    monkeypatch.setattr(
+        browser_frames,
+        "remove_world",
+        lambda session, frame_id, target_id=None: removed.append(frame_id),
+    )
+    calls = []
+
+    def fake_probe(session, frame, target_id=None, context_id=None):
+        calls.append((frame.frame_id, context_id))
+        return {"ready": "complete", "text_len": 1}
+
+    monkeypatch.setattr(browser_frames, "probe_frame", fake_probe)
+    monkeypatch.setattr(browser_frames, "SETTLE_POLL_SECONDS", 0)
+
+    frames = [
+        browser_frames.FrameInfo("main", "", "u", "", True),
+        browser_frames.FrameInfo("child", "main", "u2", "", False),
+    ]
+
+    assert browser_frames.wait_frames_settled(object(), frames=frames, timeout=1.0) is True
+    assert removed == ["child"]
+    child_contexts = [context for frame_id, context in calls if frame_id == "child"]
+    assert child_contexts
+    assert all(context == 7 for context in child_contexts)
+
+
 def test_build_probe_expression_returns_ready_state_and_text_length():
     expression = browser_frames.build_probe_expression()
     assert "readyState" in expression
