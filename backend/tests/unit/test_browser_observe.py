@@ -14,10 +14,14 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from backend.tools.browser_observe import (
+    IFRAME_MAX_COLLECT_PER_FRAME,
     SNAPSHOT_CANVAS_TEXT_HINT,
     SNAPSHOT_TEXT_CAP,
+    build_frame_ref_expression,
+    build_frame_target_expression,
     build_ref_expression,
     build_snapshot_expression,
+    merge_snapshot_payloads,
     parse_snapshot_payload,
 )
 
@@ -327,7 +331,7 @@ def test_parse_interactive_passes_through_iframes_scanned_and_truncated():
     content = parse_snapshot_payload(payload)
     assert content["iframes_scanned"] == 3
     assert content["iframes_truncated"] is True
-    assert "iframe 数量超过上限" in content["hint"]
+    assert "子 frame 数量超过上限" in content["hint"]
 
 
 def test_parse_iframes_truncated_false_no_hint():
@@ -390,7 +394,7 @@ def test_parse_query_matches_cross_origin_iframe_by_frame_url():
 def test_build_snapshot_expression_contains_iframe_constants():
     """表达式中必须含 iframe 遍历相关常量占位符替换后的值。"""
     expression = build_snapshot_expression()
-    assert "var IFRAME_MAX_PER_FRAME = 60;" in expression
+    assert f"var IFRAME_MAX_PER_FRAME = {IFRAME_MAX_COLLECT_PER_FRAME};" in expression
     assert "var IFRAME_MAX_FRAMES = 10;" in expression
     assert "iframeEl.contentDocument" in expression
 
@@ -401,3 +405,160 @@ def test_build_text_expression_contains_iframe_traversal():
     assert "iframeDoc.body" in expression
     # text 模式直接内联替换上限值（不声明 var），检查 for 循环边界
     assert "f<10" in expression.replace(" ", "")
+
+
+# ---------------------------------------------------------------------------
+# 跨 frame 快照（v2.2：CDP 全帧巡检的表达式参数与 payload 合并）
+# ---------------------------------------------------------------------------
+
+
+def test_build_snapshot_expression_accepts_ref_offset_and_disables_iframes():
+    expression = build_snapshot_expression(
+        "interactive", include_iframes=False, ref_offset=11, frame_url="https://x/f"
+    )
+
+    assert "var START_REF = 11;" in expression
+    assert 'var FRAME_URL = "https://x/f";' in expression
+    assert "var INCLUDE_IFRAMES = false;" in expression
+    assert "next_ref" in expression
+    assert "frameset_count" in expression
+    assert "if (INCLUDE_IFRAMES)" in expression
+
+
+def test_build_snapshot_expression_default_keeps_iframe_traversal():
+    expression = build_snapshot_expression()
+
+    assert "var INCLUDE_IFRAMES = true;" in expression
+    assert "var START_REF = 1;" in expression
+    assert 'var FRAME_URL = "";' in expression
+
+
+def test_merge_snapshot_payloads_annotates_frame_url_and_merges_text():
+    main = {
+        "url": "https://kns/",
+        "title": "T",
+        "elements": [_element("e1")],
+        "elements_total": 1,
+        "text": "主",
+        "next_ref": 2,
+        "iframes_scanned": 0,
+    }
+    sub = {
+        "url": "https://kns/brief.aspx",
+        "title": "R",
+        "elements": [_element("e2", role="link", name="论文A")],
+        "elements_total": 1,
+        "text": "结果",
+        "next_ref": 3,
+    }
+    merged = merge_snapshot_payloads(
+        main,
+        [sub],
+        [{"frame_id": "f1", "url": "https://kns/brief.aspx", "state": "scanned"}],
+    )
+
+    assert [item["ref"] for item in merged["elements"]] == ["e1", "e2"]
+    assert merged["elements"][1]["frame_url"] == "https://kns/brief.aspx"
+    assert merged["elements_total"] == 2
+    assert merged["text"] == "主\n结果"
+    assert merged["iframes_scanned"] == 1
+    assert merged["next_ref"] == 3
+    assert merged["frames"][0]["state"] == "scanned"
+
+
+def test_merge_snapshot_payloads_does_not_count_blocked_frames_as_scanned():
+    main = {
+        "url": "https://kns/",
+        "title": "T",
+        "elements": [_element("e1")],
+        "text": "主",
+        "next_ref": 2,
+    }
+    merged = merge_snapshot_payloads(
+        main,
+        [{}],
+        [{"frame_id": "f1", "url": "https://other/", "state": "blocked"}],
+    )
+
+    assert merged["iframes_scanned"] == 0
+    assert merged["frames"][0]["state"] == "blocked"
+
+
+def test_merge_snapshot_payloads_caps_merged_text():
+    main = {"url": "u", "title": "t", "elements": [], "text": "a" * SNAPSHOT_TEXT_CAP}
+    sub = {"url": "u2", "title": "t2", "elements": [], "text": "b" * SNAPSHOT_TEXT_CAP}
+    merged = merge_snapshot_payloads(main, [sub], [{"frame_id": "f", "url": "u2"}])
+
+    assert len(merged["text"]) == SNAPSHOT_TEXT_CAP
+
+
+def test_parse_passes_through_frames_metadata():
+    payload = json.loads(_payload([_element("e1")], text="x" * 400))
+    payload["frames"] = [
+        {"frame_id": "f1", "url": "https://kns/brief.aspx", "state": "scanned", "elements": 3}
+    ]
+    content = parse_snapshot_payload(json.dumps(payload))
+    assert content["frames"][0]["state"] == "scanned"
+
+
+def test_parse_frameset_hint_when_no_frame_content_scanned():
+    payload = json.loads(_payload([_element("e1")], text="x" * 400))
+    payload["frameset_count"] = 2
+    payload["iframes_scanned"] = 0
+    content = parse_snapshot_payload(json.dumps(payload))
+    assert content["frameset_count"] == 2
+    assert "frameset" in content["hint"]
+
+
+def test_build_frame_ref_expression_guards_stale_ref_and_name():
+    expression = build_frame_ref_expression(
+        "(function(){return{ok:true,info:'x'};})()", "e12", "论文A"
+    )
+
+    assert "data-sage-ref" in expression
+    assert "isConnected" in expression
+    assert "stale-ref" in expression
+    assert json.dumps("论文A", ensure_ascii=False) in expression
+    assert "论文A" in expression
+
+
+def test_build_frame_target_expression_locates_by_data_attribute():
+    expression = build_frame_target_expression("e12")
+
+    assert "data-sage-ref" in expression
+    assert "e12" in expression
+    assert "placeholder" in expression
+    assert "return null" in expression
+
+
+def test_text_expression_respects_include_iframes_flag():
+    expression = build_snapshot_expression(mode="text", include_iframes=False)
+
+    assert "var INCLUDE_IFRAMES = false;" in expression
+
+
+def test_interactive_expression_clears_stale_ref_attributes():
+    expression = build_snapshot_expression()
+
+    assert "removeAttribute('data-sage-ref')" in expression
+
+
+def test_parse_truncation_prioritizes_frame_elements():
+    main_items = [_element(f"e{index}") for index in range(1, 4)]
+    frame_item = _element("e9", role="link", name="论文A")
+    frame_item["frame_url"] = "https://kns/brief"
+    payload = _payload(main_items + [frame_item], text="x" * 400)
+
+    content = parse_snapshot_payload(payload, max_nodes=2)
+
+    refs = [item["ref"] for item in content["elements"]]
+    assert refs[0] == "e9"
+    assert len(refs) == 2
+    assert content["truncated"] is True
+
+
+def test_build_frame_target_expression_guards_expected_name():
+    expression = build_frame_target_expression("e12", "论文A")
+
+    assert "data-sage-ref-name" in expression
+    assert "论文A" in expression

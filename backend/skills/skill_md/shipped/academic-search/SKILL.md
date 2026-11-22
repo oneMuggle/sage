@@ -46,6 +46,8 @@ triggers: []
    调用 `web_fetch` 工具,参数 `{"url": <上一步的 URL>}`。
    - CNKI 新站（kns8s）是 Vue SPA：请传 `render="always"`，或改用
      `cnki-research` skill（浏览器通道 + 登录态 + PDF 下载流程）。
+   - **旧版 KNS 5.5 / 内网镜像 / 需要登录的站点**：本 skill 的 `web_fetch` 通道
+     拿不到登录态和子 frame 结果,请直接改用 `cnki-research` skill。
    - 成功 → 拿到 HTML / Markdown 文本
    - 失败 → 返回 `{"success": false, "error": "..."}`,告知用户网络问题
 
