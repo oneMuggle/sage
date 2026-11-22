@@ -8,6 +8,7 @@ and the orchestration layer with an injected exporter, matching the
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List
 
 import pytest
 
@@ -21,7 +22,7 @@ from backend.office.render_verify import (
 )
 
 
-def _make_pdf(path: Path, pages: list[dict]) -> Path:
+def _make_pdf(path: Path, pages: List[dict]) -> Path:
     import fitz
 
     document = fitz.open()
@@ -135,7 +136,7 @@ def test_verify_pdf_runs_visual_checker(tmp_path: Path) -> None:
     pdf = _make_pdf(tmp_path / "visual.pdf", [{"texts": [(100, 100, "Hello", 12)]}])
     seen: dict = {}
 
-    def checker(images: list[str]) -> list[RenderVerifyIssue]:
+    def checker(images: List[str]) -> List[RenderVerifyIssue]:
         seen["count"] = len(images)
         return [
             RenderVerifyIssue(
@@ -158,7 +159,7 @@ def test_verify_pdf_runs_visual_checker(tmp_path: Path) -> None:
 def test_verify_pdf_visual_checker_failure_degrades(tmp_path: Path) -> None:
     pdf = _make_pdf(tmp_path / "visual-fail.pdf", [{"texts": [(100, 100, "Hello", 12)]}])
 
-    def checker(images: list[str]) -> list[RenderVerifyIssue]:
+    def checker(images: List[str]) -> List[RenderVerifyIssue]:
         raise RuntimeError("vision unavailable")
 
     issues, warnings, _summary, _thumbnails = verify_rendered_pdf(
