@@ -180,11 +180,18 @@ class ClaimVerdict(str):
     FLAGGED = "flagged"
     UNSUPPORTED = "unsupported"
     UNRESOLVED = "unresolved"
+    UNCLEAR = "unclear"
 
 
 VALID_VERDICTS = frozenset(
-    {ClaimVerdict.UNVERIFIED, ClaimVerdict.SUPPORTED, ClaimVerdict.FLAGGED,
-     ClaimVerdict.UNSUPPORTED, ClaimVerdict.UNRESOLVED}
+    {
+        ClaimVerdict.UNVERIFIED,
+        ClaimVerdict.SUPPORTED,
+        ClaimVerdict.FLAGGED,
+        ClaimVerdict.UNSUPPORTED,
+        ClaimVerdict.UNRESOLVED,
+        ClaimVerdict.UNCLEAR,
+    }
 )
 
 

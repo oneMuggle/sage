@@ -184,6 +184,10 @@ def load_claims(run: LiteratureRun) -> List[Claim]:
     return [claim_from_dict(row) for row in read_jsonl(run.run_dir / "claims.jsonl")]
 
 
+def list_claims(run: LiteratureRun) -> List[Claim]:
+    return load_claims(run)
+
+
 def save_outline(run: LiteratureRun, raw: Dict[str, Any]) -> Outline:
     outline = outline_from_dict(raw)
     write_json(run.run_dir / "outline.json", outline.to_dict())
@@ -230,5 +234,9 @@ def run_status(run: LiteratureRun) -> Dict[str, Any]:
         "has_claims": (run.run_dir / "claims.jsonl").is_file(),
         "has_metadata_verification": (
             run.run_dir / "metadata_verification.json"
+        ).is_file(),
+        "has_ledger": (run.run_dir / "ledger.json").is_file(),
+        "has_verification_report": (
+            run.run_dir / "export" / "verification_report.md"
         ).is_file(),
     }
