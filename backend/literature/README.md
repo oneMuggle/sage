@@ -78,6 +78,39 @@ python -m backend.literature.cli verify-claims --run runs/<id>
 python -m backend.literature.cli verify-metadata --run runs/<id>
 ```
 
+## 语义 claim support（M2c）
+
+LLM 阅读 `claims.jsonl` 与 `evidence.jsonl` 后输出 `claim_support.json`：
+
+```json
+[
+  {
+    "claim_id": "c0001",
+    "support": "supported",
+    "rationale": "证据 e1 的发现直接支持该句",
+    "evidence_refs": ["e1"]
+  }
+]
+```
+
+`support` 取值：`supported` / `flagged` / `unsupported` / `unclear`。
+`apply-claim-support` 做确定性校验并合并；`unresolved` / `unsupported` 的 claim
+不会被覆盖。
+
+## EvidenceLedger 与核验报告
+
+- `build-ledger`：把 papers / evidence / claims（以及 `--external` JSON entries）
+  收敛为 `ledger.json`；外部来源通过 `source_type/source_id/locator/quote`
+  接入。
+- `report`：生成 `export/verification_report.md` / `.json`，按
+  supported / flagged / unsupported / unclear 分组，并带元数据与 ledger 统计。
+
+```bash
+python -m backend.literature.cli apply-claim-support --run runs/<id> --json claim_support.json
+python -m backend.literature.cli build-ledger --run runs/<id> [--external citations.json]
+python -m backend.literature.cli report --run runs/<id>
+```
+
 ## 设计规则
 
 - 站点差异只写在这里或 skill 的 `references/`，禁止写进 pipeline 代码。
