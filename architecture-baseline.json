@@ -31,7 +31,7 @@
     "backend/office/template_library.py": 1259,
     "backend/office/tool_service.py": 1017,
     "backend/office/word.py": 1637,
-    "backend/orchestration/chat_dispatcher.py": 2587,
+    "backend/orchestration/chat_dispatcher.py": 2634,
     "backend/scheduler/evolution.py": 2376,
     "backend/services/arena_draw_engine.py": 1054,
     "backend/services/project_wiki_generator.py": 903,
