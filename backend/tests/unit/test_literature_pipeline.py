@@ -681,3 +681,82 @@ class TestSageToolDriver:
             ]
         }
         assert SageToolDriver(call).wait_download() == "/b.pdf"
+
+
+class TestClaims:
+    def test_extract_claims_from_paragraphs(self):
+        from backend.literature.gates import extract_claims
+
+        draft = (
+            "# 综述\n\n"
+            "背景段，无引用。\n\n"
+            "方法段 [cite:p1]。\n\n"
+            "对比段 [cite:p1, p2]。\n"
+        )
+        claims = extract_claims(draft)
+        assert [c.claim_id for c in claims] == ["c0001", "c0002"]
+        assert claims[0].citation_keys == ("p1",)
+        assert claims[1].citation_keys == ("p1", "p2")
+        assert "背景段" not in claims[0].text
+
+    def test_verify_claims_classifies_supported_unresolved_unsupported(self):
+        from backend.literature.gates import verify_claims
+        from backend.literature.pipeline_models import Claim
+
+        claims = [
+            Claim("c1", "body", "有引用", ("p1",)),
+            Claim("c2", "body", "未知引用", ("missing",)),
+            Claim("c3", "body", "无引用", ()),
+        ]
+        result = verify_claims(claims, {"p1", "p2"})
+        assert result[0].verdict == "supported"
+        assert result[1].verdict == "unresolved"
+        assert "missing" in result[1].notes
+        assert result[2].verdict == "unsupported"
+
+    def test_save_and_load_claims(self, tmp_path):
+        from backend.literature.gates import verify_claims
+        from backend.literature.pipeline_models import Claim
+        from backend.literature.run_store import create_run, load_claims, save_claims
+
+        run = create_run(tmp_path, "t", "demo", run_id="r1")
+        claims = verify_claims([Claim("c1", "body", "有引用", ("p1",))], {"p1"})
+        save_claims(run, claims)
+        loaded = load_claims(run)
+        assert len(loaded) == 1
+        assert loaded[0].verdict == "supported"
+        assert loaded[0].citation_keys == ("p1",)
+
+    def test_run_status_reports_claims(self, tmp_path):
+        from backend.literature.pipeline_models import Claim
+        from backend.literature.run_store import create_run, run_status, save_claims
+
+        run = create_run(tmp_path, "t", "demo", run_id="r1")
+        save_claims(run, [Claim("c1", "body", "x", ("p1",))])
+        status = run_status(run)
+        assert status["claims"] == 1
+        assert status["has_claims"] is True
+
+    def test_cli_claims_flow(self, tmp_path):
+        from backend.literature import cli
+
+        root = tmp_path / "runs"
+        cli.main(
+            ["init", "--root", str(root), "--topic", "t", "--site", "demo", "--run-id", "r1"]
+        )
+        run_dir = root / "r1"
+        papers = tmp_path / "papers.json"
+        papers.write_text(json.dumps([_paper("p1")]), encoding="utf-8")
+        cli.main(["record-papers", "--run", str(run_dir), "--json", str(papers)])
+        draft = tmp_path / "draft.md"
+        draft.write_text(
+            "# 草稿\n\n正确引用 [cite:p1]。\n\n坏引用 [cite:missing]。\n",
+            encoding="utf-8",
+        )
+        cli.main(["save-draft", "--run", str(run_dir), "--md", str(draft)])
+        assert cli.main(["extract-claims", "--run", str(run_dir)]) == 0
+        assert cli.main(["verify-claims", "--run", str(run_dir)]) == 1
+
+        draft.write_text("# 草稿\n\n正确引用 [cite:p1]。\n", encoding="utf-8")
+        cli.main(["save-draft", "--run", str(run_dir), "--md", str(draft)])
+        assert cli.main(["verify-claims", "--run", str(run_dir)]) == 0
