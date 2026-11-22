@@ -867,6 +867,50 @@ class ChatDispatcher:
         self._bg_task = task
         return task
 
+    def start_followup(
+        self, parent_task_id: str, content: str
+    ) -> Optional[Dict[str, Any]]:
+        """M2.3: 对已完成子任务继续对话。
+
+        复用 ``followup_of`` 语义：新任务以追问内容为 goal，继承父任务
+        agent/profile 与 ``_histories[parent]`` 的子代理对话历史；以后台
+        派发方式执行（不阻塞 REST 端点）。要求 parent 在本 dispatcher 内存
+        状态中且已 done —— 进程重启后不再支持（跨重启续聊留待后续）。
+
+        Returns:
+            ``{"task_id": <新任务 id>}``；parent 不可追问 / 内容非法 /
+            后台派发超限时返回 None。
+        """
+        text = (content or "").strip()
+        if not text:
+            return None
+        parent = self._states.get(parent_task_id)
+        if parent is None or parent.status != "done":
+            return None
+        index = 1
+        while f"fu{index}" in self._states:
+            index += 1
+        new_task_id = f"fu{index}"
+        handle = self.start_background_dispatch(
+            [
+                {
+                    "task_id": new_task_id,
+                    "agent_id": parent.agent_id,
+                    "goal": text,
+                    "followup_of": parent_task_id,
+                }
+            ]
+        )
+        if handle is None:
+            return None
+        logger.info(
+            "子代理续聊已派发 run=%s parent=%s new=%s",
+            self.run_id,
+            parent_task_id,
+            new_task_id,
+        )
+        return {"task_id": new_task_id}
+
     def _task_tokens_used(self, task_id: str) -> Optional[int]:
         """BU17 (round31): 任务级累计 tokens（RT23 归因，run 内 memoize）。
 

@@ -2,7 +2,7 @@
 /**
  * TaskTranscriptPanel 测试（M1）—— 消息级过程记录渲染。
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskTranscriptResponse } from '../../../../shared/api/orchEvents';
@@ -134,6 +134,40 @@ describe('TaskTranscriptPanel', () => {
     await waitFor(() =>
       expect(screen.getByTestId('task-transcript-empty')).toHaveTextContent('暂无过程记录'),
     );
+  });
+
+  it('父任务可续聊时显示输入框并回调 onFollowup', async () => {
+    getTaskTranscriptMock.mockResolvedValue(fixture());
+    const onFollowup = vi.fn();
+
+    render(
+      <TaskTranscriptPanel
+        runId="run-1"
+        taskId="t1"
+        live={false}
+        canFollowup
+        onFollowup={onFollowup}
+      />,
+    );
+
+    const input = await screen.findByTestId('task-transcript-followup-input');
+    fireEvent.change(input, { target: { value: '再补充第三节' } });
+    fireEvent.click(screen.getByTestId('task-transcript-followup-submit'));
+
+    expect(onFollowup).toHaveBeenCalledWith('再补充第三节');
+    // 提交后清空草稿
+    expect((input as HTMLInputElement).value).toBe('');
+  });
+
+  it('不可续聊时不显示输入框', async () => {
+    getTaskTranscriptMock.mockResolvedValue(fixture());
+
+    render(<TaskTranscriptPanel runId="run-1" taskId="t1" live={false} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('task-transcript-goal')).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('task-transcript-followup')).toBeNull();
   });
 
   it('拉取失败时展示错误而不是崩溃', async () => {
