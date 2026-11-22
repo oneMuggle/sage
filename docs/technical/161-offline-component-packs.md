@@ -83,8 +83,9 @@ payload/...         # 已构建好的文件
 | 输入 | 归一化结果 |
 | --- | --- |
 | `win7` / `release/win7` / `feat/x-win7` / `v0.4.9-alpha.84-win7` | `win7` |
+| `v0.4.9-alpha.55-lts` / `lts` / `release/lts`（旧版 LTS 标签约定） | `win7` |
 | `main` / `master` / `v0.4.9-alpha.84` | `main` |
-| `""` / `unknown` / `dev-build` | 跳过校验 |
+| `""` / `unknown` / `dev-build` | 跳过校验（仅期望值侧生效；组件包清单里出现这些值仍会被拒绝） |
 
 错误消息里仍保留原始 ref 便于诊断；比较只用归一化后的通道 id。历史版本（2026-11-22 之前）是严格字符串比较，导致所有正式发行版导入必然报 `branch_mismatch`；2026-11-22 起已修复。
 

@@ -47,21 +47,29 @@ def _normalise_arch(value: str) -> str:
 
 
 #: Build-manifest branch values that carry no channel information.
+#: Only honored on the expected/env side; a pack manifest with one of these
+#: values is still rejected (it matches neither channel).
 _BRANCH_SKIP = {"", "unknown", "dev-build"}
 
 
 def _normalise_branch(value: str) -> str:
     """Map arbitrary git ref spellings to the component channel id.
 
-    ``win7`` / ``release/win7`` / ``v0.4.9-alpha.84-win7`` → ``win7``;
-    ``main`` / ``master`` / ``v0.4.9-alpha.84`` (no win7 suffix) → ``main``.
-    Empty / ``unknown`` / ``dev-build`` are kept verbatim so callers can skip
-    the channel check.
+    ``win7`` / ``release/win7`` / ``v0.4.9-alpha.84-win7`` / ``v0.4.9-alpha.55-lts``
+    → ``win7`` (the LTS tag convention predates the ``-win7`` suffix);
+    ``main`` / ``master`` / ``v0.4.9-alpha.84`` → ``main``.
+    Empty / ``unknown`` / ``dev-build`` are kept verbatim so the caller can
+    skip the channel check for dev and manifest-less builds.
     """
     lowered = value.strip().lower()
     if lowered in _BRANCH_SKIP:
         return lowered
-    if "win7" in lowered:
+    if (
+        "win7" in lowered
+        or lowered == "lts"
+        or lowered.endswith("-lts")
+        or lowered.endswith("/lts")
+    ):
         return "win7"
     return "main"
 
