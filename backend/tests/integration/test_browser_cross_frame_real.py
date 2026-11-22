@@ -19,9 +19,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
+from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.tool_policy import ToolPolicy
 from backend.services import browser_safety
-from backend.tools import browser_cdp
+from backend.tools import browser_cdp, browser_tool
 from backend.tools.browser_tool import (
     BrowserInteractTool,
     BrowserNavigateTool,
@@ -99,8 +100,14 @@ def _wait_for_text(snapshot_tool, browser_id, needle, timeout=6.0):
     return text
 
 
-def test_cross_frame_snapshot_click_and_frameset(tmp_path):
+def test_cross_frame_snapshot_click_and_frameset(tmp_path, monkeypatch):
     _discover_browser()
+    # 测试只访问 127.0.0.1 fixture：固定 online 策略，不依赖本机气隙/内网设置。
+    monkeypatch.setattr(
+        browser_tool,
+        "load_network_policy",
+        lambda: NetworkPolicy(mode=NetworkMode.ONLINE),
+    )
     browser_cdp.get_browser_manager().close_all()
 
     right_server, right_base = _start_fixture(
