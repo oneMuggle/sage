@@ -18,6 +18,7 @@ import {
   normalizeLaneTask,
   normalizeRegistryTask,
   normalizeScheduledTask,
+  normalizeSubagentTask,
   normalizeTodoTask,
 } from './unifiedTaskModel';
 import { useUnifiedTaskStore } from './unifiedTaskStore';
@@ -98,6 +99,33 @@ export function useUnifiedTasks(): UnifiedTasksResult {
       );
     }
 
+    // M2.4: 编排任务板子任务 → 任务中心条目的（活跃/失败），
+    // 由 TaskCenter 直接"打开子代理线程"（定位到任务详情）。
+    for (const [sid, slots] of Object.entries(streamSessions)) {
+      const board = slots.taskBoard;
+      if (!board) continue;
+      const title = sessionTitle.get(sid) ?? sid;
+      const planById = new Map(board.plan.map((p) => [p.task_id, p]));
+      for (const [taskId, status] of Object.entries(board.statuses ?? {})) {
+        const planItem = planById.get(taskId);
+        const live = board.live?.[taskId];
+        const entry = normalizeSubagentTask({
+          sessionId: sid,
+          sessionTitle: title,
+          runId: board.runId,
+          taskId,
+          agentId: status.agent_id || planItem?.agent_id || 'agent',
+          goal: status.goal || planItem?.goal || taskId,
+          status: status.status,
+          liveStep: live?.liveStep ?? null,
+          waitingApproval: live?.waitingApproval ?? null,
+          startedAt: status.runningSince ?? null,
+          error: status.error ?? null,
+        });
+        if (entry) entries.push(entry);
+      }
+    }
+
     for (const lane of lanes) {
       const e = normalizeLaneTask(lane);
       if (e) entries.push(e);
@@ -119,7 +147,7 @@ export function useUnifiedTasks(): UnifiedTasksResult {
     }
 
     return entries.sort(compareUnifiedTasks);
-  }, [registryTasks, activeStreamIds, sessionTitle, lanes, goals, todos, scheduledTasks]);
+  }, [registryTasks, activeStreamIds, sessionTitle, lanes, goals, todos, scheduledTasks, streamSessions]);
 
   const groups = useMemo<UnifiedTaskGroups>(() => {
     const active: UnifiedTaskEntry[] = [];

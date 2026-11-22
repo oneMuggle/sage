@@ -14,6 +14,7 @@ import {
   normalizeLaneTask,
   normalizeRegistryTask,
   normalizeScheduledTask,
+  normalizeSubagentTask,
   normalizeTodoTask,
 } from '../unifiedTaskModel';
 
@@ -338,5 +339,54 @@ describe('unifiedTaskModel / 排序', () => {
       { ...base, id: 'c', title: 'c', status: 'running' as const, startedAt: 10 },
     ];
     expect([...list].sort(compareUnifiedTasks).map((e) => e.id)).toEqual(['b', 'c', 'a']);
+  });
+});
+
+describe('unifiedTaskModel / M2.4 子代理任务', () => {
+  const base = {
+    sessionId: 's1',
+    sessionTitle: '会话一',
+    runId: 'run-1',
+    taskId: 't1',
+    agentId: 'researcher',
+    goal: '搜集资料',
+    liveStep: '🔧 read_file',
+    waitingApproval: null,
+    startedAt: 1,
+    error: null,
+  };
+
+  it('running → 可定位子代理线程的任务中心条目', () => {
+    const entry = normalizeSubagentTask({ ...base, status: 'running' });
+
+    expect(entry).not.toBeNull();
+    expect(entry!.id).toBe('subagent:s1:run-1:t1');
+    expect(entry!.source).toBe('subagent');
+    expect(entry!.status).toBe('running');
+    expect(entry!.title).toBe('搜集资料');
+    expect(entry!.detailPath).toBe('/chat?session=s1');
+    expect(entry!.openTarget).toEqual({
+      kind: 'subagent-thread',
+      sessionId: 's1',
+      runId: 'run-1',
+      taskId: 't1',
+    });
+    expect(entry!.meta.liveStep).toBe('🔧 read_file');
+  });
+
+  it('等待审批 → awaiting_approval', () => {
+    const entry = normalizeSubagentTask({
+      ...base,
+      status: 'running',
+      waitingApproval: 'write_file',
+    });
+    expect(entry!.status).toBe('awaiting_approval');
+  });
+
+  it('failed 可见，done/cancelled/skipped 不进任务中心', () => {
+    expect(normalizeSubagentTask({ ...base, status: 'failed' })!.status).toBe('failed');
+    expect(normalizeSubagentTask({ ...base, status: 'done' })).toBeNull();
+    expect(normalizeSubagentTask({ ...base, status: 'cancelled' })).toBeNull();
+    expect(normalizeSubagentTask({ ...base, status: 'skipped' })).toBeNull();
   });
 });

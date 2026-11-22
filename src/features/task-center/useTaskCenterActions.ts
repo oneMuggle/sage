@@ -8,8 +8,10 @@ import { toast } from 'sonner';
 
 import { cancelGoal, pauseGoal, startGoal } from '../../entities/autonomous-goals/goalApi';
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
+import { useOrchestrationFocusStore } from '../../entities/orchestration/orchestrationFocusStore';
 import { invoke } from '../../shared/api/desktopInvoke';
 import { scheduledClient } from '../../shared/api/scheduledClient';
+import { useRightPanelStore } from '../right-panel/rightPanelStore';
 
 import { useTaskCenterStore } from './taskCenterStore';
 import type { UnifiedTaskEntry } from './unifiedTaskModel';
@@ -96,6 +98,19 @@ export function useTaskCenterActions(): TaskCenterActions {
           openShellStream(target.shellId);
         } else if (target.kind === 'lane-delivery') {
           openDelivery({ kind: 'lane', laneId: target.laneId });
+        } else if (target.kind === 'subagent-thread') {
+          // M2.4: 记录定位请求并切到聊天页 —— ProgressSection 消费后
+          // 直接打开该子代理任务详情（过程 / 对话 / steering）。
+          useOrchestrationFocusStore.getState().focusThread({
+            sessionId: target.sessionId,
+            runId: target.runId,
+            taskId: target.taskId,
+          });
+          const panel = useRightPanelStore.getState();
+          panel.setTab('progress');
+          panel.setOpen(true);
+          navigate(`/chat?session=${encodeURIComponent(target.sessionId)}`);
+          return;
         } else {
           openDelivery({ kind: 'office', entryId: target.entryId });
         }

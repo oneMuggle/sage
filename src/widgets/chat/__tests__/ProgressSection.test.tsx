@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
+import { useOrchestrationFocusStore } from '../../../entities/orchestration/orchestrationFocusStore';
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import {
   formatProgressSectionJson,
@@ -204,5 +205,39 @@ describe('ProgressSection', () => {
     );
     expect(json.iteration).toBe(2);
     expect(json.taskBoard.runId).toBe('orch-p91');
+  });
+
+  it('M2.4: 消费 focus 请求后直接打开对应子代理任务详情', async () => {
+    useOrchestrationFocusStore.setState({
+      request: { sessionId: 's1', runId: 'orch-1', taskId: 't1' },
+    });
+    const taskBoard: TaskBoard = {
+      runId: 'orch-1',
+      plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'g' }],
+      statuses: {
+        t1: {
+          task_id: 't1',
+          status: 'running',
+          agent_id: 'researcher',
+          goal: 'g',
+          error: null,
+        } as never,
+      },
+      dispatchedAt: 1,
+    };
+
+    render(
+      <ProgressSection
+        iteration={0}
+        streamingState={null}
+        toolCalls={[]}
+        isLoading={false}
+        taskBoard={taskBoard}
+        sessionId="s1"
+      />,
+    );
+
+    expect(await screen.findByTestId('task-detail-view')).toBeInTheDocument();
+    expect(useOrchestrationFocusStore.getState().request).toBeNull();
   });
 });

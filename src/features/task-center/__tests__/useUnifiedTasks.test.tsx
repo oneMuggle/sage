@@ -66,6 +66,64 @@ describe('useUnifiedTasks', () => {
     expect(result.current.groups.finished).toEqual([]);
   });
 
+  it('M2.4: 编排任务板子任务进入任务中心（活跃/失败可见，done 排除）', () => {
+    useStore.setState({
+      sessions: [{ id: 's1', title: '会话一' }],
+      currentSessionId: 's0',
+    } as never);
+    useChatStreamStore.setState({
+      sessions: {
+        s1: {
+          taskBoard: {
+            runId: 'run-1',
+            plan: [
+              { task_id: 't1', agent_id: 'researcher', goal: '搜集资料' },
+              { task_id: 't2', agent_id: 'writer', goal: '整理资料' },
+              { task_id: 't3', agent_id: 'writer', goal: '已完成' },
+            ],
+            statuses: {
+              t1: {
+                task_id: 't1',
+                status: 'running',
+                agent_id: 'researcher',
+                goal: '搜集资料',
+                error: null,
+                runningSince: 123,
+              },
+              t2: {
+                task_id: 't2',
+                status: 'failed',
+                agent_id: 'writer',
+                goal: '整理资料',
+                error: 'boom',
+              },
+              t3: {
+                task_id: 't3',
+                status: 'done',
+                agent_id: 'writer',
+                goal: '已完成',
+                error: null,
+              },
+            },
+            live: { t1: { liveStep: '🔧 read_file', waitingApproval: null, events: [] } },
+            dispatchedAt: 1,
+          },
+        },
+      },
+    } as never);
+
+    const { result } = renderHook(() => useUnifiedTasks());
+    const sub = result.current.all.filter((e) => e.source === 'subagent');
+
+    expect(sub.map((e) => e.id).sort()).toEqual([
+      'subagent:s1:run-1:t1',
+      'subagent:s1:run-1:t2',
+    ]);
+    expect(sub.find((e) => e.id.endsWith(':t1'))!.status).toBe('running');
+    expect(sub.find((e) => e.id.endsWith(':t1'))!.meta.liveStep).toBe('🔧 read_file');
+    expect(sub.find((e) => e.id.endsWith(':t2'))!.status).toBe('failed');
+  });
+
   it('attentionCount = 进行中 + 失败', () => {
     useTaskCenterStore.setState({
       tasks: {
