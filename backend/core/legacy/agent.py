@@ -148,6 +148,9 @@ _RAPID_REFILL_RATIO = 0.9
 #: min(32, cpu+4) 个 worker）。
 _PARALLEL_POOL_SIZE = 8
 
+#: M2: 同一条 assistant 消息里并发执行的 agent 子代理上限。
+_AGENT_CONCURRENT_LIMIT = 4
+
 from backend.tools.bash_validation import validate_bash
 from backend.tools.context import current_tool_context
 from backend.tools.permissions import (
@@ -534,6 +537,9 @@ class SageAgent:
         # 窗口内注入缓存进队列而不是拒绝（原 _run_loop_active 判据会在此
         # 窗口返回 409，导致前端静默降级为排队）。
         self._pending_user_messages: deque = deque()
+        # M2: 后台子代理完成通知 —— 与 steering 同一边界机制，但不落库、
+        # 不推 STEER_CONSUMED（不是用户插话）。
+        self._pending_system_notes: deque = deque()
         self._accepts_steer = False
         self._run_loop_active = False
         # L7: 每-run 工具调用数守卫的配置来源（register_all_tools 透传同一
@@ -1599,6 +1605,31 @@ class SageAgent:
         decision = self._check_permission(enforcer, tc.name, args)
         return not (decision.needs_approval or not decision.allowed)
 
+    def _is_agent_group_eligible(
+        self, tc: Any, enforcer: Any, hooks: List[Any]
+    ) -> bool:
+        """M2: 单个 ``agent`` 调用能否进入同轮并发组。
+
+        与并发池同口径：无钩子、未中断、参数可解析、权限预检免审放行。
+        任一不满足即回落串行路径（保留审批/钩子/复读限等全部串行语义）。
+        """
+        if hooks or self.is_interrupted():
+            return False
+        if self.tool_registry.get(tc.name) is None:
+            return False
+        try:
+            args = (
+                json.loads(tc.arguments)
+                if isinstance(tc.arguments, str)
+                else tc.arguments
+            )
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(args, dict):
+            return False
+        decision = self._check_permission(enforcer, tc.name, args)
+        return bool(decision.allowed) and not decision.needs_approval
+
     def _is_parallel_eligible(  # noqa: PLR0911 — 守卫链逐条 return 可读性更好
         self,
         batch: List[Any],
@@ -1693,6 +1724,7 @@ class SageAgent:
         budget_left = self._effective_max_tool_calls_per_run() - tool_calls_used
         groups: List[Tuple[str, List[Any]]] = []
         current_pool: List[Any] = []
+        current_agents: List[Any] = []
 
         def _flush_pool() -> None:
             nonlocal current_pool
@@ -1703,7 +1735,37 @@ class SageAgent:
             groups.append(("pool", current_pool))
             current_pool = []
 
+        def _flush_agents() -> None:
+            nonlocal current_agents
+            if not current_agents:
+                return
+            # M2: 单元素组没有并发收益 —— 回落串行路径，保留全部串行语义
+            # （复读限/审批/钩子等）。
+            if len(current_agents) > 1:
+                groups.append(("agents", current_agents))
+            else:
+                groups.append(("serial", current_agents))
+            current_agents = []
+
         for tc in batch:
+            # M2: 连续 agent 调用组成并发组（同轮多子代理并行）。
+            if tc.name == "agent":
+                if (
+                    budget_left > 0
+                    and len(current_agents) < _AGENT_CONCURRENT_LIMIT
+                    and self._is_agent_group_eligible(tc, enforcer, hooks)
+                ):
+                    _flush_pool()
+                    current_agents.append(tc)
+                    budget_left -= 1
+                    continue
+                _flush_pool()
+                _flush_agents()
+                groups.append(("serial", [tc]))
+                budget_left -= 1
+                continue
+
+            _flush_agents()
             if len(current_pool) >= _PARALLEL_POOL_SIZE:
                 # 池满：先收编当前池，新调用开新池（而非降级 serial）
                 _flush_pool()
@@ -1720,6 +1782,7 @@ class SageAgent:
                 groups.append(("serial", [tc]))
                 budget_left -= 1
         _flush_pool()
+        _flush_agents()
         return groups
 
     async def _await_tool_execution(
@@ -2393,6 +2456,19 @@ class SageAgent:
                         "run_loop 迭代 %s 注入 %d 条用户补充消息", i, len(_steer_items)
                     )
 
+                # M2: 迭代边界排空后台子代理通知 —— 以 user 消息进入本轮
+                # LLM 上下文；不落库、不发 STEER_CONSUMED。
+                _system_notes = self._drain_pending_system_notes()
+                if _system_notes:
+                    messages.extend(
+                        {"role": "user", "content": note} for note in _system_notes
+                    )
+                    logger.info(
+                        "run_loop 迭代 %s 注入 %d 条后台子代理通知",
+                        i,
+                        len(_system_notes),
+                    )
+
                 # Task 8 (M5): 临时视觉反馈不得进入压缩输入 —— 压缩前先移除。
                 self._clear_tool_image_feedback(messages)
                 # RT2 (round7) + 2026-09-28 双层压缩: 迭代边界高水位预防 ——
@@ -2859,6 +2935,139 @@ class SageAgent:
                         # 2026-09 step-by-step: 并行迭代边界，legacy_routes 收到后
                         # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
                         # 消息，并重置累加器准备下一步。
+                        yield AgentEvent(
+                            state=AgentState.STEP_DONE,
+                            iteration=i,
+                            step_index=i,
+                            agent_id=self.agent_id,
+                        )
+                        continue
+                    if group_kind == "agents":
+                        # ===== M2: 同轮多个 agent 调用并发（planner 已保证：
+                        # 无钩子、权限免审、预算充足）。事件与工具消息仍按模型
+                        # 顺序产出，对 LLM 与前端透明。 =====
+                        tool_calls_used += len(group_tcs)
+                        with contextlib.suppress(Exception):
+                            _tools_used_names.update(tc.name for tc in group_tcs)
+
+                        prepared_a: List[Tuple[Any, Any, Dict[str, Any]]] = []
+                        for tc_a in group_tcs:
+                            args_a = (
+                                json.loads(tc_a.arguments)
+                                if isinstance(tc_a.arguments, str)
+                                else tc_a.arguments
+                            )
+                            tool_a = self.tool_registry.get(tc_a.name)
+                            if tool_a is None:
+                                missing_content = f"[错误] 工具不存在: {tc_a.name}"
+                                yield AgentEvent(
+                                    state=AgentState.OBSERVING,
+                                    iteration=i,
+                                    tool_call=ToolCallRequest(
+                                        id=tc_a.id, name=tc_a.name, arguments={}
+                                    ),
+                                    tool_result=ToolCallResult(
+                                        tool_call_id=tc_a.id,
+                                        content=missing_content,
+                                        is_error=True,
+                                    ),
+                                    agent_id=self.agent_id,
+                                )
+                                messages.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tc_a.id,
+                                        "content": missing_content,
+                                    }
+                                )
+                                continue
+                            yield AgentEvent(
+                                state=AgentState.ACTING,
+                                iteration=i,
+                                tool_call=ToolCallRequest(
+                                    id=tc_a.id, name=tc_a.name, arguments=args_a
+                                ),
+                                agent_id=self.agent_id,
+                            )
+                            prepared_a.append((tc_a, tool_a, args_a))
+
+                        results_a = await asyncio.gather(
+                            *(
+                                self._await_tool_execution(
+                                    tool_a, tc_a.name, args_a, tool_call_id=tc_a.id
+                                )
+                                for tc_a, tool_a, args_a in prepared_a
+                            )
+                        )
+
+                        for (
+                            tc_a,
+                            _tool_a,
+                            args_a,
+                        ), (cancelled_a, result_a) in zip(  # noqa: B905 — py3.8 兼容(两侧等长)
+                            prepared_a, results_a
+                        ):
+                            if cancelled_a:
+                                content_a = "[中断] 工具执行被用户取消"
+                                err_a = True
+                            elif hasattr(result_a, "success") and hasattr(
+                                result_a, "content"
+                            ):
+                                err_a = not result_a.success
+                                if result_a.success:
+                                    output_a = (
+                                        result_a.output
+                                        if isinstance(result_a, ToolResult)
+                                        and result_a.output is not None
+                                        else result_a.content
+                                    )
+                                    content_a = json.dumps(
+                                        output_a,
+                                        ensure_ascii=False,
+                                        default=_json_default,
+                                    )
+                                else:
+                                    raw_err_a = result_a.error
+                                    if isinstance(raw_err_a, str):
+                                        content_a = raw_err_a
+                                    elif raw_err_a is None:
+                                        content_a = "工具执行失败"
+                                    else:
+                                        content_a = json.dumps(
+                                            raw_err_a,
+                                            ensure_ascii=False,
+                                            default=_json_default,
+                                        )
+                            else:
+                                err_a = False
+                                content_a = json.dumps(
+                                    result_a,
+                                    ensure_ascii=False,
+                                    default=_json_default,
+                                )
+                            yield AgentEvent(
+                                state=AgentState.OBSERVING,
+                                iteration=i,
+                                tool_call=ToolCallRequest(
+                                    id=tc_a.id, name=tc_a.name, arguments=args_a
+                                ),
+                                tool_result=ToolCallResult(
+                                    tool_call_id=tc_a.id,
+                                    content=content_a,
+                                    is_error=err_a,
+                                ),
+                                agent_id=self.agent_id,
+                            )
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc_a.id,
+                                    "content": cap_result_for_context(content_a),
+                                }
+                            )
+                            await self._maybe_fire_error_hook(
+                                m6_hooks, tc_a.name, content_a, err_a
+                            )
                         yield AgentEvent(
                             state=AgentState.STEP_DONE,
                             iteration=i,
@@ -3928,12 +4137,28 @@ class SageAgent:
         队列在此处清空，避免上一 run 的残留跨 run 泄漏。
         """
         self._pending_user_messages.clear()
+        self._pending_system_notes.clear()
         self._accepts_steer = True
 
     def end_accept_steer(self) -> None:
         """关闭 steering 注入窗口（run 未启动即失败的路径调用）。"""
         self._accepts_steer = False
         self._pending_user_messages.clear()
+        self._pending_system_notes.clear()
+
+    def inject_system_note(self, content: str) -> bool:
+        """M2: 向运行中的主 agent 注入系统通知（后台子代理完成/失败）。
+
+        与用户 steering 同一边界（下一迭代顶部进入 LLM 上下文），但：
+        - 不落库为聊天消息（不是用户输入，避免历史里出现伪 user 气泡）；
+        - 不发 STEER_CONSUMED（前端暂存区不应把它当作可撤回插话）。
+        """
+        text = (content or "").strip()
+        if not text or not self._accepts_steer:
+            return False
+        self._pending_system_notes.append(text)
+        logger.info("system note: 已接收后台通知（%d 字符），下一迭代边界生效", len(text))
+        return True
 
     def inject_user_message(
         self, content: str, message_id: Optional[str] = None
@@ -3990,6 +4215,18 @@ class SageAgent:
                 )
             except Exception as exc:  # noqa: BLE001 — 落库失败不影响注入
                 logger.warning("steering 落库失败（注入仍生效）: %s", exc)
+
+    def _drain_pending_system_notes(self) -> List[str]:
+        """M2: 排空后台子代理通知（run_loop 迭代顶部调用）。"""
+        drained: List[str] = []
+        try:
+            while self._pending_system_notes:
+                item = self._pending_system_notes.popleft()
+                if isinstance(item, str) and item.strip():
+                    drained.append(item)
+        except Exception:  # noqa: BLE001 — 通知是增强，绝不杀死 run
+            logger.warning("system notes: 排空失败", exc_info=True)
+        return drained
 
     def _drain_pending_user_messages(self) -> List[Dict[str, Any]]:
         """排空待注入消息（run_loop 迭代顶部调用），返回 ``{"id", "text"}`` 列表。"""

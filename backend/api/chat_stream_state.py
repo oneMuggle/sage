@@ -24,6 +24,8 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 
+from backend.domain.active_agent_registry import set_main_agent_resolver
+
 if TYPE_CHECKING:
     from backend.core.legacy.agent import SageAgent
 
@@ -101,3 +103,14 @@ def interrupt_run(run_id: str) -> str:
             return "stream"
         _PENDING_RUN_CANCELLATIONS.add(run_id)
     return "stream" if matched else "pending"
+
+
+# M2: 向域层注册"stream_id → 主 agent"解析器 —— 后台子代理完成通知需要
+# 回注到当前 run 的主 agent，但 backend.tools 不允许 import backend.api
+#（六边形架构契约），故由 api 层在此注册、tools 层只读域层注册表。
+def _resolve_active_stream_agent(stream_id: Optional[str]) -> Any:
+    entry = _ACTIVE_STREAMS.get(stream_id) if stream_id else None
+    return entry.get("agent") if isinstance(entry, dict) else None
+
+
+set_main_agent_resolver(_resolve_active_stream_agent)

@@ -50,12 +50,20 @@ async def test_background_dispatch_and_collect(tmp_path, monkeypatch):
 
     handle = d.start_background_dispatch(tasks)
     assert handle is not None
-    # 在飞时再次 start → None（互斥）
-    assert d.start_background_dispatch(tasks) is None
+    # M2.2: 多个后台派发可并存（不同 task_id 避免状态撞车）
+    handle2 = d.start_background_dispatch(
+        [
+            {"task_id": "t3", "agent_id": "primary", "goal": "g3"},
+            {"task_id": "t4", "agent_id": "primary", "goal": "g4"},
+        ]
+    )
+    assert handle2 is not None
 
     aggregated = await d.wait_background(timeout=5)
     assert "结果 t1" in aggregated
     assert "结果 t2" in aggregated
+    assert "结果 t3" in aggregated
+    assert "结果 t4" in aggregated
     assert d._states["t1"].status == "done"
 
     # 已终态 → 可再次启动
@@ -167,7 +175,7 @@ async def test_dispatch_tool_background_snapshot(tmp_path, monkeypatch):
     assert content["task_ids"] == ["t1", "t2"]
     assert await d.wait_background(timeout=5)
 
-    # 在飞已结束后再来一次后台 → 正常；运行中重复 → in_progress 错误
+    # M2.2: 在飞期间再次后台派发 → 允许并存（上限内）
     slow_started = asyncio.Event()
 
     async def slow_run(state):
@@ -186,8 +194,47 @@ async def test_dispatch_tool_background_snapshot(tmp_path, monkeypatch):
         tasks=[{"task_id": "t4", "agent_id": "primary", "goal": "g4"}],
         background=True,
     )
-    assert dup.success is False
-    assert "background_dispatch_in_progress" in (dup.error or "")
+    assert dup.success is True
+    assert dup.content["status"] == "dispatched_background"
+    await d.wait_background(timeout=5)
+
+
+@pytest.mark.asyncio()
+async def test_background_dispatch_limit(tmp_path, monkeypatch):
+    """M2.2: 并发达上限时 start 返回 None，工具报 background_dispatch_limit。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    from backend.orchestration import chat_dispatcher as cd
+
+    monkeypatch.setattr(cd, "MAX_CONCURRENT_BACKGROUND_DISPATCHES", 1)
+    queue = _make_queue()
+    d = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-bg-limit")
+    d._semaphore = asyncio.Semaphore(4)
+    started = asyncio.Event()
+
+    async def slow_run(state):
+        started.set()
+        await asyncio.sleep(0.2)
+        state.status = "done"
+        return "ok"
+
+    d._run_subagent = slow_run
+    assert d.start_background_dispatch(
+        [{"task_id": "t1", "agent_id": "primary", "goal": "g1"}]
+    )
+    await started.wait()
+    assert (
+        d.start_background_dispatch(
+            [{"task_id": "t2", "agent_id": "primary", "goal": "g2"}]
+        )
+        is None
+    )
+    tool = DispatchSubagentsTool(d)
+    result = await tool.execute_async(
+        tasks=[{"task_id": "t3", "agent_id": "primary", "goal": "g3"}],
+        background=True,
+    )
+    assert result.success is False
+    assert "background_dispatch_limit" in (result.error or "")
     await d.wait_background(timeout=5)
 
 
