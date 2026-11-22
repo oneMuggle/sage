@@ -56,6 +56,9 @@ MAX_CONCURRENT_SUBAGENTS = 4
 #: M2.2: 同一 run 内并存的后台派发上限（collect 一次收全部在飞派发）。
 MAX_CONCURRENT_BACKGROUND_DISPATCHES = 4
 
+#: M3.2: 每 run 注入 conductor 的失败 re-plan 提示上限（防刷屏）。
+MAX_REPLAN_HINTS_PER_RUN = 3
+
 #: 单子结果截断上限 —— 聚合 markdown 进 conductor 上下文，防止灌爆。
 MAX_SUBAGENT_RESULT_CHARS = 50 * 1024
 
@@ -369,6 +372,8 @@ class ChatDispatcher:
         # M2.5: 任务级暂停控制器（task_id → PauseState）；每次子任务执行
         # 复用同一实例（重试不丢失暂停意愿）。
         self._task_pause_states: Dict[str, PauseState] = {}
+        # M3.2: 已注入 re-plan 提示的失败任务（按 task 去重 + 每 run 上限）。
+        self._replan_hinted_tasks: Set[str] = set()
         # live-events P0: canonical RunEvent 通道（EventHub.publish）。None 时
         # 惰性解析 orch_run_control.get_event_hub()（启动即装配），再取不到
         # 则仅镜像聊天流 —— 双通道缺一不阻塞另一。
@@ -589,6 +594,45 @@ class ChatDispatcher:
         if count:
             self._publish_run_event("run.resumed", {"resumed": count})
         return count
+
+    def _inject_replan_hint(self, state: ChatTaskState) -> None:
+        """M3.2: 子任务最终失败 → 向主 agent 注入 re-plan 提示（下一迭代边界生效）。
+
+        conductor 收到失败上下文后可自行决定：用 add_task_to_plan 追加替代
+        任务、update_pending_task 调整未开始任务后再次 dispatch，或直接基于
+        已完成结果汇总。按 task 去重 + 每 run 上限，注入失败绝不影响执行。
+        """
+        if state.task_id in self._replan_hinted_tasks:
+            return
+        if len(self._replan_hinted_tasks) >= MAX_REPLAN_HINTS_PER_RUN:
+            return
+        try:
+            from backend.domain.active_agent_registry import (
+                resolve_main_agent_for_session,
+            )
+
+            agent = resolve_main_agent_for_session(self.session_id)
+            inject = getattr(agent, "inject_system_note", None)
+            if not callable(inject):
+                return
+        except Exception:  # noqa: BLE001 — 解析失败不注入
+            return
+        goal = (state.goal or "").strip()[:80]
+        error = (state.error or "unknown")[:200]
+        note = (
+            f"【编排提示】子任务 {state.task_id}（{goal}）经重试后仍失败：{error}。"
+            "已完成任务的结果已保留。如需要，可调用 add_task_to_plan 追加替代任务、"
+            "update_pending_task 调整未开始任务，然后再次 dispatch_subagents 继续；"
+            "或直接基于已有结果汇总。"
+        )
+        try:
+            if inject(note):
+                self._replan_hinted_tasks.add(state.task_id)
+                logger.info(
+                    "re-plan 提示已注入 run=%s task=%s", self.run_id, state.task_id
+                )
+        except Exception:  # noqa: BLE001 — 提示是增强，绝不阻塞派发
+            logger.debug("re-plan 提示注入失败", exc_info=True)
 
     def _publish_run_event(self, event_type: str, payload: Dict[str, Any]) -> None:
         """run 级 canonical 事件（fire-and-forget，观测尽力而为）。"""
@@ -1427,6 +1471,9 @@ class ChatDispatcher:
                 finally:
                     state.finished_at = time.time()
                     self._emit_task_status(state)
+                    # M3.2: 失败终态 → 向 conductor 注入带失败上下文的 re-plan 提示
+                    if state.status == "failed":
+                        self._inject_replan_hint(state)
                     # BU2 (round11): 每任务终态后预算守门 —— 超限置位
                     # _cancelled，同批 queued 任务经既有 merged 守卫收口。
                     self._check_run_budget()
