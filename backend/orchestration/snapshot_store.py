@@ -118,6 +118,8 @@ class SnapshotStore:
             run.finished_at = event.occurred_at
         elif event.event_type == "run.paused":
             run.status = "paused"
+        elif event.event_type == "run.resumed":
+            run.status = "running"
 
     def _apply_task_event(self, run: _RunSnapshot, event: RunEvent) -> None:
         task_id = event.entity.get("task_id")
@@ -159,6 +161,10 @@ class SnapshotStore:
             task.finished_at = event.occurred_at
         elif event.event_type == "task.retrying":
             task.status = "retrying"
+        elif event.event_type == "task.paused":
+            task.status = "paused"
+        elif event.event_type == "task.resumed":
+            task.status = "running"
         elif event.event_type in ("task.progress", "task.step.progress"):
             task.current_step_id = payload.get("step_id", task.current_step_id)
             task.output_preview = payload.get("output_preview", task.output_preview)

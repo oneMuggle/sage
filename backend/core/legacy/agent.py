@@ -507,6 +507,7 @@ class SageAgent:
         bare: bool = False,
         policy: Optional[ToolPolicy] = None,
         scheduler_service_getter: Optional[Callable[[], Optional[SchedulerServicePort]]] = None,
+        pause_state: Optional[Any] = None,
     ):
         """初始化 SageAgent。
 
@@ -522,10 +523,16 @@ class SageAgent:
             policy: M2 工具策略；非 bare 构造时透传给
                 ``register_all_tools``（P0-3 scratch 隔离注入点）。
                 ``None`` 时 register_all_tools 使用默认策略，行为不变。
+            pause_state: M2.5 暂停控制器（``backend.orchestration.pause_state
+                .PauseState``）。非 None 时 run_loop 在每轮迭代边界调用
+                ``wait_if_paused()``；暂停期间不发起 LLM 调用、不执行工具。
+                类型用 Any 避免 core → orchestration 的静态耦合（与既有
+                complexity_classifier 惰性导入同因）。
         """
         self.session_repo = SessionRepository()
         self.message_repo = MessageRepository()
         self._interrupted = False
+        self._pause_state = pause_state
         # L12-lite (批次 C-3): 中断事件 —— run_loop 起点创建, interrupt()
         # 置位; 工具执行以 task 竞争该事件, 中断先到即取消当前工具。
         self._interrupt_event: Optional[asyncio.Event] = None
@@ -2420,6 +2427,38 @@ class SageAgent:
                     else:
                         _budget_stop_reason = _plan.reason
                         break
+                # M2.5: 暂停闸门 —— 迭代边界等待恢复信号；暂停期间不发起
+                # LLM 调用、不执行工具。与中断竞争：暂停中被中断则立即
+                # 落到下方统一中断处理（FAILED）。
+                if self._pause_state is not None and getattr(
+                    self._pause_state, "paused", False
+                ):
+                    logger.info("run_loop 迭代 %s 暂停，等待恢复/中断", i)
+                    _resume_waiter = asyncio.ensure_future(
+                        self._pause_state.wait_if_paused()
+                    )
+                    _stop_waiter = (
+                        asyncio.ensure_future(self._interrupt_event.wait())
+                        if self._interrupt_event is not None
+                        else None
+                    )
+                    try:
+                        _pause_waiters = [_resume_waiter]
+                        if _stop_waiter is not None:
+                            _pause_waiters.append(_stop_waiter)
+                        await asyncio.wait(
+                            _pause_waiters, return_when=asyncio.FIRST_COMPLETED
+                        )
+                    finally:
+                        _resume_waiter.cancel()
+                        if _stop_waiter is not None:
+                            _stop_waiter.cancel()
+                    if not (
+                        self._interrupt_event is not None
+                        and self._interrupt_event.is_set()
+                    ):
+                        logger.info("run_loop 迭代 %s 恢复执行", i)
+
                 # P0-1 (2026-08-20): 中断检查 —— 每轮迭代顶部消费一次中断信号（one-shot）。
                 # 此前 interrupt() 只置标志位、is_interrupted() 零调用者，run_loop 从不读，
                 # 中断请求完全无效。现在最迟在下一轮迭代开头终止：发 FAILED 事件，
