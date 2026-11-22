@@ -42,6 +42,35 @@ search:
 `SageToolDriver`（`backend/literature/sage_driver.py`）把 driver 调用映射到
 `sage.call("browser_*")`，可在 `execute_code` 中使用。
 
+## Claims 账本与核验（M2a）
+
+每次核验生成 `claims.jsonl`，每行一条 claim：
+
+```json
+{
+  "claim_id": "c0001",
+  "section": "body",
+  "text": "带 [cite:p1] 的段落原文",
+  "citation_keys": ["p1"],
+  "verdict": "supported",
+  "notes": "",
+  "metadata_schema_ok": true
+}
+```
+
+- `extract-claims`：从 `draft.md` 按段落抽取带 `[cite:KEY]` 的主张。
+- `verify-claims`：跑 Layer 1+2a 核验：
+  - `unresolved`：引用 key 不在文献池；
+  - `unsupported`：claim 无引用；
+  - `supported`：引用 key 都在文献池。
+  - 退出码 1 表示存在 unresolved/unsupported。
+- 外部 DOI/元数据 2-of-3 共识（Layer 2b）与 claim support（Layer 3）留 M2b。
+
+```bash
+python -m backend.literature.cli extract-claims --run runs/<id>
+python -m backend.literature.cli verify-claims --run runs/<id>
+```
+
 ## 设计规则
 
 - 站点差异只写在这里或 skill 的 `references/`，禁止写进 pipeline 代码。

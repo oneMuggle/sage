@@ -57,6 +57,25 @@
 `kind` 建议取值：`task` / `method` / `data` / `metric` / `finding` /
 `limitation` / `quote`。`paper_key` 必须存在于 papers.jsonl。
 
+## claims.jsonl（M2a）
+
+```json
+{
+  "claim_id": "c0001",
+  "section": "body",
+  "text": "带 [cite:doi:10.1000/demo] 的段落原文",
+  "citation_keys": ["doi:10.1000/demo"],
+  "verdict": "supported",
+  "notes": "",
+  "metadata_schema_ok": true
+}
+```
+
+`verdict` 取值：`unverified` / `supported` / `flagged` / `unsupported` /
+`unresolved`。`unresolved` 表示引用 key 不在文献池；`unsupported` 表示 claim
+无引用。`extract-claims` 从 draft.md 按段落重建账本；`verify-claims` 重跑
+Layer 1+2a 并覆盖写入。外部 DOI 2-of-3 与 claim support 尚未实现。
+
 ## outline.json
 
 ```json

@@ -22,6 +22,7 @@ triggers: []
   query_log.jsonl    # 每次检索：query / site_id / result_count / note / at
   papers.jsonl       # PaperRecord（paper_key 唯一）
   evidence.jsonl     # evidence_id / paper_key / kind / text / locator / quote
+  claims.jsonl       # claim_id / section / text / citation_keys / verdict / notes
   outline.json       # title / sections[{id,title,summary,source_keys}]
   draft.md           # 正文，引用用 [cite:KEY] 或 [cite:KEY1, KEY2]
   verification.json  # 门禁报告
@@ -118,19 +119,29 @@ print(record_papers(run, papers))  # papers 是上一步的 JSON 数组
 `[cite:KEY]` 或 `[cite:KEY1, KEY2]`；不要手写 `[1]` 编号。先综合、后比较，
 不要逐篇复述。用 `save_draft` 保存。
 
-### 7. 门禁
+### 7. 门禁与 claims 核验
 
 用 `execute_code` 运行：
 
 ```python
 from pathlib import Path
-from backend.literature.gates import run_gates
-from backend.literature.run_store import load_run
-print(run_gates(load_run(Path("<run_dir>"))).to_dict())
+from backend.literature.gates import extract_claims, run_gates, verify_claims
+from backend.literature.run_store import list_papers, load_run, read_draft, save_claims
+
+run = load_run(Path("<run_dir>"))
+print(run_gates(run).to_dict())
+claims = verify_claims(
+    extract_claims(read_draft(run)),
+    {p.paper_key for p in list_papers(run)},
+)
+save_claims(run, claims)
+print({"claims": len(claims), "verdicts": [c.verdict for c in claims]})
 ```
 
 - `errors` 必须清零：未知引用、缺失检索日志/大纲/草稿、证据指向未知文献。
+- `claims` 的 `unresolved` / `unsupported` 必须清零；`flagged` 要向用户说明。
 - `warnings`（未被引用文献）可以保留，但要向用户说明。
+- 外部 DOI/元数据 2-of-3 与 claim support（M2b）尚未实现，不得声称已做语义核验。
 
 ### 8. 导出
 
