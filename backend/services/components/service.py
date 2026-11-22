@@ -46,6 +46,34 @@ def _normalise_arch(value: str) -> str:
     return lowered
 
 
+#: Build-manifest branch values that carry no channel information.
+#: Only honored on the expected/env side; a pack manifest with one of these
+#: values is still rejected (it matches neither channel).
+_BRANCH_SKIP = {"", "unknown", "dev-build"}
+
+
+def _normalise_branch(value: str) -> str:
+    """Map arbitrary git ref spellings to the component channel id.
+
+    ``win7`` / ``release/win7`` / ``v0.4.9-alpha.84-win7`` / ``v0.4.9-alpha.55-lts``
+    → ``win7`` (the LTS tag convention predates the ``-win7`` suffix);
+    ``main`` / ``master`` / ``v0.4.9-alpha.84`` → ``main``.
+    Empty / ``unknown`` / ``dev-build`` are kept verbatim so the caller can
+    skip the channel check for dev and manifest-less builds.
+    """
+    lowered = value.strip().lower()
+    if lowered in _BRANCH_SKIP:
+        return lowered
+    if (
+        "win7" in lowered
+        or lowered == "lts"
+        or lowered.endswith("-lts")
+        or lowered.endswith("/lts")
+    ):
+        return "win7"
+    return "main"
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -227,10 +255,16 @@ class ComponentService:
                 f"组件包架构不匹配：需要 {manifest.arch}，当前 {platform.machine()}",
                 code="arch_mismatch",
             )
-        expected_branch = str(self.environ.get("SAGE_COMPONENT_BRANCH", "")).strip()
-        if expected_branch and manifest.branch and manifest.branch != expected_branch:
+        raw_expected = str(self.environ.get("SAGE_COMPONENT_BRANCH", "")).strip()
+        expected = _normalise_branch(raw_expected)
+        if (
+            expected
+            and expected not in _BRANCH_SKIP
+            and manifest.branch
+            and _normalise_branch(manifest.branch) != expected
+        ):
             raise ComponentError(
-                f"组件包分支不匹配：需要 {manifest.branch}，当前 {expected_branch}",
+                f"组件包分支不匹配：需要 {manifest.branch}，当前 {raw_expected or expected}",
                 code="branch_mismatch",
             )
 

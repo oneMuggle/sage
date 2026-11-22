@@ -76,6 +76,19 @@ payload/...         # 已构建好的文件
 
 `<userData>` 目录**不作为**信任锚：它是普通用户可写目录，接受其中的公钥会让任何本地用户绕过管理员签名。管理员如需自定义密钥，应使用 `ProgramData` 或安装目录下的公钥文件，或通过显式环境变量下发。
 
+### 3.1 分支校验归一化
+
+`component.json` 的 `branch` 是**发布通道 id**（固定值 `win7` / `main`），而打包版 `resources/build-manifest.json` 的 `branch` 是 git ref（tag 名 `v0.4.9-alpha.84-win7`、分支名 `release/win7`、dev 缺省 `unknown`）。两者不做裸字符串比较 —— `ComponentService._check_compatibility` 通过 `_normalise_branch()` 把两边都映射成通道 id 再比较：
+
+| 输入 | 归一化结果 |
+| --- | --- |
+| `win7` / `release/win7` / `feat/x-win7` / `v0.4.9-alpha.84-win7` | `win7` |
+| `v0.4.9-alpha.55-lts` / `lts` / `release/lts`（旧版 LTS 标签约定） | `win7` |
+| `main` / `master` / `v0.4.9-alpha.84` | `main` |
+| `""` / `unknown` / `dev-build` | 跳过校验（仅期望值侧生效；组件包清单里出现这些值仍会被拒绝） |
+
+错误消息里仍保留原始 ref 便于诊断；比较只用归一化后的通道 id。历史版本（2026-11-22 之前）是严格字符串比较，导致所有正式发行版导入必然报 `branch_mismatch`；2026-11-22 起已修复。
+
 ## 4. 入口
 
 ### 4.1 设置页「组件管理」

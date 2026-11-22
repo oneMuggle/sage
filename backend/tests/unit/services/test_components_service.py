@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import platform
+import sys
 import zipfile
 from pathlib import Path
 
@@ -308,3 +310,117 @@ def test_install_upgrade_removes_old_files(tmp_path: Path):
     assert not (tmp_path / "userdata" / "models" / "demo" / "a.bin").exists()
     assert (tmp_path / "userdata" / "models" / "demo" / "b.bin").read_bytes() == b"b"
     assert service.list_installed()[0].version == "2.0.0"
+
+
+# ---------- _normalise_branch + compatibility branch tolerance ----------
+
+
+def _compat_manifest(branch: str = "win7") -> ComponentManifest:
+    return ComponentManifest.from_dict(
+        _manifest(
+            {"models/demo.bin": b"x"},
+            branch=branch,
+            python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
+            arch=platform.machine(),
+        )
+    )
+
+
+def _compat_service(tmp_path: Path, branch_env: str) -> ComponentService:
+    return ComponentService(
+        user_data_dir=tmp_path,
+        environ={"SAGE_COMPONENT_BRANCH": branch_env},
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("", ""),
+        ("   ", ""),
+        ("win7", "win7"),
+        ("WIN7", "win7"),
+        ("release/win7", "win7"),
+        ("feat/orch-win7", "win7"),
+        ("v0.4.9-alpha.84-win7", "win7"),
+        ("v0.4.9-alpha.84-win7  ", "win7"),
+        ("v0.4.9-alpha.55-lts", "win7"),
+        ("lts", "win7"),
+        ("release/lts", "win7"),
+        ("main", "main"),
+        ("master", "main"),
+        ("v0.4.9-alpha.84", "main"),
+        ("unknown", "unknown"),
+        ("dev-build", "dev-build"),
+    ],
+)
+def test_normalise_branch(value, expected):
+    from backend.services.components.service import _normalise_branch
+
+    assert _normalise_branch(value) == expected
+
+
+def test_check_compatibility_accepts_tag_style_win7_branch(tmp_path: Path):
+    """Packaged win7 builds set SAGE_COMPONENT_BRANCH to the git tag name.
+
+    They must still accept packs whose manifest says branch='win7'.
+    """
+    svc = _compat_service(tmp_path, "v0.4.9-alpha.84-win7")
+    svc._check_compatibility(_compat_manifest())  # no exception == pass
+
+
+def test_check_compatibility_accepts_release_win7_ref(tmp_path: Path):
+    """Any ref containing 'win7' maps to the win7 channel."""
+    svc = _compat_service(tmp_path, "release/win7")
+    svc._check_compatibility(_compat_manifest())
+
+
+def test_check_compatibility_skips_unknown_and_dev_build(tmp_path: Path):
+    """Dev builds without a packaged manifest have branch='unknown' — the
+    check must be skipped so local imports work during development."""
+    for branch_env in ("", "unknown", "dev-build"):
+        svc = _compat_service(tmp_path, branch_env)
+        svc._check_compatibility(_compat_manifest())  # no exception
+
+
+def test_check_compatibility_rejects_cross_channel(tmp_path: Path):
+    """A main-channel build must still refuse win7 packs."""
+    svc = _compat_service(tmp_path, "v0.4.9-alpha.84")
+    with pytest.raises(ComponentError, match="分支不匹配"):
+        svc._check_compatibility(_compat_manifest())
+
+
+def test_check_compatibility_accepts_lts_tag_branch(tmp_path: Path):
+    """The legacy LTS tag convention (v*-lts) also targets the win7 channel."""
+    svc = _compat_service(tmp_path, "v0.4.9-alpha.55-lts")
+    svc._check_compatibility(_compat_manifest())  # no exception
+
+
+def test_check_compatibility_accepts_ref_style_manifest_branch(tmp_path: Path):
+    """Manifest branch compared by channel id, not by ref spelling."""
+    svc = _compat_service(tmp_path, "win7")
+    svc._check_compatibility(_compat_manifest(branch="release/win7"))
+
+
+def test_check_compatibility_win7_rejects_main_pack(tmp_path: Path):
+    """Reverse direction: a win7 build refuses main-channel packs."""
+    svc = _compat_service(tmp_path, "v0.4.9-alpha.84-win7")
+    with pytest.raises(ComponentError, match="分支不匹配"):
+        svc._check_compatibility(_compat_manifest(branch="main"))
+
+
+def test_install_with_tag_style_branch_env(tmp_path: Path):
+    """End-to-end install() under a packaged-build branch env (the original bug)."""
+    key, public_pem = _keypair()
+    payload = {"models/demo/model.bin": b"model"}
+    manifest = _manifest(
+        payload,
+        python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
+        arch=platform.machine(),
+    )
+    pack = _build_pack(tmp_path / "demo.sagepkg", key, manifest, payload)
+    service = _service(tmp_path, public_pem)
+    service.environ["SAGE_COMPONENT_BRANCH"] = "v0.4.9-alpha.84-win7"
+    installed = service.install(pack)
+    assert installed.id == "demo"
+    assert (tmp_path / "userdata" / "models" / "demo" / "model.bin").read_bytes() == b"model"
