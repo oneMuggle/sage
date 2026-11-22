@@ -1,6 +1,7 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0–M2.4 已合并 main+win7；M2.5（pause/resume）已实施（本分支）
+> 状态：M0–M2.5 已合并 main+win7；M3.1（subagent_type 角色注册表）已实施（本分支）
+> 分支：M3.1 `feat/orch-subagent-types`
 > 分支：M2.5 `feat/orch-pause-resume`
 > 分支：M2.4 `feat/orch-subagent-thread`
 > 分支：M2.3 `feat/orch-subagent-followup`
@@ -137,7 +138,7 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 - [x] M2.3 子代理继续对话
 - [x] M2.4 子代理线程 + TaskCenter task 级条目
 - [x] M2.5 task pause/resume + run resume 端点
-- [ ] M3.1 `subagent_type` 角色注册表落地
+- [x] M3.1 `subagent_type` 角色注册表落地
 - [ ] M3.2 失败驱动 re-plan
 - [ ] M3.3 计划卡成本预估 + 拆深开关
 - [ ] M4.1 工具耗时 + transcript 全文引用
