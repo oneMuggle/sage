@@ -62,13 +62,20 @@ search:
 - `verify-claims`：跑 Layer 1+2a 核验：
   - `unresolved`：引用 key 不在文献池；
   - `unsupported`：claim 无引用；
-  - `supported`：引用 key 都在文献池。
+  - `supported`：引用 key 都在文献池；
+  - `flagged`：引用存在，但引用论文没有任何 evidence 记录（Layer 3a）。
   - 退出码 1 表示存在 unresolved/unsupported。
-- 外部 DOI/元数据 2-of-3 共识（Layer 2b）与 claim support（Layer 3）留 M2b。
+- 外部 DOI/元数据 2-of-3 共识（Layer 2b）：
+  - `verify-metadata` 对每篇有 DOI/arXiv 的文献查询 Crossref / OpenAlex / Semantic Scholar；
+  - 至少 2 家标题/年份/作者匹配 → `verified`；1 家 → `partial`；0 → `unverified`；
+    无 DOI/arXiv → `skipped`；
+  - 报告写入 `metadata_verification.json`。
+- 语义 claim support（Layer 3b：被引段落是否真的支持该句，含 PDF 页定位）留 M2c。
 
 ```bash
 python -m backend.literature.cli extract-claims --run runs/<id>
 python -m backend.literature.cli verify-claims --run runs/<id>
+python -m backend.literature.cli verify-metadata --run runs/<id>
 ```
 
 ## 设计规则
