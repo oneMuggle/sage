@@ -11,13 +11,14 @@
  *  - 旧抽屉是 `absolute w-96`（384px）叠在 320-560px 的右栏里，内容被裁切；
  *    本视图占满整个进度面板，实时事件流可以完整展开。
  */
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { SubagentLiveEvent, TaskStatusValue } from '../../../shared/api';
 import { orchRunClient } from '../../../shared/api/orchRunClient';
+import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 import { usePluginNames } from '../../../shared/lib/hooks/usePluginNames';
 import { findPluginToolOwner } from '../../../shared/lib/permissionInsights';
 
@@ -92,17 +93,28 @@ export function TaskDetailView({
   onRetryTask,
   sessionId,
 }: TaskDetailViewProps) {
-  const planItem = board.plan.find((p) => p.task_id === taskId);
-  const status = board.statuses[taskId];
+  // M2.3: 续聊派发后切换到新任务（transcript 轮询随之切换）。
+  const [activeTaskId, setActiveTaskId] = useState(taskId);
+  useEffect(() => {
+    setActiveTaskId(taskId);
+  }, [taskId]);
+
+  const planItem = board.plan.find((p) => p.task_id === activeTaskId);
+  const status = board.statuses[activeTaskId];
   const state: TaskStatusValue = status?.status ?? 'queued';
-  const live = board.live?.[taskId];
+  const live = board.live?.[activeTaskId];
+  const [followupBusy, setFollowupBusy] = useState(false);
+  const [followupGoal, setFollowupGoal] = useState<string | null>(null);
 
   // 编排运行视图里登记过的 run 才有权威事件流 + steering 能力。
   const knownRun = useRunControlStore((s) => s.runs.get(board.runId));
   const eventsByRunId = useRunControlStore((s) => s.eventsByRunId);
   const orchEvents = useMemo(
-    () => (eventsByRunId.get(board.runId) ?? []).filter((e) => e.entity.task_id === taskId),
-    [eventsByRunId, board.runId, taskId],
+    () =>
+      (eventsByRunId.get(board.runId) ?? []).filter(
+        (e) => e.entity.task_id === activeTaskId,
+      ),
+    [eventsByRunId, board.runId, activeTaskId],
   );
 
   // running 时 1s tick 驱动实时耗时。
@@ -115,14 +127,37 @@ export function TaskDetailView({
 
   const [skipping, setSkipping] = useState(false);
   const [view, setView] = useState<'process' | 'transcript'>('process');
+
+  const handleFollowup = useCallback(
+    async (content: string) => {
+      if (followupBusy) return;
+      setFollowupBusy(true);
+      try {
+        const res = await orchRunControlClient.followupTask(
+          board.runId,
+          activeTaskId,
+          content,
+        );
+        setFollowupGoal(content);
+        setActiveTaskId(res.task_id);
+        setView('transcript');
+        toast.info('已派发续聊任务，正在继续对话');
+      } catch (err) {
+        toast.error(`续聊失败：${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setFollowupBusy(false);
+      }
+    },
+    [board.runId, activeTaskId, followupBusy],
+  );
   const handleSkip = () => {
     if (skipping) return;
     setSkipping(true);
     orchRunClient
-      .cancelTask(board.runId, taskId)
-      .then(() => toast.info(`已请求跳过子任务 ${taskId}`))
+      .cancelTask(board.runId, activeTaskId)
+      .then(() => toast.info(`已请求跳过子任务 ${activeTaskId}`))
       .catch(() => {
-        toast.error(`跳过子任务 ${taskId} 失败（已结束?）`);
+        toast.error(`跳过子任务 ${activeTaskId} 失败（已结束?）`);
         setSkipping(false);
       });
   };
@@ -181,13 +216,13 @@ export function TaskDetailView({
           </span>
         </div>
         <div className="mt-1.5 text-sm text-text break-words">
-          {planItem?.goal ?? status?.goal ?? taskId}
+          {planItem?.goal ?? status?.goal ?? followupGoal ?? activeTaskId}
         </div>
         <div
           className="mt-1 flex items-center gap-2 flex-wrap text-ui-2xs text-text-muted"
           data-testid="task-detail-stats"
         >
-          <span className="tabular-nums">任务 {taskId.slice(0, 12)}</span>
+          <span className="tabular-nums">任务 {activeTaskId.slice(0, 12)}</span>
           {elapsedMs !== null && (
             <span className="tabular-nums">
               {state === 'running' ? '已运行 ' : '耗时 '}
@@ -231,7 +266,7 @@ export function TaskDetailView({
           {state === 'failed' && onRetryTask && (
             <button
               type="button"
-              onClick={() => onRetryTask(board.runId, taskId)}
+              onClick={() => onRetryTask(board.runId, activeTaskId)}
               data-testid="task-detail-retry"
               className="px-2 py-0.5 text-ui-2xs border border-border rounded text-text-secondary hover:text-primary hover:border-primary/40"
             >
@@ -278,9 +313,12 @@ export function TaskDetailView({
           <Suspense fallback={<div className="text-xs text-text-muted">加载对话记录…</div>}>
             <LazyTaskTranscriptPanel
               runId={board.runId}
-              taskId={taskId}
+              taskId={activeTaskId}
               live={state === 'running' || state === 'queued'}
               sessionId={sessionId}
+              canFollowup={state === 'done'}
+              followupBusy={followupBusy}
+              onFollowup={(content) => void handleFollowup(content)}
             />
           </Suspense>
         ) : (
@@ -375,7 +413,9 @@ export function TaskDetailView({
       </div>
 
       {/* steering —— 仅编排 run 且任务未终态 */}
-      {knownRun && !TERMINAL.has(state) && <ContextInput runId={board.runId} taskId={taskId} />}
+      {knownRun && !TERMINAL.has(state) && (
+        <ContextInput runId={board.runId} taskId={activeTaskId} />
+      )}
     </div>
   );
 }

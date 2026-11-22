@@ -151,6 +151,7 @@
     "orchestration_cancel_run_task": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/tasks/{task_id}/cancel" },
     "orchestration_confirm_run": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/confirm" },
     "orchestration_create_lane": { "method": "POST", "path": "/api/v1/orchestration/lanes" },
+    "orchestration_followup_task": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/tasks/{task_id}/followup" },
     "orchestration_get_lane": { "method": "GET", "path": "/api/v1/orchestration/lanes/{lane_id}" },
     "orchestration_get_run": { "method": "GET", "path": "/api/v1/orch/runs/{run_id}" },
     "orchestration_get_run_snapshot": { "method": "GET", "path": "/api/v1/orch/runs/{run_id}/snapshot" },

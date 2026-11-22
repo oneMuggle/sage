@@ -32,6 +32,15 @@ export interface SteerTaskResponse {
   status: string;
 }
 
+/** M2.3: 子代理继续对话的派发结果。 */
+export interface FollowupTaskResponse {
+  ok: boolean;
+  run_id: string;
+  parent_task_id: string;
+  task_id: string;
+  status: string;
+}
+
 export interface CancelRunParams {
   run_id: string;
   reason?: string;
@@ -104,6 +113,24 @@ export const orchRunControlClient = {
    */
   async steerTask(params: SteerTaskParams): Promise<SteerTaskResponse> {
     return invoke<SteerTaskResponse>('orchestration_steer_task', { ...params });
+  },
+
+  /**
+   * POST /orch/runs/{runId}/tasks/{taskId}/followup
+   *
+   * M2.3: 对已完成子任务继续对话 —— 复用其子代理历史（followup_of），
+   * 后台派发新任务；返回新 task_id 供详情页切换 transcript。
+   */
+  async followupTask(
+    runId: string,
+    taskId: string,
+    content: string,
+  ): Promise<FollowupTaskResponse> {
+    return invoke<FollowupTaskResponse>('orchestration_followup_task', {
+      run_id: runId,
+      task_id: taskId,
+      content,
+    });
   },
 
   /**

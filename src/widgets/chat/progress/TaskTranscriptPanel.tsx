@@ -7,7 +7,7 @@
  * 为摘要条）。
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { DisplayMode } from '../../../features/chat/displayMode/types';
 import { useDisplayMode } from '../../../features/chat/displayMode/useDisplayMode';
@@ -21,6 +21,10 @@ interface TaskTranscriptPanelProps {
   /** 任务仍在运行（开启增量轮询）。 */
   live: boolean;
   sessionId?: string | null;
+  /** M2.3：父任务已完成且可继续对话。 */
+  canFollowup?: boolean;
+  followupBusy?: boolean;
+  onFollowup?: (content: string) => void;
 }
 
 function summarizeArgs(args: unknown): string {
@@ -158,7 +162,15 @@ function MessageRow({ message, mode }: { message: TaskTranscriptMessage; mode: D
   }
 }
 
-export function TaskTranscriptPanel({ runId, taskId, live, sessionId }: TaskTranscriptPanelProps) {
+export function TaskTranscriptPanel({
+  runId,
+  taskId,
+  live,
+  sessionId,
+  canFollowup,
+  followupBusy,
+  onFollowup,
+}: TaskTranscriptPanelProps) {
   const { mode } = useDisplayMode(sessionId ?? null, null);
   const { messages, loading, error, refresh } = useTaskTranscript({
     runId,
@@ -167,6 +179,14 @@ export function TaskTranscriptPanel({ runId, taskId, live, sessionId }: TaskTran
     live,
   });
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [followupDraft, setFollowupDraft] = useState('');
+
+  const submitFollowup = () => {
+    const text = followupDraft.trim();
+    if (!text || followupBusy || !onFollowup) return;
+    onFollowup(text);
+    setFollowupDraft('');
+  };
 
   // 运行中在靠近底部时自动跟随新消息（用户上翻时不打扰）。
   useEffect(() => {
@@ -210,6 +230,33 @@ export function TaskTranscriptPanel({ runId, taskId, live, sessionId }: TaskTran
             ))}
           </ul>
         </div>
+      )}
+      {canFollowup && onFollowup && (
+        <form
+          data-testid="task-transcript-followup"
+          className="flex items-center gap-1 border-t border-border pt-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitFollowup();
+          }}
+        >
+          <input
+            value={followupDraft}
+            onChange={(e) => setFollowupDraft(e.target.value)}
+            placeholder="继续追问这个子代理…"
+            aria-label="继续追问"
+            data-testid="task-transcript-followup-input"
+            className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-border bg-bg text-text"
+          />
+          <button
+            type="submit"
+            disabled={!followupDraft.trim() || followupBusy}
+            data-testid="task-transcript-followup-submit"
+            className="px-2 py-1 text-ui-2xs rounded border border-primary text-primary disabled:opacity-50"
+          >
+            {followupBusy ? '派发中…' : '继续'}
+          </button>
+        </form>
       )}
     </div>
   );

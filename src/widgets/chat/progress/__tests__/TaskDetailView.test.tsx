@@ -6,12 +6,13 @@
  * 旧抽屉从 runControlStore.runs 解析任务 → 聊天任务板恒 undefined；
  * 新视图直接读 board.plan + board.statuses + board.live[taskId]。
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useRunControlStore } from '../../../../entities/orchestration/runControlStore';
 import type { TaskBoard } from '../../../../features/send-message/useChat';
 import { orchRunClient } from '../../../../shared/api/orchRunClient';
+import { orchRunControlClient } from '../../../../shared/api/orchRunControlClient';
 import type { SubagentLiveState } from '../../../../shared/api/types/chatAndEventTypes';
 import { TaskDetailView } from '../TaskDetailView';
 
@@ -29,6 +30,13 @@ vi.mock('../../../../shared/api/orchRunControlClient', () => ({
       messages: [],
       next_seq: 0,
       has_more: false,
+    }),
+    followupTask: vi.fn().mockResolvedValue({
+      ok: true,
+      run_id: 'run-1',
+      parent_task_id: 't1',
+      task_id: 'fu1',
+      status: 'dispatched',
     }),
   },
 }));
@@ -77,6 +85,42 @@ describe('TaskDetailView', () => {
     fireEvent.click(screen.getByTestId('task-detail-tab-transcript'));
 
     expect(await screen.findByTestId('task-transcript-panel')).toBeInTheDocument();
+  });
+
+  it('终态任务可在「对话」tab 继续追问并切换到新任务', async () => {
+    const board = buildBoard({
+      statuses: {
+        t1: {
+          state: 'task_status',
+          run_id: 'run-1',
+          task_id: 't1',
+          status: 'done',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: null,
+          output_preview: 'done',
+        },
+      },
+    });
+    const followupTaskMock = vi.mocked(orchRunControlClient.followupTask);
+    const getTaskTranscriptMock = vi.mocked(orchRunControlClient.getTaskTranscript);
+    followupTaskMock.mockClear();
+    getTaskTranscriptMock.mockClear();
+
+    render(<TaskDetailView board={board} taskId="t1" onBack={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('task-detail-tab-transcript'));
+
+    const input = await screen.findByTestId('task-transcript-followup-input');
+    fireEvent.change(input, { target: { value: '再补充第三节' } });
+    fireEvent.click(screen.getByTestId('task-transcript-followup-submit'));
+
+    await waitFor(() =>
+      expect(followupTaskMock).toHaveBeenCalledWith('run-1', 't1', '再补充第三节'),
+    );
+    // 派发成功后详情页切换到新任务 fu1，transcript 轮询随之切换
+    await waitFor(() =>
+      expect(getTaskTranscriptMock).toHaveBeenCalledWith('run-1', 'fu1', 0, 200),
+    );
   });
 
   it('run 已登记进 runControlStore 时渲染事件时间线与 steering 入口', () => {

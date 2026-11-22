@@ -428,6 +428,55 @@ class CancelTaskResponse(BaseModel):
     status: str
 
 
+class FollowupTaskRequest(BaseModel):
+    content: str
+
+
+class FollowupTaskResponse(BaseModel):
+    ok: bool
+    run_id: str
+    parent_task_id: str
+    task_id: str
+    status: str
+
+
+@router.post(
+    "/runs/{run_id}/tasks/{task_id}/followup", response_model=FollowupTaskResponse
+)
+def followup_run_task(
+    run_id: str, task_id: str, payload: FollowupTaskRequest
+) -> FollowupTaskResponse:
+    """M2.3: 对已完成子任务继续对话（复用其子代理历史，后台派发新任务）。
+
+    - 404：run 不在进程内活动注册表（进程重启 / run 从未在本进程运行）
+    - 409：parent 不存在 / 未完成 / 后台派发超限
+    - 400：content 为空或超过 8KB
+    """
+    content = (payload.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="content is required")
+    if len(content) > 8192:
+        raise HTTPException(status_code=400, detail="content too long (max 8192)")
+    from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
+
+    dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
+    if dispatcher is None:
+        raise HTTPException(status_code=404, detail="active run not found")
+    started = dispatcher.start_followup(task_id, content)
+    if started is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"task not followup-able (unknown/unfinished/limit): {task_id}",
+        )
+    return FollowupTaskResponse(
+        ok=True,
+        run_id=run_id,
+        parent_task_id=task_id,
+        task_id=str(started["task_id"]),
+        status="dispatched",
+    )
+
+
 @router.post("/runs/{run_id}/tasks/{task_id}/cancel", response_model=CancelTaskResponse)
 def cancel_run_task(run_id: str, task_id: str) -> CancelTaskResponse:
     """B3 (2026-09-09): 单任务跳过 —— 只停一个子任务，不影响其余。
