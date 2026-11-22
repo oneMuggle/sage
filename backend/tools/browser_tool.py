@@ -36,6 +36,7 @@ from backend.services.browser_control import (
     get_browser_control,
 )
 
+from . import browser_frames
 from .base import BaseTool, ToolResult, ToolSchema
 from .browser_cdp import (
     RESERVED_BROWSER_ID,
@@ -59,8 +60,12 @@ from .browser_observe import (
     SNAPSHOT_INTERACTIVE_MAX_DEFAULT,
     STALE_REF_ERROR,
     STALE_REF_INFO,
+    TARGET_NAME_SOURCE_JS,
+    build_frame_ref_expression,
+    build_frame_target_expression,
     build_ref_expression,
     build_snapshot_expression,
+    merge_snapshot_payloads,
     parse_key_combo,
     parse_snapshot_payload,
 )
@@ -75,6 +80,14 @@ LOCAL_STORAGE_CAP = 512 * 1024
 
 #: 允许的 URL scheme（file:// 可读本地文件 → 坚决拒绝；javascript: 注入面）
 _ALLOWED_SCHEMES = frozenset({"http", "https", "about", "data"})
+
+#: 子 frame 内容读取允许的 scheme；其余（file:/chrome:/javascript:）一律 block
+_ALLOWED_FRAME_SCHEMES = frozenset({"http", "https", "about", "data", "blob"})
+
+#: 子 frame 交互前读取真实 location（隔离世界可跨域读自身）
+_FRAME_LOCATION_EXPRESSION = (
+    "(function(){return JSON.stringify({href:location.href,origin:location.origin});})()"
+)
 
 _VALID_ACTIONS = (
     "click",
@@ -137,6 +150,10 @@ _LAST_PAGE: Dict[str, Dict[str, str]] = {}
 
 #: 受控浏览器每会话最近一次快照的登录墙判断
 _LAST_LOGIN_WALL: Dict[str, bool] = {}
+
+#: 最近一次快照中 ref → 所属子 frame 的归属（跨 frame 交互定位用）。
+#: 结构：browser_id -> ref -> {frame_id, frame_url, name}；新快照覆盖写入。
+_SNAPSHOT_FRAME_REFS: Dict[str, Dict[str, Dict[str, str]]] = {}
 
 
 def _error(exc: BrowserCDPError) -> ToolResult:
@@ -390,17 +407,23 @@ def _safety_check_site(session_id: str, url: str) -> str:
 
 
 def _site_access_gate(
-    session: BrowserSession, url: str, domain: str, started: float
+    session: BrowserSession,
+    url: str,
+    domain: str,
+    started: float,
+    tool: str = "browser_navigate",
 ) -> Optional[ToolResult]:
     """M4 站点授权门禁：拒绝指纹 → 持久/会话策略 → block / confirm。
 
     返回拦截结果（已写审计）或 None（放行）。导航落地域名与请求域名
     不同（重定向/短链）时调用方用最终 URL 再调一次，避免 302 绕过。
+    子 frame 交互传入 ``tool="browser_interact"``，把授权绑定到交互动作。
     """
     if not domain:
         return None
+    meta_action = "interact" if tool == "browser_interact" else "navigate"
     site_fingerprint = browser_safety.action_fingerprint(
-        "browser_navigate",
+        tool,
         "site_access",
         domain,
         session_id=session.browser_id,
@@ -411,8 +434,8 @@ def _site_access_gate(
         get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
         _record_browser_audit(
             session,
-            "browser_navigate",
-            "navigate",
+            tool,
+            meta_action,
             "blocked",
             approval="denied",
             domain=domain,
@@ -424,7 +447,7 @@ def _site_access_gate(
                 error="denied_by_user: 用户拒绝了访问该站点，请换一种方式或询问用户",
             ),
             session,
-            "navigate",
+            meta_action,
             url=url,
         )
     verdict = _safety_check_site(session.browser_id, url)
@@ -432,8 +455,8 @@ def _site_access_gate(
         get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
         _record_browser_audit(
             session,
-            "browser_navigate",
-            "navigate",
+            tool,
+            meta_action,
             "blocked",
             approval="none",
             domain=domain,
@@ -442,7 +465,7 @@ def _site_access_gate(
         return _meta_result(
             ToolResult(success=False, error=f"site_blocked: 用户已禁止该站点 {domain}"),
             session,
-            "navigate",
+            meta_action,
             url=url,
         )
     if verdict == "confirm":
@@ -459,8 +482,8 @@ def _site_access_gate(
         get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
         _record_browser_audit(
             session,
-            "browser_navigate",
-            "navigate",
+            tool,
+            meta_action,
             "confirm_required",
             approval="none",
             domain=domain,
@@ -475,7 +498,7 @@ def _site_access_gate(
                 ),
             ),
             session,
-            "navigate",
+            meta_action,
             url=url,
         )
     return None
@@ -528,6 +551,19 @@ def _read_target_metadata(
     if not ref and not selector and not use_focused:
         return None
     if ref:
+        owner = _SNAPSHOT_FRAME_REFS.get(session.browser_id, {}).get(str(ref))
+        if owner:
+            try:
+                context_id = browser_frames.create_world(session, owner["frame_id"])
+                value = browser_frames.evaluate_in_context(
+                    session,
+                    build_frame_target_expression(ref, str(owner.get("name") or "")),
+                    context_id,
+                )
+            except BrowserCDPError:
+                logger.debug("子 frame 交互目标元数据读取失败", exc_info=True)
+                return None
+            return value if isinstance(value, dict) else None
         locator = f"(window.__SAGE_REFS__||{{}})[{json.dumps(str(ref))}]"
     elif selector:
         locator = f"document.querySelector({json.dumps(str(selector))})"
@@ -536,33 +572,9 @@ def _read_target_metadata(
     # body/documentElement 永不取正文；宽泛容器（div/main/section… 且没有
     # 交互角色）只取直接文本节点，避免整页/整块 innerText 进入 name →
     # 审计/确认描述（I3）。focused 与非 focused 路径共用同一守卫。
-    name_source = (
-        "var name='';"
-        "var isBody=(el===document.body||el===document.documentElement);"
-        "var role=(el.getAttribute&&el.getAttribute('role'))||'';"
-        "var tag=(el.tagName||'').toUpperCase();"
-        "var broadRoles={generic:1,presentation:1,none:1,main:1,region:1,"
-        "document:1,group:1,list:1};"
-        "var broadTags={DIV:1,MAIN:1,SECTION:1,ARTICLE:1,NAV:1,FORM:1,"
-        "ASIDE:1,HEADER:1,FOOTER:1,UL:1,OL:1,TABLE:1,TBODY:1,TR:1,"
-        "BODY:1,HTML:1};"
-        "var isBroad=!!broadTags[tag]&&(!role||broadRoles[role]===1);"
-        "if(!isBody){"
-        "name=(el.getAttribute&&(el.getAttribute('aria-label')||''))||'';"
-        "if(!name){name=(el.getAttribute&&(el.getAttribute('title')||''))||'';}"
-        "if(!name&&el.labels&&el.labels.length){name=el.labels[0].textContent||'';}"
-        "if(!name){"
-        "if(!isBroad){name=el.innerText||el.textContent||'';}"
-        "else{var tn='';var kids=el.childNodes||[];"
-        "for(var i=0;i<kids.length&&tn.length<120;i++){"
-        "if(kids[i].nodeType===3){tn+=kids[i].nodeValue;}}"
-        "name=tn;}"
-        "}"
-        "}"
-    )
     expression = (
         "(function(){var el=" + locator + ";if(!el)return null;"
-        + name_source
+        + TARGET_NAME_SOURCE_JS
         + "return{tag:(el.tagName||'').toLowerCase(),"
         "role:(el.getAttribute&&el.getAttribute('role'))||'',"
         "name:String(name).trim().slice(0,120),"
@@ -1164,7 +1176,7 @@ def _expression_with_page_info(expression: str) -> str:
     )
 
 
-def _build_interact_expression(
+def _build_interact_expression(  # noqa: PLR0911 — 每个动作分支独立返回，扁平更直读
     action: str,
     selector: str,
     text: str,
@@ -1172,9 +1184,17 @@ def _build_interact_expression(
     key: str,
     clear: bool,
     ref: str,
+    frame_owner: Optional[Dict[str, str]] = None,
 ) -> str:
-    """按定位优先级构造交互 JS（ref > selector > text，scroll 无定位）。"""
+    """按定位优先级构造交互 JS（ref > selector > text，scroll 无定位）。
+
+    ``frame_owner`` 非空表示 ref 来自子 frame：用 data 属性定位、在目标
+    frame 的隔离世界执行，且不附加页面 url/title（保持顶层页面缓存）。
+    """
+    frame_name = str((frame_owner or {}).get("name") or "")
     if action == "click":
+        if ref and frame_owner:
+            return build_frame_ref_expression(_js_click_element(), ref, frame_name)
         expression = (
             build_ref_expression(_js_click_element(), ref)
             if ref
@@ -1182,6 +1202,10 @@ def _build_interact_expression(
         )
         return _expression_with_page_info(expression)
     if action == "scroll":
+        # 子 frame 内滚动不写 page 信息：否则 frame 的 url/title 会被当成
+        # 顶层页面写回 _LAST_PAGE。
+        if frame_owner:
+            return _js_scroll(int(value))
         return _expression_with_page_info(_js_scroll(int(value)))
     if action == "press" and not ref and not selector:
         return _expression_with_page_info(_js_press(key))
@@ -1200,8 +1224,33 @@ def _build_interact_expression(
         snippet = _js_press_element(key)
 
     if ref:
+        if frame_owner:
+            return build_frame_ref_expression(snippet, ref, frame_name)
         return _expression_with_page_info(build_ref_expression(snippet, ref))
     return _expression_with_page_info(_js_on_selector(selector, snippet))
+
+
+def _wait_after_click(session: BrowserSession) -> None:
+    """点击后的就绪等待：有子 frame 等全帧稳定，否则沿用顶层网络空闲等待。
+
+    被封禁/待确认的 frame 不参与探活（不读取其 DOM，避免侧信道）。
+    """
+    try:
+        frames = browser_frames.list_frames(session)
+    except BrowserCDPError as exc:
+        logger.debug("点击后 frame tree 不可用，回退网络空闲等待: %s", exc)
+        frames = []
+    if len(frames) > 1:
+        frames_by_id = {frame.frame_id: frame for frame in frames}
+        allowed = [
+            frame
+            for frame in frames
+            if frame.is_main
+            or _frame_site_decision(session.browser_id, frame, frames_by_id)[0] == "allow"
+        ]
+        browser_frames.wait_frames_settled(session, frames=allowed or frames[:1])
+        return
+    _wait_network_idle(session, None, timeout=5.0)
 
 
 def _wait_page_settled(
@@ -1472,6 +1521,8 @@ class BrowserNavigateTool(BaseTool):
         page_url = str(page.get("url") or url)
         page_title = str(page.get("title") or "")
         _remember_page(session, page_url, page_title)
+        # 新页面上的旧 ref（含子 frame 归属）全部失效
+        _SNAPSHOT_FRAME_REFS.pop(session.browser_id, None)
         # 302/短链/JS 跳转可能落到与请求不同的域名：对最终落地域名重跑
         # 站点授权（block → site_blocked；confirm → 站点确认 + paused），
         # 否则允许域名重定向到禁止域名即可绕过策略。
@@ -1500,6 +1551,192 @@ class BrowserNavigateTool(BaseTool):
             title=page_title,
             screenshot_path=thumbnail,
         )
+
+
+def _coerce_frame_payload(value: Any) -> Optional[Dict[str, Any]]:
+    """把 frame 快照返回值（dict 或 JSON 字符串）归一为 dict；异常返回 None。"""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def _frame_site_decision(  # noqa: PLR0911 — 来源判定各分支独立早退
+    session_id: str,
+    frame: browser_frames.FrameInfo,
+    frames_by_id: Dict[str, browser_frames.FrameInfo],
+    url_override: str = "",
+    origin_override: str = "",
+) -> Tuple[str, str]:
+    """子 frame 的站点策略判定；返回 ``(decision, policy_url)``。
+
+    优先级：本次采集到的真实 ``location.origin`` → CDP ``securityOrigin`` →
+    本次 ``location.href`` → frame tree 的 ``url``。originless frame
+    （about:blank / srcdoc / data: / 空 URL）继承最近有 host 的祖先 frame 的
+    判定；scheme 不在白名单或无法确定来源时 fail-closed（block）。
+    """
+    candidates = (origin_override, frame.security_origin, url_override, frame.url)
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if not text:
+            continue
+        try:
+            parts = urlsplit(text)
+        except ValueError:
+            return "block", text
+        scheme = (parts.scheme or "").lower()
+        if scheme and scheme not in _ALLOWED_FRAME_SCHEMES:
+            return "block", text
+        if parts.hostname:
+            return _safety_check_site(session_id, text), text
+
+    ancestor = frames_by_id.get(frame.parent_id)
+    visited = set()
+    while ancestor is not None and ancestor.frame_id not in visited:
+        visited.add(ancestor.frame_id)
+        for candidate in (ancestor.security_origin, ancestor.url):
+            text = str(candidate or "").strip()
+            if not text:
+                continue
+            try:
+                parts = urlsplit(text)
+            except ValueError:
+                return "block", text
+            scheme = (parts.scheme or "").lower()
+            if scheme and scheme not in _ALLOWED_FRAME_SCHEMES:
+                return "block", text
+            if parts.hostname:
+                return _safety_check_site(session_id, text), text
+        ancestor = frames_by_id.get(ancestor.parent_id)
+    return "block", frame.url or str(url_override or "")
+
+
+def _collect_frame_snapshot(
+    session: BrowserSession,
+    main_payload: Dict[str, Any],
+    mode: str,
+    include_offscreen: bool,
+) -> Optional[
+    Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Dict[str, str]]]
+]:
+    """CDP 巡检所有子 frame 的快照（跨域 / frameset / 多层嵌套）。
+
+    返回 ``(payloads, frames_meta, ref_map)``；``payloads`` 与 ``frames_meta``
+    一一对应（被策略拦截或读取失败的 frame 对应空 payload）。CDP frame API
+    不可用时返回 ``None``，由调用方回退页面内同源 iframe 遍历。
+    """
+    try:
+        frames = browser_frames.list_frames(session)
+    except BrowserCDPError as exc:
+        logger.debug("CDP frame tree 不可用，回退页面内 iframe 遍历: %s", exc)
+        return None
+    children = [frame for frame in frames if not frame.is_main]
+    if not children:
+        return [], [], {}
+    frames_by_id = {frame.frame_id: frame for frame in frames}
+    try:
+        next_ref = max(1, int(main_payload.get("next_ref") or 0))
+    except (TypeError, ValueError):
+        next_ref = 1
+
+    payloads: List[Dict[str, Any]] = []
+    metas: List[Dict[str, Any]] = []
+    ref_map: Dict[str, Dict[str, str]] = {}
+    scanned_children = children[: browser_frames.MAX_FRAMES]
+    truncated_children = children[browser_frames.MAX_FRAMES :]
+    for frame in scanned_children:
+        meta: Dict[str, Any] = {
+            "frame_id": frame.frame_id,
+            "url": frame.url,
+            "name": frame.name,
+            "state": "scanned",
+            "elements": 0,
+            "text_len": 0,
+        }
+        # 跨 frame 读取绕过同源策略：按真实来源（securityOrigin / 祖先继承）判定，
+        # 非 allow 一律不读内容。
+        decision, policy_url = _frame_site_decision(
+            session.browser_id, frame, frames_by_id
+        )
+        meta["policy_url"] = policy_url
+        if decision != "allow":
+            meta["state"] = "blocked" if decision == "block" else "needs_confirmation"
+            payloads.append({})
+            metas.append(meta)
+            continue
+        try:
+            context_id = browser_frames.create_world(session, frame.frame_id)
+            expression = build_snapshot_expression(
+                mode=mode,
+                max_collect=SNAPSHOT_HARD_COLLECT_CAP,
+                include_offscreen=include_offscreen,
+                include_iframes=False,
+                ref_offset=next_ref,
+                frame_url=frame.url,
+            )
+            payload = _coerce_frame_payload(
+                browser_frames.evaluate_in_context(session, expression, context_id)
+            )
+            if payload is None:
+                raise BrowserCDPError("frame 快照返回异常")
+        except BrowserCDPError as exc:
+            logger.debug("frame 快照失败 frame=%s: %s", frame.frame_id, exc)
+            meta["state"] = "error"
+            payloads.append({})
+            metas.append(meta)
+            continue
+        # TOCTOU 防护：payload 自带采集时刻的 location.origin/href；来源在检查后
+        # 发生变化（frame 自导航到被禁站点）时丢弃本次内容。
+        decision, policy_url = _frame_site_decision(
+            session.browser_id,
+            frame,
+            frames_by_id,
+            url_override=str(payload.get("url") or ""),
+            origin_override=str(payload.get("origin") or ""),
+        )
+        meta["policy_url"] = policy_url
+        if decision != "allow":
+            meta["state"] = "blocked" if decision == "block" else "needs_confirmation"
+            payloads.append({})
+            metas.append(meta)
+            continue
+        payloads.append(payload)
+        metas.append(meta)
+        elements = [item for item in payload.get("elements") or [] if isinstance(item, dict)]
+        meta["elements"] = len(elements)
+        meta["text_len"] = len(str(payload.get("text") or ""))
+        for item in elements:
+            ref = str(item.get("ref") or "")
+            if ref:
+                ref_map[ref] = {
+                    "frame_id": frame.frame_id,
+                    "frame_url": frame.url,
+                    "policy_url": policy_url,
+                    "name": str(item.get("name") or ""),
+                }
+        try:
+            next_ref = max(next_ref, int(payload.get("next_ref") or 0))
+        except (TypeError, ValueError):
+            continue
+
+    for frame in truncated_children:
+        payloads.append({})
+        metas.append(
+            {
+                "frame_id": frame.frame_id,
+                "url": frame.url,
+                "name": frame.name,
+                "state": "truncated",
+                "elements": 0,
+                "text_len": 0,
+            }
+        )
+    return payloads, metas, ref_map
 
 
 class BrowserSnapshotTool(BaseTool):
@@ -1582,8 +1819,45 @@ class BrowserSnapshotTool(BaseTool):
                 mode=mode,
                 max_collect=SNAPSHOT_HARD_COLLECT_CAP,
                 include_offscreen=bool(include_offscreen),
+                include_iframes=False,
             )
-            payload = _evaluate_json(session, expression, None)
+            raw_payload = _evaluate_json(session, expression, None)
+            payload_dict = _coerce_frame_payload(raw_payload)
+            if payload_dict is None:
+                # 非 JSON 交由 parse_snapshot_payload 统一报错，不重复抓取
+                payload: Any = raw_payload
+                _SNAPSHOT_FRAME_REFS.pop(session.browser_id, None)
+            else:
+                frame_result = _collect_frame_snapshot(
+                    session, payload_dict, mode, bool(include_offscreen)
+                )
+                if frame_result is None:
+                    # CDP frame API 不可用：回退页面内同源 iframe 遍历（旧路径）
+                    payload = _evaluate_json(
+                        session,
+                        build_snapshot_expression(
+                            mode=mode,
+                            max_collect=SNAPSHOT_HARD_COLLECT_CAP,
+                            include_offscreen=bool(include_offscreen),
+                            include_iframes=True,
+                        ),
+                        None,
+                    )
+                    _SNAPSHOT_FRAME_REFS.pop(session.browser_id, None)
+                else:
+                    frame_payloads, frames_meta, ref_map = frame_result
+                    if frame_payloads:
+                        payload = merge_snapshot_payloads(
+                            payload_dict, frame_payloads, frames_meta
+                        )
+                    elif frames_meta:
+                        payload = dict(payload_dict)
+                        payload["frames"] = frames_meta
+                    else:
+                        payload = payload_dict
+                    if any(meta.get("state") == "truncated" for meta in frames_meta):
+                        payload["iframes_truncated"] = True
+                    _SNAPSHOT_FRAME_REFS[session.browser_id] = ref_map
         except BrowserCDPError as exc:
             return _meta_error(exc, session, "snapshot")
         content = parse_snapshot_payload(
@@ -1596,6 +1870,21 @@ class BrowserSnapshotTool(BaseTool):
         if content.get("error"):
             return _meta_result(
                 ToolResult(success=False, error=str(content["error"])), session, "snapshot"
+            )
+        pending_frames = [
+            frame
+            for frame in content.get("frames") or []
+            if isinstance(frame, dict)
+            and frame.get("state") in ("blocked", "needs_confirmation")
+        ]
+        if pending_frames:
+            note = "；".join(
+                f"{frame.get('state')}: {browser_safety.domain_of(str(frame.get('url') or ''))}"
+                for frame in pending_frames
+            )
+            hint = str(content.get("hint") or "")
+            content["hint"] = (hint + "；" if hint else "") + (
+                f"部分子 frame 未读取（{note}）；可在设置→网络→浏览器站点策略中放行"
             )
         # M4 注入告警：命中只标注 trust/injection_warning，保留原有字段，不阻断
         injection_warning = browser_safety.scan_untrusted_text(
@@ -1733,10 +2022,6 @@ class BrowserInteractTool(BaseTool):
                     success=False, error=f"upload_file_not_found: {raw_path}"
                 )
             upload_file = resolved
-        else:
-            expression = _build_interact_expression(
-                action, selector, text, value, key, bool(clear), ref
-            )
         session: Optional[BrowserSession] = None
         started = time.monotonic()
         try:
@@ -1749,6 +2034,80 @@ class BrowserInteractTool(BaseTool):
             if site_blocked is not None:
                 return site_blocked
             target_fields = {"target_ref": ref or selector, "target_name": text}
+            frame_owner = (
+                _SNAPSHOT_FRAME_REFS.get(session.browser_id, {}).get(str(ref))
+                if ref
+                else None
+            )
+            frame_context_id: Optional[int] = None
+            if frame_owner:
+                # 跨 frame 交互同样受站点策略约束：读 frame 当前 location（隔离
+                # 世界可跨域读自身），按真实来源过门禁；来源不明一律拒绝。
+                try:
+                    frame_context_id = browser_frames.create_world(
+                        session, frame_owner["frame_id"]
+                    )
+                    location = _coerce_frame_payload(
+                        browser_frames.evaluate_in_context(
+                            session, _FRAME_LOCATION_EXPRESSION, frame_context_id
+                        )
+                    )
+                except BrowserCDPError as exc:
+                    return _meta_error(exc, session, "interact")
+                current_url = str((location or {}).get("href") or "")
+                current_origin = str((location or {}).get("origin") or "")
+                check_url = current_url
+                if current_origin and urlsplit(current_origin).hostname:
+                    check_url = current_origin
+                if not check_url or not urlsplit(check_url).hostname:
+                    check_url = str(
+                        frame_owner.get("policy_url")
+                        or frame_owner.get("frame_url")
+                        or ""
+                    )
+                frame_gate = _site_access_gate(
+                    session,
+                    check_url,
+                    browser_safety.domain_of(check_url),
+                    started,
+                    tool="browser_interact",
+                )
+                if frame_gate is not None:
+                    return frame_gate
+                if not browser_safety.domain_of(check_url):
+                    return _meta_result(
+                        ToolResult(
+                            success=False,
+                            error="site_blocked: 子 frame 来源无法确认，已拒绝交互",
+                        ),
+                        session,
+                        "interact",
+                        **target_fields,
+                    )
+            if action == "upload" and frame_owner:
+                return _meta_result(
+                    ToolResult(
+                        success=False,
+                        error=(
+                            "upload 暂不支持子 frame 元素；"
+                            "请先 browser_navigate 到 frame_url 再上传"
+                        ),
+                    ),
+                    session,
+                    "interact",
+                    **target_fields,
+                )
+            if action != "upload":
+                expression = _build_interact_expression(
+                    action,
+                    selector,
+                    text,
+                    value,
+                    key,
+                    bool(clear),
+                    ref,
+                    frame_owner=frame_owner,
+                )
             # M4 敏感动作：先取目标元数据再分类；hard_block 不允许用户放行。
             # 仅 press Enter/Return 需要读焦点元素（触发默认提交/点击语义），
             # 其他按键不产生副作用，省一次 Runtime.evaluate。
@@ -1781,6 +2140,18 @@ class BrowserInteractTool(BaseTool):
                 approval_scope = str(upload_file)
             elif action == "select":
                 approval_scope = str(value or "")
+            # MEDIUM：批准指纹绑定 frame 身份，防止同一 ref 序号跨 frame 复用
+            # 造成「批了 A frame 的提交、被重放到 B frame」。
+            if frame_owner:
+                frame_scope = (
+                    "frame:"
+                    + str(frame_owner.get("frame_id") or "")
+                    + "|"
+                    + str(frame_owner.get("policy_url") or frame_owner.get("frame_url") or "")
+                )
+                approval_scope = (
+                    approval_scope + "|" + frame_scope if approval_scope else frame_scope
+                )
             fingerprint = browser_safety.action_fingerprint(
                 "browser_interact",
                 action,
@@ -1902,6 +2273,15 @@ class BrowserInteractTool(BaseTool):
                     "url": page_url,
                     "title": page_title,
                 }
+            elif frame_owner:
+                context_id = (
+                    frame_context_id
+                    if frame_context_id is not None
+                    else browser_frames.create_world(session, frame_owner["frame_id"])
+                )
+                outcome = browser_frames.evaluate_in_context(
+                    session, expression, context_id
+                )
             else:
                 outcome = _evaluate_json(session, expression, None)
         except BrowserCDPError as exc:
@@ -1924,6 +2304,19 @@ class BrowserInteractTool(BaseTool):
             )
         page_url = str(outcome.get("url") or "")
         page_title = str(outcome.get("title") or "")
+        if frame_owner and outcome.get("ok"):
+            # 子 frame 动作可能触发顶层导航（target=_top 等）：补读顶层 URL，
+            # 让随后的 I1 站点门禁与页面缓存更新仍然生效。
+            try:
+                top_info = _evaluate_json(
+                    session, "({url:location.href,title:document.title})", None
+                )
+            except BrowserCDPError as exc:
+                logger.debug("子 frame 交互后顶层 URL 读取失败: %s", exc)
+                top_info = None
+            if isinstance(top_info, dict):
+                page_url = str(top_info.get("url") or page_url)
+                page_title = str(top_info.get("title") or page_title)
         if page_url or page_title:
             _remember_page(session, page_url, page_title)
         info = outcome.get("info", "")
@@ -1970,12 +2363,13 @@ class BrowserInteractTool(BaseTool):
             )
         # I1：点击链接 / JS 跳转可能把页面带到新域名；交互成功后按最终 URL
         # 重跑站点门禁，避免「在允许站点点一个链接」绕过站点策略。
-        # 在此之前，若 action 为 click，等待 SPA AJAX 请求归零（最多 5 秒），
-        # 确保页面内容已加载完成，后续站点门禁与 snapshot 能拿到正确 URL/内容。
+        # 在此之前，若 action 为 click，等待子 frame 导航/SPA AJAX 完成
+        # （无子 frame 时退化为顶层网络空闲，最多 5 秒），确保后续站点门禁
+        # 与 snapshot 能拿到正确 URL/内容。
         if action == "click" and outcome.get("ok"):
-            # 网络空闲等待失败不阻断主流程，降级为不等待
+            # 就绪等待失败不阻断主流程，降级为不等待
             with contextlib.suppress(Exception):
-                _wait_network_idle(session, None, timeout=5.0)
+                _wait_after_click(session)
         final_domain = browser_safety.domain_of(page_url)
         if page_url and final_domain and final_domain != domain:
             navigation_gate = _site_access_gate(session, page_url, final_domain, started)
@@ -2201,6 +2595,7 @@ class BrowserCloseTool(BaseTool):
         get_browser_control().reset(session.browser_id)
         browser_safety.reset_session(session.browser_id)
         _LAST_PAGE.pop(session.browser_id, None)
+        _SNAPSHOT_FRAME_REFS.pop(session.browser_id, None)
         _LAST_LOGIN_WALL.pop(session.browser_id, None)
         return ToolResult(
             success=True,
@@ -2322,6 +2717,7 @@ class BrowserTabsTool(BaseTool):
                     )
                 session.active_target_id = created
                 _remember_page(session, target_url, "")
+                _SNAPSHOT_FRAME_REFS.pop(session.browser_id, None)
                 thumbnail = _capture_step_thumbnail(session)
                 return _meta_result(
                     ToolResult(
@@ -2368,6 +2764,7 @@ class BrowserTabsTool(BaseTool):
                 page_url = str(page.get("url") or "")
                 page_title = str(page.get("title") or "")
                 _remember_page(session, page_url, page_title)
+                _SNAPSHOT_FRAME_REFS.pop(session.browser_id, None)
                 thumbnail = _capture_step_thumbnail(session)
                 return _meta_result(
                     ToolResult(
