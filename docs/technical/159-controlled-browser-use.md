@@ -373,6 +373,7 @@
 | 对话框不自动处理 | `alert/confirm/prompt` 不自动接受/取消，需用户接管 |
 | 无 diff 快照 | 快照不与上一版做差异对比，模型需自行比较 |
 | selector/text 定位仍只作用于顶层 | 子 frame 内的元素必须用 `browser_snapshot` 返回的 `ref` 定位；`browser_interact(text=...)` / `selector=...` 在主 frame 找不到时不回退到子 frame，模型应先 `browser_navigate url=<frame_url>` 或直接用 ref |
+| 跨域子 frame 需先在站点策略放行 | 子 frame 域名未在 allow 列表时，快照把该 frame 标为 `needs_confirmation` 并在 hint 提示到设置→网络→浏览器站点策略中放行；这是有意的跨站读取防线，不是缺陷 |
 | 无 URL 令牌脱敏 | 审计与展示层未对 URL 中的敏感查询参数做掩码 |
 | 无审计导出 | 仅面板内表格展示，未提供 JSON/CSV 导出 |
 | 无指标埋点 | 未接入 `web_metrics` 之类的指标；排障依赖日志与审计表 |
