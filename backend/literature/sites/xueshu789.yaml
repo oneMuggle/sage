@@ -49,9 +49,10 @@ detail:
       selector: ""
 pdf:
   entry:
+    selector: "a.downloadlink"
     text: 下载
   post_click_wait_s: 8
-  note: "doDownload 新标签可能显示参数错误；下载链路待验证"
+  note: "必须点击 a.downloadlink 元素（完整 href 含 &ddata=文件名|库|题名|库|hash）；不要用快照中截断的 URL 直连，否则 doDownload 报参数错误"
   forbid:
     - CAJ
   validate:
@@ -63,6 +64,6 @@ rate_limit:
 compliance:
   note: 仅使用本人账号/机构授权；不绕过付费墙；验证码交还用户
   default_enabled: false
-version: "0.2.0"
-status: draft
-last_verified_at: "2026-11-21"
+version: "0.3.0"
+status: ready
+last_verified_at: "2026-11-22"
