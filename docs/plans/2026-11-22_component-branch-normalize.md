@@ -376,11 +376,13 @@ cd /home/fz/project/sage/.worktrees/fix-components-branch-normalize
 （`test_git_tool.py` 3 个 git 环境类 + `test_port_backend/frontend` 5 个
 端口占用类），与组件包改动无关（与 MEMORY「后端环境性失败」记录一致）。
 
-- [ ] **Step 6.2：确认提交顺序**
+- [x] **Step 6.2：确认提交顺序**
 
 ```bash
 git log --oneline -5
 ```
+
+PR: https://github.com/oneMuggle/sage/pull/3199
 
 Expected:
 ```
@@ -388,7 +390,7 @@ Expected:
 <sha> fix(components): 组件包分支校验做通道归一化...
 ```
 
-- [ ] **Step 6.3：推送并开 PR**
+- [x] **Step 6.3：推送并开 PR**
 
 ```bash
 git push -u origin fix/components-branch-normalize
