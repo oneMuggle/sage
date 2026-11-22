@@ -27,6 +27,7 @@ from .profile_store import get_default_store
 from .recording import write_profile_draft
 from .run_store import (
     create_run,
+    list_evidence,
     list_papers,
     load_run,
     read_draft,
@@ -38,6 +39,7 @@ from .run_store import (
     save_draft,
     save_outline,
 )
+from .verify import apply_evidence_support, default_lookups, verify_run_metadata
 
 
 def _print(data: Any) -> None:
@@ -111,6 +113,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     verify = sub.add_parser("verify-claims")
     verify.add_argument("--run", required=True)
+
+    verify_meta = sub.add_parser("verify-metadata")
+    verify_meta.add_argument("--run", required=True)
+    verify_meta.add_argument("--min-consensus", type=int, default=2)
 
     export = sub.add_parser("export")
     export.add_argument("--run", required=True)
@@ -207,6 +213,7 @@ def _dispatch(args: argparse.Namespace) -> int:  # noqa: PLR0911 — 每个子�
         claims = extract_claims(read_draft(run))
         paper_keys = {p.paper_key for p in list_papers(run)}
         verified = verify_claims(claims, paper_keys)
+        verified = apply_evidence_support(verified, list_evidence(run))
         save_claims(run, verified)
         verdicts: Dict[str, int] = {}
         for claim in verified:
@@ -220,6 +227,11 @@ def _dispatch(args: argparse.Namespace) -> int:  # noqa: PLR0911 — 每个子�
             }
         )
         return 0 if not verdicts.get("unresolved") and not verdicts.get("unsupported") else 1
+
+    if args.command == "verify-metadata":
+        report = verify_run_metadata(run, default_lookups(), args.min_consensus)
+        _print({"ok": True, **report})
+        return 0 if not report.get("unverified") else 1
 
     if args.command == "export":
         paths = export_run(run)

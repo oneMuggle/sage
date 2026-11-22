@@ -228,4 +228,7 @@ def run_status(run: LiteratureRun) -> Dict[str, Any]:
         "has_draft": (run.run_dir / "draft.md").is_file(),
         "has_verification": (run.run_dir / "verification.json").is_file(),
         "has_claims": (run.run_dir / "claims.jsonl").is_file(),
+        "has_metadata_verification": (
+            run.run_dir / "metadata_verification.json"
+        ).is_file(),
     }

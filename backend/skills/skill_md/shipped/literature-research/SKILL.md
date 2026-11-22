@@ -126,7 +126,8 @@ print(record_papers(run, papers))  # papers 是上一步的 JSON 数组
 ```python
 from pathlib import Path
 from backend.literature.gates import extract_claims, run_gates, verify_claims
-from backend.literature.run_store import list_papers, load_run, read_draft, save_claims
+from backend.literature.run_store import list_evidence, list_papers, load_run, read_draft, save_claims
+from backend.literature.verify import apply_evidence_support, default_lookups, verify_run_metadata
 
 run = load_run(Path("<run_dir>"))
 print(run_gates(run).to_dict())
@@ -134,14 +135,16 @@ claims = verify_claims(
     extract_claims(read_draft(run)),
     {p.paper_key for p in list_papers(run)},
 )
+claims = apply_evidence_support(claims, list_evidence(run))
 save_claims(run, claims)
 print({"claims": len(claims), "verdicts": [c.verdict for c in claims]})
+print(verify_run_metadata(run, default_lookups(), min_consensus=2))
 ```
 
 - `errors` 必须清零：未知引用、缺失检索日志/大纲/草稿、证据指向未知文献。
-- `claims` 的 `unresolved` / `unsupported` 必须清零；`flagged` 要向用户说明。
-- `warnings`（未被引用文献）可以保留，但要向用户说明。
-- 外部 DOI/元数据 2-of-3 与 claim support（M2b）尚未实现，不得声称已做语义核验。
+- `claims` 的 `unresolved` / `unsupported` 必须清零；`flagged`（引用存在但没有 evidence 记录）要向用户说明并复核。
+- `metadata_verification.json`：`verified` / `partial` / `unverified` / `skipped`；`unverified` 需要补元数据或向用户披露。
+- 语义 claim support（Layer 3b：被引段落是否真的支持该句）尚未实现，不得声称已做语义核验。
 
 ### 8. 导出
 

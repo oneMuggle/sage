@@ -73,8 +73,37 @@
 
 `verdict` 取值：`unverified` / `supported` / `flagged` / `unsupported` /
 `unresolved`。`unresolved` 表示引用 key 不在文献池；`unsupported` 表示 claim
-无引用。`extract-claims` 从 draft.md 按段落重建账本；`verify-claims` 重跑
-Layer 1+2a 并覆盖写入。外部 DOI 2-of-3 与 claim support 尚未实现。
+无引用；`flagged` 表示引用存在但引用论文没有任何 evidence 记录（Layer 3a）。
+`extract-claims` 从 draft.md 按段落重建账本；`verify-claims` 重跑 Layer 1+2a、
+应用证据级支持并覆盖写入。语义 claim support（Layer 3b）尚未实现。
+
+## metadata_verification.json（M2b）
+
+```json
+{
+  "min_consensus": 2,
+  "items": [
+    {
+      "paper_key": "doi:10.1000/demo",
+      "status": "verified",
+      "matched": 2,
+      "checks": [
+        {"lookup": "crossref", "ok": true, "title": "示例论文", "year": "2024"},
+        {"lookup": "openalex", "ok": true, "title": "示例论文", "year": "2024"},
+        {"lookup": "semantic_scholar", "ok": false, "reason": "no_data"}
+      ]
+    }
+  ],
+  "verified": 1,
+  "partial": 0,
+  "unverified": 0,
+  "skipped": 0
+}
+```
+
+`verify-metadata` 对有 DOI/arXiv 的文献查询 Crossref / OpenAlex /
+Semantic Scholar；至少 `min_consensus`（默认 2）家标题/年份/作者匹配 →
+`verified`；1 家 → `partial`；0 → `unverified`；无外部 ID → `skipped`。
 
 ## outline.json
 
