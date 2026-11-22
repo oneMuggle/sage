@@ -20,13 +20,19 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from .export import export_run
-from .gates import extract_claims, run_gates, verify_claims
+from .gates import (
+    SUPPORTED_REFERENCE_STYLES,
+    extract_claims,
+    run_gates,
+    verify_claims,
+)
 from .guidance import render_search_guidance
 from .ledger import build_ledger, ledger_stats
 from .models import profile_from_dict
 from .profile_store import get_default_store
 from .recording import write_profile_draft
 from .report import build_verification_report
+from .rubric import review_run
 from .run_store import (
     create_run,
     list_evidence,
@@ -133,8 +139,12 @@ def _build_parser() -> argparse.ArgumentParser:
     report_cmd = sub.add_parser("report")
     report_cmd.add_argument("--run", required=True)
 
+    rubric_cmd = sub.add_parser("rubric", help="四维 rubric 评审（方法/覆盖/逻辑/写作）")
+    rubric_cmd.add_argument("--run", required=True)
+
     export = sub.add_parser("export")
     export.add_argument("--run", required=True)
+    export.add_argument("--style", choices=list(SUPPORTED_REFERENCE_STYLES), default="gbt7714")
 
     status = sub.add_parser("status")
     status.add_argument("--run", required=True)
@@ -283,8 +293,29 @@ def _dispatch(args: argparse.Namespace) -> int:  # noqa: PLR0911 — 每个子�
         )
         return 0
 
+    if args.command == "rubric":
+        review = review_run(run)
+        _print(
+            {
+                "ok": True,
+                "total_score": review["total_score"],
+                "max_score": review["max_score"],
+                "band": review["band"],
+                "dimensions": [
+                    {
+                        "id": dimension["id"],
+                        "score": dimension["score"],
+                        "issues": dimension["issues"],
+                    }
+                    for dimension in review["dimensions"]
+                ],
+                "paths": review.get("paths"),
+            }
+        )
+        return 0
+
     if args.command == "export":
-        paths = export_run(run)
+        paths = export_run(run, style=args.style)
         _print({"ok": True, "paths": {key: str(value) for key, value in paths.items()}})
         return 0
 

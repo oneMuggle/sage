@@ -56,20 +56,20 @@ def build_handoff(run: LiteratureRun) -> Dict[str, Any]:
     return {"references": references, "draft_path": str(run.run_dir / "draft.md")}
 
 
-def export_run(run: LiteratureRun) -> Dict[str, Path]:
+def export_run(run: LiteratureRun, style: str = "gbt7714") -> Dict[str, Path]:
     report = run_gates(run)
     if not report.ok:
         raise ValueError("门禁未通过，无法导出: " + "; ".join(report.errors))
 
     papers = list_papers(run)
     draft = read_draft(run)
-    references_md, entries = build_references(draft, papers)
+    references_md, entries = build_references(draft, papers, style)
     export_dir = run.run_dir / "export"
     final = draft.rstrip() + "\n\n## 参考文献\n\n" + references_md + "\n"
     final_path = export_dir / "final.md"
     refs_path = export_dir / "references.json"
     bib_path = export_dir / "papers.bib"
     atomic_write_text(final_path, final)
-    write_json(refs_path, {"style": "gbt7714", "entries": entries})
+    write_json(refs_path, {"style": style, "entries": entries})
     atomic_write_text(bib_path, build_bibtex(papers, report.citations))
     return {"final": final_path, "references": refs_path, "bibtex": bib_path}

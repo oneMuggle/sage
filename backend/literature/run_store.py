@@ -239,4 +239,5 @@ def run_status(run: LiteratureRun) -> Dict[str, Any]:
         "has_verification_report": (
             run.run_dir / "export" / "verification_report.md"
         ).is_file(),
+        "has_rubric_review": (run.run_dir / "export" / "rubric_review.md").is_file(),
     }
