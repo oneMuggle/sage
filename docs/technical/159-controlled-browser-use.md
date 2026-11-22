@@ -148,12 +148,29 @@
 - **Canvas 提示**：可交互元素少于 3 个且正文少于 200 字符时，在快照结果里提示「页面可能是
   Canvas/图片渲染，考虑截图 + 视觉模型」。
 - 组合键解析支持 Control/Ctrl、Shift、Alt/Option、Meta/Cmd/Command/Win/Super。
-- **iframe 遍历（v2.1）**：`_INTERACTIVE_JS` 通过 `iframe.contentDocument` 遍历所有
-  same-origin iframe 并合并元素（`frame_url` 字段标注来源）；cross-origin iframe 仅记录
-  `role: "iframe"` + `frame_url` 占位，供 AI 感知存在并可手动 navigate 进入。每个子 frame
-  最多采集 60 个候选，最多处理 10 个子 frame（`IFRAME_MAX_COLLECT_PER_FRAME` /
-  `IFRAME_MAX_FRAMES`）。跨 frame ref 在下次 snapshot 后失效（已知限制），AI 应在交互前重拍快照。
-  快照输出新增 `iframes_scanned` / `iframes_truncated` 字段。
+- **iframe 遍历（v2.1 → v2.2 CDP 全帧巡检）**：snapshot 现在同时启用两条路径：
+  - **CDP 主路径（v2.2）**：`Page.getFrameTree` 枚举所有 frame（含跨域 iframe、
+    frameset `<frame>`、多层嵌套），对每个子 frame 通过
+    `Page.createIsolatedWorld(frameId, "sage_snapshot")` 建隔离世界，再用
+    `Runtime.evaluate(contextId)` 执行同一套采集 JS。子 frame 的 URL 过
+    `browser_safety.check_site` 站点策略——`confirm`/`block` 一律不读内容，
+    在快照里标注 `state: needs_confirmation` 或 `state: blocked`；
+    读取/交互失败标注 `state: error`。每个子 frame 最多 150 个候选
+    （`IFRAME_MAX_COLLECT_PER_FRAME`），一次最多 20 个 frame（`MAX_FRAMES`）。
+    每个来自子 frame 的元素都带 `frame_url` 字段标注来源；快照输出新增
+    `frames: [{frame_id, url, name, state, elements, text_len}]` 元数据，
+    以及 `frameset_count` / `iframes_scanned` / `iframes_truncated` 诊断字段。
+  - **JS 回退路径**：当 CDP frame API 不可用时（外部浏览器扩展桥异常等），回退
+    到原 `iframe.contentDocument` 遍历同源 iframe；其余路径与 CDP 一致。
+  - **ref 协议**：主 frame 仍走 `window.__SAGE_REFS__`；子 frame 元素统一用
+    DOM 属性 `data-sage-ref` / `data-sage-ref-name` 跨世界定位——`build_frame_ref_expression`
+    与 `build_frame_target_expression` 封装此路径。跨 frame 交互前先过站点策略
+    （`_site_access_gate`），敏感动作分类走 `_read_target_metadata` 的 frame 分支。
+  - **就绪等待**：`browser_interact click` 后的等待改为 `_wait_after_click`：若
+    frame tree 包含子 frame，调用 `browser_frames.wait_frames_settled`（每 0.3s
+    轮询所有 frame 的 readyState + 文本长度稳定度），否则沿用顶层网络空闲等待。
+  - 快照输出里 `frames` 中未授权/读取失败的 frame 还会在 hint 中提示用户到
+    设置→网络→浏览器站点策略中放行。
 - **网络空闲等待（AJAX 适配）**：`web_render.py` 在每次 `Page.navigate` 前通过
   `Page.addScriptToEvaluateOnNewDocument` 注入 XHR/fetch monkey-patch 计数器
   （`window.__SAGE_ACTIVE_REQUESTS__`），`wait_page_ready` 在 readyState 达标后额外等待
@@ -338,7 +355,7 @@
 | 时间线缩略图 | 时间线仅显示缩略图文件名（相机图标）；确认条内联 ≤100KB 的 data URL 缩略图，无法生成时回退显示截图路径 |
 | 对话框不自动处理 | `alert/confirm/prompt` 不自动接受/取消，需用户接管 |
 | 无 diff 快照 | 快照不与上一版做差异对比，模型需自行比较 |
-| 无跨域 iframe 定向 | 不能对跨域子框架内的元素直接定位（ref 跨 frame 会在下次 snapshot 后失效）；same-origin iframe 内容已自动纳入快照（标注 `frame_url`），cross-origin iframe 仅记录 src 占位 |
+| selector/text 定位仍只作用于顶层 | 子 frame 内的元素必须用 `browser_snapshot` 返回的 `ref` 定位；`browser_interact(text=...)` / `selector=...` 在主 frame 找不到时不回退到子 frame，模型应先 `browser_navigate url=<frame_url>` 或直接用 ref |
 | 无 URL 令牌脱敏 | 审计与展示层未对 URL 中的敏感查询参数做掩码 |
 | 无审计导出 | 仅面板内表格展示，未提供 JSON/CSV 导出 |
 | 无指标埋点 | 未接入 `web_metrics` 之类的指标；排障依赖日志与审计表 |
