@@ -126,6 +126,12 @@ jobs:
       - name: Build frontend + Electron
         run: npm run electron:build
 
+      # dist-web/ 由 electron-builder.yml extraResources 打进 resources/dist-web，
+      # SageWeb.cmd（开始菜单「Sage 网页模式」）据此以 SAGE_WEB_MODE 提供浏览器界面。
+      # 需在 electron-builder 打包前完成（Linux/Windows 两个产物都依赖）。
+      - name: Build web fallback frontend (dist-web)
+        run: npm run build:web
+
       - name: Setup Python 3.11 (Cython compilation headers)
         # bundle-python-main.ps1 needs Python.h for Cython build_ext.
         # The embeddable Python zip lacks dev headers; setup-python provides a full

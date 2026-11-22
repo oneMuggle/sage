@@ -12,7 +12,7 @@
     "prebuild": "npm run build:electron",
     "build:analyze": "vite build --mode production && npx vite-bundle-visualizer",
     "preview": "vite preview",
-    "lint": "eslint . --ignore-pattern dist-electron --ignore-pattern \"backend/**/export_assets\" --ignore-pattern \"extension/**\" --ignore-pattern \".worktrees/**\"",
+    "lint": "eslint . --ignore-pattern dist-electron --ignore-pattern dist-web --ignore-pattern \"backend/**/export_assets\" --ignore-pattern \"extension/**\" --ignore-pattern \".worktrees/**\"",
     "lint:fix": "eslint . --fix --ignore-pattern dist-electron --ignore-pattern \"extension/**\" --ignore-pattern \".worktrees/**\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest",

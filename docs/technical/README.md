@@ -129,7 +129,7 @@
 | 149 | [权限对话框 UX 优化](./149-permission-dialog-ux.md) | 来源会话标签（多会话并行辨识请求来源）+ 长命令完整展示（截断常量 1000→4000 / 对话框加宽） |
 | 150 | [TDD Subagent Workflow](./100-tdd-workflow.md) | 借鉴 Claude Code：TddGuard 状态机 + workflow_mode 优先级链（explicit > text > env > default）+ TDD 循环（max=3）+ `lane.tdd.evidence` 事件 + LaneDetailDrawer 证据展示 |
 | 151 | [Design Studio 内容库与 Craft 工艺规范](./151-design-studio-content-craft.md) | 四平面架构（设计系统/模板/工艺规范/生成）+ 17 设计系统 / 13 Deck 模板 / 4 原型模板 / 5 条 Craft 规则 + `CraftRuleRegistry` 解析器 + Prompt 注入链路 + 导出管道（PDF/PPTX/ZIP）+ Design Lint + Office 融合（Word→大纲 / 图表嵌入 / Live Artifact）+ 单屏创作器 / 版本恢复 / 迭代消息持久化 / 内联下载导出 |
-| 152 | [Web Fallback 模式（Win7 兼容）](./152-web-fallback-mode.md) | Win7 管控环境下 Electron 被拦截时的浏览器降级方案：`SAGE_WEB_MODE` 环境变量 + FastAPI 静态文件服务 + URL param token 认证 + `sage-web.bat` 启动脚本 |
+| 152 | [Web Fallback 模式（Win7 兼容）](./152-web-fallback-mode.md) | Win7 管控环境下 Electron 被拦截时的浏览器降级方案：`SAGE_WEB_MODE` 环境变量 + FastAPI 静态文件服务 + URL param token 认证 + `SageWeb.cmd`（安装版） / `sage-web.bat`（源码）启动器 |
 | 153 | [本地 AI 模型内置与离线导入](./153-local-ai-models.md) | OCR（6MB）+ Embedding（91MB）随安装包内置：`extraResources` 打包 `resources/models/` + 路径优先级链（userData > bundled > repo）+ 本地导入 IPC（目录选择 + SHA-256 校验）+ CI 缓存下载 |
 | 154 | [MinerU 内网独立部署](./154-mineru-deployment.md) | A6000 服务器独立部署 MinerU 4.1（Python 3.12 + vLLM，`--tier standard`）：模型离线搬运三段式 + `source: local` 零外网依赖 + V1 异步 API 契约（create→PUT→poll→download）+ Sage 工具接入（`mineru_parse_document`）+ systemd 托管与验证清单 |
 | 155 | [项目健康监控与 AI 辅助规程定制](./155-project-health-ai-stages.md) | M1 主动告警（桌面通知 + 24h 节流）+ M2 对话式规程定制（多轮迭代 / 目录推断 / git 推断 / LLM 降级）+ M3 定时健康检查（每天 09:00 cron + HealthReport） |

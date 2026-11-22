@@ -139,9 +139,16 @@
   ; 前端闪退时用户仍可双击进入配置/体检/修复。
   DetailPrint "Creating Sage Repair Tool shortcut..."
   CreateShortCut "$SMPROGRAMS\Sage 修复工具.lnk" "$INSTDIR\SageDoctor.cmd" "" "$INSTDIR\Sage.exe" 0 SW_SHOWNORMAL
+
+  ; 2026-11-22: 网页模式入口 —— 开始菜单「Sage 网页模式」。
+  ; 指向 SageWeb.cmd（extraFiles 已复制到安装根目录）。Electron 桌面端被
+  ; 安全软件拦截时，用户可改用浏览器打开 Sage；不依赖 Electron/Chromium。
+  DetailPrint "Creating Sage Web Mode shortcut..."
+  CreateShortCut "$SMPROGRAMS\Sage 网页模式.lnk" "$INSTDIR\SageWeb.cmd" "" "$INSTDIR\Sage.exe" 0 SW_SHOWNORMAL
 !macroend
 
 !macro customUnInstall
-  ; 清理救援工具快捷方式（electron-builder 默认只清理自己创建的 Sage 快捷方式）
+  ; 清理救援工具 / 网页模式快捷方式（electron-builder 默认只清理自己创建的 Sage 快捷方式）
   Delete "$SMPROGRAMS\Sage 修复工具.lnk"
+  Delete "$SMPROGRAMS\Sage 网页模式.lnk"
 !macroend

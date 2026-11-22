@@ -481,6 +481,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Web Fallback 前端（dist-web）若构建失败，release 打出的安装包会缺
+      # resources/dist-web，SageWeb.cmd 无法启动。在此提前拦截。
+      - name: Build web fallback frontend (dist-web)
+        run: npm run build:web
+
       # 渲染产物体积门禁（ZCode audit-bundle-size 思路）：#1401 砍掉的
       # -44% 若被静默回潮（如 shiki 换回全量 bundle）在此拦截。
       # 预算与棘轮协议见 scripts/check-bundle-size.mjs 头注释。
