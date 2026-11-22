@@ -18,9 +18,12 @@ vi.mock('../../../../features/manage-settings/useSettings', () => ({
 }));
 
 const setApprovalModeMock = vi.hoisted(() => vi.fn());
+const pauseRunMock = vi.hoisted(() => vi.fn());
 vi.mock('../../../../shared/api/orchRunControlClient', () => ({
   orchRunControlClient: {
     setApprovalMode: (...args: unknown[]) => setApprovalModeMock(...args),
+    pauseRun: (...args: unknown[]) => pauseRunMock(...args),
+    resumeRun: vi.fn(),
   },
 }));
 
@@ -347,5 +350,58 @@ describe('StatusBar — 无编排时的状态', () => {
     render(<StatusBar streamingState="thinking" isLoading iteration={3} board={null} />);
     expect(screen.getByTestId('progress-status-bar')).toHaveTextContent('思考中');
     expect(screen.getByTestId('progress-status-bar')).toHaveTextContent('第 3 轮');
+  });
+});
+
+describe('StatusBar — M2.5 全部暂停/恢复', () => {
+  it('running 任务显示「全部暂停」并调用 pauseRun', () => {
+    pauseRunMock.mockResolvedValue({
+      ok: true,
+      run_id: 'orch-1',
+      status: 'paused',
+      affected: 1,
+    });
+    const board = makeBoard({
+      dispatchedAt: 1,
+      statuses: {
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'running',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: null,
+          output_preview: null,
+        },
+      },
+    });
+    render(<StatusBar streamingState={null} isLoading={false} iteration={0} board={board} />);
+
+    const btn = screen.getByTestId('task-tree-pause-all');
+    expect(btn).toHaveTextContent('全部暂停');
+    fireEvent.click(btn);
+    expect(pauseRunMock).toHaveBeenCalledWith('orch-1');
+  });
+
+  it('存在 paused 任务时显示「全部恢复」并调用 resumeRun', () => {
+    const board = makeBoard({
+      dispatchedAt: 1,
+      statuses: {
+        t1: {
+          state: 'task_status',
+          run_id: 'orch-1',
+          task_id: 't1',
+          status: 'paused',
+          agent_id: 'researcher',
+          goal: '搜集资料',
+          error: null,
+          output_preview: null,
+        },
+      },
+    });
+    render(<StatusBar streamingState={null} isLoading={false} iteration={0} board={board} />);
+
+    expect(screen.getByTestId('task-tree-pause-all')).toHaveTextContent('全部恢复');
   });
 });

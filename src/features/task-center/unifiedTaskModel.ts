@@ -96,6 +96,7 @@ export const SUBAGENT_STATUS_MAP: Readonly<
 > = {
   queued: 'queued',
   running: 'running',
+  paused: 'paused',
   done: 'succeeded',
   failed: 'failed',
   cancelled: 'cancelled',
@@ -104,7 +105,12 @@ export const SUBAGENT_STATUS_MAP: Readonly<
 
 /** M2.4: 任务中心只展示活跃 + 失败的子代理任务（done 在 run 摘要/transcript 回看）。 */
 export function isSubagentTaskVisible(status: TaskStatusValue): boolean {
-  return status === 'queued' || status === 'running' || status === 'failed';
+  return (
+    status === 'queued' ||
+    status === 'running' ||
+    status === 'paused' ||
+    status === 'failed'
+  );
 }
 
 export const STATUS_PRIORITY: Readonly<Record<TaskCenterStatus, number>> = {

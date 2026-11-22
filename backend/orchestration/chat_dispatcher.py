@@ -29,6 +29,7 @@ from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.models import Lane, RecoveryPolicy, Task, TaskPacket
 from backend.orchestration.orch_settings import OrchSettings, load_orch_settings
+from backend.orchestration.pause_state import PauseState
 from backend.orchestration.plan_hierarchy import HierarchyError, normalize_task_hierarchy
 from backend.orchestration.report_schema import Assertion
 from backend.orchestration.subagent_events import SubagentEventSink
@@ -365,6 +366,9 @@ class ChatDispatcher:
         # interrupt_event 消费）。_run_one 建档、finally 注销。
         self._task_skip_events: Dict[str, asyncio.Event] = {}
         self._task_cancel_events: Dict[str, asyncio.Event] = {}
+        # M2.5: 任务级暂停控制器（task_id → PauseState）；每次子任务执行
+        # 复用同一实例（重试不丢失暂停意愿）。
+        self._task_pause_states: Dict[str, PauseState] = {}
         # live-events P0: canonical RunEvent 通道（EventHub.publish）。None 时
         # 惰性解析 orch_run_control.get_event_hub()（启动即装配），再取不到
         # 则仅镜像聊天流 —— 双通道缺一不阻塞另一。
@@ -530,6 +534,86 @@ class ChatDispatcher:
             )
             self._resolve_all_step_confirms("abort")
         return True
+
+    # ------------------------------------------------------------------
+    # M2.5: 任务级 / run 级暂停与恢复
+    # ------------------------------------------------------------------
+
+    def _pause_state_for(self, task_id: str) -> PauseState:
+        """取得（或惰性创建）任务级暂停控制器 —— 重试复用同一实例。"""
+        state = self._task_pause_states.get(task_id)
+        if state is None:
+            state = PauseState()
+            self._task_pause_states[task_id] = state
+        return state
+
+    def pause_task(self, task_id: str) -> bool:
+        """暂停运行中的子任务（下一迭代边界生效）。
+
+        仅 running 可暂停；queued/已暂停/终态返回 False（端点转 409）。
+        暂停后状态下发 ``task_status(status="paused")`` + canonical
+        ``task.paused`` 事件；子代理在下一迭代边界阻塞，不消耗 LLM token。
+        """
+        state = self._states.get(task_id)
+        if state is None or state.status != "running":
+            return False
+        if not self._pause_state_for(task_id).request_pause():
+            return False
+        state.status = "paused"
+        self._emit_task_status(state, lifecycle_override="task.paused")
+        logger.info("子任务已暂停 run=%s task=%s", self.run_id, task_id)
+        return True
+
+    def resume_task(self, task_id: str) -> bool:
+        """恢复已暂停的子任务。非 paused 状态返回 False。"""
+        state = self._states.get(task_id)
+        if state is None or state.status != "paused":
+            return False
+        if not self._pause_state_for(task_id).request_resume():
+            return False
+        state.status = "running"
+        self._emit_task_status(state, lifecycle_override="task.resumed")
+        logger.info("子任务已恢复 run=%s task=%s", self.run_id, task_id)
+        return True
+
+    def pause_run(self) -> int:
+        """暂停本 run 所有 running 子任务，返回暂停数量。"""
+        count = sum(1 for task_id in list(self._states) if self.pause_task(task_id))
+        if count:
+            self._publish_run_event("run.paused", {"paused": count})
+        return count
+
+    def resume_run(self) -> int:
+        """恢复本 run 所有 paused 子任务，返回恢复数量。"""
+        count = sum(1 for task_id in list(self._states) if self.resume_task(task_id))
+        if count:
+            self._publish_run_event("run.resumed", {"resumed": count})
+        return count
+
+    def _publish_run_event(self, event_type: str, payload: Dict[str, Any]) -> None:
+        """run 级 canonical 事件（fire-and-forget，观测尽力而为）。"""
+        publisher = self._make_publisher()
+        if publisher is None:
+            return
+        event = make_event(
+            run_id=self.run_id,
+            seq=0,
+            event_type=event_type,
+            producer="chat-dispatcher",
+            entity={},
+            payload=payload,
+        )
+
+        async def _run() -> None:
+            try:
+                await publisher(event)
+            except Exception as exc:  # noqa: BLE001 — 观测尽力而为
+                logger.debug("run 事件发布失败 %s: %s", event_type, exc)
+
+        try:
+            asyncio.get_running_loop().create_task(_run())
+        except RuntimeError:  # pragma: no cover — 均在协程上下文调用
+            return
 
     def cancel_task(self, task_id: str) -> bool:
         """B3 (2026-09-09): 单任务跳过 —— 只停一个子任务，不影响其余。
@@ -1633,6 +1717,8 @@ class ChatDispatcher:
                 # O1: 投递用 canonical task_id（t1..tN，与 steer 端点一致），
                 # 不是 lane 空间的 "task-tN"。
                 context_task_id=state.task_id,
+                # M2.5: 任务级暂停（重试复用同一 PauseState）。
+                pause_state=self._pause_state_for(state.task_id),
             ),
         )
         # O5 (2026-09-08): 子代理执行期间置位嵌套深度 —— AgentTool 据此
@@ -1843,7 +1929,9 @@ class ChatDispatcher:
             )
             self._cancelled.set()
 
-    def _emit_task_status(self, state: ChatTaskState) -> None:
+    def _emit_task_status(
+        self, state: ChatTaskState, *, lifecycle_override: Optional[str] = None
+    ) -> None:
         """推 task_status 事件；队列满/关闭静默降级（进度尽力而为）。"""
         event: Dict[str, Any] = {
             "state": "task_status",
@@ -1901,7 +1989,7 @@ class ChatDispatcher:
         # Wave 2 P1-4: 状态迁移同步写库。失败在 _persist_task_state 内部降级，
         # 绝不阻塞聊天进度推送。
         self._persist_task_state(state)
-        self._publish_task_lifecycle(state)
+        self._publish_task_lifecycle(state, event_type=lifecycle_override)
 
     # ==================== live-events P0/P1 ====================
 
@@ -1923,7 +2011,9 @@ class ChatDispatcher:
         "skipped": "task.skipped",  # Phase 3: 用户跳过的 auto_confirm 步骤
     }
 
-    def _publish_task_lifecycle(self, state: ChatTaskState) -> None:
+    def _publish_task_lifecycle(
+        self, state: ChatTaskState, event_type: Optional[str] = None
+    ) -> None:
         """任务状态迁移 → canonical ``task.*`` 事件（fire-and-forget）。
 
         canonical 流（Drawer/快照/observe_subagents 的事实源）此前在 chat
@@ -1932,7 +2022,7 @@ class ChatDispatcher:
         succeeded/failed/cancelled，让 step/审批事件有归属的 task 实体。
         发布失败全吞（观测尽力而为，绝不阻塞派发循环）。
         """
-        event_type = self._TASK_LIFECYCLE_EVENTS.get(state.status)
+        event_type = event_type or self._TASK_LIFECYCLE_EVENTS.get(state.status)
         publisher = self._make_publisher()
         if event_type is None or publisher is None:
             return

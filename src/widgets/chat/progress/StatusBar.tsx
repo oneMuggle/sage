@@ -103,6 +103,33 @@ export function StatusBar({
   const terminal = board ? isRunTerminal(board) : false;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
+  // M2.5: run 级暂停/恢复 —— 按任务状态汇总决定按钮形态。
+  const anyPaused = board
+    ? Object.values(board.statuses).some((st) => st.status === 'paused')
+    : false;
+  const anyRunning = board
+    ? Object.values(board.statuses).some((st) => st.status === 'running')
+    : false;
+  const [runPausePending, setRunPausePending] = useState(false);
+  const toggleRunPause = () => {
+    if (runPausePending || !board?.runId) return;
+    const resuming = anyPaused;
+    setRunPausePending(true);
+    const call = resuming
+      ? orchRunControlClient.resumeRun(board.runId)
+      : orchRunControlClient.pauseRun(board.runId);
+    call
+      .then((res) =>
+        toast.info(
+          resuming ? `已恢复 ${res.affected} 个子任务` : `已暂停 ${res.affected} 个子任务`,
+        ),
+      )
+      .catch(() => {
+        toast.error(`${resuming ? '全部恢复' : '全部暂停'}失败（run 已结束?）`);
+      })
+      .finally(() => setRunPausePending(false));
+  };
+
   return (
     <div className="shrink-0 border-b border-border px-3 py-2" data-testid="progress-status-bar">
       <div className="flex items-center justify-between gap-2">
@@ -125,6 +152,22 @@ export function StatusBar({
 
         {/* run 级操作 —— 取消执行 / 自动批准开关 */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {board && dispatched && !terminal && (anyRunning || anyPaused) && (
+            <button
+              type="button"
+              onClick={toggleRunPause}
+              disabled={runPausePending}
+              data-testid="task-tree-pause-all"
+              title={
+                anyPaused
+                  ? '恢复全部已暂停子任务'
+                  : '暂停全部运行中子任务（下一迭代边界生效，不消耗 token）'
+              }
+              className="px-2 py-0.5 border border-border rounded text-xs text-text-secondary hover:text-primary hover:border-primary/40 disabled:opacity-50"
+            >
+              {runPausePending ? '处理中…' : anyPaused ? '全部恢复' : '全部暂停'}
+            </button>
+          )}
           {board && dispatched && !terminal && (
             <button
               type="button"
