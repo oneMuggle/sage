@@ -24,6 +24,7 @@ from backend.data.orch_context_repo import (
     OrchestrationContextRepository,
 )
 from backend.data.orch_task_repo import OrchTaskRepository
+from backend.data.orch_transcript_repo import OrchTranscriptRepository
 from backend.domain.orch_events import ControlEventType, Visibility, make_event
 from backend.orchestration.event_hub import EventHub
 from backend.orchestration.snapshot_store import SnapshotStore
@@ -124,6 +125,36 @@ async def stream_events(
 
 async def _error_stream(message: str):
     yield json.dumps({"error": message}) + "\n"
+
+
+@router.get("/{run_id}/tasks/{task_id}/transcript")
+async def get_task_transcript(
+    run_id: str,
+    task_id: str,
+    after_seq: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=500),
+) -> JSONResponse:
+    """任务过程消息分页（M1 transcript）。
+
+    与 ``/events``（canonical 状态事件，NDJSON 流）互补：这里返回消息级
+    过程记录（goal / reasoning / assistant / tool_call / tool_result /
+    error），供任务详情 Transcript 视图回看，运行中按 ``after_seq`` 轮询续接。
+    """
+    repo = OrchTranscriptRepository()
+    # 多取一条用于 has_more 判断
+    messages = repo.list_messages(run_id, task_id, after_seq=after_seq, limit=limit + 1)
+    has_more = len(messages) > limit
+    page = messages[:limit]
+    next_seq = page[-1].seq if page else after_seq
+    return JSONResponse(
+        {
+            "run_id": run_id,
+            "task_id": task_id,
+            "messages": [message.to_dict() for message in page],
+            "next_seq": next_seq,
+            "has_more": has_more,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

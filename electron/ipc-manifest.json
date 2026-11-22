@@ -154,6 +154,7 @@
     "orchestration_get_lane": { "method": "GET", "path": "/api/v1/orchestration/lanes/{lane_id}" },
     "orchestration_get_run": { "method": "GET", "path": "/api/v1/orch/runs/{run_id}" },
     "orchestration_get_run_snapshot": { "method": "GET", "path": "/api/v1/orch/runs/{run_id}/snapshot" },
+    "orchestration_get_task_transcript": { "method": "GET", "path": "/api/v1/orch/runs/{run_id}/tasks/{task_id}/transcript" },
     "orchestration_lane_decision": { "method": "POST", "path": "/api/v1/orchestration/lanes/{lane_id}/decision" },
     "orchestration_list_lane_events": { "method": "GET", "path": "/api/v1/orchestration/lanes/{lane_id}/events" },
     "orchestration_list_lanes": { "method": "GET", "path": "/api/v1/orchestration/lanes" },

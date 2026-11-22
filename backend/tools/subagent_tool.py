@@ -201,7 +201,8 @@ class DispatchSubagentsTool(BaseTool):
             if bg_task is None:
                 return ToolResult(
                     success=False,
-                    error="background_dispatch_in_progress: 已有后台派发进行中，请先调用 collect_subagents",
+                    error="background_dispatch_limit: 后台派发并发已达上限，"
+                    "请先调用 collect_subagents 收取已完成的派发",
                 )
             task_ids = [
                 str(t.get("task_id"))

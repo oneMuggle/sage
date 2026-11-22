@@ -11,7 +11,7 @@
  *  - 旧抽屉是 `absolute w-96`（384px）叠在 320-560px 的右栏里，内容被裁切；
  *    本视图占满整个进度面板，实时事件流可以完整展开。
  */
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useRunControlStore } from '../../../entities/orchestration/runControlStore';
@@ -24,6 +24,13 @@ import { findPluginToolOwner } from '../../../shared/lib/permissionInsights';
 import { ContextInput } from './ContextInput';
 import { EventTimeline } from './EventTimeline';
 import { formatDuration, formatElapsed, formatTokens } from './progressFormat';
+
+// M1: Transcript 面板按需加载 —— 主 chunk 已逼近 bundle size 门禁预算，
+// 面板与轮询 hook 拆到独立 chunk，只有切到「对话」tab 时才拉取。
+const LazyTaskTranscriptPanel = lazy(async () => {
+  const mod = await import('./TaskTranscriptPanel');
+  return { default: mod.TaskTranscriptPanel };
+});
 
 const STATUS_ICON: Record<TaskStatusValue, string> = {
   queued: '○',
@@ -74,9 +81,17 @@ interface TaskDetailViewProps {
   onBack: () => void;
   /** 单任务重试（run 终态才可重试）。 */
   onRetryTask?: (runId: string, taskId: string) => void;
+  /** 思考展示档位的会话级作用域（Transcript tab 使用）。 */
+  sessionId?: string | null;
 }
 
-export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetailViewProps) {
+export function TaskDetailView({
+  board,
+  taskId,
+  onBack,
+  onRetryTask,
+  sessionId,
+}: TaskDetailViewProps) {
   const planItem = board.plan.find((p) => p.task_id === taskId);
   const status = board.statuses[taskId];
   const state: TaskStatusValue = status?.status ?? 'queued';
@@ -99,6 +114,7 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
   }, [state]);
 
   const [skipping, setSkipping] = useState(false);
+  const [view, setView] = useState<'process' | 'transcript'>('process');
   const handleSkip = () => {
     if (skipping) return;
     setSkipping(true);
@@ -225,92 +241,136 @@ export function TaskDetailView({ board, taskId, onBack, onRetryTask }: TaskDetai
         </div>
       </div>
 
+      {/* M1: 视图切换 —— 过程（实时事件/时间线） vs 对话（消息级 transcript） */}
+      <div
+        className="shrink-0 px-3 pt-2 flex items-center gap-1"
+        data-testid="task-detail-view-tabs"
+      >
+        <button
+          type="button"
+          onClick={() => setView('process')}
+          data-testid="task-detail-tab-process"
+          className={`px-2 py-0.5 text-ui-2xs rounded ${
+            view === 'process'
+              ? 'bg-primary/10 text-primary'
+              : 'text-text-secondary hover:text-text'
+          }`}
+        >
+          过程
+        </button>
+        <button
+          type="button"
+          onClick={() => setView('transcript')}
+          data-testid="task-detail-tab-transcript"
+          className={`px-2 py-0.5 text-ui-2xs rounded ${
+            view === 'transcript'
+              ? 'bg-primary/10 text-primary'
+              : 'text-text-secondary hover:text-text'
+          }`}
+        >
+          对话
+        </button>
+      </div>
+
       {/* 详情正文 */}
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-3">
-        {/* 当前步骤 —— 大字号，这是"实时运行情况"的主答案。 */}
-        <div>
-          <div className="text-ui-2xs text-text-muted mb-1">当前步骤</div>
-          <div
-            className={`text-sm break-words ${
-              currentStep ? 'text-primary font-medium animate-pulse' : 'text-text-muted'
-            }`}
-            data-testid="task-detail-current-step"
-          >
-            {currentStep ?? (state === 'running' ? '正在执行…' : '无活动步骤')}
-          </div>
-          {live?.waitingApproval && (
-            <div className="mt-1 text-ui-2xs text-warning" data-testid="task-detail-approval">
-              ⏳ 等待审批: {live.waitingApproval}
-              {pluginOwnerSuffix(live.waitingApproval)}
+        {view === 'transcript' ? (
+          <Suspense fallback={<div className="text-xs text-text-muted">加载对话记录…</div>}>
+            <LazyTaskTranscriptPanel
+              runId={board.runId}
+              taskId={taskId}
+              live={state === 'running' || state === 'queued'}
+              sessionId={sessionId}
+            />
+          </Suspense>
+        ) : (
+          <>
+            {/* 当前步骤 —— 大字号，这是"实时运行情况"的主答案。 */}
+            <div>
+              <div className="text-ui-2xs text-text-muted mb-1">当前步骤</div>
+              <div
+                className={`text-sm break-words ${
+                  currentStep ? 'text-primary font-medium animate-pulse' : 'text-text-muted'
+                }`}
+                data-testid="task-detail-current-step"
+              >
+                {currentStep ?? (state === 'running' ? '正在执行…' : '无活动步骤')}
+              </div>
+              {live?.waitingApproval && (
+                <div className="mt-1 text-ui-2xs text-warning" data-testid="task-detail-approval">
+                  ⏳ 等待审批: {live.waitingApproval}
+                  {pluginOwnerSuffix(live.waitingApproval)}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {error && (
-          <div>
-            <div className="text-ui-2xs text-text-muted mb-1">错误</div>
-            <pre
-              className="text-xs text-error whitespace-pre-wrap break-words bg-error/5 rounded p-2"
-              data-testid="task-detail-error"
-            >
-              {error}
-            </pre>
-          </div>
-        )}
-
-        {output && (
-          <div>
-            <div className="text-ui-2xs text-text-muted mb-1">结果预览</div>
-            <pre
-              className="text-xs text-text-secondary whitespace-pre-wrap break-words bg-bg-hover rounded p-2"
-              data-testid="task-detail-output"
-            >
-              {output}
-            </pre>
-          </div>
-        )}
-
-        {/* 实时事件流 —— 子代理的实时运行情况 */}
-        <div>
-          <div className="text-ui-2xs text-text-muted mb-1">
-            实时动态（{liveEvents.length} 条）
-          </div>
-          {liveEvents.length === 0 ? (
-            <div className="text-xs text-text-muted" data-testid="task-detail-events-empty">
-              暂无实时事件
-            </div>
-          ) : (
-            <ul className="space-y-0.5" data-testid="task-detail-events">
-              {liveEvents.map((evt, idx) => (
-                <li
-                  key={`${evt.ts ?? idx}-${idx}`}
-                  className="text-xs text-text-secondary flex items-start gap-2"
+            {error && (
+              <div>
+                <div className="text-ui-2xs text-text-muted mb-1">错误</div>
+                <pre
+                  className="text-xs text-error whitespace-pre-wrap break-words bg-error/5 rounded p-2"
+                  data-testid="task-detail-error"
                 >
-                  <span className="text-text-muted shrink-0 tabular-nums w-16">
-                    {evt.ts
-                      ? new Date(evt.ts).toLocaleTimeString('zh-CN', {
-                          hour12: false,
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                        })
-                      : ''}
-                  </span>
-                  <span className="min-w-0 break-words">
-                    {describeLiveEvent(evt, pluginOwnerSuffix)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                  {error}
+                </pre>
+              </div>
+            )}
 
-        {/* 编排运行事件时间线 —— 仅当该 run 在编排 store 中登记过 */}
-        {knownRun && (
-          <div>
-            <div className="text-ui-2xs text-text-muted mb-1">事件时间线</div>
-            <EventTimeline events={orchEvents} />
-          </div>
+            {output && (
+              <div>
+                <div className="text-ui-2xs text-text-muted mb-1">结果预览</div>
+                <pre
+                  className="text-xs text-text-secondary whitespace-pre-wrap break-words bg-bg-hover rounded p-2"
+                  data-testid="task-detail-output"
+                >
+                  {output}
+                </pre>
+              </div>
+            )}
+
+            {/* 实时事件流 —— 子代理的实时运行情况 */}
+            <div>
+              <div className="text-ui-2xs text-text-muted mb-1">
+                实时动态（{liveEvents.length} 条）
+              </div>
+              {liveEvents.length === 0 ? (
+                <div className="text-xs text-text-muted" data-testid="task-detail-events-empty">
+                  暂无实时事件
+                </div>
+              ) : (
+                <ul className="space-y-0.5" data-testid="task-detail-events">
+                  {liveEvents.map((evt, idx) => (
+                    <li
+                      key={`${evt.ts ?? idx}-${idx}`}
+                      className="text-xs text-text-secondary flex items-start gap-2"
+                    >
+                      <span className="text-text-muted shrink-0 tabular-nums w-16">
+                        {evt.ts
+                          ? new Date(evt.ts).toLocaleTimeString('zh-CN', {
+                              hour12: false,
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            })
+                          : ''}
+                      </span>
+                      <span className="min-w-0 break-words">
+                        {describeLiveEvent(evt, pluginOwnerSuffix)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* 编排运行事件时间线 —— 仅当该 run 在编排 store 中登记过 */}
+            {knownRun && (
+              <div>
+                <div className="text-ui-2xs text-text-muted mb-1">事件时间线</div>
+                <EventTimeline events={orchEvents} />
+              </div>
+            )}
+          </>
         )}
       </div>
 

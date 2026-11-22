@@ -2344,6 +2344,31 @@ class Database:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_orch_events_run_seq ON orch_events(run_id, seq)"
         )
+        # M1 (2026-11-21): 子代理 transcript —— 消息级过程记录（goal /
+        # reasoning / assistant / tool_call / tool_result / error），供任务
+        # 详情回看；canonical 状态事件仍走 orch_events。写入方为
+        # TaskTranscriptRecorder，读取方为 /orch/runs/{run}/tasks/{task}/transcript。
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS orch_task_messages (
+                run_id TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                message_type TEXT NOT NULL,
+                content TEXT,
+                reasoning TEXT,
+                tool_name TEXT,
+                tool_call_id TEXT,
+                tool_args TEXT,
+                tool_result TEXT,
+                is_error INTEGER NOT NULL DEFAULT 0,
+                duration_ms INTEGER,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (run_id, task_id, seq)
+            )
+            """
+        )
         # C3 (2026-09-09): orch_steps 死表退役 —— 表/repo 曾建好但生产路径
         # 零写入，step 事实已由 orch_events 的 task.step.* payload 承载（可
         # after_seq 回放）。存量库中的残留表不主动 DROP（无害，随库保留）。
