@@ -42,3 +42,16 @@ export function resolveSageUserDataDir(env: NodeJS.ProcessEnv = process.env): st
   if (app.isPackaged) return app.getPath('userData');
   return join(process.cwd(), 'data');
 }
+
+/**
+ * Where local AI models (embedder / OCR) live: ``<userData>/models``.
+ *
+ * The backend spawn injects ``SAGE_USER_DATA_DIR`` and resolves models as
+ * ``<SAGE_USER_DATA_DIR>/models/...`` (see embedder_factory.onnx_model_dir and
+ * rapidocr.resolve_model_dir). IPC handlers must write to the same place —
+ * ``process.cwd()`` diverges on packaged installs (install dir) and in dev
+ * (repo root vs <repo>/data), which silently made imports ineffective.
+ */
+export function resolveSageModelsDir(env: NodeJS.ProcessEnv = process.env): string {
+  return join(resolveSageUserDataDir(env), 'models');
+}
