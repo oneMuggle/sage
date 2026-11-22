@@ -399,17 +399,23 @@ def _safety_check_site(session_id: str, url: str) -> str:
 
 
 def _site_access_gate(
-    session: BrowserSession, url: str, domain: str, started: float
+    session: BrowserSession,
+    url: str,
+    domain: str,
+    started: float,
+    tool: str = "browser_navigate",
 ) -> Optional[ToolResult]:
     """M4 站点授权门禁：拒绝指纹 → 持久/会话策略 → block / confirm。
 
     返回拦截结果（已写审计）或 None（放行）。导航落地域名与请求域名
     不同（重定向/短链）时调用方用最终 URL 再调一次，避免 302 绕过。
+    子 frame 交互传入 ``tool="browser_interact"``，把授权绑定到交互动作。
     """
     if not domain:
         return None
+    meta_action = "interact" if tool == "browser_interact" else "navigate"
     site_fingerprint = browser_safety.action_fingerprint(
-        "browser_navigate",
+        tool,
         "site_access",
         domain,
         session_id=session.browser_id,
@@ -420,8 +426,8 @@ def _site_access_gate(
         get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
         _record_browser_audit(
             session,
-            "browser_navigate",
-            "navigate",
+            tool,
+            meta_action,
             "blocked",
             approval="denied",
             domain=domain,
@@ -433,7 +439,7 @@ def _site_access_gate(
                 error="denied_by_user: 用户拒绝了访问该站点，请换一种方式或询问用户",
             ),
             session,
-            "navigate",
+            meta_action,
             url=url,
         )
     verdict = _safety_check_site(session.browser_id, url)
@@ -441,8 +447,8 @@ def _site_access_gate(
         get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
         _record_browser_audit(
             session,
-            "browser_navigate",
-            "navigate",
+            tool,
+            meta_action,
             "blocked",
             approval="none",
             domain=domain,
@@ -451,7 +457,7 @@ def _site_access_gate(
         return _meta_result(
             ToolResult(success=False, error=f"site_blocked: 用户已禁止该站点 {domain}"),
             session,
-            "navigate",
+            meta_action,
             url=url,
         )
     if verdict == "confirm":
@@ -468,8 +474,8 @@ def _site_access_gate(
         get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
         _record_browser_audit(
             session,
-            "browser_navigate",
-            "navigate",
+            tool,
+            meta_action,
             "confirm_required",
             approval="none",
             domain=domain,
@@ -484,7 +490,7 @@ def _site_access_gate(
                 ),
             ),
             session,
-            "navigate",
+            meta_action,
             url=url,
         )
     return None
@@ -537,6 +543,17 @@ def _read_target_metadata(
     if not ref and not selector and not use_focused:
         return None
     if ref:
+        owner = _SNAPSHOT_FRAME_REFS.get(session.browser_id, {}).get(str(ref))
+        if owner:
+            try:
+                context_id = browser_frames.create_world(session, owner["frame_id"])
+                value = browser_frames.evaluate_in_context(
+                    session, build_frame_target_expression(ref), context_id
+                )
+            except BrowserCDPError:
+                logger.debug("子 frame 交互目标元数据读取失败", exc_info=True)
+                return None
+            return value if isinstance(value, dict) else None
         locator = f"(window.__SAGE_REFS__||{{}})[{json.dumps(str(ref))}]"
     elif selector:
         locator = f"document.querySelector({json.dumps(str(selector))})"
@@ -545,33 +562,9 @@ def _read_target_metadata(
     # body/documentElement 永不取正文；宽泛容器（div/main/section… 且没有
     # 交互角色）只取直接文本节点，避免整页/整块 innerText 进入 name →
     # 审计/确认描述（I3）。focused 与非 focused 路径共用同一守卫。
-    name_source = (
-        "var name='';"
-        "var isBody=(el===document.body||el===document.documentElement);"
-        "var role=(el.getAttribute&&el.getAttribute('role'))||'';"
-        "var tag=(el.tagName||'').toUpperCase();"
-        "var broadRoles={generic:1,presentation:1,none:1,main:1,region:1,"
-        "document:1,group:1,list:1};"
-        "var broadTags={DIV:1,MAIN:1,SECTION:1,ARTICLE:1,NAV:1,FORM:1,"
-        "ASIDE:1,HEADER:1,FOOTER:1,UL:1,OL:1,TABLE:1,TBODY:1,TR:1,"
-        "BODY:1,HTML:1};"
-        "var isBroad=!!broadTags[tag]&&(!role||broadRoles[role]===1);"
-        "if(!isBody){"
-        "name=(el.getAttribute&&(el.getAttribute('aria-label')||''))||'';"
-        "if(!name){name=(el.getAttribute&&(el.getAttribute('title')||''))||'';}"
-        "if(!name&&el.labels&&el.labels.length){name=el.labels[0].textContent||'';}"
-        "if(!name){"
-        "if(!isBroad){name=el.innerText||el.textContent||'';}"
-        "else{var tn='';var kids=el.childNodes||[];"
-        "for(var i=0;i<kids.length&&tn.length<120;i++){"
-        "if(kids[i].nodeType===3){tn+=kids[i].nodeValue;}}"
-        "name=tn;}"
-        "}"
-        "}"
-    )
     expression = (
         "(function(){var el=" + locator + ";if(!el)return null;"
-        + name_source
+        + TARGET_NAME_SOURCE_JS
         + "return{tag:(el.tagName||'').toLowerCase(),"
         "role:(el.getAttribute&&el.getAttribute('role'))||'',"
         "name:String(name).trim().slice(0,120),"
@@ -1181,9 +1174,17 @@ def _build_interact_expression(
     key: str,
     clear: bool,
     ref: str,
+    frame_owner: Optional[Dict[str, str]] = None,
 ) -> str:
-    """按定位优先级构造交互 JS（ref > selector > text，scroll 无定位）。"""
+    """按定位优先级构造交互 JS（ref > selector > text，scroll 无定位）。
+
+    ``frame_owner`` 非空表示 ref 来自子 frame：用 data 属性定位、在目标
+    frame 的隔离世界执行，且不附加页面 url/title（保持顶层页面缓存）。
+    """
+    frame_name = str((frame_owner or {}).get("name") or "")
     if action == "click":
+        if ref and frame_owner:
+            return build_frame_ref_expression(_js_click_element(), ref, frame_name)
         expression = (
             build_ref_expression(_js_click_element(), ref)
             if ref
@@ -1209,8 +1210,23 @@ def _build_interact_expression(
         snippet = _js_press_element(key)
 
     if ref:
+        if frame_owner:
+            return build_frame_ref_expression(snippet, ref, frame_name)
         return _expression_with_page_info(build_ref_expression(snippet, ref))
     return _expression_with_page_info(_js_on_selector(selector, snippet))
+
+
+def _wait_after_click(session: BrowserSession) -> None:
+    """点击后的就绪等待：有子 frame 等全帧稳定，否则沿用顶层网络空闲等待。"""
+    try:
+        frames = browser_frames.list_frames(session)
+    except BrowserCDPError as exc:
+        logger.debug("点击后 frame tree 不可用，回退网络空闲等待: %s", exc)
+        frames = []
+    if len(frames) > 1:
+        browser_frames.wait_frames_settled(session, frames=frames)
+        return
+    _wait_network_idle(session, None, timeout=5.0)
 
 
 def _wait_page_settled(
@@ -1909,10 +1925,6 @@ class BrowserInteractTool(BaseTool):
                     success=False, error=f"upload_file_not_found: {raw_path}"
                 )
             upload_file = resolved
-        else:
-            expression = _build_interact_expression(
-                action, selector, text, value, key, bool(clear), ref
-            )
         session: Optional[BrowserSession] = None
         started = time.monotonic()
         try:
@@ -1925,6 +1937,47 @@ class BrowserInteractTool(BaseTool):
             if site_blocked is not None:
                 return site_blocked
             target_fields = {"target_ref": ref or selector, "target_name": text}
+            frame_owner = (
+                _SNAPSHOT_FRAME_REFS.get(session.browser_id, {}).get(str(ref))
+                if ref
+                else None
+            )
+            if frame_owner:
+                # 跨 frame 交互同样受站点策略约束：frame 域名即新的授权边界。
+                frame_url = str(frame_owner.get("frame_url") or "")
+                frame_gate = _site_access_gate(
+                    session,
+                    frame_url,
+                    browser_safety.domain_of(frame_url),
+                    started,
+                    tool="browser_interact",
+                )
+                if frame_gate is not None:
+                    return frame_gate
+            if action == "upload" and frame_owner:
+                return _meta_result(
+                    ToolResult(
+                        success=False,
+                        error=(
+                            "upload 暂不支持子 frame 元素；"
+                            "请先 browser_navigate 到 frame_url 再上传"
+                        ),
+                    ),
+                    session,
+                    "interact",
+                    **target_fields,
+                )
+            if action != "upload":
+                expression = _build_interact_expression(
+                    action,
+                    selector,
+                    text,
+                    value,
+                    key,
+                    bool(clear),
+                    ref,
+                    frame_owner=frame_owner,
+                )
             # M4 敏感动作：先取目标元数据再分类；hard_block 不允许用户放行。
             # 仅 press Enter/Return 需要读焦点元素（触发默认提交/点击语义），
             # 其他按键不产生副作用，省一次 Runtime.evaluate。
@@ -2079,7 +2132,15 @@ class BrowserInteractTool(BaseTool):
                     "title": page_title,
                 }
             else:
-                outcome = _evaluate_json(session, expression, None)
+                if frame_owner:
+                    context_id = browser_frames.create_world(
+                        session, frame_owner["frame_id"]
+                    )
+                    outcome = browser_frames.evaluate_in_context(
+                        session, expression, context_id
+                    )
+                else:
+                    outcome = _evaluate_json(session, expression, None)
         except BrowserCDPError as exc:
             return _meta_error(exc, session, "interact")
         if not isinstance(outcome, dict):
@@ -2146,12 +2207,13 @@ class BrowserInteractTool(BaseTool):
             )
         # I1：点击链接 / JS 跳转可能把页面带到新域名；交互成功后按最终 URL
         # 重跑站点门禁，避免「在允许站点点一个链接」绕过站点策略。
-        # 在此之前，若 action 为 click，等待 SPA AJAX 请求归零（最多 5 秒），
-        # 确保页面内容已加载完成，后续站点门禁与 snapshot 能拿到正确 URL/内容。
+        # 在此之前，若 action 为 click，等待子 frame 导航/SPA AJAX 完成
+        # （无子 frame 时退化为顶层网络空闲，最多 5 秒），确保后续站点门禁
+        # 与 snapshot 能拿到正确 URL/内容。
         if action == "click" and outcome.get("ok"):
-            # 网络空闲等待失败不阻断主流程，降级为不等待
+            # 就绪等待失败不阻断主流程，降级为不等待
             with contextlib.suppress(Exception):
-                _wait_network_idle(session, None, timeout=5.0)
+                _wait_after_click(session)
         final_domain = browser_safety.domain_of(page_url)
         if page_url and final_domain and final_domain != domain:
             navigation_gate = _site_access_gate(session, page_url, final_domain, started)

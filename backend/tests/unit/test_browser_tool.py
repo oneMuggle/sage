@@ -600,6 +600,86 @@ def test_snapshot_falls_back_when_frame_api_unavailable(stubbed, monkeypatch):
     assert "var INCLUDE_IFRAMES = true;" in expressions[-1]
 
 
+def _snapshot_with_child_frame(stubbed):
+    stubbed.cdp.frame_tree = _frame_tree(
+        {"id": "f1", "url": "https://x/brief.aspx", "name": "iframeResult"}
+    )
+    stubbed.results.append(
+        {"result": {"value": _snapshot_payload([_snapshot_element("e1")], text="主")}}
+    )
+    stubbed.results.append(
+        {
+            "result": {
+                "value": _snapshot_payload(
+                    [_snapshot_element("e2", role="link", name="论文A")], text="结果"
+                )
+            }
+        }
+    )
+    assert _tool(BrowserSnapshotTool).execute(browser_id="b1").success is True
+
+
+def test_interact_frame_ref_click_uses_child_context(stubbed, monkeypatch):
+    _snapshot_with_child_frame(stubbed)
+    monkeypatch.setattr(browser_frames, "wait_frames_settled", lambda *a, **k: True)
+    stubbed.results.append(
+        {"result": {"value": {"ok": True, "info": "clicked A 论文A"}}}
+    )
+
+    result = _tool(BrowserInteractTool).execute(action="click", ref="e2", browser_id="b1")
+
+    assert result.success is True
+    frame_click_expressions = [
+        call["params"]["expression"]
+        for call in stubbed.calls
+        if call["method"] == "Runtime.evaluate"
+        and call["params"].get("contextId") == 1
+        and "__sageName=" in call["params"].get("expression", "")
+    ]
+    assert len(frame_click_expressions) == 1
+    assert "data-sage-ref" in frame_click_expressions[0]
+
+
+def test_interact_frame_ref_respects_blocked_frame(stubbed, monkeypatch):
+    _snapshot_with_child_frame(stubbed)
+    monkeypatch.setattr(
+        browser_tool,
+        "_safety_check_site",
+        lambda sid, url: "block" if "brief" in url else "allow",
+    )
+
+    result = _tool(BrowserInteractTool).execute(action="click", ref="e2", browser_id="b1")
+
+    assert result.success is False
+    assert "site_blocked" in result.error
+
+
+def test_read_target_metadata_uses_frame_context(monkeypatch):
+    session = _fake_session("b1")
+    browser_tool._SNAPSHOT_FRAME_REFS["b1"] = {
+        "e9": {"frame_id": "f1", "frame_url": "https://x/f", "name": "Go"}
+    }
+    captured = {}
+
+    def fake_create_world(session_, frame_id):
+        captured["frame_id"] = frame_id
+        return 5
+
+    def fake_evaluate(session_, expression, context_id):
+        captured["context_id"] = context_id
+        return {"tag": "a", "role": "link", "name": "Go", "type": "", "placeholder": ""}
+
+    monkeypatch.setattr(browser_frames, "create_world", fake_create_world)
+    monkeypatch.setattr(browser_frames, "evaluate_in_context", fake_evaluate)
+    try:
+        meta = browser_tool._read_target_metadata(session, ref="e9")
+    finally:
+        browser_tool._SNAPSHOT_FRAME_REFS.pop("b1", None)
+
+    assert meta["name"] == "Go"
+    assert captured == {"frame_id": "f1", "context_id": 5}
+
+
 
 def test_interact_maps_not_found_to_failure(stubbed):
     stubbed.results.append({"result": {"value": {"ok": False, "info": "not-found"}}})
