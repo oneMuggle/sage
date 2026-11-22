@@ -26,7 +26,10 @@ triggers: []
   outline.json       # title / sections[{id,title,summary,source_keys}]
   draft.md           # 正文，引用用 [cite:KEY] 或 [cite:KEY1, KEY2]
   verification.json  # 门禁报告
+  metadata_verification.json  # 外部元数据 2-of-3 核验
+  ledger.json        # EvidenceLedger（evidence / claim / 外部引用）
   export/            # final.md / references.json / papers.bib
+                     # verification_report.{md,json} / rubric_review.{md,json}
 ```
 
 ## 工作流（按顺序，不要跳步）
@@ -162,6 +165,16 @@ save_claims(run, apply_claim_support(load_claims(run), judgments))
 
 - 最后 `build-ledger` + `report` 生成 `ledger.json` 与
   `export/verification_report.{md,json}`（四态报告 artifact）。
+- 生成四维 rubric 评审（方法/覆盖/逻辑/写作，确定性规则）：
+
+```python
+from backend.literature.rubric import review_run
+review = review_run(run)  # 写 export/rubric_review.{md,json}
+print({"total": review["total_score"], "band": review["band"]})
+```
+
+  把 `rubric_review.md` 的 issues 清单反馈给用户；评分为"模拟评审/写作自检"，
+  不是同行评审，不能当作投稿依据。
 
 ### 8. 导出
 
@@ -170,11 +183,13 @@ from pathlib import Path
 from backend.literature.export import build_handoff, export_run
 from backend.literature.run_store import load_run
 run = load_run(Path("<run_dir>"))
-print(export_run(run))
+print(export_run(run))                       # GB/T 7714（默认）
+print(export_run(run, style="ieee"))         # 需要 IEEE 时
 print(build_handoff(run))
 ```
 
-产物：`export/final.md`、`export/references.json`、`export/papers.bib`。
+产物：`export/final.md`、`export/references.json`、`export/papers.bib`；
+`references.json.style` 记录实际引用样式（`gbt7714` / `ieee`）。
 
 ### 9. 交接 paper-writing
 
@@ -198,5 +213,7 @@ docx；生成后跑 `office_lint_word` 自检。不要在本技能里重复实�
 python -m backend.literature.cli init --root runs --topic 主题 --site xueshu789
 python -m backend.literature.cli guidance --site xueshu789 --query 机器学习
 python -m backend.literature.cli gate --run runs/<id>
-python -m backend.literature.cli export --run runs/<id>
+python -m backend.literature.cli report --run runs/<id>
+python -m backend.literature.cli rubric --run runs/<id>
+python -m backend.literature.cli export --run runs/<id> [--style ieee]
 ```

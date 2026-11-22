@@ -409,7 +409,8 @@ compliance:
 ### M2：EvidenceLedger 与引用核验（2 周）
 
 > **M2a/M2b 已完成（main `cc870ff9` / `cd660a16`）**：Claims 账本、存在性/schema、外部 2-of-3、证据级支持。
-> **M2c 实施中**：语义 claim support 摄入 + 统一 EvidenceLedger + 四态报告 artifact。
+> **M2c 核心已完成（main `1e5841a55` #3203）**：语义 claim support 摄入 + 统一 EvidenceLedger + 四态报告 artifact。
+> **M2c 收尾（本分支）**：Rubric 四维评审 + IEEE 引用样式；跨子系统自动适配器与专用前端面板留后续。
 
 - [x] 统一 EvidenceLedger 接口：`ledger.json` 收敛 papers/evidence/claims + 外部 entries（附件/Wiki/专家/Word/Zotero 通过 `ingest_external` 接入）。
 - [x] Claims 账本：`claims.jsonl`（claim_id / section / text / citation_keys / verdict / notes）。
@@ -421,8 +422,8 @@ compliance:
 - [x] 核验报告 artifact：`export/verification_report.md` / `.json`（四态分组 + 元数据 + ledger 统计）。
 - [ ] 各子系统引用自动适配器（Word/附件/Wiki/专家/Zotero 的自动扫描接入）。
 - [ ] 专用核验报告前端面板（当前走 artifact 面板）。
-- [ ] Rubric 评审：方法/覆盖/逻辑/写作四维评分 + 问题清单；明确"模拟评审，非同行评审"。
-- [ ] 引用样式：在 GB/T 7714 / APA 基础上评估 CSL/citeproc 或至少补 IEEE。
+- [x] Rubric 评审：方法/覆盖/逻辑/写作四维评分 + 问题清单；明确"模拟评审，非同行评审"（`rubric` 命令，`export/rubric_review.{md,json}`）。
+- [x] 引用样式：在 GB/T 7714 基础上补 IEEE（`export --style ieee`）；CSL/citeproc 与 APA 留后续评估。
 
 ### M3：产出层集成（2–3 周）
 
