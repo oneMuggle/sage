@@ -24,7 +24,10 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 
-from backend.domain.active_agent_registry import set_main_agent_resolver
+from backend.domain.active_agent_registry import (
+    set_main_agent_resolver,
+    set_main_agent_session_resolver,
+)
 
 if TYPE_CHECKING:
     from backend.core.legacy.agent import SageAgent
@@ -114,3 +117,17 @@ def _resolve_active_stream_agent(stream_id: Optional[str]) -> Any:
 
 
 set_main_agent_resolver(_resolve_active_stream_agent)
+
+
+# M3.2: 按 session_id 解析主 agent —— ChatDispatcher 只知道 session_id，
+# 失败驱动 re-plan 提示需要回注到该会话当前活跃的主 agent。
+def _resolve_active_session_agent(session_id: Optional[str]) -> Any:
+    if not session_id:
+        return None
+    for entry in _ACTIVE_STREAMS.values():
+        if isinstance(entry, dict) and entry.get("session_id") == session_id:
+            return entry.get("agent")
+    return None
+
+
+set_main_agent_session_resolver(_resolve_active_session_agent)
