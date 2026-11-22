@@ -64,6 +64,7 @@ python -m backend.cli.rescue components import D:\SageComponents\model.sagepkg -
 | 「组件包签名无效」 | 包被篡改或不是受信任密钥签名的，重新获取 |
 | 「Python 版本不匹配」 | win7 需要 Python 3.8 构建的组件包，不能用 main 的包 |
 | 「文件被占用」 | 关闭 Sage 后重试，或重启系统 |
+| 「组件包分支不匹配」（早期版本） | 2026-11-22 之后的版本已修复；升级 Sage 即可。无法升级时，用 SageDoctor 导入（§3）可绕过 |
 | 导入成功但功能没变化 | 重启 Sage；模型类组件在启动时加载 |
 
 ## 6. 与全量安装包的区别
