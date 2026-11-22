@@ -304,9 +304,11 @@ class TestShippedXueshu789Profile:
         assert profile.search.entry_url == "https://www.xueshu789.cc/dbItem/3"
         assert "input[placeholder*='检索词']" in profile.search.input_selectors
         assert profile.pdf is not None
+        assert profile.pdf.entry_selector == "a.downloadlink"
         assert profile.pdf.entry_text == "下载"
         assert profile.pdf.post_click_wait_s == 8.0
-        assert profile.status == "draft"
+        assert profile.status == "ready"
+        assert profile.last_verified_at == "2026-11-22"
         assert profile.compliance.default_enabled is False
 
 
