@@ -294,3 +294,45 @@ backend/data/migrations/runner.py
 backend/api/ai_routes.py
 # commandRoutes/memory.ts: win7 独有 batch_delete_memories IPC
 electron/commandRoutes/memory.ts
+
+# ==== 2026-11-22 real 漂移审计（72 → 登记 26 项必要差异，其余 46 项为未同步 main 功能）====
+# 审计：office M1–M6b / user_profile v2 / design 内容库 / 编排 M2.4 等属 main 新功能未同步，
+# 不在此登记（须 cherry-pick）；以下为 win7 专属实现与 pydantic-v1 / py38 必要兼容。
+
+# -- win7 专属：.sagepkg 离线组件包（设置页 + Electron IPC + rescue + 文档路径 + 打包预算） --
+electron/preload.ts
+electron/main.ts
+backend/cli/rescue.py
+backend/services/sage_docs/paths.py
+scripts/check-bundle-size.mjs
+src/pages/settings/settingsTabs.tsx
+src/pages/settings/settingsSearchEntries.ts
+src/pages/settings/__tests__/settingsSearchIndex.test.ts
+src/pages/settings/__tests__/settingsTabs.guards.test.ts
+src/shared/lib/i18n/en.ts
+src/shared/lib/i18n/zh.ts
+
+# -- win7 专属：Win7 运行时检测与启动失败救援对话框 --
+electron/__tests__/runtime-check.test.ts
+electron/__tests__/showStartupFailureDialog.test.ts
+
+# -- pydantic v1 兼容：ConfigDict / field_validator 垫片、前向引用 rebuild --
+backend/api/legacy_memory_feedback_routes.py
+backend/api/legacy_memory_quality_routes.py
+backend/api/rules_routes.py
+backend/office/models/_word_gen.py
+
+# -- py38 语法/测试兼容：zip 严格参数、with 语法、Optional 注解、pydantic 分支断言 --
+backend/memory/quality_scorer.py
+backend/tests/integration/test_asr_api.py
+backend/tests/integration/test_evolution_run_api.py
+backend/tests/integration/test_office_generate_routes.py
+
+# -- win7 测试隔离/资源适配：流注册表隔离、组件测试网络 fixture、matplotlib skipif、doctor 超时 --
+backend/tests/integration/test_chat_stream_office_refs.py
+backend/tests/integration/test_doctor_cli.py
+backend/tests/unit/test_browser_account_service.py
+backend/tests/unit/test_chart_embedder.py
+
+# -- README 文档目录未随 main 重组（docs/technical → docs/），非功能差异 --
+README.md
