@@ -158,7 +158,7 @@ def test_update_learned_preference_updates_both_stores(tmp_db, monkeypatch):
         "SELECT content, category FROM user_profile"
     ).fetchall()
     assert len(profile_rows) == 1
-    assert "专业" in profile_rows[0]["content"]
+    assert "professional" in profile_rows[0]["content"]
     assert profile_rows[0]["category"] == "preference"
 
 
