@@ -104,3 +104,30 @@ describe('resolveSageUserDataDir', () => {
     expect(resolveSageUserDataDir()).toBe(join(MOCK_CWD, 'data'));
   });
 });
+
+describe('resolveSageModelsDir', () => {
+  // Regression (2026-11-22): modelDownloadIpc's modelsBaseDir used
+  // `process.env.SAGE_USER_DATA_DIR || process.cwd()`, but the Electron
+  // main process never sets that env var. Packaged imports/downloads
+  // therefore landed in the install dir while the backend reads
+  // <SAGE_USER_DATA_DIR>/models — the semantic model import reported
+  // success but had no effect.
+  it('uses app.getPath("userData")/models when packaged', async () => {
+    isPackagedRef = true;
+    const { resolveSageModelsDir } = await import('../userDataPaths');
+    expect(resolveSageModelsDir()).toBe(join(MOCK_USER_DATA, 'models'));
+  });
+
+  it('falls back to <cwd>/data/models when dev (isPackaged=false)', async () => {
+    isPackagedRef = false;
+    const { resolveSageModelsDir } = await import('../userDataPaths');
+    expect(resolveSageModelsDir()).toBe(join(MOCK_CWD, 'data', 'models'));
+  });
+
+  it('honors explicit SAGE_USER_DATA_DIR over all defaults', async () => {
+    process.env.SAGE_USER_DATA_DIR = '/env/userdata';
+    isPackagedRef = true;
+    const { resolveSageModelsDir } = await import('../userDataPaths');
+    expect(resolveSageModelsDir()).toBe(join('/env/userdata', 'models'));
+  });
+});

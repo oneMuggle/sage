@@ -164,7 +164,11 @@ import { createIncrementalUtf8Decoder } from './incrementalUtf8Decoder';
 import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
 import { runRuntimeChecks, showRuntimeMissingDialog, isLegacyWindows } from './runtime-check';
-import { resolveSageDbPath, resolveSageUserDataDir } from './userDataPaths';
+import {
+  resolveSageDbPath,
+  resolveSageModelsDir,
+  resolveSageUserDataDir,
+} from './userDataPaths';
 import { appendCrashEvent, buildCrashEvent } from './crashJournal';
 import {
   bumpLevel,
@@ -894,8 +898,7 @@ function spawnBackend(): ChildProcess {
       // 3. 后端自行推导（userData > repo > 包内默认）
       // 用户如在 userData/models/ 放置了更新版本，后端会优先使用。
       ...(() => {
-        const userDataDir = process.env.SAGE_USER_DATA_DIR || process.cwd();
-        const userOcrDir = join(userDataDir, 'models', 'rapidocr');
+        const userOcrDir = join(resolveSageModelsDir(), 'rapidocr');
         const bundledModelsDir = app.isPackaged ? join(process.resourcesPath, 'models') : null;
         const bundledOcrDir = bundledModelsDir ? join(bundledModelsDir, 'rapidocr') : null;
         const ocrModelDir = existsSync(userOcrDir)
@@ -2713,10 +2716,11 @@ async function registerIpcHandlers(): Promise<void> {
   // B2 (P11): 嵌入模型下载 IPC —— model.onnx/tokenizer.json 单文件直下,
   // sha256 校验 + .part 原子 rename; 进度经 models:embedder:progress 推送。
   registerModelDownloadIpc(ipcMain, {
-    modelsBaseDir: () => {
-      const base = process.env.SAGE_USER_DATA_DIR || process.cwd();
-      return join(base, 'models');
-    },
+    // Models must land where the backend reads them: <userData>/models
+    // (backend spawn injects SAGE_USER_DATA_DIR). Using cwd here wrote to
+    // the install dir (packaged) / repo root (dev) and made local imports
+    // silently ineffective.
+    modelsBaseDir: resolveSageModelsDir,
     getWindow: () => mainWindow,
   });
 
