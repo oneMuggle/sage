@@ -5,6 +5,7 @@
 import { clsx } from 'clsx';
 import {
   AlertCircle,
+  Bot,
   CalendarClock,
   CheckCircle2,
   Clock,
@@ -31,6 +32,7 @@ const SOURCE_ICON: Record<UnifiedTaskSource, LucideIcon> = {
   registry: FileSpreadsheet,
   chat: MessageSquare,
   lane: Network,
+  subagent: Bot,
   goal: Target,
   todo: ListTodo,
   scheduled: CalendarClock,

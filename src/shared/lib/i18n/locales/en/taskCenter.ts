@@ -6,6 +6,7 @@ export const enTaskCenter = {
   'taskCenter.source.registry': 'Page task',
   'taskCenter.source.chat': 'Background chat',
   'taskCenter.source.lane': 'Orchestration',
+  'taskCenter.source.subagent': 'Subagent',
   'taskCenter.source.goal': 'Idle goal',
   'taskCenter.source.todo': 'Todo',
   'taskCenter.source.scheduled': 'Scheduled task',

@@ -8,8 +8,9 @@
 //   概览 = StatusBar(常驻顶栏) + 焦点卡 + 任务清单 + 历史运行
 //   任务 = 任务树（点击行 → 整面板切到 TaskDetailView 看实时运行情况）
 //   轨迹 = 完整轨迹（原样保留）
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 
+import { useOrchestrationFocusStore } from '../../../entities/orchestration/orchestrationFocusStore';
 import {
   useChatStreamStore,
   selectSessionSlots,
@@ -140,6 +141,18 @@ export function ProgressSection({
 
   const openTaskDetail = (taskId: string) => setSelectedTaskId(taskId);
   const closeTaskDetail = () => setSelectedTaskId(null);
+
+  // M2.4: 任务中心"打开子代理线程" —— 本会话 run 匹配后直接进入任务详情。
+  const focusRequest = useOrchestrationFocusStore((s) => s.request);
+  useEffect(() => {
+    if (!focusRequest || !taskBoard) return;
+    const consumed = useOrchestrationFocusStore
+      .getState()
+      .consume(sessionId ?? null, taskBoard.runId);
+    if (!consumed) return;
+    setSubTab('tasks');
+    setSelectedTaskId(consumed.taskId);
+  }, [focusRequest, taskBoard, sessionId]);
 
   return (
     <div className="flex flex-col h-full min-h-0">
