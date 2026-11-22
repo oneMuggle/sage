@@ -111,6 +111,23 @@ python -m backend.literature.cli build-ledger --run runs/<id> [--external citati
 python -m backend.literature.cli report --run runs/<id>
 ```
 
+## Rubric 评审与引用样式（M2c 收尾）
+
+- `rubric`：确定性四维评分（方法 / 覆盖 / 逻辑 / 写作，各 0–5 分，总分 20），
+  读取 query_log / papers / evidence / claims / outline / draft / gate / metadata，
+  不调用 LLM，输出 `export/rubric_review.md` / `.json`。
+  评分是**模拟评审/写作自检**，不是同行评审；`band` 为 优/良/及格/待改进，
+  每个维度带可读的 `issues` 清单。
+- 引用样式：`build_references(..., style="gbt7714" | "ieee")`；
+  `export --style ieee` 时 `references.json.style = "ieee"`。
+  IEEE 行格式：`[1] A. Author, "Title," Venue, Year.`（英文名缩写首字母，
+  超过 3 位作者用 `et al.`；中文名保持原样）。APA/CSL 未实现。
+
+```bash
+python -m backend.literature.cli rubric --run runs/<id>
+python -m backend.literature.cli export --run runs/<id> --style ieee
+```
+
 ## 设计规则
 
 - 站点差异只写在这里或 skill 的 `references/`，禁止写进 pipeline 代码。
