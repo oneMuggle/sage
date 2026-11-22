@@ -36,6 +36,7 @@ const LazyTaskTranscriptPanel = lazy(async () => {
 const STATUS_ICON: Record<TaskStatusValue, string> = {
   queued: '○',
   running: '◐',
+  paused: '⏸',
   done: '✓',
   failed: '✗',
   cancelled: '⊘',
@@ -45,6 +46,7 @@ const STATUS_ICON: Record<TaskStatusValue, string> = {
 const STATUS_LABEL: Record<TaskStatusValue, string> = {
   queued: '排队中',
   running: '执行中',
+  paused: '已暂停',
   done: '已完成',
   failed: '失败',
   cancelled: '已取消',
@@ -126,6 +128,7 @@ export function TaskDetailView({
   }, [state]);
 
   const [skipping, setSkipping] = useState(false);
+  const [pausing, setPausing] = useState(false);
   const [view, setView] = useState<'process' | 'transcript'>('process');
 
   const handleFollowup = useCallback(
@@ -160,6 +163,24 @@ export function TaskDetailView({
         toast.error(`跳过子任务 ${activeTaskId} 失败（已结束?）`);
         setSkipping(false);
       });
+  };
+
+  // M2.5: 任务级暂停/恢复 —— 暂停在下一迭代边界生效，不消耗 token。
+  const handlePauseToggle = () => {
+    if (pausing) return;
+    const paused = state === 'paused';
+    setPausing(true);
+    const call = paused
+      ? orchRunControlClient.resumeTask(board.runId, activeTaskId)
+      : orchRunControlClient.pauseTask(board.runId, activeTaskId);
+    call
+      .then(() =>
+        toast.info(paused ? `已恢复子任务 ${activeTaskId}` : `已请求暂停子任务 ${activeTaskId}`),
+      )
+      .catch(() => {
+        toast.error(`${paused ? '恢复' : '暂停'}子任务 ${activeTaskId} 失败（已结束?）`);
+      })
+      .finally(() => setPausing(false));
   };
 
   const liveEvents = live?.events ?? [];
@@ -252,6 +273,17 @@ export function TaskDetailView({
           </div>
         )}
         <div className="mt-1.5 flex items-center gap-1.5">
+          {(state === 'running' || state === 'paused') && (
+            <button
+              type="button"
+              onClick={handlePauseToggle}
+              disabled={pausing}
+              data-testid="task-detail-pause"
+              className="px-2 py-0.5 text-ui-2xs border border-border rounded text-text-secondary hover:text-primary hover:border-primary/40 disabled:opacity-50"
+            >
+              {pausing ? '处理中…' : state === 'paused' ? '恢复' : '暂停'}
+            </button>
+          )}
           {(state === 'queued' || state === 'running') && (
             <button
               type="button"

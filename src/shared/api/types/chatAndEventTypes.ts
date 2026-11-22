@@ -571,7 +571,14 @@ export interface TaskPlanEvent {
 
 // 2026-10-28 (Plan Mode 增强 Phase 3): skipped —— 用户在步骤确认对话框
 // 选择"跳过此步"，dispatcher 不派发该步直接进入下一任务。
-export type TaskStatusValue = 'queued' | 'running' | 'done' | 'failed' | 'cancelled' | 'skipped';
+export type TaskStatusValue =
+  | 'queued'
+  | 'running'
+  | 'paused'
+  | 'done'
+  | 'failed'
+  | 'cancelled'
+  | 'skipped';
 
 export interface TaskStatusEvent {
   state: 'task_status';

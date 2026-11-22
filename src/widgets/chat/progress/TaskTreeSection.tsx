@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue } from '../../../shared/api';
 import { orchRunClient } from '../../../shared/api/orchRunClient';
+import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 import { usePluginNames } from '../../../shared/lib/hooks/usePluginNames';
 import { findPluginToolOwner } from '../../../shared/lib/permissionInsights';
 
@@ -14,6 +15,8 @@ import { buildTaskTree, descendantsOf, flattenTree } from './taskTree';
 const STATUS_ICON: Record<TaskStatusValue, string> = {
   queued: '○',
   running: '◐',
+  // M2.5: 暂停态 —— 与 running 区分但保持"活跃"视觉。
+  paused: '⏸',
   done: '✓',
   failed: '✗',
   // P0-8 (2026-08-20): cancelled 状态渲染 —— 之前未覆盖 cancel 子任务，图标
@@ -26,6 +29,7 @@ const STATUS_ICON: Record<TaskStatusValue, string> = {
 const STATUS_TITLE: Record<TaskStatusValue, string> = {
   queued: 'queued',
   running: 'running',
+  paused: 'paused',
   done: 'done',
   failed: 'failed',
   cancelled: 'cancelled',
@@ -84,6 +88,8 @@ export function TaskTreeSection({
   // B3 (2026-09-09): 单任务跳过 in-flight 集合 —— 防重复点击；终态由
   // task_status 事件驱动刷新，这里只做乐观禁用。
   const [skipping, setSkipping] = useState<ReadonlySet<string>>(new Set());
+  // M2.5: 暂停/恢复请求中的任务（按钮忙碌态）。
+  const [pausing, setPausing] = useState<ReadonlySet<string>>(new Set());
 
   const total = board.progress?.total ?? board.plan.length;
   const doneCount =
@@ -153,6 +159,29 @@ export function TaskTreeSection({
       .catch(() => {
         toast.error(`跳过子任务 ${taskId} 失败（已结束?）`);
         setSkipping((prev) => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+      });
+  };
+
+  // M2.5: 任务级暂停/恢复 —— 暂停在下一迭代边界生效，不消耗 token。
+  const handleTaskPause = (taskId: string, paused: boolean) => {
+    if (pausing.has(taskId)) return;
+    setPausing((prev) => new Set(prev).add(taskId));
+    const call = paused
+      ? orchRunControlClient.resumeTask(board.runId, taskId)
+      : orchRunControlClient.pauseTask(board.runId, taskId);
+    call
+      .then(() =>
+        toast.info(paused ? `已恢复子任务 ${taskId}` : `已请求暂停子任务 ${taskId}`),
+      )
+      .catch(() => {
+        toast.error(`${paused ? '恢复' : '暂停'}子任务 ${taskId} 失败（已结束?）`);
+      })
+      .finally(() => {
+        setPausing((prev) => {
           const next = new Set(prev);
           next.delete(taskId);
           return next;
@@ -262,6 +291,32 @@ export function TaskTreeSection({
               )}
               <span className="px-1 rounded bg-primary/10 text-primary">{item.agent_id}</span>
               <span className="text-text-secondary flex-1">{item.goal}</span>
+              {/* M2.5: 任务级暂停/恢复 —— running/paused 行内按钮。 */}
+              {board.runId && (status === 'running' || status === 'paused') && (
+                <button
+                  type="button"
+                  data-testid={`task-tree-pause-${item.task_id}`}
+                  disabled={pausing.has(item.task_id)}
+                  title={
+                    status === 'paused'
+                      ? '恢复该子任务'
+                      : '暂停该子任务（下一迭代边界生效，不消耗 token）'
+                  }
+                  className="px-1.5 py-0.5 text-ui-2xs border border-border rounded text-text-secondary hover:text-primary hover:border-primary/40 shrink-0 disabled:opacity-50"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleTaskPause(item.task_id, status === 'paused');
+                  }}
+                >
+                  {pausing.has(item.task_id)
+                    ? status === 'paused'
+                      ? '恢复中…'
+                      : '暂停中…'
+                    : status === 'paused'
+                      ? '恢复'
+                      : '暂停'}
+                </button>
+              )}
               {/* B3 (2026-09-09): 单任务跳过 —— queued/running 行内按钮；
                   stopPropagation 防触发整行点击。 */}
               {board.runId && (status === 'queued' || status === 'running') && (

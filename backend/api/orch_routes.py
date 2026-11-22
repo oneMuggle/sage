@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from backend.api.orch_pause_routes import router as _pause_router
 from backend.compat.win7.pydantic_compat import field_validator
 from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与文档语义保留
     _SQLITE_LOCK,
@@ -27,6 +28,7 @@ from backend.data.orch_run_repo import OrchRun, OrchRunRepository
 from backend.data.orch_task_repo import OrchTaskRepository
 
 router = APIRouter(prefix="/orch", tags=["orchestration-runs"])
+router.include_router(_pause_router)
 
 
 def with_db_lock(func):

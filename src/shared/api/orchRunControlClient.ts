@@ -46,6 +46,22 @@ export interface CancelRunParams {
   reason?: string;
 }
 
+/** M2.5: 任务级暂停/恢复结果。 */
+export interface TaskPauseResponse {
+  ok: boolean;
+  run_id: string;
+  task_id: string;
+  status: string;
+}
+
+/** M2.5: run 级暂停/恢复结果。 */
+export interface RunPauseResponse {
+  ok: boolean;
+  run_id: string;
+  status: string;
+  affected: number;
+}
+
 export interface CancelRunResponse {
   ok: boolean;
   run_id: string;
@@ -131,6 +147,36 @@ export const orchRunControlClient = {
       task_id: taskId,
       content,
     });
+  },
+
+  /**
+   * POST /orch/runs/{runId}/tasks/{taskId}/pause
+   *
+   * M2.5: 暂停运行中的子任务（下一迭代边界生效，暂停期间不消耗 LLM token）。
+   */
+  async pauseTask(runId: string, taskId: string): Promise<TaskPauseResponse> {
+    return invoke<TaskPauseResponse>('orchestration_pause_task', {
+      run_id: runId,
+      task_id: taskId,
+    });
+  },
+
+  /** POST /orch/runs/{runId}/tasks/{taskId}/resume —— 恢复已暂停子任务。 */
+  async resumeTask(runId: string, taskId: string): Promise<TaskPauseResponse> {
+    return invoke<TaskPauseResponse>('orchestration_resume_task', {
+      run_id: runId,
+      task_id: taskId,
+    });
+  },
+
+  /** POST /orch/runs/{runId}/pause —— 暂停本 run 全部运行中任务。 */
+  async pauseRun(runId: string): Promise<RunPauseResponse> {
+    return invoke<RunPauseResponse>('orchestration_pause_run', { run_id: runId });
+  },
+
+  /** POST /orch/runs/{runId}/resume —— 恢复本 run 全部已暂停任务。 */
+  async resumeRun(runId: string): Promise<RunPauseResponse> {
+    return invoke<RunPauseResponse>('orchestration_resume_run', { run_id: runId });
   },
 
   /**

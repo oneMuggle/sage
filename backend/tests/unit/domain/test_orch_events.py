@@ -131,8 +131,11 @@ def test_terminal_states_closed_for_all_levels():
 def test_event_type_enum_counts_and_samples():
     assert len(RunEventType) == 11
     assert RunEventType.RUN_RECOVERED == "run.recovered"
-    assert len(TaskEventType) == 11
+    # M2.5: += task.paused / task.resumed
+    assert len(TaskEventType) == 13
     assert TaskEventType.TASK_WAITING_APPROVAL == "task.waiting_approval"
+    assert TaskEventType.TASK_PAUSED == "task.paused"
+    assert TaskEventType.TASK_RESUMED == "task.resumed"
     assert len(StepEventType) == 7
     assert StepEventType.STEP_OUTPUT_DELTA == "task.step.output_delta"
     assert len(oe.ControlEventType) == 7
