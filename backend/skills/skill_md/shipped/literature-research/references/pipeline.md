@@ -105,6 +105,51 @@
 Semantic Scholar；至少 `min_consensus`（默认 2）家标题/年份/作者匹配 →
 `verified`；1 家 → `partial`；0 → `unverified`；无外部 ID → `skipped`。
 
+## claim_support.json（M2c）
+
+```json
+[
+  {
+    "claim_id": "c0001",
+    "support": "supported",
+    "rationale": "证据 e1 的发现直接支持该句",
+    "evidence_refs": ["e1"]
+  }
+]
+```
+
+`support`：`supported` / `flagged` / `unsupported` / `unclear`。
+`apply-claim-support` 校验并合并到 claims.jsonl；`unresolved` / `unsupported`
+的 claim 不被覆盖。
+
+## ledger.json（M2c）
+
+```json
+{
+  "count": 1,
+  "entries": [
+    {
+      "entry_id": "evidence:e1",
+      "paper_key": "doi:10.1000/demo",
+      "source_type": "evidence",
+      "source_id": "e1",
+      "claim_id": null,
+      "locator": "p.3",
+      "quote": "原文片段",
+      "text": "证据正文"
+    }
+  ]
+}
+```
+
+`source_type` 可为 `evidence` / `claim` / `attachment` / `wiki` / `specialist` /
+`word` / `zotero` / `external`；外部来源用 `ingest_external` 以 dict 接入。
+
+## export/verification_report.{md,json}（M2c）
+
+四态分组（supported / flagged / unsupported / unclear）+ 元数据核验摘要 +
+EvidenceLedger 统计；由 `report` 命令生成，可直接作为 artifact 预览。
+
 ## outline.json
 
 ```json

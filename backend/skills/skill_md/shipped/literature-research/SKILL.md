@@ -144,7 +144,24 @@ print(verify_run_metadata(run, default_lookups(), min_consensus=2))
 - `errors` 必须清零：未知引用、缺失检索日志/大纲/草稿、证据指向未知文献。
 - `claims` 的 `unresolved` / `unsupported` 必须清零；`flagged`（引用存在但没有 evidence 记录）要向用户说明并复核。
 - `metadata_verification.json`：`verified` / `partial` / `unverified` / `skipped`；`unverified` 需要补元数据或向用户披露。
-- 语义 claim support（Layer 3b：被引段落是否真的支持该句）尚未实现，不得声称已做语义核验。
+- 语义 claim support（Layer 3b）：逐条 claim 对照 evidence，生成 `claim_support.json`：
+
+```json
+[{"claim_id": "c0001", "support": "supported",
+  "rationale": "证据 e1 的发现直接支持该句", "evidence_refs": ["e1"]}]
+```
+
+`support` 只能是 `supported` / `flagged` / `unsupported` / `unclear`；
+`unresolved` / `unsupported` 的存在性问题优先，不要用语义判定掩盖。合并：
+
+```python
+from backend.literature.support import apply_claim_support
+from backend.literature.run_store import load_claims, save_claims
+save_claims(run, apply_claim_support(load_claims(run), judgments))
+```
+
+- 最后 `build-ledger` + `report` 生成 `ledger.json` 与
+  `export/verification_report.{md,json}`（四态报告 artifact）。
 
 ### 8. 导出
 
