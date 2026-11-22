@@ -1166,7 +1166,7 @@ def _expression_with_page_info(expression: str) -> str:
     )
 
 
-def _build_interact_expression(
+def _build_interact_expression(  # noqa: PLR0911 — 每个动作分支独立返回，扁平更直读
     action: str,
     selector: str,
     text: str,
@@ -2131,16 +2131,15 @@ class BrowserInteractTool(BaseTool):
                     "url": page_url,
                     "title": page_title,
                 }
+            elif frame_owner:
+                context_id = browser_frames.create_world(
+                    session, frame_owner["frame_id"]
+                )
+                outcome = browser_frames.evaluate_in_context(
+                    session, expression, context_id
+                )
             else:
-                if frame_owner:
-                    context_id = browser_frames.create_world(
-                        session, frame_owner["frame_id"]
-                    )
-                    outcome = browser_frames.evaluate_in_context(
-                        session, expression, context_id
-                    )
-                else:
-                    outcome = _evaluate_json(session, expression, None)
+                outcome = _evaluate_json(session, expression, None)
         except BrowserCDPError as exc:
             return _meta_error(exc, session, "interact")
         if not isinstance(outcome, dict):

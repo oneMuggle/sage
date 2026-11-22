@@ -23,7 +23,7 @@ ref 协议（与 ``browser_tool`` 约定）：
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 #: interactive 模式默认返回的节点数
 SNAPSHOT_INTERACTIVE_MAX_DEFAULT = 120
@@ -595,17 +595,17 @@ def merge_snapshot_payloads(
     except (TypeError, ValueError):
         next_ref = 0
 
-    for payload, meta in zip(frames or [], frames_meta or []):
-        if not isinstance(payload, dict):
-            payload = {}
+    for raw_payload, meta in zip(frames or [], frames_meta or []):  # noqa: B905 — py3.8 无 strict
+        payload = raw_payload if isinstance(raw_payload, dict) else {}
         frame_url = str((meta or {}).get("url") or "") if isinstance(meta, dict) else ""
         for item in payload.get("elements") or []:
             if not isinstance(item, dict):
                 continue
+            current = item
             if frame_url and not item.get("frame_url"):
-                item = dict(item)
-                item["frame_url"] = frame_url
-            elements.append(item)
+                current = dict(item)
+                current["frame_url"] = frame_url
+            elements.append(current)
         sub_text = str(payload.get("text") or "")
         if sub_text:
             text_parts.append(sub_text)

@@ -55,7 +55,7 @@
   - `wait_frames_settled(session, target_id: Optional[str] = None, timeout: float = 8.0) -> bool`
   - 常量 `MAX_FRAMES = 20`、`ISOLATED_WORLD_NAME = "sage_snapshot"`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_browser_frames.py
@@ -131,21 +131,21 @@ def test_evaluate_in_context_passes_context_id(monkeypatch):
     assert captured["returnByValue"] is True
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `cd /home/fz/project/sage/.worktrees/feat-browser-cross-frame-snapshot && /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_browser_frames.py -v`
 Expected: FAIL（ModuleNotFoundError）。
 
-- [ ] **Step 3: 实现最小代码**
+- [x] **Step 3: 实现最小代码**
 
 关键点：`flatten_frame_tree` 递归展平（主 frame 置首）；`list_frames` 先 `Page.enable` 再 `Page.getFrameTree`（均为页面级调用，传 `target_id`）；`create_world` 用 `Page.createIsolatedWorld({"frameId", "worldName"})`；`evaluate_in_context` 的 `Runtime.evaluate` 带 `contextId` 与 `returnByValue`，`exceptionDetails` 非空时抛 `BrowserCDPError`；`wait_frames_settled` 每 0.3s 轮询每个 frame 的 `document.readyState` 与 `innerText` 长度，连续 2 轮 readyState∈{interactive, complete} 且长度不变 → True，超时 False；frame 上下文销毁（求值抛错）时下一轮重建世界。
 
-- [ ] **Step 4: 运行通过**
+- [x] **Step 4: 运行通过**
 
 Run: `... -m pytest backend/tests/unit/test_browser_frames.py -v`
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/tools/browser_frames.py backend/tests/unit/test_browser_frames.py
@@ -169,7 +169,7 @@ git commit -m "feat(browser): CDP 全帧枚举与隔离世界执行基础设施"
 - `build_frame_target_expression(ref: str) -> str`
 - 常量 `IFRAME_MAX_COLLECT_PER_FRAME` 60 → 150。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # test_browser_observe.py 追加
@@ -210,12 +210,12 @@ def test_build_frame_ref_expression_guards_stale_ref_and_name():
     assert "stale-ref" in expr
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `... -m pytest backend/tests/unit/test_browser_observe.py -v`
 Expected: FAIL（参数/函数不存在）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 - `_INTERACTIVE_JS` 增加占位符替换：`__START_REF__`、`__FRAME_URL__`、`__INCLUDE_IFRAMES__`；`collect(document, START_REF, FRAME_URL ? FRAME_URL : null)`；iframe 遍历整段包在 `if (INCLUDE_IFRAMES) { ... }` 内；返回值加 `next_ref: nextRef`、`frameset_count: document.querySelectorAll('frame').length`。
 - `_TEXT_JS` 返回值加 `frameset_count`；保留 iframe 文本遍历（fallback 路径用）。
@@ -225,12 +225,12 @@ Expected: FAIL（参数/函数不存在）。
 - `build_frame_ref_expression`：`document.querySelector("[data-sage-ref='e12']")` + `isConnected` + `data-sage-ref-name` 校验。
 - `build_frame_target_expression`：按 data 属性定位后复用现有元数据读取片段（把 `_read_target_metadata` 的 `name_source` 抽成模块级常量以便复用）。
 
-- [ ] **Step 4: 运行通过**
+- [x] **Step 4: 运行通过**
 
 Run: `... -m pytest backend/tests/unit/test_browser_observe.py -v`
 Expected: PASS（含既有 403 行测试）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git commit -am "feat(browser): 快照表达式支持跨帧偏移/合并与帧内 ref 定位"
@@ -252,7 +252,7 @@ git commit -am "feat(browser): 快照表达式支持跨帧偏移/合并与帧内
   - 每个可读子 frame：`create_world` → `build_snapshot_expression(..., include_iframes=False, ref_offset=next_ref, frame_url=frame.url)` → `evaluate_in_context`。
 - 快照流程：主框架先按 `include_iframes=False` 取 payload → `_collect_frame_snapshot`；返回 `None` 时用 `include_iframes=True` 重拍（旧路径）并清空 ref 映射；成功时 `merge_snapshot_payloads` 并写入 `_SNAPSHOT_FRAME_REFS`。
 
-- [ ] **Step 1: 测试 stub 适配与新增用例**
+- [x] **Step 1: 测试 stub 适配与新增用例**
 
 `stubbed._fake_cdp` 增加无队列消耗的缺省应答：
 
@@ -282,12 +282,12 @@ def test_snapshot_skips_blocked_child_frame(stubbed, monkeypatch):
     ...
 ```
 
-- [ ] **Step 2-4: 运行失败 → 实现 → 通过**
+- [x] **Step 2-4: 运行失败 → 实现 → 通过**
 
 Run: `... -m pytest backend/tests/unit/test_browser_tool.py -v`
 Expected: 先 FAIL（帧未合并），实现后 PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git commit -am "feat(browser): snapshot 经 CDP 巡检全帧并输出 frames 元数据"
@@ -306,7 +306,7 @@ git commit -am "feat(browser): snapshot 经 CDP 巡检全帧并输出 frames 元
 - `BrowserInteractTool.execute`：ref 属于子 frame 时，先 `_site_access_gate(session, frame_url, ...)`；构造 `build_frame_ref_expression` 并在该 frame 的隔离世界执行；结果信封不带 frame 的 url/title（保持顶层页面缓存）。
 - 点击后等待：`_wait_after_click(session)` —— `list_frames` 显示 >1 个 frame → `browser_frames.wait_frames_settled`；否则保留 `_wait_network_idle(timeout=5.0)`；帧 API 失败按旧路径降级。
 
-- [ ] **Step 1: 新增测试**
+- [x] **Step 1: 新增测试**
 
 ```python
 def test_interact_frame_ref_click_uses_child_context(stubbed, monkeypatch):
@@ -319,11 +319,11 @@ def test_interact_frame_ref_respects_blocked_frame(stubbed, monkeypatch):
     ...
 ```
 
-- [ ] **Step 2-4: 运行失败 → 实现 → 通过**
+- [x] **Step 2-4: 运行失败 → 实现 → 通过**
 
 Run: `... -m pytest backend/tests/unit/test_browser_tool.py backend/tests/unit/test_browser_observe.py -v`
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git commit -am "feat(browser): 交互支持子 frame ref 与全帧就绪等待"
@@ -338,16 +338,16 @@ git commit -am "feat(browser): 交互支持子 frame ref 与全帧就绪等待"
 - Modify: `backend/skills/skill_md/shipped/academic-search/SKILL.md`
 - Modify: `docs/technical/159-controlled-browser-use.md`
 
-- [ ] **Step 1: cnki-research 增补「旧版 KNS 5.5 / 内网镜像」小节**：入口 URL 形态、结果在 `#iframeResult`、检索后 `iframes_scanned`/`frame_url` 自诊断、结果为空等 2–3 秒重拍、翻页点 `Page_next`（用 ref）、不要复制 QueryID 链接到新窗口、frame 内详情链接必须用 ref 点击。
-- [ ] **Step 2: academic-search 明确旧站/登录场景转 `cnki-research`**。
-- [ ] **Step 3: §159 更新**：观察层 v2.2（CDP 全帧巡检、`frames` 元数据、全帧就绪等待、隔离世界交互）；已知限制表删除「无跨域 iframe 定向」，改为「selector/text 定位仍只作用于顶层，子 frame 请用 ref」。
-- [ ] **Step 4: 提交** `docs(browser): 更新 KNS 5.5 与跨帧快照说明`。
+- [x] **Step 1: cnki-research 增补「旧版 KNS 5.5 / 内网镜像」小节**：入口 URL 形态、结果在 `#iframeResult`、检索后 `iframes_scanned`/`frame_url` 自诊断、结果为空等 2–3 秒重拍、翻页点 `Page_next`（用 ref）、不要复制 QueryID 链接到新窗口、frame 内详情链接必须用 ref 点击。
+- [x] **Step 2: academic-search 明确旧站/登录场景转 `cnki-research`**。
+- [x] **Step 3: §159 更新**：观察层 v2.2（CDP 全帧巡检、`frames` 元数据、全帧就绪等待、隔离世界交互）；已知限制表删除「无跨域 iframe 定向」，改为「selector/text 定位仍只作用于顶层，子 frame 请用 ref」。
+- [x] **Step 4: 提交** `docs(browser): 更新 KNS 5.5 与跨帧快照说明`。
 
 ---
 
 ### Task 6: 全量验证与棘轮
 
-- [ ] **Step 1: 定向测试**
+- [x] **Step 1: 定向测试**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest \
@@ -359,11 +359,11 @@ git commit -am "feat(browser): 交互支持子 frame ref 与全帧就绪等待"
   backend/tests/api/test_browser_use_routes.py -q
 ```
 
-- [ ] **Step 2: ruff**：`ruff check backend/tools/browser_frames.py backend/tools/browser_observe.py backend/tools/browser_tool.py backend/tests/unit/test_browser_frames.py`
-- [ ] **Step 3: 静默异常棘轮**：`python scripts/check_silent_exceptions.py`
-- [ ] **Step 4: 架构棘轮**：按实测更新 `architecture-baseline.json`（`node scripts/architecture-check.mjs` 报告为准；`split('\n').length`），确认无新违规。
-- [ ] **Step 5: py38 兼容自检**（win7 同步前）：`python scripts/check_py38_compat.py`（若脚本仅 win7 触发则跳过并记录）。
-- [ ] **Step 6: 提交** `test(browser): 跨帧快照回归与棘轮基线`。
+- [x] **Step 2: ruff**：`ruff check backend/tools/browser_frames.py backend/tools/browser_observe.py backend/tools/browser_tool.py backend/tests/unit/test_browser_frames.py`
+- [x] **Step 3: 静默异常棘轮**：`python scripts/check_silent_exceptions.py`
+- [x] **Step 4: 架构棘轮**：按实测更新 `architecture-baseline.json`（`node scripts/architecture-check.mjs` 报告为准；`split('\n').length`），确认无新违规。
+- [x] **Step 5: py38 兼容自检**（win7 同步前）：`python scripts/check_py38_compat.py`（若脚本仅 win7 触发则跳过并记录）。
+- [x] **Step 6: 提交** `test(browser): 跨帧快照回归与棘轮基线`。
 
 ---
 

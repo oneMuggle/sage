@@ -214,12 +214,10 @@ def probe_frame(
 
 def all_frames_settled(probes: List[Dict[str, Any]]) -> bool:
     """所有 frame 的 ``readyState`` 都已进入 interactive/complete。"""
-    if not probes:
-        return True
-    for probe in probes:
-        if str(probe.get("ready") or "") not in ("interactive", "complete"):
-            return False
-    return True
+    return all(
+        str(probe.get("ready") or "") in ("interactive", "complete")
+        for probe in probes
+    )
 
 
 def wait_frames_settled(
@@ -256,7 +254,7 @@ def wait_frames_settled(
             )
             for frame in frames
         ]
-        for frame, probe in zip(frames, probes):
+        for frame, probe in zip(frames, probes):  # noqa: B905 — py3.8 无 strict
             if probe.get("error") and not frame.is_main:
                 contexts.pop(frame.frame_id, None)
         lengths = [int(probe.get("text_len") or 0) for probe in probes]
