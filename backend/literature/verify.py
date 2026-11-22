@@ -47,11 +47,14 @@ def _get_json(url: str) -> Optional[Dict[str, Any]]:
 
 def _doi_of(paper: PaperRecord) -> Optional[str]:
     doi = (paper.doi or "").strip()
-    if doi:
-        return doi.removeprefix("https://doi.org/").removeprefix("doi:")
-    if paper.paper_key.lower().startswith("doi:"):
-        return paper.paper_key[4:].strip() or None
-    return None
+    if not doi and paper.paper_key.lower().startswith("doi:"):
+        doi = paper.paper_key[4:].strip()
+    if not doi:
+        return None
+    for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
+        if doi.startswith(prefix):
+            doi = doi[len(prefix):]
+    return doi.strip() or None
 
 
 def _arxiv_of(paper: PaperRecord) -> Optional[str]:
