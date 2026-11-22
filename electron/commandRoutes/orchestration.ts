@@ -37,6 +37,15 @@ export const orchestrationRoutes: Record<string, CommandRoute> = {
       `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/tasks/${encodeURIComponent(String(a.task_id ?? a.taskId))}/steer`,
   },
 
+  // M2.3: 子代理继续对话 —— POST /orch/runs/{run_id}/tasks/{task_id}/followup
+  // 复用 followup_of 历史，后台派发新任务；返回新 task_id 供前端切换 transcript。
+  orchestration_followup_task: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/tasks/${encodeURIComponent(String(a.task_id ?? a.taskId))}/followup`,
+    body: (a) => ({ content: a.content }),
+  },
+
   // Phase 3: run cancellation control — POST /orch/runs/{run_id}/cancel
   // Broadcasts run.cancel_requested; executor-driven abort belongs to Phase 4.
   orchestration_cancel_run_control: {

@@ -1,7 +1,7 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0 已合并 main（`96cfe619c`），M1 已合并 main（`2f5055f0d`）；M2a/M2.2 已实施（同轮并发 + 后台模式 + 多后台派发），M2.3–M2.5 待实施
-> 分支：M2 `feat/orch-agent-background`
+> 状态：M0/M1/M2a/M2.2 已合并 main；M2.3（子代理继续对话）已实施（本分支），M2.4–M2.5 待实施
+> 分支：M2.3 `feat/orch-subagent-followup`
 > 关联：技术手册 §27（多 Agent 编排层）、§36（编排端到端）、§42（Chat-Native 编排）、§108（Plan Mode 增强）、§125（思考展示档位）、§140（插话暂存区）、§148（任务中心）
 > 调研方式：后端核心 / 前端 UI / 文档技能三路并行代码审计（本文所有 file:line 均来自实际代码）
 
@@ -132,7 +132,7 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 - [x] M1.4 前端子代理详情页（过程/Transcript/思考/统计）
 - [x] M2.1 `agent(background=true)` + 同轮并发
 - [x] M2.2 多个后台 dispatch 并存
-- [ ] M2.3 子代理继续对话
+- [x] M2.3 子代理继续对话
 - [ ] M2.4 子代理线程 + TaskCenter task 级条目
 - [ ] M2.5 task pause/resume + run resume 端点
 - [ ] M3.1 `subagent_type` 角色注册表落地
@@ -164,6 +164,20 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 | M2.2 多个后台 dispatch 并存：`ChatDispatcher` 由单在飞互斥改为最多 `MAX_CONCURRENT_BACKGROUND_DISPATCHES`=4 并存；`wait_background` 一次 collect 全部在飞派发后聚合；`background_snapshot` 汇总所有派发状态；超限错误码 `background_dispatch_limit` | `backend/orchestration/chat_dispatcher.py`、`backend/tools/subagent_tool.py`、`test_chat_dispatcher_background.py` |
 
 验证：新增 10 用例 + agent 工具/steering/执行分组回归 163 用例全绿；ruff 干净；架构棘轮按协议更新（agent.py 4274、agent_tool.py 813 入基线）；silent-exceptions OK。
+
+## M2.3 实施记录（2026-11-22）
+
+| 改动 | 文件 |
+|---|---|
+| `ChatDispatcher.start_followup(parent_task_id, content)`：仅当 parent 在本进程 dispatcher 内存态且 done；生成唯一 `fuN` 任务 id，经 `followup_of` 后台派发（复用 `_histories[parent]` 子代理历史） | `backend/orchestration/chat_dispatcher.py` |
+| `POST /orch/runs/{run_id}/tasks/{task_id}/followup`（404 无活动 run / 409 不可追问或超限 / 400 空或超长内容） | `backend/api/orch_routes.py` |
+| IPC `orchestration_followup_task` + manifest；前端 `orchRunControlClient.followupTask` | `electron/commandRoutes/orchestration.ts`、`src/shared/api/orchRunControlClient.ts` |
+| TaskDetailView：`activeTaskId`（续聊后切到新任务并继续 transcript 轮询）+ `followupBusy` + 头部 fallback 追问文案；TaskTranscriptPanel 终态任务显示「继续追问」输入框 | `src/widgets/chat/progress/TaskDetailView.tsx`、`TaskTranscriptPanel.tsx` |
+| 测试 | `test_orch_followup.py`（9）+ 面板/TaskDetailView 用例 4 |
+
+**已知边界**：续聊依赖 dispatcher 仍在进程内（`_ACTIVE_DISPATCHERS`）；进程重启后返回 404 —— 跨重启续聊需要从 transcript 重建历史，留待后续。
+
+验证：后端 9 新用例全绿 + ruff；前端 typecheck、27 用例、ESLint、构建与 bundle 门禁通过；棘轮 chat_dispatcher 2497。
 
 ## 7. 明确不做（YAGNI）
 
