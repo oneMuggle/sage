@@ -20,15 +20,24 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from .export import export_run
-from .gates import extract_claims, run_gates, verify_claims
+from .gates import (
+    SUPPORTED_REFERENCE_STYLES,
+    extract_claims,
+    run_gates,
+    verify_claims,
+)
 from .guidance import render_search_guidance
+from .ledger import build_ledger, ledger_stats
 from .models import profile_from_dict
 from .profile_store import get_default_store
 from .recording import write_profile_draft
+from .report import build_verification_report
+from .rubric import review_run
 from .run_store import (
     create_run,
     list_evidence,
     list_papers,
+    load_claims,
     load_run,
     read_draft,
     record_evidence,
@@ -39,6 +48,7 @@ from .run_store import (
     save_draft,
     save_outline,
 )
+from .support import apply_claim_support, summarize_claim_support
 from .verify import apply_evidence_support, default_lookups, verify_run_metadata
 
 
@@ -118,8 +128,23 @@ def _build_parser() -> argparse.ArgumentParser:
     verify_meta.add_argument("--run", required=True)
     verify_meta.add_argument("--min-consensus", type=int, default=2)
 
+    apply_support = sub.add_parser("apply-claim-support")
+    apply_support.add_argument("--run", required=True)
+    apply_support.add_argument("--json", required=True)
+
+    build_ledger_cmd = sub.add_parser("build-ledger")
+    build_ledger_cmd.add_argument("--run", required=True)
+    build_ledger_cmd.add_argument("--external", default=None)
+
+    report_cmd = sub.add_parser("report")
+    report_cmd.add_argument("--run", required=True)
+
+    rubric_cmd = sub.add_parser("rubric", help="四维 rubric 评审（方法/覆盖/逻辑/写作）")
+    rubric_cmd.add_argument("--run", required=True)
+
     export = sub.add_parser("export")
     export.add_argument("--run", required=True)
+    export.add_argument("--style", choices=list(SUPPORTED_REFERENCE_STYLES), default="gbt7714")
 
     status = sub.add_parser("status")
     status.add_argument("--run", required=True)
@@ -233,8 +258,64 @@ def _dispatch(args: argparse.Namespace) -> int:  # noqa: PLR0911 — 每个子�
         _print({"ok": True, **report})
         return 0 if not report.get("unverified") else 1
 
+    if args.command == "apply-claim-support":
+        judgments = _rows_arg(args.json, "judgments")
+        updated = apply_claim_support(load_claims(run), judgments)
+        save_claims(run, updated)
+        summary = summarize_claim_support(updated)
+        _print({"ok": True, "claims": len(updated), "verdicts": summary})
+        return 1 if summary.get("unsupported") or summary.get("unresolved") else 0
+
+    if args.command == "build-ledger":
+        external = _rows_arg(args.external, "entries") if args.external else None
+        ledger = build_ledger(run, external)
+        _print(
+            {
+                "ok": True,
+                "entries": len(ledger.entries),
+                "by_source": ledger_stats(ledger),
+            }
+        )
+        return 0
+
+    if args.command == "report":
+        report = build_verification_report(run)
+        _print(
+            {
+                "ok": True,
+                "summary": report["summary"],
+                "metadata": {
+                    key: report.get("metadata", {}).get(key, 0)
+                    for key in ("verified", "partial", "unverified", "skipped")
+                },
+                "paths": report.get("paths"),
+            }
+        )
+        return 0
+
+    if args.command == "rubric":
+        review = review_run(run)
+        _print(
+            {
+                "ok": True,
+                "total_score": review["total_score"],
+                "max_score": review["max_score"],
+                "band": review["band"],
+                "dimensions": [
+                    {
+                        "id": dimension["id"],
+                        "score": dimension["score"],
+                        "issues": dimension["issues"],
+                    }
+                    for dimension in review["dimensions"]
+                ],
+                "paths": review.get("paths"),
+            }
+        )
+        return 0
+
     if args.command == "export":
-        paths = export_run(run)
+        paths = export_run(run, style=args.style)
         _print({"ok": True, "paths": {key: str(value) for key, value in paths.items()}})
         return 0
 

@@ -47,11 +47,49 @@ def _reference_line(number: int, paper: PaperRecord) -> str:
     return f"[{number}] {authors}. {paper.title}[J]. {venue}, {year}."
 
 
+def _ieee_author(name: str) -> str:
+    """IEEE 作者格式：英文名缩写首字母，中文名保持原样。"""
+    name = name.strip()
+    if not name or any(ord(char) > 127 for char in name):
+        return name
+    tokens = name.split()
+    if len(tokens) == 1:
+        return tokens[0]
+    initials = " ".join(f"{token[0]}." for token in tokens[:-1])
+    return f"{initials} {tokens[-1]}"
+
+
+def _ieee_authors(authors: Sequence[str]) -> str:
+    if not authors:
+        return "Anon."
+    if len(authors) > 3:
+        return f"{_ieee_author(authors[0])} et al."
+    names = [_ieee_author(name) for name in authors]
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return f"{names[0]} and {names[1]}"
+    return f"{names[0]}, {names[1]}, and {names[2]}"
+
+
+def _ieee_reference_line(number: int, paper: PaperRecord) -> str:
+    authors = _ieee_authors(paper.authors)
+    venue = paper.venue or "[出版者不详]"
+    year = paper.year or "[年份不详]"
+    return f'[{number}] {authors}, "{paper.title}," {venue}, {year}.'
+
+
+SUPPORTED_REFERENCE_STYLES = ("gbt7714", "ieee")
+
+
 def build_references(
     draft: str, papers: Sequence[PaperRecord], style: str = "gbt7714"
 ) -> Tuple[str, List[Dict[str, Any]]]:
-    if style != "gbt7714":
-        raise ValueError(f"暂不支持的引用样式: {style}")
+    if style not in SUPPORTED_REFERENCE_STYLES:
+        raise ValueError(
+            f"暂不支持的引用样式: {style}（可选: {', '.join(SUPPORTED_REFERENCE_STYLES)}）"
+        )
+    line_builder = _ieee_reference_line if style == "ieee" else _reference_line
     by_key = {p.paper_key: p for p in papers}
     entries: List[Dict[str, Any]] = []
     lines: List[str] = []
@@ -59,7 +97,7 @@ def build_references(
         paper = by_key.get(key)
         if paper is None:
             continue
-        lines.append(_reference_line(number, paper))
+        lines.append(line_builder(number, paper))
         entries.append({"key": key, "number": number, "paper": paper.to_dict()})
     return "\n".join(lines), entries
 

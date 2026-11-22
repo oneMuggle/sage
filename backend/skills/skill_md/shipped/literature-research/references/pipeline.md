@@ -105,6 +105,73 @@
 Semantic Scholar；至少 `min_consensus`（默认 2）家标题/年份/作者匹配 →
 `verified`；1 家 → `partial`；0 → `unverified`；无外部 ID → `skipped`。
 
+## claim_support.json（M2c）
+
+```json
+[
+  {
+    "claim_id": "c0001",
+    "support": "supported",
+    "rationale": "证据 e1 的发现直接支持该句",
+    "evidence_refs": ["e1"]
+  }
+]
+```
+
+`support`：`supported` / `flagged` / `unsupported` / `unclear`。
+`apply-claim-support` 校验并合并到 claims.jsonl；`unresolved` / `unsupported`
+的 claim 不被覆盖。
+
+## ledger.json（M2c）
+
+```json
+{
+  "count": 1,
+  "entries": [
+    {
+      "entry_id": "evidence:e1",
+      "paper_key": "doi:10.1000/demo",
+      "source_type": "evidence",
+      "source_id": "e1",
+      "claim_id": null,
+      "locator": "p.3",
+      "quote": "原文片段",
+      "text": "证据正文"
+    }
+  ]
+}
+```
+
+`source_type` 可为 `evidence` / `claim` / `attachment` / `wiki` / `specialist` /
+`word` / `zotero` / `external`；外部来源用 `ingest_external` 以 dict 接入。
+
+## export/verification_report.{md,json}（M2c）
+
+四态分组（supported / flagged / unsupported / unclear）+ 元数据核验摘要 +
+EvidenceLedger 统计；由 `report` 命令生成，可直接作为 artifact 预览。
+
+## export/rubric_review.{md,json}（M2c）
+
+四维 rubric 评审（方法 / 覆盖 / 逻辑 / 写作，各 0–5 分，总分 20）：
+
+```json
+{
+  "generated_at": "2026-11-22T12:00:00+00:00",
+  "total_score": 14,
+  "max_score": 20,
+  "band": "良",
+  "disclaimer": "本评审由确定性规则自动生成，是写作自检而非同行评审；...",
+  "dimensions": [
+    {"id": "method", "title": "方法", "score": 4, "max_score": 5,
+     "issues": ["部分被引文献缺少证据（覆盖率 67%）"]}
+  ]
+}
+```
+
+由 `rubric` 命令生成。评分只反映流程完整度（检索次数、证据覆盖率、元数据
+通过率、被引比例、来源多样性、大纲覆盖、claims 状态、正文体量与引用密度），
+不评价学术价值；必须向用户说明"模拟评审，不是同行评审"。
+
 ## outline.json
 
 ```json
@@ -146,8 +213,13 @@ Semantic Scholar；至少 `min_consensus`（默认 2）家标题/年份/作者�
 ## export/
 
 - `final.md`：正文 + `## 参考文献`（仅列实际引用）。
-- `references.json`：`{"style": "gbt7714", "entries": [{"key", "number", "paper"}]}`。
+- `references.json`：`{"style": "gbt7714", "entries": [{"key", "number", "paper"}]}`；
+  `export --style ieee` 时 `style` 为 `ieee`。
 - `papers.bib`：仅包含实际引用的 BibTeX 条目。
+
+参考文献样式：默认 GB/T 7714（`[1] 作者. 题名[J]. 刊名, 年.`）；
+`ieee` 输出 `[1] A. Author, "Title," Venue, Year.`（英文名缩写首字母，
+超过 3 位作者用 `et al.`）。APA/CSL 未实现。
 
 ## paper-writing 交接
 

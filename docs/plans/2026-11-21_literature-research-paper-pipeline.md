@@ -408,19 +408,22 @@ compliance:
 
 ### M2：EvidenceLedger 与引用核验（2 周）
 
-> **M2a 已完成（2026-11-22，main `cc870ff9`）**：Claims 账本 + 存在性/元数据 schema 核验 + CLI。
-> **M2b 实施中**：外部 2-of-3 共识 + 证据级 claim 支持。
+> **M2a/M2b 已完成（main `cc870ff9` / `cd660a16`）**：Claims 账本、存在性/schema、外部 2-of-3、证据级支持。
+> **M2c 核心已完成（main `1e5841a55` #3203）**：语义 claim support 摄入 + 统一 EvidenceLedger + 四态报告 artifact。
+> **M2c 收尾（本分支）**：Rubric 四维评审 + IEEE 引用样式；跨子系统自动适配器与专用前端面板留后续。
 
-- [ ] 统一 EvidenceLedger 接口，收敛 Word references、附件 ChunkCitation、Wiki S1/S2、专家 knowledge sources、Zotero BibTeX 的引用记录（M2c）。
+- [x] 统一 EvidenceLedger 接口：`ledger.json` 收敛 papers/evidence/claims + 外部 entries（附件/Wiki/专家/Word/Zotero 通过 `ingest_external` 接入）。
 - [x] Claims 账本：`claims.jsonl`（claim_id / section / text / citation_keys / verdict / notes）。
 - [x] 提取 claim：从 draft.md 按段落抽取带 `[cite:KEY]` 的主张。
-- [x] 存在性 + 元数据 schema 核验（Layer 1 + Layer 2a）：引用 key 在文献池、DOI/arXiv/标题/作者/年份字段完整。
+- [x] 存在性 + 元数据 schema 核验（Layer 1 + Layer 2a）。
 - [x] 外部 DOI/元数据 2-of-3 共识核验（Layer 2b）：Crossref / OpenAlex / Semantic Scholar。
 - [x] 证据级 claim 支持（Layer 3a）：引用论文没有 evidence 记录 → `flagged`。
-- [ ] 语义 claim support（Layer 3b，含 PDF 页定位，需 LLM 调用）。
-- [ ] 核验报告 UI：支持 / 待复核 / 不支持 / 无法核验四态（M2c）。
-- [ ] Rubric 评审：方法/覆盖/逻辑/写作四维评分 + 问题清单；明确"模拟评审，非同行评审"。
-- [ ] 引用样式：在 GB/T 7714 / APA 基础上评估 CSL/citeproc 或至少补 IEEE。
+- [x] 语义 claim support（Layer 3b）：LLM 输出 judgments JSON → `apply-claim-support`，四态 supported/flagged/unsupported/unclear。
+- [x] 核验报告 artifact：`export/verification_report.md` / `.json`（四态分组 + 元数据 + ledger 统计）。
+- [ ] 各子系统引用自动适配器（Word/附件/Wiki/专家/Zotero 的自动扫描接入）。
+- [ ] 专用核验报告前端面板（当前走 artifact 面板）。
+- [x] Rubric 评审：方法/覆盖/逻辑/写作四维评分 + 问题清单；明确"模拟评审，非同行评审"（`rubric` 命令，`export/rubric_review.{md,json}`）。
+- [x] 引用样式：在 GB/T 7714 基础上补 IEEE（`export --style ieee`）；CSL/citeproc 与 APA 留后续评估。
 
 ### M3：产出层集成（2–3 周）
 
