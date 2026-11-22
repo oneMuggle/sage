@@ -1,6 +1,7 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0/M1/M2a/M2.2 已合并 main；M2.3（子代理继续对话）已实施（本分支），M2.4–M2.5 待实施
+> 状态：M0/M1/M2a/M2.2/M2.3 已合并 main；M2.4（子代理线程 + TaskCenter task 级条目）已实施（本分支），M2.5 待实施
+> 分支：M2.4 `feat/orch-subagent-thread`
 > 分支：M2.3 `feat/orch-subagent-followup`
 > 关联：技术手册 §27（多 Agent 编排层）、§36（编排端到端）、§42（Chat-Native 编排）、§108（Plan Mode 增强）、§125（思考展示档位）、§140（插话暂存区）、§148（任务中心）
 > 调研方式：后端核心 / 前端 UI / 文档技能三路并行代码审计（本文所有 file:line 均来自实际代码）
@@ -133,7 +134,7 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 - [x] M2.1 `agent(background=true)` + 同轮并发
 - [x] M2.2 多个后台 dispatch 并存
 - [x] M2.3 子代理继续对话
-- [ ] M2.4 子代理线程 + TaskCenter task 级条目
+- [x] M2.4 子代理线程 + TaskCenter task 级条目
 - [ ] M2.5 task pause/resume + run resume 端点
 - [ ] M3.1 `subagent_type` 角色注册表落地
 - [ ] M3.2 失败驱动 re-plan
@@ -178,6 +179,18 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 **已知边界**：续聊依赖 dispatcher 仍在进程内（`_ACTIVE_DISPATCHERS`）；进程重启后返回 404 —— 跨重启续聊需要从 transcript 重建历史，留待后续。
 
 验证：后端 9 新用例全绿 + ruff；前端 typecheck、27 用例、ESLint、构建与 bundle 门禁通过；棘轮 chat_dispatcher 2497。
+
+## M2.4 实施记录（2026-11-22）
+
+| 改动 | 文件 |
+|---|---|
+| 统一任务模型新增 `subagent` 源：`normalizeSubagentTask`（活跃/失败可见，等待审批映射 awaiting_approval；id `subagent:<sid>:<runId>:<taskId>`）+ `subagent-thread` 打开目标 | `src/features/task-center/unifiedTaskModel.ts` |
+| `useUnifiedTasks` 从各会话 `taskBoard`（plan/statuses/live）展开子代理任务条目，跨会话可见 | `src/features/task-center/useUnifiedTasks.ts` |
+| TaskCenter 点击子代理条目：写 focus 请求 + 打开右栏进度面板 + 路由到 `/chat?session=`；ProgressSection 消费请求后直接打开该任务详情（过程/对话/steering），实现"打开子代理线程" | `src/entities/orchestration/orchestrationFocusStore.ts`（新）、`useTaskCenterActions.ts`、`ProgressSection.tsx` |
+| 卡片图标/文案（zh/en） | `TaskCenterCard.tsx`、`i18n/locales/{zh,en}/taskCenter.ts` |
+| 测试 | 模型 3 + 汇总 1 + 动作 1 + 详情定位 1 |
+
+验证：TaskCenter/ProgressSection 相关 14 个套件 / 118 用例全绿；typecheck、ESLint、构建与 bundle 门禁（main 2243/2304KB）、架构棘轮均通过。
 
 ## 7. 明确不做（YAGNI）
 
