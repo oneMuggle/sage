@@ -59,5 +59,10 @@ search:
 - 搜索框 placeholder 含「检索词」；输入关键词后 Enter 提交，约 5 秒出结果。
 - 结果条目的题名/作者/来源链接均指向 `https://www.xueshu789.cc/doDownload?url=...`；
   操作列有「下载 / 原版阅读 / CNKI AI阅读」。
-- **下载链路未验证通过**：`doDownload` 新标签显示「参数错误」；profile 保持
-  `status: draft`，下载需后续排查（POST/Referer/动态 token 等）。
+- **下载已实测通过**：`a.downloadlink` 的真实 href 还带
+  `&ddata=<文件名>|<库>|<题名>|<库>|<hash>`；点击该元素会经
+  `oversea.cnki.net/docdown/fulltext/download` 落盘 PDF（实测 787KB / 26 页）。
+  **不要**用快照里截断的 `doDownload?url=...` 直连，缺少 `ddata` 会报「参数错误」。
+- 下载完成后新标签可能显示 CNKI「页面不存在」，但 PDF 已落盘；以浏览器下载目录为准。
+- profile 对 `/dbItem/3` 已标记 `status: ready`；`/dbItem/1` 代理报错、`/dbItem/2`
+  仍会触发滑块验证。
