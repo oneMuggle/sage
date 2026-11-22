@@ -10,9 +10,9 @@ locating modes:
    ``office_documents`` row are removed together, files-first so a
    locked file keeps a consistent row+file state.
 2. **file_path mode** — an absolute path to a single office file.
-   Restricted to ``.docx/.xlsx/.pptx`` so the tool can never delete an
-   arbitrary file the way ``bash rm`` could; outside-workspace targets
-   are gated by the same approval chain as ``office_create``
+   Restricted to ``.docx/.xlsx/.pptx/.pdf/.csv`` so the tool can never
+   delete an arbitrary file the way ``bash rm`` could; outside-workspace
+   targets are gated by the same approval chain as ``office_create``
    (``make_office_path_boundary``) and the hex-chain
    ``_enforce_workspace``.
 
@@ -33,7 +33,7 @@ from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import current_tool_context
 
 #: file_path 模式允许删除的扩展名（与 office_update 的可编辑范围一致）
-_DELETABLE_EXTENSIONS = frozenset({".docx", ".xlsx", ".pptx"})
+_DELETABLE_EXTENSIONS = frozenset({".docx", ".xlsx", ".pptx", ".pdf", ".csv"})
 
 
 class OfficeDeleteTool(BaseTool):
@@ -46,7 +46,7 @@ class OfficeDeleteTool(BaseTool):
         return ToolSchema(
             name="office_delete",
             description=(
-                "Delete an existing Office document (.docx/.xlsx/.pptx). "
+                "Delete an existing Office document (.docx/.xlsx/.pptx/.pdf/.csv). "
                 "This is DESTRUCTIVE and cannot be undone. Locate the file "
                 "either by doc_id (from office_list, uses the active chat "
                 "workspace and removes the managed copy + its registration) "
@@ -67,7 +67,7 @@ class OfficeDeleteTool(BaseTool):
                     "file_path": {
                         "type": "string",
                         "description": (
-                            "ABSOLUTE path to an existing .docx/.xlsx/.pptx "
+                            "ABSOLUTE path to an existing .docx/.xlsx/.pptx/.pdf/.csv "
                             "file to delete (when no doc_id)."
                         ),
                     },
@@ -123,7 +123,7 @@ class OfficeDeleteTool(BaseTool):
         if path.suffix.lower() not in _DELETABLE_EXTENSIONS:
             return ToolResult(
                 success=False,
-                error="unsupported_file_type: 仅允许删除 .docx/.xlsx/.pptx",
+                error="unsupported_file_type: 仅允许删除 .docx/.xlsx/.pptx/.pdf/.csv",
             )
         if not path.is_file():
             return ToolResult(success=False, error="file_not_found")

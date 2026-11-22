@@ -125,6 +125,7 @@ from ._word_read import (
     WordImagePreview,
     WordParagraphContent,
     WordTableContent,
+    WordTrackedChange,
 )
 
 __all__ = [
@@ -152,6 +153,7 @@ __all__ = [
     "WordCommentsResult",
     "WordHeaderFooterContent",
     "WordImagePreview",
+    "WordTrackedChange",
     "OfficeWordReadResult",
     # Word gen
     "WordParagraphSpec",

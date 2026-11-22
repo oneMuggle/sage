@@ -402,6 +402,65 @@ def _build_xlsx_summary(
     )
 
 
+def _extract_sheet_charts(worksheet: Any) -> List[Dict[str, Any]]:
+    charts: List[Dict[str, Any]] = []
+    for chart in getattr(worksheet, "_charts", []) or []:
+        title = None
+        try:
+            title_object = chart.title
+            if title_object is not None:
+                title = str(title_object)
+        except (AttributeError, KeyError, TypeError, ValueError):
+            title = None
+        series = getattr(chart, "series", None)
+        charts.append(
+            {
+                "type": type(chart).__name__,
+                "series": len(series) if series else 0,
+                "title": title,
+            }
+        )
+    return charts
+
+
+def _extract_conditional_formats(worksheet: Any) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    try:
+        entries = list(worksheet.conditional_formatting)
+    except (AttributeError, TypeError):
+        return items
+    for entry in entries:
+        rules: List[Dict[str, Any]] = []
+        for rule in getattr(entry, "rules", []) or []:
+            rules.append(
+                {
+                    "type": getattr(rule, "type", None),
+                    "operator": getattr(rule, "operator", None),
+                    "formula": getattr(rule, "formula", None),
+                }
+            )
+        items.append({"range": str(getattr(entry, "sqref", "")), "rules": rules})
+    return items
+
+
+def _extract_data_validations(worksheet: Any) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    container = getattr(worksheet, "data_validations", None)
+    if container is None:
+        return items
+    for validation in getattr(container, "dataValidation", []) or []:
+        items.append(
+            {
+                "type": getattr(validation, "type", None),
+                "operator": getattr(validation, "operator", None),
+                "formula1": getattr(validation, "formula1", None),
+                "formula2": getattr(validation, "formula2", None),
+                "sqref": str(getattr(validation, "sqref", "")),
+            }
+        )
+    return items
+
+
 def read_xlsx(
     file_path: Path,
     *,
@@ -468,7 +527,16 @@ def read_xlsx(
     # R5（Round2）：先收集各 sheet 的公式条目；任一 sheet 存在缺缓存值的
     # 公式时，才用 formulas 库做一次整簿本地求值（evaluate_workbook 内部
     # 全 fail-safe，失败返回 None → 行为与不引入求值时完全一致）。
-    collected: List[Tuple[str, List[List[str]], int, int, Optional[List[str]]]] = []
+    collected: List[
+        Tuple[
+            str,
+            List[List[str]],
+            int,
+            int,
+            Optional[List[str]],
+            Dict[str, List[Dict[str, Any]]],
+        ]
+    ] = []
     any_cache_missing = False
     for ws in wb.worksheets:
         rows, max_row, max_col = _extract_sheet_rows(ws)
@@ -481,7 +549,12 @@ def read_xlsx(
                 entries = formula_entries
                 if sheet_cache_missing:
                     any_cache_missing = True
-        collected.append((ws.title, rows, max_row, max_col, entries))
+        extras = {
+            "charts": _extract_sheet_charts(ws),
+            "conditional_formats": _extract_conditional_formats(ws),
+            "data_validations": _extract_data_validations(ws),
+        }
+        collected.append((ws.title, rows, max_row, max_col, entries, extras))
 
     evaluated: Optional[Dict[str, Dict[str, Any]]] = None
     if any_cache_missing:
@@ -490,7 +563,7 @@ def read_xlsx(
         evaluated = evaluate_workbook(file_path)
 
     sheets: List[ExcelSheetContent] = []
-    for title, rows, max_row, max_col, entries in collected:
+    for title, rows, max_row, max_col, entries, extras in collected:
         formulas_out: Optional[List[str]] = None
         note: Optional[str] = None
         if entries:
@@ -510,6 +583,9 @@ def read_xlsx(
                 max_col=max_col,
                 formulas=formulas_out,
                 note=note,
+                charts=extras["charts"],
+                conditional_formats=extras["conditional_formats"],
+                data_validations=extras["data_validations"],
             )
         )
 

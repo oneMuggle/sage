@@ -1,8 +1,8 @@
 {
-  "real": 41,
+  "real": 15,
   "main_only": 28,
-  "actionable": 69,
-  "updated_at": "2026-11-21",
-  "updated_by": "fix/parity-baseline-update (PR #3159) — 实测对齐 2026-11-21",
-  "note": "actionable = real + main-only。棘轮：超过该值 CI fail；收敛后请下调本文件。real=41 主要为 py310/pydantic v2 与 py38/pydantic v1 的必要兼容差异（pydantic update_forward_refs/model_rebuild 等）；main-only=28 主要为 design 内容资产（systems 5×3=15 + templates 8+2 + 2 测试），待后续 cherry-pick 到 release/win7。"
+  "actionable": 43,
+  "updated_at": "2026-11-22",
+  "updated_by": "sync/win7-office-batch — office M1–M6b 同步 + 26 项 real 审计登记后实测",
+  "note": "actionable = real + main-only。棘轮：超过该值 CI fail；收敛后请下调本文件。real=15 为尚未同步的 main 功能（design 内容库/Craft 4 + literature M0a–M1b 6 + user_profile v2 2 + 对应测试），须 cherry-pick 后归零；main-only=28 为 design 内容资产（systems 5×3=15 + templates 8 + 2 测试），随 Design PR #3038 合入后消失。office 批次同步引入的 pydantic-v1 适配已登记 parity-allow。"
 }

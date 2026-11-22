@@ -63,8 +63,14 @@ def audit_rendered_pdf(
     require_page_number: bool = False,
     margin_tolerance_cm: float = 0.3,
     page_number_band: float = 0.15,
+    max_pages: Optional[int] = None,
 ) -> Tuple[List[WordRenderIssue], List[Dict[str, str]], int]:
-    """Inspect a rendered PDF; returns (issues, warnings, page_count)."""
+    """Inspect a rendered PDF; returns (issues, warnings, page_count).
+
+    ``max_pages`` limits how many pages are inspected (the returned
+    ``page_count`` is still the PDF's real page count).  ``None`` keeps the
+    original "audit every page" behavior.
+    """
     try:
         import fitz  # noqa: PLC0415 — heavy import, call-time only
     except Exception as exc:  # noqa: BLE001
@@ -83,6 +89,8 @@ def audit_rendered_pdf(
     try:
         page_count = document.page_count
         for index, page in enumerate(document):
+            if max_pages is not None and index >= max_pages:
+                break
             rect = page.rect
             width_mm = rect.width * _PT_TO_MM
             height_mm = rect.height * _PT_TO_MM

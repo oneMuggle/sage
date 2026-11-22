@@ -94,6 +94,7 @@ from .office_latex_template_tool import (
 )
 from .office_latex_tool import OfficeReadLatexTool
 from .office_lint_tool import OfficeLintWordTool
+from .office_ooxml_tool import OfficeOoxmlTool
 from .office_pdf_tool import (
     OfficeFillPdfFormTool,
     OfficeGeneratePdfTool,
@@ -272,6 +273,7 @@ def _install_office_quality(ctx: ToolInstallContext) -> None:
     ctx.registry.register(OfficeLatexdiffTool(policy=policy))
     ctx.registry.register(OfficeExtractLatexProjectTool(policy=policy))
     ctx.registry.register(OfficeRepairWordTool(policy=policy))
+    ctx.registry.register(OfficeOoxmlTool(policy=policy))
     ctx.registry.register(OfficeRefreshTocTool(policy=policy))
 
 

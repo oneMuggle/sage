@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,6 +29,10 @@ class ExcelSheetContent(BaseModel):
         default=None,
         description="公式缺缓存值时的一行提示（openpyxl 无法计算公式）。",
     )
+    # M4: 读侧对称字段（图表 / 条件格式 / 数据验证）。
+    charts: List[Dict[str, Any]] = Field(default_factory=list)
+    conditional_formats: List[Dict[str, Any]] = Field(default_factory=list)
+    data_validations: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class OfficeExcelReadResult(BaseModel):

@@ -109,6 +109,25 @@ def test_search_returns_managed_office_result_before_files(
     assert results[1].kind == "file"
 
 
+def test_search_recognizes_pdf_and_csv_for_import(
+    conn: sqlite3.Connection, binding, workspace: Path
+) -> None:
+    (workspace / "report.pdf").write_bytes(b"%PDF")
+    (workspace / "data.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+
+    pdf_results = search_workspace_files(conn, binding.session_id, "report", 20)
+    csv_results = search_workspace_files(conn, binding.session_id, "data", 20)
+
+    assert any(
+        result.name == "report.pdf" and result.kind == "office-pdf"
+        for result in pdf_results
+    )
+    assert any(
+        result.name == "data.csv" and result.kind == "office-excel"
+        for result in csv_results
+    )
+
+
 def test_search_marks_unmanaged_office_file_for_import(
     conn: sqlite3.Connection, binding, workspace: Path
 ) -> None:

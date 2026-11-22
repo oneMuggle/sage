@@ -84,13 +84,22 @@ _OP_DESCRIPTIONS = {
         "'line'|'bar'|'pie',anchor,data_ref:{min_col,min_row,max_col,max_row},"
         "titles_from_data?,from_rows?,categories_ref?,title?}（原生图表）; "
         "set_column_width{sheet,column,width}; set_number_format{sheet,cells,format}; "
-        "set_fill{sheet,cells,color（6 位 hex）}; freeze_panes{sheet,cell}"
+        "set_fill{sheet,cells,color（6 位 hex）}; freeze_panes{sheet,cell}; "
+        "insert_rows/delete_rows/insert_cols/delete_cols{sheet,index(1-based),amount?}; "
+        "merge_cells{sheet,range,merge?}"
     ),
     "ppt": (
         "ppt ops（slide index 从 0 起）: replace_text{find,replace}; set_slide_title"
         "{index,title}; set_slide_bullets{index,bullets}; set_slide_notes{index,notes}; "
-        "append_slide{title,bullets?,notes?}; delete_slide{index}; "
-        "add_picture{index,path|base64,width_inches?,height_inches?}（≤10MB）"
+        "append_slide{title?,bullets?,notes?,layout?,placeholders?,position?}"
+        "（layout 为版式名/索引，placeholders 为 {idx:text}）; "
+        "duplicate_slide{index,position?}; move_slide{index,to}; delete_slide{index}; "
+        "set_run_format{index,find?|shape_index?,paragraph_index?,run_index?,bold?,"
+        "italic?,underline?,font_size?,font_name?,color?}; "
+        "add_picture{index,path|base64,width_inches?,height_inches?}（≤10MB）; "
+        "replace_image{index,find?|shape_index?,path|base64,width_inches?,height_inches?}; "
+        "add_chart{index,type:'column'|'bar'|'line'|'pie',categories,"
+        "series:[{name,values}],left_inches?,top_inches?,width_inches?,height_inches?,title?}"
     ),
 }
 
@@ -183,6 +192,17 @@ class OfficeUpdateTool(BaseTool):
                             "返回 revision_conflict，请重新读取再改。doc_id 模式有效。"
                         ),
                     },
+                    "verify": {
+                        "type": "string",
+                        "enum": ["auto", "off"],
+                        "description": (
+                            "编辑后渲染级校验（默认 off，避免每轮编辑同步等待"
+                            "转换器）：auto 时本机有 PDF 转换器才把产物转为 PDF，"
+                            "检查页面尺寸/页边距/字体/页码/空白页/内容越界，结果"
+                            "附加 render_verify 摘要；无转换器自动降级。"
+                            "dry_run 预览不执行校验。"
+                        ),
+                    },
                 },
                 "required": ["ops"],
             },
@@ -196,11 +216,15 @@ class OfficeUpdateTool(BaseTool):
         dry_run: bool = False,
         refresh_toc: bool = False,
         expected_revision: Optional[str] = None,
+        verify: Optional[str] = None,
         **kwargs: Any,
     ) -> ToolResult:
         normalized = _normalize_ops(ops)
         if normalized is None:
             return ToolResult(success=False, error="ops_required")
+        verify_mode = str(verify or "off").strip().lower()
+        if verify_mode not in ("auto", "off"):
+            return ToolResult(success=False, error="verify_invalid: verify 仅支持 auto / off")
         if dry_run:
             # dry_run 只预览不落盘，refresh_toc 自然无效果（不报错）。
             if isinstance(doc_id, str) and doc_id.strip():
@@ -214,9 +238,15 @@ class OfficeUpdateTool(BaseTool):
                 normalized,
                 do_refresh=refresh_toc,
                 expected_revision=expected_revision,
+                verify_mode=verify_mode,
             )
         if isinstance(file_path, str) and file_path.strip():
-            return self._execute_by_path(file_path.strip(), normalized, do_refresh=refresh_toc)
+            return self._execute_by_path(
+                file_path.strip(),
+                normalized,
+                do_refresh=refresh_toc,
+                verify_mode=verify_mode,
+            )
         return ToolResult(success=False, error="doc_id_or_file_path_required")
 
     # ── doc_id 模式：走 service（授权 + DB 登记） ────────────────────
@@ -228,6 +258,7 @@ class OfficeUpdateTool(BaseTool):
         *,
         do_refresh: bool = False,
         expected_revision: Optional[str] = None,
+        verify_mode: str = "off",
     ) -> ToolResult:
         ctx = current_tool_context()
         if ctx is None or not ctx.session_id:
@@ -311,6 +342,11 @@ class OfficeUpdateTool(BaseTool):
             if doc_info is not None:
                 path, workspace, _dtype = doc_info
                 content = self._refresh_and_attach(content, path, workspace)
+        if isinstance(edited_id, str):
+            doc_info = self._managed_doc_info(ctx, edited_id)
+            if doc_info is not None:
+                path, workspace, _dtype = doc_info
+                content = self._render_verify_attach(content, path, workspace, verify_mode)
         return ToolResult(success=True, content=content)
 
     def _managed_doc_info(
@@ -472,7 +508,12 @@ class OfficeUpdateTool(BaseTool):
     # ── file_path 模式：直接编辑（越界由权限层守卫） ─────────────────
 
     def _execute_by_path(  # noqa: PLR0911 — fail-fast 守卫链，逐条早退
-        self, file_path: str, ops: List[Dict[str, Any]], *, do_refresh: bool = False
+        self,
+        file_path: str,
+        ops: List[Dict[str, Any]],
+        *,
+        do_refresh: bool = False,
+        verify_mode: str = "off",
     ) -> ToolResult:
         blocked = self._enforce_workspace(file_path)
         if blocked is not None:
@@ -534,7 +575,27 @@ class OfficeUpdateTool(BaseTool):
             content = self._refresh_and_attach(
                 content, path, self._binding_workspace_or_none()
             )
+        content = self._render_verify_attach(
+            content, path, self._binding_workspace_or_none() or path.parent, verify_mode
+        )
         return ToolResult(success=True, content=content)
+
+    @staticmethod
+    def _render_verify_attach(
+        content: Dict[str, Any],
+        path: Path,
+        workspace: Path,
+        verify_mode: str,
+    ) -> Dict[str, Any]:
+        """编辑后渲染校验：附加紧凑摘要（失败不改写成功态）。"""
+        from backend.office.render_verify import verify_for_tool
+
+        summary = verify_for_tool(file_path=path, workspace=workspace, mode=verify_mode)
+        if summary is None:
+            return content
+        updated = dict(content)
+        updated["render_verify"] = summary
+        return updated
 
 
 __all__ = ["OfficeUpdateTool"]
