@@ -161,38 +161,52 @@ window.electronAPI?.helpAPI?.getVersion();  // undefined?.helpAPI → undefined
 
 ## 5. 启动方式
 
-### 5.1 Windows（sage-web.bat）
+安装版与源码目录共用 `backend/cli/web.py` 的启动逻辑：
+
+1. 选定端口：从 `8765` 起最多尝试 10 个端口，跳过被占用者；
+2. 生成（或复用）`SAGE_LOCAL_AUTH_TOKEN`；
+3. 等待 `/health` 就绪（默认 30 秒，使用 urllib 轮询，Win7 无 curl 亦可）；
+4. 用默认浏览器打开 `http://127.0.0.1:<port>/?token=<token>`；
+5. 前台运行 `uvicorn`，`Ctrl+C` 停止。
+
+### 5.1 安装版（Windows）
+
+安装包在 `resources/dist-web` 内置前端产物，并提供开始菜单入口：
+
+- **开始菜单 → Sage 网页模式**（`SageWeb.cmd`，快捷方式由 `build/installer.nsh` 创建）
+- 或直接双击安装目录下的 `SageWeb.cmd`
+
+`SageWeb.cmd` 使用内置 Python（`resources/python/python.exe`）运行
+`python -m backend.cli.web`，无需系统 Python / Node / curl。若 `8765` 被占用，
+会自动顺延到下一个空闲端口，浏览器地址随之变化。
+
+### 5.2 源码目录（scripts/sage-web.bat）
 
 ```batch
 scripts\sage-web.bat
 ```
 
-脚本自动：
-1. 检查 Python 和后端代码
-2. 若 `dist-web/index.html` 不存在，运行 `npm run build:web`
-3. 生成随机 token（`secrets.token_urlsafe(32)`）
-4. 启动后端（`SAGE_WEB_MODE=1`）
-5. 健康检查（最多 30 秒）
-6. 打开浏览器到 `http://127.0.0.1:8765/?token=<token>`
+要求已激活后端环境（`conda activate sage-backend`）。若 `dist-web/index.html`
+不存在会先执行 `npm run build:web`，随后调用 `python -m backend.cli.web`。
 
-### 5.2 Linux/macOS（手动）
+### 5.3 Linux/macOS（手动）
 
 ```bash
-# 构建前端
 npm run build:web
-
-# 生成 token
-export SAGE_LOCAL_AUTH_TOKEN=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
-
-# 启动后端
-SAGE_WEB_MODE=1 python backend/main.py &
-
-# 等待健康检查
-until curl -s http://127.0.0.1:8765/health > /dev/null; do sleep 1; done
-
-# 打开浏览器
-open "http://127.0.0.1:8765/?token=$SAGE_LOCAL_AUTH_TOKEN"
+SAGE_WEB_MODE=1 python -m backend.cli.web
 ```
+
+### 5.4 打包结构
+
+| 来源 | 打包位置 | 机制 |
+| --- | --- | --- |
+| `dist-web/` | `resources/dist-web` | `electron-builder.yml` `extraResources` |
+| `resources/SageWeb.cmd` | 安装根目录 `SageWeb.cmd` | `electron-builder.yml` `extraFiles` |
+| 开始菜单快捷方式 | `$SMPROGRAMS\Sage 网页模式.lnk` | `build/installer.nsh` `customInstall` |
+
+`release.yml` / `release-win7.yml` 在 electron-builder 打包前执行
+`npm run build:web`，`ci.yml` 亦执行以提前拦截构建失败，确保安装包不会缺失
+`resources/dist-web`。
 
 ## 6. 功能降级
 
@@ -216,6 +230,7 @@ open "http://127.0.0.1:8765/?token=$SAGE_LOCAL_AUTH_TOKEN"
 | `backend/tests/test_web_config.py` | `is_web_mode()` 配置   |
 | `backend/tests/test_web_serve.py`  | 静态文件挂载           |
 | `backend/tests/test_web_auth.py`   | Token 认证扩展         |
+| `backend/tests/test_cli_web.py`    | 启动器（选端口 / token / 等待就绪 / URL 编码 / 缺失产物退出码） |
 
 ### 7.2 集成测试
 
@@ -243,7 +258,11 @@ pytest backend/tests/test_web_integration.py -v
 | `SAGE_WEB_MODE`         | 启用 Web 模式（设为 `1`）        | 未设置       |
 | `SAGE_WEB_DIST_PATH`    | 前端构建产物路径                 | `./dist-web` |
 | `SAGE_LOCAL_AUTH_TOKEN` | 认证 token（必填）               | 自动生成     |
-| `PYTHON_BACKEND_PORT`   | 后端端口                         | `8765`       |
+| `PYTHON_BACKEND_PORT`   | 后端起始端口                     | `8765`       |
+| `BACKEND_URL`           | 启动器写入的实际后端地址         | `http://127.0.0.1:8765` |
+
+> 端口被占用时，启动器在 `PYTHON_BACKEND_PORT` 起的 10 个端口内顺延，并把实际端口
+> 写回 `PYTHON_BACKEND_PORT` / `BACKEND_URL`。
 
 ## 9. 安全考虑
 

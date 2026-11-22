@@ -42,6 +42,12 @@ extraFiles:
   # 不依赖 Electron/Chromium，使用 resources/python 运行 backend.cli.rescue。
   - from: "resources/SageDoctor.cmd"
     to: "SageDoctor.cmd"
+  # 2026-11-22: Web Fallback 启动器 —— 复制到安装根目录，Electron 被安全软件
+  # 拦截时可用浏览器打开 Sage。由开始菜单「Sage 网页模式」调用
+  # （见 build/installer.nsh customInstall）。使用 resources/python 运行
+  # backend.cli.web，前端产物来自下方 extraResources 的 dist-web。
+  - from: "resources/SageWeb.cmd"
+    to: "SageWeb.cmd"
 
 extraResources:
   # Build provenance manifest — single source of truth for packaged Electron
@@ -85,6 +91,14 @@ extraResources:
     to: "sage-core"
     filter:
       - "**/*"
+  # Web Fallback 前端产物（npm run build:web → dist-web/）。SAGE_WEB_MODE=1 时
+  # backend/main.py 将 dist-web 挂到 "/"；由 SageWeb.cmd 拉起，供 Electron 被
+  # 拦截的用户改用浏览器访问。
+  - from: "dist-web"
+    to: "dist-web"
+    filter:
+      - "**/*"
+      - "!**/*.map"
   # External daily-browser bridge (Chrome/Edge MV3 extension).  Shipped
   # unpacked so the user can load it from the install directory; the settings
   # UI displays this path.  No build step: plain JS + manifest.
