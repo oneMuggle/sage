@@ -226,17 +226,23 @@ def fill_pdf_form(req: PdfFormFillRequest) -> PdfFormFillResult:
                         widget.field_flags = widget.field_flags | 1
                         widget.update()
 
-        doc.save(str(output_path))
-        output_size = output_path.stat().st_size
-        if output_size > MAX_PDF_OUTPUT_SIZE:
-            # 产物超上限 —— 删掉半成品，不给磁盘留下垃圾。
+        # 先写同目录的隐藏临时文件 → 体积检查 → 原子改名到最终落点。
+        # 直接写 output_path 再检查体积有两个问题：超限时磁盘上已经留下
+        # 一个超大文件（虽然随后被删，但删除失败就留垃圾），而且检查期间
+        # output_path 已经「存在」。
+        # 临时名保留 .pdf 后缀 —— PyMuPDF 的 save() 按扩展名推断输出格式。
+        tmp_output = output_path.with_name(f".{output_path.stem}.sage-tmp.pdf")
+        try:
+            doc.save(str(tmp_output))
+            output_size = tmp_output.stat().st_size
+            if output_size > MAX_PDF_OUTPUT_SIZE:
+                # 产物超上限 —— 删掉半成品，不给磁盘留下垃圾。
+                # 不带 file_path：错误文案里不能出现绝对路径。
+                raise OfficeSizeLimitError(output_size, MAX_PDF_OUTPUT_SIZE)
+            tmp_output.replace(output_path)
+        finally:
             with contextlib.suppress(OSError):
-                output_path.unlink()
-            raise OfficeSizeLimitError(
-                output_size,
-                MAX_PDF_OUTPUT_SIZE,
-                file_path=output_path,
-            )
+                tmp_output.unlink()
     except OfficePdfFormError:
         raise
     except OfficeSizeLimitError:

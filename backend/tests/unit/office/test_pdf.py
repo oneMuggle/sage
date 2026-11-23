@@ -83,19 +83,34 @@ def test_read_pdf_images_are_opt_in(tmp_path: Path):
 
     path = _pdf_with_image(tmp_path)
 
+    # include_images=False → 根本不枚举图片（病理 PDF 的 get_images 很贵）。
     default = read_pdf(path, workspace_path=str(tmp_path))
-    assert default.pages[0].image_count == 1
+    assert default.pages[0].image_count == 0
     assert default.pages[0].images == []
 
-    with_images = read_pdf(
+    # include_images=True 默认也不带像素 —— 只回元数据。
+    metadata = read_pdf(
         path, workspace_path=str(tmp_path), include_images=True, max_images_per_page=2
+    )
+    page = metadata.pages[0]
+    assert page.image_count == 1
+    assert len(page.images) == 1
+    assert "data_url" not in page.images[0]
+    assert page.images[0]["width"] == 20
+    assert page.images[0]["height"] == 20
+
+    # embed_image_data=True 才把 base64 塞进结果。
+    with_images = read_pdf(
+        path,
+        workspace_path=str(tmp_path),
+        include_images=True,
+        max_images_per_page=2,
+        embed_image_data=True,
     )
     page = with_images.pages[0]
     assert page.image_count == 1
     assert len(page.images) == 1
     assert page.images[0]["data_url"].startswith("data:image/")
-    assert page.images[0]["width"] == 20
-    assert page.images[0]["height"] == 20
 
 
 def test_read_nonexistent_pdf(tmp_path: Path):

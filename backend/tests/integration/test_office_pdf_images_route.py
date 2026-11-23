@@ -55,6 +55,7 @@ def test_pdf_read_endpoint_returns_embedded_images(
             "file_path": str(source),
             "include_images": True,
             "max_images_per_page": 2,
+            "embed_image_data": True,
         },
     )
 
@@ -126,3 +127,24 @@ def test_pdf_read_endpoint_zero_images_per_page(
     page = response.json()["pages"][0]
     assert page["image_count"] == 1
     assert page["images"] == []
+
+
+def test_pdf_read_endpoint_omitting_embed_image_data_returns_metadata_only(
+    workspace: Path, http_client: TestClient
+) -> None:
+    """M6c：``embed_image_data`` 默认 False —— 不显式开启就不回 base64。"""
+    source = _pdf_with_image(workspace)
+
+    response = http_client.post(
+        "/api/v1/office/pdf/read",
+        json={
+            "workspace_path": str(workspace),
+            "file_path": str(source),
+            "include_images": True,
+        },
+    )
+
+    assert response.status_code == 200
+    entry = response.json()["pages"][0]["images"][0]
+    assert "data_url" not in entry
+    assert entry["width"] == 20

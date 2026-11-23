@@ -44,7 +44,6 @@ Public surface:
 
 from __future__ import annotations
 
-import json
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
@@ -66,6 +65,12 @@ from backend.office.storage import document_path
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import ToolExecutionContext, current_tool_context
 from backend.tools.file_tool import _record_artifact_safely
+from backend.tools.office_tool_common import (
+    bounded_output,
+    coerce_bool,
+    coerce_int,
+    fit_image_output_budget,
+)
 from backend.tools.office_workspace_scope import workspace_for_input
 
 #: page_size 参数（LLM 面小写）→ PdfGenerateRequest 服务层取值
@@ -139,16 +144,6 @@ def _workspace_for_input(
     return workspace_for_input(binding_ws, input_path)
 
 
-def _bounded(data: Dict[str, Any], max_bytes: int) -> Dict[str, Any]:
-    """超 ``max_bytes`` 时退化为 bounded head，语义同 tool_service。"""
-    serialized = json.dumps(data, ensure_ascii=False, default=str)
-    raw = serialized.encode("utf-8")
-    if len(raw) <= max_bytes:
-        return data
-    head = raw[:max_bytes].decode("utf-8", errors="ignore")
-    return {"truncated": True, "max_output_bytes": max_bytes, "head": head}
-
-
 def _strip_workspace_path(data: Dict[str, Any]) -> Dict[str, Any]:
     """剥除 summary.workspace_path（LLM 面永不回显 binding 绝对路径）。"""
     summary = data.get("summary")
@@ -214,6 +209,31 @@ def _resolve_pdf_input(  # noqa: PLR0911 — 错误早退路径多，保持线�
     return ToolResult(success=False, error="doc_id_or_file_path_required")
 
 
+def _coerce_image_args(
+    include_images: Any,
+    embed_image_data: Any,
+    max_images_per_page: Any,
+) -> Union[ToolResult, Tuple[bool, bool, int]]:
+    """把 LLM 面的图片参数解释成强类型；解释不了返回错误 ``ToolResult``。
+
+    ``bool("false")`` 是 True —— 显式传错类型不能被静默解释成「要图片」。
+    """
+    include_flag = coerce_bool(include_images)
+    if include_flag is None:
+        return ToolResult(
+            success=False, error="invalid_include_images: 期望布尔值（true/false）"
+        )
+    embed_flag = coerce_bool(embed_image_data)
+    if embed_flag is None:
+        return ToolResult(
+            success=False, error="invalid_embed_image_data: 期望布尔值（true/false）"
+        )
+    per_page = coerce_int(max_images_per_page)
+    if per_page is None:
+        return ToolResult(success=False, error="invalid_max_images_per_page: 期望整数")
+    return include_flag, embed_flag, per_page
+
+
 # ──────────────────────────────────────────────────────────────────────
 # 读工具
 # ──────────────────────────────────────────────────────────────────────
@@ -254,7 +274,8 @@ class OfficeReadPdfTool(BaseTool):
                         "type": "boolean",
                         "description": (
                             "返回页内嵌图片的**元数据**（序号/尺寸/数量），"
-                            "默认 false"
+                            "默认 false。开启会枚举页面图片资源（病理 PDF 上有"
+                            "可观的 CPU 开销），但不解码像素。"
                         ),
                     },
                     "embed_image_data": {
@@ -262,7 +283,9 @@ class OfficeReadPdfTool(BaseTool):
                         "description": (
                             "把图片像素（base64 data_url）一并返回。默认 false —— "
                             "像素对文本模型无用且会挤占输出预算；确需预览时再开。"
-                            "服务端强制：单图 base64 ≤1.5MB，全文档 ≤20MB"
+                            "服务端强制：单图与全文档预算都从本工具的输出预算"
+                            "推导（约为其 1/2），超出的图会被丢弃并在 "
+                            "images_omitted 里计数"
                         ),
                     },
                     "max_images_per_page": {
@@ -280,14 +303,20 @@ class OfficeReadPdfTool(BaseTool):
         self,
         doc_id: Optional[str] = None,
         file_path: Optional[str] = None,
-        include_images: bool = False,
-        embed_image_data: bool = False,
-        max_images_per_page: int = 3,
+        include_images: Any = False,
+        embed_image_data: Any = False,
+        max_images_per_page: Any = 3,
         **kwargs: Any,
     ) -> ToolResult:
         ctx = current_tool_context()
         if ctx is None:
             return ToolResult(success=False, error="missing_tool_context")
+
+        # LLM 面的参数不可信 —— 解释不了就报明确错误码，不静默兜底。
+        parsed = _coerce_image_args(include_images, embed_image_data, max_images_per_page)
+        if isinstance(parsed, ToolResult):
+            return parsed
+        include_flag, embed_flag, per_page = parsed
 
         resolved = _resolve_pdf_input(self, ctx, doc_id, file_path)
         if isinstance(resolved, ToolResult):
@@ -296,14 +325,23 @@ class OfficeReadPdfTool(BaseTool):
 
         from backend.office.pdf import read_pdf  # 延迟 import（pymupdf 重依赖）
 
+        # 图片预算从**工具自身的输出预算**推导 —— 服务端的固定上限
+        # （全文档 20MB base64）远大于工具输出预算（默认 256KB），
+        # 不联动的话响应会被 ``bounded_output`` 拦腰截断成半截 JSON。
+        max_output = max(1, int(self._policy.max_output_bytes))
+        total_image_budget = max(4_096, max_output // 2)
+        per_image_budget = max(2_048, min(total_image_budget // 4, 1_500_000))
+
         try:
             result = read_pdf(
                 path,
                 workspace_path=workspace,
                 document_id=doc.id if doc is not None else None,
-                include_images=bool(include_images),
-                max_images_per_page=int(max_images_per_page),
-                embed_image_data=bool(embed_image_data),
+                include_images=include_flag,
+                max_images_per_page=per_page,
+                embed_image_data=embed_flag,
+                max_image_bytes=per_image_budget,
+                max_total_image_bytes=total_image_budget,
             )
         except OfficeError as exc:
             return _office_error_result(exc, "read_failed")
@@ -311,8 +349,9 @@ class OfficeReadPdfTool(BaseTool):
             return ToolResult(success=False, error=f"read_failed: {exc}")
 
         data = _strip_workspace_path(result.model_dump(mode="json"))
+        data = fit_image_output_budget(data, max_output)
         return ToolResult(
-            success=True, content=_bounded(data, self._policy.max_output_bytes)
+            success=True, content=bounded_output(data, max_output)
         )
 
 
@@ -379,7 +418,9 @@ class OfficeReadPdfFormTool(BaseTool):
         if doc is not None:
             # doc_id 模式不回显受管绝对路径，换成受管文件名。
             data["file_path"] = doc.generated_filename
-        return ToolResult(success=True, content=_bounded(data, self._policy.max_output_bytes))
+        return ToolResult(
+            success=True, content=bounded_output(data, self._policy.max_output_bytes)
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -548,7 +589,8 @@ class OfficeFillPdfFormTool(BaseTool):
                 "`data` maps exact field names (from office_read_pdf_form) "
                 "to values. By default the file is filled IN PLACE; pass "
                 "`output_path` to write a new .pdf instead. flatten=true "
-                "makes fields read-only after filling."
+                "bakes the field values into the page content and REMOVES "
+                "the form fields, so the result is no longer editable."
             ),
             parameters={
                 "type": "object",
@@ -577,7 +619,10 @@ class OfficeFillPdfFormTool(BaseTool):
                     },
                     "flatten": {
                         "type": "boolean",
-                        "description": "Set fields read-only after filling (default false).",
+                        "description": (
+                            "把字段值烘焙成静态页面内容并从文件中**删除表单字段**"
+                            "（结果不可再编辑）。默认 false（保留可填字段）。"
+                        ),
                         "default": False,
                     },
                 },

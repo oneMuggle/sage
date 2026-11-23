@@ -18,7 +18,11 @@ class PdfPageContent(BaseModel):
     images: List[Dict[str, Any]] = Field(default_factory=list)
     # M6b: 页内嵌图片总数（images 列表受 include_images/预算限制可能更少；
     # embed_image_data=False 时 images 只含元数据、不含 data_url）。
+    # include_images=False 时**不枚举**图片 → 该值为 0（没枚举就没有总数可言）。
     image_count: int = Field(default=0, ge=0)
+    # M6c: 本页检测到但**未返回**的图片数（超出每页上限 / 解码前预检拒绝 /
+    # 全文档预算放不下）。让调用方能区分「PDF 里没有图」和「有图但被裁掉」。
+    images_omitted: int = Field(default=0, ge=0)
     # P4-A (office-p4a): 该页文本是否来自 OCR 兜底（SAGE_OCR=1 且 pytesseract
     # 可用时，扫描/纯图页触发）。additive 字段，前端/摘要可安全忽略。
     ocr: bool = Field(default=False, description="文本来自 OCR 兜底（扫描页）")
@@ -44,11 +48,13 @@ class PdfReadRequest(BaseModel):
     # M6b: 返回页内嵌图片（data_url）；默认关闭，避免普通读取膨胀。
     include_images: bool = Field(default=False, description="是否返回页内嵌图片 data_url")
     max_images_per_page: int = Field(default=3, ge=0, le=10)
-    # M6c: 只返回图片元数据（宽高/数量）而不返回像素。False 时**完全不解码**，
-    # 因此不存在解压炸弹风险；True 时按服务端预算（单图 ≤1.5MB base64，
-    # 全文档 ≤20MB base64）截断。
+    # M6c: 是否把图片像素（base64 data_url）一并返回。**默认关闭** ——
+    # 光是像素就可能让一次读取膨胀到几十 MB，必须由调用方显式索取。
+    # False 时**完全不解码**（因此不存在解压炸弹风险），只返回宽高/数量等
+    # 元数据；True 时按服务端预算（单图 ≤1.5MB base64，全文档 ≤20MB
+    # base64）截断，并按过滤器白名单拒绝自带尺寸的编解码器（JPX/JBIG2/CCITT）。
     embed_image_data: bool = Field(
-        default=True, description="是否把图片像素（base64 data_url）一并返回"
+        default=False, description="是否把图片像素（base64 data_url）一并返回"
     )
 
 

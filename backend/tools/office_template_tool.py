@@ -28,7 +28,6 @@ Public surface:
 
 from __future__ import annotations
 
-import json
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
@@ -50,6 +49,7 @@ from backend.office.storage import document_path
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import ToolExecutionContext, current_tool_context
 from backend.tools.file_tool import _record_artifact_safely
+from backend.tools.office_tool_common import bounded_output
 from backend.tools.office_workspace_scope import workspace_for_input
 
 # ──────────────────────────────────────────────────────────────────────
@@ -103,16 +103,6 @@ def _workspace_for_input(
     """
     binding_ws = _resolve_active_workspace(ctx)
     return workspace_for_input(binding_ws, input_path)
-
-
-def _bounded(data: Dict[str, Any], max_bytes: int) -> Dict[str, Any]:
-    """超 ``max_bytes`` 时退化为 bounded head，语义同 tool_service。"""
-    serialized = json.dumps(data, ensure_ascii=False, default=str)
-    raw = serialized.encode("utf-8")
-    if len(raw) <= max_bytes:
-        return data
-    head = raw[:max_bytes].decode("utf-8", errors="ignore")
-    return {"truncated": True, "max_output_bytes": max_bytes, "head": head}
 
 
 def _strip_workspace_path(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -248,7 +238,7 @@ class OfficeAnalyzeWordTemplateTool(BaseTool):
             # doc_id 模式不回显受管绝对路径，换成受管文件名。
             data["file_path"] = doc.generated_filename
         return ToolResult(
-            success=True, content=_bounded(data, self._policy.max_output_bytes)
+            success=True, content=bounded_output(data, self._policy.max_output_bytes)
         )
 
 

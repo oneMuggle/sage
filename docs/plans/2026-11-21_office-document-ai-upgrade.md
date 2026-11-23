@@ -341,17 +341,23 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 测试：PDF 读取/表单/工具 58 passed；Office 全量 2260 passed / 2 skipped；门禁绿
 
 > **实施记录（2026-11-23，M6c 安全返工：审查 BLOCK 修复）**
-> - 审查代理判 BLOCK 的三个根因：预算在**解码之后**才判定（用户可控 PDF 里的 Flate 位图 = 解压炸弹）、
->   工具面返回**被截断的 base64**（响应体静默损坏）、工具面**没有上界**
+> - 审查代理判 BLOCK 的根因：预算在**解码之后**才判定（用户可控 PDF 里的位图 = 解压炸弹）、
+>   工具面返回**被截断的 base64**（响应体静默损坏）、工具面**没有上界**；
+>   第二轮复审判 BLOCK 的两条：JPX 字典尺寸不可信（伪造 /Width /Height 可绕预检）、
+>   `include_images=False` 仍枚举图片（病理 PDF 单页 0.1s）
 > - 解码前预检：`MAX_EMBEDDED_IMAGE_PIXELS`（12MP）+ `MAX_EMBEDDED_IMAGE_DECODED_BYTES`（64MB），
 >   超限图跳过并 `logger.warning`，PDF 其余部分照常读出
+> - **过滤器白名单**：只有 Flate/LZW/RunLength（裸样本）与 DCTDecode 的字典尺寸可信；
+>   JPX/JBIG2/CCITT 码流自带真实尺寸 → **解码前整链拒绝**；ASCII85/Hex 链头包装照常放行
+> - **`include_images=False` 根本不枚举**（不调 `get_images`）；枚举/解码/返回三档独立上限
 > - 预览归一：统一 JPEG（去 alpha → RGB）+ 最长边缩放到 `MAX_EMBEDDED_IMAGE_EDGE`（1024px）
 > - 资源三分离：输出预算（base64 20MB）/ 常驻缓存字节（`cache_bytes`）/ 已跳过 xref（`skipped`）
 > - 服务端 clamp：`max_images_per_page` 收敛到 `MAX_IMAGES_PER_PAGE`（10），负数/非数字 → 0
-> - 工具面默认 **metadata-only**（只回宽高/数量，零解码），`embed_image_data` 显式开关才嵌像素
-> - `fill_pdf_form` 产物加 `MAX_PDF_OUTPUT_SIZE` 上限；`bake()` 注释纠正（自 PyMuPDF 1.24.0 起提供）
-> - 测试：新增 unit 17（预算/预检/clamp/metadata-only/归一化）+ 端点 3 + 工具面 2；
->   PDF 相关 80 passed；ruff / py38 兼容门禁 / architecture 棘轮绿
+> - 工具面默认 **metadata-only**（只回宽高/数量，零解码），`embed_image_data` 显式开关才嵌像素；
+>   输出预算不足时先按大图优先丢 `data_url`（记入 `images_omitted`），而不是整包截断
+> - `fill_pdf_form` 产物加 `MAX_PDF_OUTPUT_SIZE` 上限；原子临时文件 + `Path.replace` 落盘
+> - 测试：unit 29（过滤器白名单/伪造尺寸回归/零枚举/预算/clamp/metadata-only/归一化）
+>   + 端点 5 + 工具面 6；PDF 相关 95 passed；ruff / py38 兼容门禁 / architecture 棘轮绿
 
 ### M7 — 前端一致性与漂移清理（P1，对应 G11/G12）
 
