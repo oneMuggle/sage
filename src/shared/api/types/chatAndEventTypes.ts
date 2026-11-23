@@ -649,6 +649,10 @@ export interface SubagentLiveEvent {
   preview?: string | null;
   is_error?: boolean;
   approved?: boolean;
+  /** M4.1: 工具调用关联键（tool_call ↔ tool_result 匹配，兼容旧后端缺省）。 */
+  tool_call_id?: string | null;
+  /** M4.1: tool_result 阶段的工具执行耗时（毫秒）。 */
+  duration_ms?: number;
   ts?: number;
 }
 
@@ -843,6 +847,9 @@ export interface AgentEvent {
   preview?: string | null;
   is_error?: boolean;
   approved?: boolean;
+  // M4.1: 工具关联键与耗时（与 SubagentLiveEvent 同步）。
+  tool_call_id?: string | null;
+  duration_ms?: number;
   parent_tool_call_id?: string | null;
   ts?: number;
   // live-events P1: approval_mode 切换回显字段。

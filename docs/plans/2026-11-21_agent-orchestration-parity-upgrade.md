@@ -1,6 +1,7 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0–M3.3 已实施（M3.3 计划卡预估 + 拆深开关 本分支），M4 待实施
+> 状态：M0–M4.1 已实施（M4.1 工具耗时 + transcript 全文引用 本分支），M4.2/M4.3 待实施
+> 分支：M4.1 `feat/orch-tool-duration`
 > 分支：M3.3 `feat/orch-plan-estimates`
 > 分支：M3.2 `feat/orch-failed-replan`
 > 分支：M3.1 `feat/orch-subagent-types`
@@ -145,7 +146,7 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 - [x] M3.1 `subagent_type` 角色注册表落地
 - [x] M3.2 失败驱动 re-plan
 - [x] M3.3 计划卡成本预估 + 拆深开关（预估轮次/复杂度已落地；成本估算延至 M4.3）
-- [ ] M4.1 工具耗时 + transcript 全文引用
+- [x] M4.1 工具耗时 + transcript 全文引用（含 M1 transcript 接线缺陷修复，见 M4.1 实施记录）
 - [ ] M4.2 统一运行视图
 - [ ] M4.3 编排通知 + 成本透明
 
@@ -254,3 +255,22 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 **已知边界**：另一条「计划文本 → 任务」通道（`backend/api/orch_routes.py` 的 `_PLAN_ITEMS_PROMPT` / `_PLAN_REVISION_PROMPT`）未接入预估字段，该路径产出的计划不显示预估徽章 —— 该文件 797 行、距 800 行架构棘轮上限仅 3 行，本 PR 不动它。
 
 验证：`tsc --noEmit` 通过；ESLint 0 error（123 warning 为既有）；后端契约 + 预估专项 154 用例全绿；前端 PlanCard + OrchestrationTab 61 用例全绿；`ruff check`（改动文件）、`lint-imports`（六边形契约）、架构棘轮、体积门禁（最大 chunk 2246KB / 预算 2304KB）均通过。
+
+## 11. M4.1 实施记录（2026-11-23）
+
+| 改动 | 文件 |
+|---|---|
+| **修复 M1 接线缺陷**：`chat_dispatcher` 构造了 `TaskTranscriptRecorder` 包装器 `_event_sink`，却把裸 `sink` 传给 `SubagentRunner` → 生产环境 `orch_task_messages` 恒为空；改为 `event_sink=_event_sink`（approval 专用第二处 sink 无需 recorder，保持裸 sink） | `backend/orchestration/chat_dispatcher.py` |
+| 子代理工具事件补关联键与耗时：chat 镜像携带 `tool_call_id`/`duration_ms`；canonical `task.step.started` 载荷补 `tool_call_id`（`task.step.completed` 的 `duration_ms` 原本已有） | `backend/orchestration/subagent_events.py` |
+| 前端类型：`SubagentLiveEvent` 与宽松 `AgentEvent` 增可选 `tool_call_id`/`duration_ms`（旧后端缺省时按无耗时渲染） | `src/shared/api/types/chatAndEventTypes.ts` |
+| Transcript 面板：tool_call 行本身无耗时（后端 OBSERVING 时才知道），按 `tool_call_id` 关联 tool_result 行 `duration_ms` 展示；本地重复 `formatDuration` 统一到共享 `progressFormat` | `src/widgets/chat/progress/TaskTranscriptPanel.tsx` |
+| 事件时间线：canonical 事件行内渲染 `· 1.2s` 耗时徽标（`payload.duration_ms` 为数值时） | `src/widgets/chat/progress/EventTimeline.tsx` |
+| 任务详情实时事件：`tool_result` 行追加 `· 耗时` | `src/widgets/chat/progress/TaskDetailView.tsx` |
+| 架构棘轮：按协议仅上调本 PR 触及条目（chat_dispatcher 2634→2635、chatAndEventTypes 988→995） | `architecture-baseline.json` |
+| 测试 | `test_subagent_events.py`（+2：mirror/canonical 字段断言、`TaskTranscriptRecorder` 接线回归）、`TaskTranscriptPanel.test.tsx`（+2 断言）、`EventTimeline.duration.test.tsx`（新，3）、`TaskDetailView.test.tsx`（+1） |
+
+**「transcript 全文引用」的落地方式**：M4 第 1 条要求"完整 args/result 引用（全文存 transcript，卡片按需拉取）"——M1 已建好 `orch_task_messages` 全文落盘与分页 API，本里程碑补上的是其**从未被喂数据**的接线修复；工具卡全文按需拉取沿用 transcript 面板（"完整参数"展开与结果详情），耗时则同时进入实时镜像与 canonical 事件两条通道。
+
+**已知遗留（不在本 PR）**：transcript 的 `_dump_args` 落盘未脱敏（`summarize_tool_args` 的密钥清洗只作用于实时镜像）；全文引用场景下如需脱敏应在 recorder 侧补同款清洗，另行跟进。
+
+验证：后端 subagent_events + transcript + canonical publish + chat_dispatcher 80 用例全绿；前端 transcript/时间线/任务详情 26 用例全绿；`tsc --noEmit`、ESLint（改动文件 0 error）、`prettier --check`、`ruff check`、架构棘轮均通过。

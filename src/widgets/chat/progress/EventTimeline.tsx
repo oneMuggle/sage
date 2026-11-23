@@ -8,6 +8,8 @@ import type { RunEvent } from '../../../shared/api/orchEvents';
 import { isStepEvent, isTaskEvent } from '../../../shared/api/orchEvents';
 import { formatTimeOfDay } from '../../../shared/lib/timeFormatter';
 
+import { formatDuration } from './progressFormat';
+
 interface EventTimelineProps {
   events: RunEvent[];
   /** Max number of events to render (oldest truncated). Default: 200 */
@@ -94,6 +96,9 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
       <div className="flex items-center justify-end gap-1.5 px-2 pb-1"></div>
       {visible.map((event) => {
         const preview = extractPreview(event.payload);
+        // M4.1: canonical step 载荷带工具耗时 —— 时间线行内展示。
+        const rawDuration = event.payload?.duration_ms;
+        const duration = typeof rawDuration === 'number' ? formatDuration(rawDuration) : null;
         // RD22 (round50): 相对首事件的偏移量 —— 步骤间隔一目了然。
         const base = visible[0]?.occurred_at ?? event.occurred_at;
         const offset = event.occurred_at - base;
@@ -116,6 +121,14 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
               {eventIcon(event)}
             </span>
             <span className={`shrink-0 ${eventColor(event)}`}>{eventLabel(event.event_type)}</span>
+            {duration && (
+              <span
+                className="text-text-muted tabular-nums shrink-0 text-ui-xs"
+                data-testid={`event-timeline-duration-${event.event_id}`}
+              >
+                · {duration}
+              </span>
+            )}
             {preview && <span className="text-text-secondary truncate">{preview}</span>}
             {event.entity.step_id && isStepEvent(event) && (
               <span className="text-text-muted text-ui-xs shrink-0">

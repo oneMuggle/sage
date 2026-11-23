@@ -113,7 +113,10 @@ describe('TaskTranscriptPanel', () => {
     );
     expect(screen.getByTestId('task-transcript-reasoning')).toHaveTextContent('思考');
     expect(screen.getByTestId('task-transcript-tool-call')).toHaveTextContent('web_search');
+    // M4.1: tool_call 行本身无耗时，按 tool_call_id 关联 tool_result 的 42ms。
+    expect(screen.getByTestId('task-transcript-tool-call')).toHaveTextContent('42ms');
     expect(screen.getByTestId('task-transcript-tool-result')).toHaveTextContent('检索结果');
+    expect(screen.getByTestId('task-transcript-tool-result')).toHaveTextContent('42ms');
     expect(screen.getByTestId('task-transcript-assistant')).toHaveTextContent(
       '结论：Sage 支持编排',
     );
@@ -164,9 +167,7 @@ describe('TaskTranscriptPanel', () => {
 
     render(<TaskTranscriptPanel runId="run-1" taskId="t1" live={false} />);
 
-    await waitFor(() =>
-      expect(screen.getByTestId('task-transcript-goal')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId('task-transcript-goal')).toBeInTheDocument());
     expect(screen.queryByTestId('task-transcript-followup')).toBeNull();
   });
 

@@ -70,7 +70,9 @@ function describeLiveEvent(
     case 'failed':
       return `✗ 失败${evt.preview ? `: ${evt.preview}` : ''}`;
     case 'tool_result':
-      return `👀 ${evt.tool_name ?? 'tool'}${ownerSuffix(evt.tool_name)} 返回${evt.is_error ? '（错误）' : ''}`;
+      return `👀 ${evt.tool_name ?? 'tool'}${ownerSuffix(evt.tool_name)} 返回${
+        typeof evt.duration_ms === 'number' ? ` · ${formatDuration(evt.duration_ms)}` : ''
+      }${evt.is_error ? '（错误）' : ''}`;
     case 'tool_call':
     default:
       return `🔧 ${evt.tool_name ?? 'tool'}${ownerSuffix(evt.tool_name)}${evt.args_summary ? ` ${evt.args_summary}` : ''}`;
@@ -112,10 +114,7 @@ export function TaskDetailView({
   const knownRun = useRunControlStore((s) => s.runs.get(board.runId));
   const eventsByRunId = useRunControlStore((s) => s.eventsByRunId);
   const orchEvents = useMemo(
-    () =>
-      (eventsByRunId.get(board.runId) ?? []).filter(
-        (e) => e.entity.task_id === activeTaskId,
-      ),
+    () => (eventsByRunId.get(board.runId) ?? []).filter((e) => e.entity.task_id === activeTaskId),
     [eventsByRunId, board.runId, activeTaskId],
   );
 
@@ -136,11 +135,7 @@ export function TaskDetailView({
       if (followupBusy) return;
       setFollowupBusy(true);
       try {
-        const res = await orchRunControlClient.followupTask(
-          board.runId,
-          activeTaskId,
-          content,
-        );
+        const res = await orchRunControlClient.followupTask(board.runId, activeTaskId, content);
         setFollowupGoal(content);
         setActiveTaskId(res.task_id);
         setView('transcript');
