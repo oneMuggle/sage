@@ -53,7 +53,12 @@ export interface RunControlState {
   /** Currently selected task_id (for detail drawer) */
   selectedTaskId: string | null;
   // RD19 (round35): 选中任务的使用统计（来源：聊天任务板终态事件）。
-  selectedTaskMeta: { used_tokens?: number; duration_ms?: number } | null;
+  // M4.3b: used_cost_usd —— 已定价金额（USD 估算），未知定价为 undefined。
+  selectedTaskMeta: {
+    used_tokens?: number;
+    duration_ms?: number;
+    used_cost_usd?: number;
+  } | null;
 
   /** Error messages for UI display */
   errors: string[];
@@ -82,7 +87,11 @@ export interface RunControlState {
   selectTask: (
     runId: string | null,
     taskId: string | null,
-    meta?: { used_tokens?: number; duration_ms?: number } | null,
+    meta?: {
+      used_tokens?: number;
+      duration_ms?: number;
+      used_cost_usd?: number;
+    } | null,
   ) => void;
 
   /** Add an error message */
@@ -274,7 +283,11 @@ export const useRunControlStore = create<RunControlState>((set, get) => ({
   connectionStatus: 'disconnected' as ConnectionStatus,
   selectedRunId: null as string | null,
   selectedTaskId: null as string | null,
-  selectedTaskMeta: null as { used_tokens?: number; duration_ms?: number } | null,
+  selectedTaskMeta: null as {
+    used_tokens?: number;
+    duration_ms?: number;
+    used_cost_usd?: number;
+  } | null,
   errors: [] as string[],
 
   applyEvent: (event: RunEvent) => {
@@ -362,7 +375,11 @@ export const useRunControlStore = create<RunControlState>((set, get) => ({
   selectTask: (
     runId: string | null,
     taskId: string | null,
-    meta?: { used_tokens?: number; duration_ms?: number } | null,
+    meta?: {
+      used_tokens?: number;
+      duration_ms?: number;
+      used_cost_usd?: number;
+    } | null,
   ) => {
     set({ selectedRunId: runId, selectedTaskId: taskId, selectedTaskMeta: meta ?? null });
   },

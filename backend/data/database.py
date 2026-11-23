@@ -1726,6 +1726,13 @@ class Database:
                 "ALTER TABLE usage_events ADD COLUMN task_id TEXT"
             )
             conn.commit()
+        # M4.3b (2026-11-23): run_id 归因列 —— run 级成本汇总/回看。
+        # 历史行由 v20 迁移按 task_id + session + 时间窗回填。
+        if "run_id" not in _usage_cols:
+            cursor.execute(
+                "ALTER TABLE usage_events ADD COLUMN run_id TEXT"
+            )
+            conn.commit()
         # RT25 (round46): 任务级归因查询索引 —— task_usage_since 按
         # (session_id, task_id, created_at) 过滤；无此索引时退化为
         # session 前缀内的全行扫描（BU13/BU17 每终态任务各查一次）。
@@ -1733,6 +1740,11 @@ class Database:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_usage_events_session_task
             ON usage_events(session_id, task_id, created_at)
+        """)
+        # M4.3b: run 维度聚合索引（必须位于 run_id ALTER 之后）。
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_usage_events_run
+            ON usage_events(run_id, task_id, created_at)
         """)
         # 上下文分类明细快照 (backend/chat/context_breakdown.py) ——
         # JSON: {categories, estimated_total, prompt_tokens, calibrated}。
@@ -2331,6 +2343,9 @@ class Database:
         # 必须位于 orch_tasks 表创建之后（旧库先建表/补列再 ALTER）。
         if "retry_of" not in _task_cols:
             cursor.execute("ALTER TABLE orch_tasks ADD COLUMN retry_of TEXT")
+        # M4.3b (2026-11-23): 金额不入 orch_tasks —— 该表主键是 task_id，
+        # 计划编号跨 run 复用会互相覆盖；金额以 usage_events 为唯一真相源
+        # （backend/data/usage_cost_repo.py 按 run_id 聚合）。
 
         # Subagent 实时可观测性 schema (run-events@1.0)。全部 DDL 幂等，兼容旧库。
         cursor.execute(
