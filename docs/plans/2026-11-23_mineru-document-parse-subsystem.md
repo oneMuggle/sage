@@ -26,7 +26,7 @@ Sage 现有的文档抽取能力只有两层：
 2. **聊天附件 PDF 路由增强**：本地优先秒级返回，质量不足时后台提交 MinerU，结果进内容哈希缓存供后续轮次与其它子系统复用。
 3. 提供 `parse_document` 工具，让 agent 可显式要求高精度解析。
 4. 提供设置页卡片与后端状态端点，让用户自助配置与自检连通性。
-5. 一并修复离线包侧的 3 个已知问题（假 WARN、打包脚本缺失、文档漂移）。
+5. 一并修复离线包侧的 4 个已知问题（假 WARN、打包脚本缺失、文档漂移、**鉴权实际关闭**）。
 
 ### 1.3 非目标
 
@@ -40,18 +40,21 @@ Sage 现有的文档抽取能力只有两层：
 
 ## 2. 关键事实核对（设计依据）
 
-本节所有结论来自**离线包内 `mineru-4.1.7-py3-none-any.whl` 的实际源码**，而非既有文档或公开记忆。既有 `docs/technical/154-mineru-deployment.md` 存在 5 处漂移，§11 列出校正项。
+本节所有结论来自**离线包内 `mineru-4.1.7-py3-none-any.whl` 的实际源码**与离线包内的 `install.sh` / `systemd/*.template`，而非既有文档或公开记忆。既有 `docs/technical/154-mineru-deployment.md` 存在 10 处漂移，§11 列出校正项。
 
 | # | 事实 | 源码依据 | 对设计的影响 |
 |---|---|---|---|
 | F1 | **Sage 不能 `import mineru`** | 离线包同时携带 `docvortex-0.6.22-cp311-abi3-manylinux_2_28_x86_64.whl`（二进制轮子，非 pure-Python） | 必须自写薄 HTTP 客户端；也顺带避开 §154 提到的 `AICapability` 模板方法只支持单请求的问题 |
 | F2 | `/v1/health`、`/v1/models`、`/v1/tiers` **免鉴权** | `mineru/parser/api_server.py:2019` `_PUBLIC_PATHS = frozenset({"/v1/health", "/v1/models", "/v1/tiers"})` | 离线包 `verify.sh` 第 6 项"鉴权拦截"探的是免鉴权端点 → **永远只能 WARN，不可能 8 项全 PASS** |
-| F3 | 服务端未设 `MINERU_API_KEY` 时**鉴权完全关闭** | `api_server.py` 鉴权中间件：`if not api_key: return await call_next(request)` | 客户端仍总是带 `Authorization: Bearer`（幂等无害）；但需在文档中说明 |
+| F3 | 服务端未设 `MINERU_API_KEY` 时**鉴权完全关闭** | `api_server.py` 鉴权中间件：`if not api_key: return await call_next(request)` | 服务端未开鉴权时，客户端**发不发** `Authorization` 头都能通过 —— 故 `apiKey` 设计为可选（§4.8） |
 | F4 | `output_formats` 只给 `{docx}` 或 `{html}` 时服务端返回**裸文件**，其余返回 ZIP | `mineru/parser/task_outputs.py:build_task_output()` | 下载分支必须双判（请求格式 + 内容魔数），不能只按 ZIP 解包 |
 | F5 | `--tier` **只对 PDF/图片生效**，Office 恒定走 flash 档 | 服务端按输入类型分派 | 路由策略不能对 docx/xlsx/pptx 承诺高保真；需在工具 metadata 里如实标注实际档位 |
 | F6 | 响应体用 `.model_dump(exclude_none=True)` | `mineru/tasks/http.py` | 所有字段必须 `.get()` 读取，禁止 `d["x"]` |
 | F7 | 实际模型是 `MinerU2.5-Pro-2605-1.2B` | `MANIFEST.env` + 离线包 models 目录 | §154 写的 `MinerU2.5-2509-1.2B` 是漂移，需校正 |
 | F8 | `mineru[full]>=4.1,<4.2`（不是 `<5`）；vllm 0.19.1 / torch 2.10.0；Python 3.12.16 便携版 | `MANIFEST.env` | 版本锁定口径需校正 |
+| F9 | **`mineru-kit api-server` 的 `--api-key` 没有 envvar 回退** | `mineru/kit/commands/api_server.py:34` 的 `typer.Option(None, "--api-key")` 无 `envvar=`；底层 `mineru/parser/api_server.py:2142` 的 click option 同样无 `envvar=`（对比 `webui.py:64` 有 `os.environ.get("MINERU_API_KEY")` 回退） | **`MINERU_API_KEY` 环境变量对 api-server 入口不生效** —— 只能靠命令行 `--api-key` 开启鉴权 |
+| F10 | **随离线包部署的服务端，鉴权实际是关闭的** | `bundle/systemd/mineru.service.template`：`EnvironmentFile=/etc/mineru/mineru.env` 注入了 `MINERU_API_KEY`，但 `ExecStart` **没有** `--api-key` 参数 → 配合 F9，`application.state.api_key` 为空 → 鉴权中间件直接放行 | 用户"我没有生成 api key"的观察是对的；`install.sh` 生成的 key **对该部署无效**。这是离线包的真实缺陷（M8 修） |
+| F11 | `GET /v1/usage` 回 `access_level` ∈ {`registered`, `anonymous`} | `mineru/parser/api_server.py:728 _resolve_access_level()` → `UsageResponse.access_level` | 客户端可用它**探测服务端鉴权模式**（比 `/v1/health` 更精确），状态端点据此回报 `serverAuthMode` |
 
 ---
 
@@ -103,7 +106,7 @@ Sage 现有的文档抽取能力只有两层：
 |---|---|
 | `scripts/mineru-offline-bundle/build-bundle.sh`（新建） | 回填打包脚本（可复现） |
 | `scripts/mineru-offline-bundle/verify.sh`（改） | 第 6 项改探真需鉴权端点 |
-| `docs/technical/154-mineru-deployment.md`（改） | 校正 8 处漂移 |
+| `docs/technical/154-mineru-deployment.md`（改） | 校正 10 处漂移 |
 | `docs/technical/157-mineru-deployment.md`（win7 改） | 同上 |
 | `docs/technical/160-mineru-document-parse-subsystem.md`（新建） | 本设计的归档版（实现完成后并入技术手册） |
 
@@ -168,7 +171,7 @@ class ParseEngine(Protocol):
 
 | 步 | 请求 | 关键约束 |
 |---|---|---|
-| 1 | `POST {base}/v1/tasks` | 头 `Authorization: Bearer <key>`；**body 必须 JSON**（服务端拒绝任何 query 参数，返回 400）；`Content-Type: application/json` 否则 415；`files[].bytes` 必填；`file_name` 禁 `/ \ :`、Cc 控制字符、`.` / `..`，长度 1–1024 |
+| 1 | `POST {base}/v1/tasks` | 头 `Authorization: Bearer <key>`（**仅当 apiKey 非空**）；**body 必须 JSON**（服务端拒绝任何 query 参数，返回 400）；`Content-Type: application/json` 否则 415；`files[].bytes` 必填；`file_name` 禁 `/ \ :`、Cc 控制字符、`.` / `..`，长度 1–1024 |
 | 2 | `PUT {upload.url}` | 使用响应给出的 `upload.headers`；body 为原始字节 |
 | 3 | `GET {base}/v1/tasks/{task_id}` | 轮询；`status` ∈ `waiting-file / pending / running / completed / partial / failed / canceled`；`files[].status` 同集合 |
 | 4 | `GET {base}/v1/files/{file_id}/content` | `result_url` 即此路径。`default` → ZIP；`{docx}`/`{html}` → 裸文件 |
@@ -180,7 +183,10 @@ class ParseEngine(Protocol):
 3. **重试**：仅连接错误 + HTTP {408, 429, 500, 502, 503, 504}，指数退避 0.25 → 2.0s，最多 3 次。**创建任务不重试**（无幂等保证，重试会产生孤儿任务）。
 4. **URL 处理**：`baseUrl` 保留反代路径前缀（`http://host/mineru`）；`task_id` / `file_id` 用 `quote(x, safe='')` 编码。
 5. **上传上限**：沿用 Sage 现有 `MAX_ATTACHMENT_SIZE = 25 MB`（`backend/api/chat_attachment_routes.py:85`），配置项 `maxUploadMb` 可下调。
-6. **鉴权**：客户端总是带 `Authorization: Bearer`。服务端若未设 key（F3）则忽略之 —— 行为一致，无需分支。
+6. **鉴权（apiKey 可选）**：`apiKey` 为空字符串时**不发送** `Authorization` 头；非空时发送 `Authorization: Bearer <key>`。
+   - 服务端未设 key（F3）→ 鉴权中间件放行，请求通过。
+   - 服务端设了 key 而客户端没带 / 带错 → 401 `{"error":{"code":"invalid_api_key","message":"Invalid or missing API key"}}`。
+   - **不做"总是带 Bearer"的假设**：F10 证明随包部署的服务端鉴权是关的，但管理员随时可能通过 `--api-key` 打开；两种模式客户端都要能工作。
 7. **产物解包**：ZIP → 找 `markdown.md` / `middle_json.json` / `structured_content.json`（`middle-json` 候选名兼容 `layout.json`）；裸文件 → 直接按扩展名判定。ZIP 内 `images/` 目录落 MediaStore。
 8. **py38 兼容**：不用 `X | Y` 运行时注解、不用 `asyncio.to_thread`、不用泛型下标；`isinstance` 用 tuple 形式（`# noqa: UP038`）。
 
@@ -188,7 +194,8 @@ class ParseEngine(Protocol):
 
 | HTTP / 情况 | 异常 | 降级行为 |
 |---|---|---|
-| 401 / 403 | `MineruAuthError` | 不重试；标记服务为"鉴权失败"，后续 auto 路由直接走本地 |
+| 401（`invalid_api_key`） | `MineruAuthError` | 不重试；标记服务为"鉴权失败"，后续 auto 路由直接走本地。warning 带诊断：**服务端已开鉴权，客户端 key 缺失或不匹配** —— 提示到服务器 `/etc/mineru/mineru.env` 取 `MINERU_API_KEY`（若服务端是 `--api-key` 开启的，则取该命令行值） |
+| 403（`feature_requires_api_key`） | `MineruTaskError` | 不重试（客户端 bug：试图下载**源文件**而非解析产物）；降级本地并记原始错误体 |
 | 连接失败 / DNS / 超时（连接层） | `MineruUnavailableError` | 重试 3 次后降级本地 |
 | 415 / 400 | `MineruTaskError` | 不重试，降级本地（记录原始错误体） |
 | 任务 `status == failed` / `canceled` | `MineruTaskError` | 降级本地，metadata 记 `mineru_failed` |
@@ -258,7 +265,8 @@ score = max(0.0, score)                              # 0.0 ~ 1.0
 |---|---|
 | 未配置 MinerU | 走本地；工具 metadata 标 `engine_used="local"`, `warnings=["mineru_not_configured"]` |
 | MinerU 不可达（连接层） | 走本地；`warnings=["mineru_unavailable"]`；连续失败 3 次后进入 10 分钟熔断 |
-| MinerU 鉴权失败 | 走本地；`warnings=["mineru_auth_failed"]`；直接进入熔断（配错 key 重试无意义） |
+| MinerU 鉴权失败（401） | 走本地；`warnings=["mineru_auth_failed"]`；直接进入熔断（配错 key 重试无意义）；warning 附诊断「服务端已开启鉴权，请到服务器取 `MINERU_API_KEY` 填入」 |
+| 服务端匿名（F10：随包部署的默认形态，鉴权关闭） | 正常走 MinerU，**无 warning**；客户端不带 `Authorization` 头 |
 | MinerU 任务失败 / 超时 | 走本地；`warnings=["mineru_failed"]` |
 | 本地抽取也失败 | 抛原始异常（此时是真的无法解析） |
 
@@ -328,13 +336,13 @@ class ParseDocumentTool(BaseTool):
 
 **存储位置**：preferences 独立 KV `mineru_service`（**不进 `app_settings.endpoints`** —— MinerU 不是 OpenAI 兼容模型端点，塞进去会造成语义混淆，且会污染 `AICapability.load_config()` 的模型路由）。
 
-**配置形状**：
+**配置形状**（`apiKey` **可为空**）：
 
 ```json
 {
   "enabled": true,
   "baseUrl": "http://10.x.x.x:8000",
-  "apiKey": "<64-hex>",
+  "apiKey": "",
   "defaultTier": "standard",
   "timeoutSeconds": 300,
   "maxUploadMb": 25,
@@ -343,9 +351,20 @@ class ParseDocumentTool(BaseTool):
 }
 ```
 
+**两种服务端鉴权形态**（客户端都要能工作，见 F9–F11）：
+
+| 服务端形态 | 怎么来的 | 客户端该怎么配 |
+|---|---|---|
+| **匿名**（`access_level=anonymous`） | 随离线包部署的默认形态：systemd 用 `EnvironmentFile` 注入了 `MINERU_API_KEY`，但 `ExecStart` 没传 `--api-key`，而 `--api-key` 又没有 envvar 回退（F9/F10） | `apiKey` **留空**即可；客户端不发 `Authorization` 头 |
+| **Bearer**（`access_level=registered`） | 管理员改 ExecStart 加了 `--api-key <key>`（或用包装脚本把 `/etc/mineru/mineru.env` 的 `MINERU_API_KEY` 展开成命令行参数） | `apiKey` 填与服务器**完全一致**的值；不填 → 401 |
+
+`apiKey` 的语义因此是"**可选凭据**"而非"必填凭据"：空 = 匿名模式。UI 上该项标注为**可选**，留空即表示"服务端未开鉴权"。
+
+> ⚠️ 匿名模式意味着**任何人拿到 `baseUrl` 就能用这台 GPU 服务器**。内网环境下由防火墙兜底（只对 Sage 机器放行端口）；若要开启鉴权，M8 会给出服务端改法。
+
 **读取优先级**（`load_mineru_config()`，对齐 `load_ocr_config()` 的三段式）：
 
-1. 环境变量 `SAGE_MINERU_BASE_URL` / `SAGE_MINERU_API_KEY` / `SAGE_MINERU_TIER` / `SAGE_MINERU_TIMEOUT_SECONDS`（**最高优先级**，便于 CI 与离线环境统一注入）
+1. 环境变量 `SAGE_MINERU_BASE_URL` / `SAGE_MINERU_API_KEY` / `SAGE_MINERU_TIER` / `SAGE_MINERU_TIMEOUT_SECONDS`（**最高优先级**，便于 CI 与离线环境统一注入）。`SAGE_MINERU_API_KEY` 为空或未设 = **匿名模式**（不发 `Authorization` 头）。
 2. preferences `mineru_service`（读侧自动解密）
 3. 兜底默认值（`enabled=False`, `baseUrl=""`, `apiKey=""`）
 
@@ -370,18 +389,23 @@ def unwrap_mineru_service_json(raw: str | None) -> str | None: ...
 {
   "configured": true,
   "enabled": true,
-  "hasApiKey": true,
+  "hasApiKey": false,
   "reachable": true,
+  "serverAuthMode": "anonymous",
   "serverTiers": ["flash", "basic", "standard"],
   "serverVersion": "4.1.7",
   "reason": null
 }
 ```
 
-- `hasApiKey` 只回布尔，**不回明文**（对齐项目既有"设置脱敏"口径）。
-- `reachable` 探测打 `/v1/health`（免鉴权，F2）+ `/v1/tiers`；鉴权是否正确由客户端在真实调用时判定（免鉴权端点无法区分）。
+- `hasApiKey` 只回布尔，**不回明文**（对齐项目既有"设置脱敏"口径）。`false` 是**合法状态**（服务端未开鉴权），不代表配置错误。
+- `serverAuthMode`：
+  - `anonymous` —— 服务端未设 api_key，请求放行（F3/F10）
+  - `bearer` —— 服务端设了 api_key，必须带对 key
+  - `unknown` —— 服务端版本不认识 `/v1/usage`，无法判定（回退探 `/v1/health` + `/v1/tiers`）
+- 探测顺序：`GET /v1/usage`（带配置里的 key）→ 200 时读 `access_level`（F11）得 `serverAuthMode`；401 时 `serverAuthMode="bearer"` 且 `reason` 提示 key 不匹配；404 时回退 `/v1/health` + `/v1/tiers` 得 `unknown`。`/v1/health`、`/v1/tiers` 免鉴权（F2），只能证明"服务活着"，不能证明"key 对"。
 
-**`MineruServiceCard.tsx`**：启用开关 / baseUrl 输入 / apiKey 密码框（带"显示"切换）/ 档位下拉（flash|basic|standard|advanced，默认 standard）/ 超时秒数 / 「测试连接」按钮（打 status 端点并展示 `serverTiers` 与 `reason`）。
+**`MineruServiceCard.tsx`**：启用开关 / baseUrl 输入 / apiKey 密码框（带"显示"切换，**标注为可选**，占位文案「留空 = 服务端未开鉴权」）/ 档位下拉（flash|basic|standard|advanced，默认 standard）/ 超时秒数 / 「测试连接」按钮（打 status 端点并展示 `serverTiers`、`serverAuthMode` 与 `reason`）。当 `serverAuthMode="bearer"` 且 `hasApiKey=false` 时，UI 直接红字提示「服务端已开鉴权，请在服务器取 MINERU_API_KEY 后填入」。
 
 ### 4.10 聊天附件双阶段策略（用户已确认）
 
@@ -434,7 +458,7 @@ def unwrap_mineru_service_json(raw: str | None) -> str | None: ...
   - `backend/services/document_parse/config.py`（`MineruConfig` + `load_mineru_config()`）
   - `backend/services/secret_box.py` 加 `wrap/unwrap_mineru_service_json`
   - `backend/data/settings_repo.py` KEYS 白名单 + 加解密接入
-  - 单测：preferences 读取、env 覆盖优先级、加密往返、单字段解密失败置空、读取异常回退默认值
+  - 单测：preferences 读取、env 覆盖优先级、加密往返、单字段解密失败置空、读取异常回退默认值、**apiKey 为空 ⇒ 匿名模式（不发 `Authorization` 头）**
 - [ ] **M3 LocalEngine + 质量评分 + DocumentParseService 路由**
   - `backend/adapters/out/document_parse/{quality,local_engine}.py`
   - `backend/application/document_parse.py`
@@ -452,18 +476,23 @@ def unwrap_mineru_service_json(raw: str | None) -> str | None: ...
 - [ ] **M7 状态端点 + 设置 UI**
   - `backend/api/mineru_routes.py` + `backend/main.py` 挂载
   - `src/shared/api/mineruApi.ts` + `src/pages/settings/MineruServiceCard.tsx` + `ModelsTab.tsx` 挂载
-  - 单测（vitest）：卡片渲染、apiKey 掩码、「测试连接」成功/失败态
+  - 单测（vitest）：卡片渲染、apiKey 掩码、apiKey 留空（匿名模式）可用、「测试连接」成功/失败态、`serverAuthMode="bearer"` 且无 key 时的红字提示
 
 ### 轨道 B：离线包修复、验证与双分支发布
 
 - [ ] **M8 离线包侧修复**
   - `scripts/mineru-offline-bundle/verify.sh` 第 6 项改探需鉴权端点
   - `scripts/mineru-offline-bundle/build-bundle.sh` 回填（按 MANIFEST 反推：wheel 闭包 + portable python + 模型 + 模板渲染 + sha256 落盘）
-  - `docs/technical/154-mineru-deployment.md`（main）/ `157`（win7）校正 8 处漂移
+  - **鉴权修正（F9/F10）**：systemd unit 的 `ExecStart` 未传 `--api-key`，而 `--api-key` 又无 envvar 回退 ⇒ 随包部署的服务端鉴权实际关闭。两种改法二选一（**推荐 b**）：
+    - a. `ExecStart` 直接写死 `--api-key <hex>` —— 简单，但 key 明文进 unit 文件（`/etc/systemd/system/mineru.service` 默认 644，需 `chmod 600`）
+    - b. **（推荐）** 增一个 root 拥有的包装脚本 `/etc/mineru/mineru-start.sh`（600）：`set -a; . /etc/mineru/mineru.env; set +a; exec .../mineru-kit api-server --host 0.0.0.0 --port __PORT__ --tier __TIER__ --api-key "$MINERU_API_KEY"`，unit 的 `ExecStart` 指向它 —— key 始终只在 600 权限文件里
+    - 无论哪种，都要在 `install.sh` 末尾的"Sage 客户端配置"JSON 里如实标注 `serverAuthMode`（`bearer` / `anonymous`），避免再次误导
+  - `docs/technical/154-mineru-deployment.md`（main）/ `157`（win7）校正 10 处漂移
 - [ ] **M9 真机 E2E 验证**（轨道 A 合并后进行）
-  - 用内网真实服务器：baseUrl + API key 走 `.env.local`（**不贴进聊天/日志**）
+  - 用内网真实服务器：baseUrl 走 `.env.local`（**不贴进聊天/日志**）；apiKey 仅在服务端**确实开了鉴权**时才填（先看 status 端点的 `serverAuthMode`）
   - 用一份含公式 + 跨页表格的 PDF：断言 markdown 含表格与公式、`structured_content.json` 可解析、缓存二次命中
   - 断网 / 改错 key：断言降级本地且不阻塞
+  - 匿名模式与 Bearer 模式**各跑一遍**
 - [ ] **M10 双分支同步**（轨道 A 合并到 main 后进行）
   - main 合并后 cherry-pick 到 `release/win7`，做 py38 适配（`X | Y` 注解、`asyncio.to_thread`、泛型下标、`isinstance` tuple 形式）
   - win7 侧跑 `scripts/check_py38_compat.py` + py38 单测
@@ -474,7 +503,7 @@ def unwrap_mineru_service_json(raw: str | None) -> str | None: ...
 
 | 层 | 内容 | 工具 |
 |---|---|---|
-| 单元（后端） | MinerU 客户端 4 步协议全分支、路由决策、缓存、配置、加密往返、队列去重 | pytest + `httpx.MockTransport` |
+| 单元（后端） | MinerU 客户端 4 步协议全分支、路由决策、缓存、配置、加密往返、队列去重、**鉴权两态（apiKey 空 → 不发头 / 非空 → 发 Bearer；401 → `MineruAuthError` 不重试）** | pytest + `httpx.MockTransport` |
 | 单元（前端） | `MineruServiceCard` 渲染 / apiKey 掩码 / 测试连接成功失败 | vitest |
 | 集成 | 聊天附件双阶段；工具注册后 schema 可见性 | pytest |
 | E2E（真机） | 真实内网 MinerU：含公式+跨页表格 PDF → markdown 含表格与公式；`structured_content.json` 可解析；缓存二次命中；服务端不可达降级 | pytest + 手工 |
@@ -492,6 +521,7 @@ def unwrap_mineru_service_json(raw: str | None) -> str | None: ...
 | MinerU 服务端版本与客户端契约漂移（4.1.x 破坏性协议） | 中 | 客户端与服务端同锁 `>=4.1,<4.2`；响应全字段用 `.get()`（F6）；契约变化表现为"字段缺失"而非崩溃 |
 | 内网服务器不可达 / 掉线 | 中 | 质量门控 + 三级降级（§4.4）+ 熔断；聊天首轮永远不依赖 MinerU |
 | API key 泄露 | 中 | SecretBox 静态加密（DPAPI/keychain/secret-tool）；`.env.local` gitignore；日志与聊天中不出现明文；status 端点只回 `hasApiKey` |
+| **服务端鉴权实际关闭（F10）** | 中 | 随包部署的服务端不校验 key ⇒ 拿到 `baseUrl` 的人都能占用 GPU。缓解：M8 提供开启鉴权的改法；未开启时靠防火墙只对 Sage 机器放行端口；status 端点如实回报 `serverAuthMode` |
 | MinerU 分钟级延迟拖垮聊天 | 中 | 双阶段：阶段 1 本地秒级；MinerU 只在后台跑 |
 | 文档内容上传到内网服务器 | 中 | 工具 description 明示；配置提供 `enabled` 总开关；内网部署本身是既定事实，但需用户知情 |
 | GPU 资源争抢（多客户端共享） | 低 | 内容哈希缓存减少重复解析；tier 可下调；熔断避免持续打不通时反复重试 |
@@ -500,7 +530,7 @@ def unwrap_mineru_service_json(raw: str | None) -> str | None: ...
 | 离线包不可复现 | 中 | M8 回填 `build-bundle.sh` |
 
 **依赖**：
-- 内网 MinerU 服务器可达（用户已确认可达，可提供 baseUrl + API key）。
+- 内网 MinerU 服务器可达（用户已确认可达，可提供 baseUrl；apiKey 视服务端是否开启鉴权而定 —— 见 F9–F11）。
 - 用户提供一份含公式 / 跨页表格的测试 PDF（M9）。
 - 无新增 Python / Node 依赖。
 
@@ -517,7 +547,8 @@ def unwrap_mineru_service_json(raw: str | None) -> str | None: ...
 
 ## 9. 验收标准
 
-- [ ] 配置 baseUrl + API key 后，`parse_document` 工具在 `engine="mineru"` 下能返回含表格与公式的 markdown。
+- [ ] 配置 baseUrl 后，`parse_document` 工具在 `engine="mineru"` 下能返回含表格与公式的 markdown（apiKey 空或非空两种情形都跑通）。
+- [ ] 服务端匿名（未开鉴权）与 Bearer（已开鉴权、key 一致）两种模式下工具都能正常工作；key 不一致时降级本地并给出明确 warning。
 - [ ] 未配置 MinerU 时，`parse_document(engine="auto")` 走本地并正常返回，其余功能不受影响。
 - [ ] 质量门控生效：纯文本 PDF 走本地（`engine_used="local"`）；含公式或表格的 PDF 升级 MinerU（`engine_used="mineru"`）。
 - [ ] 聊天附件 PDF：首轮输出与改造前一致（本地）；低质量文档后台提交 MinerU 并在缓存中留下产物。
@@ -550,6 +581,8 @@ def unwrap_mineru_service_json(raw: str | None) -> str | None: ...
 | 6 | 未提 install/verify 脚本 | `install.sh`（建 `mineru` 系统用户、`/etc/mineru/mineru.env` chmod 600、systemd unit、300s 健康轮询）+ `verify.sh` |
 | 7 | §5.1 API 契约 | 补 `exclude_none` 语义、`file_name` 校验规则、query 参数被拒、`{docx}`/`{html}` 返回裸文件、`/v1/health`+`/v1/models`+`/v1/tiers` 免鉴权、无 key 时鉴权完全关闭 |
 | 8 | 工具名 `mineru_parse_document` | `parse_document`（engine 参数区分） |
+| 9 | §3.4 启动示例写 `export MINERU_API_KEY="<强随机串>"` | **该环境变量对 `mineru-kit api-server` 不生效**（F9：该入口的 `--api-key` 无 envvar 回退）。必须 `mineru-kit api-server ... --api-key "<key>"`，或用 systemd 包装脚本把 env 展开成命令行参数 |
+| 10 | 隐含"设了 `MINERU_API_KEY` 即有鉴权" | 离线包 systemd unit 的 `ExecStart` 未传 `--api-key` ⇒ **随包部署的服务端鉴权是关闭的**（F10）。要么改 unit（M8 给出两种改法），要么在文档里明确记录"内网匿名模式 + 防火墙兜底" |
 
 ---
 
