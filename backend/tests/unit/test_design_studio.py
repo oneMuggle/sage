@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from backend.data.design_repo import DesignRepo
+from backend.design.craft_loader import CraftRuleRegistry
 from backend.design.design_studio import DesignStudio
 from backend.design.errors import (
     DesignGenerationError,
@@ -45,6 +46,14 @@ class TestDesignStudio:
         repo = DesignRepo(db)
 
         content_dir = tmp_path / "content"
+
+        craft_dir = content_dir / "craft"
+        craft_dir.mkdir(parents=True)
+        (craft_dir / "test-rule.md").write_text(
+            "---\nid: test-rule\nname: Test Rule\n"
+            "description: test rule\napplies_to: prototype\npriority: 1\n---\n"
+            "# Test Rule\n\nKeep the test page readable."
+        )
 
         systems_dir = content_dir / "systems" / "test"
         systems_dir.mkdir(parents=True)
@@ -86,6 +95,7 @@ class TestDesignStudio:
             systems=systems_reg,
             templates=templates_reg,
             workspace_dir=tmp_path / "workspace",
+            craft_rules=CraftRuleRegistry(content_dir),
         )
 
     def test_create_project(self, studio):
@@ -393,3 +403,26 @@ class TestDesignStudio:
     def test_list_messages_unknown_project_raises(self, studio):
         with pytest.raises(DesignProjectNotFoundError):
             studio.list_messages("missing-project")
+
+    def test_craft_for_returns_rules_for_kind(self, studio):
+        """Craft 规则必须能按 template kind 解析出来。
+
+        回归：win7 曾出现「调用了 _craft_for 但没定义该方法」的半同步状态，
+        生成路径会直接 AttributeError。
+        """
+        template = studio.list_templates(kind="prototype")[0]
+        rules = studio._craft_for(template)
+        assert rules is not None
+        assert [rule.id for rule in rules] == ["test-rule"]
+
+    @pytest.mark.asyncio()
+    async def test_generate_injects_craft_rules_into_prompt(self, studio):
+        """Craft 规则必须进入生成 prompt。
+
+        回归：generate() 不接受 craft_rules 形参时会 TypeError，
+        规则缺席则工艺规范静默失效。
+        """
+        project = studio.create_project(kind="prototype", brief="craft me")
+        artifact = await studio.generate(project.id, "Generate with craft rules")
+        assert "工艺规范" in artifact.source_prompt
+        assert "Keep the test page readable." in artifact.source_prompt

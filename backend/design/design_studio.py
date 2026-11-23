@@ -75,6 +75,12 @@ class DesignStudio:
         self._version_lock = threading.Lock()
         self._progress: Dict[str, dict] = {}
 
+    def _craft_for(self, template: DesignTemplate) -> Optional[List]:
+        """Craft rules applicable to a template, or None when no registry."""
+        if self._craft_rules is None:
+            return None
+        return self._craft_rules.rules_for_kind(template.kind)
+
     def _progress_update(
         self, project_id: str, stage: str, message: str,
     ) -> None:
@@ -91,12 +97,6 @@ class DesignStudio:
         return self._progress.get(
             project_id, {"stage": "idle", "message": ""},
         )
-
-    def _craft_for(self, template: DesignTemplate) -> Optional[list]:
-        """Craft rules applicable to a template, or None when no registry."""
-        if self._craft_rules is None:
-            return None
-        return self._craft_rules.rules_for_kind(template.kind)
 
     def _resolve_template_for_kind(
         self, template_id: str, kind: str,
