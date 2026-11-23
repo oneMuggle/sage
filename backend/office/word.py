@@ -1184,11 +1184,13 @@ def _add_inline_image(
     output_path: Path,
     workspace_path: Optional[str],
     trailing: bool = False,
+    caption_spec: Any = None,
 ) -> None:
     """写入一张插图；带题注时图居中并在下方追加 "图N　caption" 题注。
 
     无题注的文末插图走 ``doc.add_picture`` 原路径（渲染与批次 2.1 逐字节
-    一致）；其余（行内插图 / 带题注）用居中段落承载。
+    一致）；其余（行内插图 / 带题注）用居中段落承载。``caption_spec`` 为
+    format_spec.caption 的题注样式（None = 历史 9pt 居中）。
     """
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Inches
@@ -1212,17 +1214,24 @@ def _add_inline_image(
     paragraph.add_run().add_picture(stream, width=width, height=height)
     caption = getattr(image, "caption", None)
     if caption:
-        add_caption(doc, caption, kind="figure", number=figure_no)
+        add_caption(
+            doc, caption, kind="figure", number=figure_no, spec=caption_spec
+        )
 
 
-def _style_table(doc: Document, table: Any, table_spec: Any) -> None:
+def _style_table(
+    doc: Document, table: Any, table_spec: Any, table_text_spec: Any = None
+) -> None:
     """Round 8 表格排版：三线表 / 显式网格 / 表头重复 / 固定列宽 / 合并。
 
     ``style`` 为 None 时不触碰表样式（与历史行为一致）。列宽长度与列数
     不一致直接抛错（外层统一包成 OfficeGenerateError），不做静默截断。
+    ``table_text_spec`` 为 format_spec.table_text 的单元格文字样式（None
+    不触碰）。
     """
     from .word_layout import (
         apply_cell_merges,
+        apply_table_text_style,
         apply_three_line_table,
         enable_header_repeat,
         set_fixed_column_widths,
@@ -1253,6 +1262,8 @@ def _style_table(doc: Document, table: Any, table_spec: Any) -> None:
             n_rows=1 + len(table_spec.rows),
             n_cols=len(table_spec.headers),
         )
+    if table_text_spec is not None:
+        apply_table_text_style(table, table_text_spec)
 
 
 def _resolve_references(
@@ -1355,6 +1366,11 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
             from .word_layout import apply_format_spec, heading_number_prefix
 
             apply_format_spec(doc, req.format_spec)
+        # 样式模板：题注与表格文字样式（None = 历史行为：9pt 居中 / 不触碰）
+        caption_spec = req.format_spec.caption if req.format_spec is not None else None
+        table_text_spec = (
+            req.format_spec.table_text if req.format_spec is not None else None
+        )
 
         # Round 42：分桶前置——图目录条目预收集（目录段）与正文插图
         # 共用同一 images_by_position/trailing_images，保证编号一致。
@@ -1592,14 +1608,27 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
             for image in images_by_position.get(pi, []):
                 if getattr(image, "caption", None):
                     figure_no += 1
-                _add_inline_image(doc, image, figure_no, output_path, req.workspace_path)
+                _add_inline_image(
+                    doc,
+                    image,
+                    figure_no,
+                    output_path,
+                    req.workspace_path,
+                    caption_spec=caption_spec,
+                )
         # Tables
         for table_spec in req.tables:
             if table_spec.caption:
                 table_no += 1
                 from .word_layout import add_caption as _add_caption
 
-                _add_caption(doc, table_spec.caption, kind="table", number=table_no)
+                _add_caption(
+                    doc,
+                    table_spec.caption,
+                    kind="table",
+                    number=table_no,
+                    spec=caption_spec,
+                )
             table = doc.add_table(rows=1 + len(table_spec.rows), cols=len(table_spec.headers))
             # Header row
             for ci, header in enumerate(table_spec.headers):
@@ -1609,13 +1638,19 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                 for ci, cell in enumerate(row):
                     if ci < len(table_spec.headers):
                         table.cell(ri + 1, ci).text = cell
-            _style_table(doc, table, table_spec)
+            _style_table(doc, table, table_spec, table_text_spec=table_text_spec)
         # 文末插图（批次 2.1 既有行为：按顺序追加在正文之后）
         for image in trailing_images:
             if getattr(image, "caption", None):
                 figure_no += 1
             _add_inline_image(
-                doc, image, figure_no, output_path, req.workspace_path, trailing=True
+                doc,
+                image,
+                figure_no,
+                output_path,
+                req.workspace_path,
+                trailing=True,
+                caption_spec=caption_spec,
             )
         # Round 9：文末参考文献节（带 references 时生成；heading 不参与
         # 多级标题编号——编号只作用于 req.paragraphs 的显式标题）
