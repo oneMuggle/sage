@@ -404,6 +404,10 @@ def _build_xlsx_summary(
 
 #: M6d：结构化预览迷你图每系列最多取的点数（超出置 truncated）。
 MAX_CHART_POINTS = 50
+#: M6d：单次图表引用最多物化的单元格数。引用是用户可控文本
+#: （``'Sheet1'!$A$1:$A$1048576``），无上限时几 KB 的文件也能让
+#: ``iter_rows`` 物化百万行；这里在读取前按行优先裁剪。
+MAX_CHART_REF_CELLS = 500
 
 
 def _parse_reference(formula: Any) -> Optional[Tuple[str, int, int, int, int]]:
@@ -443,6 +447,14 @@ def _resolve_reference(workbook: Any, formula: Any) -> List[Any]:
         worksheet = workbook[sheet_name]
     except (KeyError, TypeError):
         return []
+    # 用户可控引用可能是整列/整行（$A$1:$A$1048576）——先按行优先裁剪到
+    # MAX_CHART_REF_CELLS 个单元格，再交给 iter_rows 物化。
+    col_count = max_col - min_col + 1
+    if col_count > MAX_CHART_REF_CELLS:
+        max_col = min_col + MAX_CHART_REF_CELLS - 1
+        max_row = min_row
+    elif col_count > 0 and (max_row - min_row + 1) * col_count > MAX_CHART_REF_CELLS:
+        max_row = min_row + max(1, MAX_CHART_REF_CELLS // col_count) - 1
     values: List[Any] = []
     try:
         # data_only=True 工作簿 → 取缓存计算值；公式文本引用可能返回 None。
@@ -483,6 +495,10 @@ def _chart_ref_values(workbook: Any, ref: Any, *, numeric: bool) -> List[Any]:
     points = getattr(ref, "pt", None)
     if points is None:
         cache = getattr(ref, "numCache" if numeric else "strCache", None)
+        if cache is None:
+            # 纯缓存的数值类别常落在 numCache（如 `[1, 2, 3]` 轴），对
+            # numeric=False 也回退检查一次，避免类别整列为空。
+            cache = getattr(ref, "strCache" if numeric else "numCache", None)
         points = getattr(cache, "pt", None) if cache is not None else None
     if not points:
         return []

@@ -114,3 +114,70 @@ def test_read_ppt_oversized_image_keeps_metadata_without_pixels(
 
     assert len(images) == 1
     assert "data_url" not in images[0]
+
+
+def test_read_ppt_total_budget_exhaustion_counts_omitted(
+    tmp_path: Path, monkeypatch
+) -> None:
+    deck = _make_deck(tmp_path / "deck.pptx", pictures=2)
+    monkeypatch.setattr(
+        "backend.office.ppt.PPT_IMAGE_TOTAL_RAW_BUDGET", len(_png_bytes())
+    )
+
+    result = read_ppt(deck, include_images=True, embed_image_data=True)
+    slide = result.slides[0]
+
+    # 第一张恰好用尽总预算，第二张只能计入 omitted —— 预算跨页/跨图共享。
+    assert len(slide.images) == 1
+    assert slide.images[0]["data_url"].startswith("data:image/png;base64,")
+    assert slide.images_omitted == 1
+
+
+def test_read_ppt_inspection_cap_counts_remaining_pictures(
+    tmp_path: Path, monkeypatch
+) -> None:
+    deck = _make_deck(tmp_path / "deck.pptx", pictures=3)
+    monkeypatch.setattr("backend.office.ppt.PPT_IMAGE_MAX_INSPECTIONS", 1)
+
+    result = read_ppt(deck, include_images=True)
+    slide = result.slides[0]
+
+    assert len(slide.images) == 1
+    assert slide.images_omitted == 2
+
+
+def test_extract_slide_images_skips_linked_pictures() -> None:
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+    from backend.office.ppt import _extract_slide_images
+
+    class _Image:
+        content_type = "image/png"
+        size = (10, 10)
+        blob = b"1234"
+
+    class _Shape:
+        name = "Pic"
+
+        def __init__(self, image) -> None:
+            self.shape_type = MSO_SHAPE_TYPE.PICTURE
+            self._image = image
+
+        @property
+        def image(self):
+            if self._image is None:
+                # 链接图没有内嵌 part —— python-pptx 访问 image 会抛错。
+                raise AttributeError("linked picture")
+            return self._image
+
+    class _Slide:
+        shapes = [_Shape(None), _Shape(_Image())]
+
+    budget = {"remaining": 10**6, "inspected": 0}
+    images, omitted = _extract_slide_images(
+        _Slide(), max_images=3, embed_image_data=False, budget=budget
+    )
+
+    # 链接图内容不在文件里，不算「被裁掉」；内嵌图正常返回。
+    assert len(images) == 1
+    assert omitted == 0

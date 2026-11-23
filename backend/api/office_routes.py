@@ -317,11 +317,9 @@ def read_ppt_endpoint(req: OfficePptReadRequest) -> OfficePptReadResult:
         f"img:{int(req.include_images)}:"
         f"{req.max_images_per_slide}:{int(req.embed_image_data)}"
     )
-    result = read_cache.get_or_read(
-        "ppt",
-        file_path,
-        f"{canonical_workspace}|{req.original_filename or ''}|{image_options}",
-        lambda: read_ppt(
+
+    def _load_ppt() -> OfficePptReadResult:
+        return read_ppt(
             file_path=file_path,
             workspace_path=canonical_workspace,
             generated_filename=file_path.name,
@@ -329,8 +327,19 @@ def read_ppt_endpoint(req: OfficePptReadRequest) -> OfficePptReadResult:
             include_images=req.include_images,
             max_images_per_slide=req.max_images_per_slide,
             embed_image_data=req.embed_image_data,
-        ),
-    )
+        )
+
+    if req.embed_image_data:
+        # M6d: 带像素的结果可达 ~20MB base64，进 8 项 LRU 再加命中深拷贝
+        # 会把常驻内存放大到上百 MB。embed 请求直接解析、不过缓存。
+        result = _load_ppt()
+    else:
+        result = read_cache.get_or_read(
+            "ppt",
+            file_path,
+            f"{canonical_workspace}|{req.original_filename or ''}|{image_options}",
+            _load_ppt,
+        )
     _persist_read_summary(
         result,
         file_path=file_path,

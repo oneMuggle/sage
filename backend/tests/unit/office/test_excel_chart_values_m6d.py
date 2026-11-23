@@ -103,3 +103,45 @@ def test_excel_chart_unresolvable_reference_yields_empty_values(tmp_path: Path) 
 
     assert chart_payload["series_items"][0]["values"] == []
     assert chart_payload["type"] == "BarChart"
+
+
+def test_chart_reference_range_is_capped_before_materializing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from openpyxl import Workbook
+
+    from backend.office.excel import MAX_CHART_REF_CELLS, _resolve_reference
+
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Data"
+    calls: dict = {}
+    real_iter_rows = worksheet.iter_rows
+
+    def _spy(**kwargs):
+        calls.update(kwargs)
+        return real_iter_rows(**kwargs)
+
+    monkeypatch.setattr(worksheet, "iter_rows", _spy)
+
+    # 用户可控引用可以是整列（1048576 行）——必须在物化前裁剪。
+    values = _resolve_reference(workbook, "'Data'!$A$1:$A$1048576")
+
+    assert len(values) <= MAX_CHART_REF_CELLS
+    assert calls["max_row"] <= MAX_CHART_REF_CELLS
+
+
+def test_chart_ref_values_falls_back_to_num_cache_for_categories() -> None:
+    from backend.office.excel import _chart_ref_values
+
+    class _Point:
+        v = 7
+
+    class _Cache:
+        pt = [_Point(), _Point()]
+
+    class _Ref:
+        numCache = _Cache()  # noqa: N815 — 镜像 openpyxl 的 XML 属性名
+
+    # 纯缓存的数值类别存于 numCache；numeric=False 也不应整列为空。
+    assert _chart_ref_values(None, _Ref(), numeric=False) == [7, 7]
