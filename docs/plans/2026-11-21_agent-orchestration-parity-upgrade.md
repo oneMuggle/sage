@@ -1,7 +1,7 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
 > 状态：M0–M4.1 已实施（M4.1 工具耗时 + transcript 全文引用 本分支），M4.2/M4.3 待实施
-> 分支：M4.1 `feat/orch-tool-duration`
+> 分支：M4.1 `feat/orch-tool-duration`（main）/ `feat/orch-tool-duration-win7`（win7 同步）
 > 分支：M3.3 `feat/orch-plan-estimates`
 > 分支：M3.2 `feat/orch-failed-replan`
 > 分支：M3.1 `feat/orch-subagent-types`
