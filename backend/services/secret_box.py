@@ -452,3 +452,57 @@ def unwrap_search_config_json(raw: str | None) -> str | None:
                 )
                 data[field] = ""
     return json.dumps(data, ensure_ascii=False)
+
+
+#: MinerU 服务配置里需要静态加密的字段：(JSON 字段名, 加密账户名)
+_MINERU_SERVICE_KEY_FIELDS: List[Tuple[str, str]] = [("apiKey", "mineru:api_key")]
+
+
+def wrap_mineru_service_json(raw: str | None) -> str | None:
+    """字符串层包装(preferences "mineru_service" 写侧): apiKey 就地加密。"""
+    if raw is None:
+        return raw
+    try:
+        import json
+
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+    if not isinstance(data, dict):
+        return raw
+    for field, account in _MINERU_SERVICE_KEY_FIELDS:
+        value = data.get(field)
+        if isinstance(value, str) and value and not is_wrapped(value):
+            try:
+                data[field] = encrypt_secret(value, account)
+            except Exception:
+                logger.warning(
+                    "SecretBox: encrypt failed for mineru_service.%s (kept plaintext)", field
+                )
+    return json.dumps(data, ensure_ascii=False)
+
+
+def unwrap_mineru_service_json(raw: str | None) -> str | None:
+    """与 :func:`wrap_mineru_service_json` 对称；单字段解密失败置空。"""
+    if raw is None:
+        return raw
+    try:
+        import json
+
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+    if not isinstance(data, dict):
+        return raw
+    for field, _account in _MINERU_SERVICE_KEY_FIELDS:
+        value = data.get(field)
+        if isinstance(value, str) and is_wrapped(value):
+            try:
+                data[field] = decrypt_secret(value)
+            except Exception:
+                logger.warning(
+                    "SecretBox: decrypt failed for mineru_service.%s (treated as unconfigured)",
+                    field,
+                )
+                data[field] = ""
+    return json.dumps(data, ensure_ascii=False)

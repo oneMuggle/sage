@@ -87,6 +87,9 @@ class SettingsRepository:
             # 本地 OCR：引擎/语言/聊天兜底偏好（JSON blob）
             # 读取口径见 backend/services/ocr/config.load_ocr_config
             "ocr_config",
+            # MinerU 文档解析服务配置（JSON blob，apiKey 字段静态加密）
+            # 读取口径见 backend/services/document_parse/config.load_mineru_settings
+            "mineru_service",
             # Context Isolation (Task 6): turn limit + topic detection keys
             # - context_turn_limit: int, applied by Task 7 turn-limit logic
             # - auto_topic_detection: "true"/"false", enables auto detection in Task 10
@@ -162,6 +165,11 @@ class SettingsRepository:
             from backend.services.secret_box import unwrap_search_config_json
 
             value = unwrap_search_config_json(value)
+        # MinerU 文档解析: mineru_service.apiKey 字段级静态解密(同法)
+        if key == "mineru_service" and value is not None:
+            from backend.services.secret_box import unwrap_mineru_service_json
+
+            value = unwrap_mineru_service_json(value)
         return value
 
     def get_json(self, key: str) -> Any | None:
@@ -193,6 +201,11 @@ class SettingsRepository:
             from backend.services.secret_box import wrap_search_config_json
 
             value = wrap_search_config_json(value)
+        # MinerU 文档解析: mineru_service.apiKey 写侧自动包裹(幂等, 已 enc: 跳过)
+        if key == "mineru_service" and value is not None:
+            from backend.services.secret_box import wrap_mineru_service_json
+
+            value = wrap_mineru_service_json(value)
         now = int(time.time() * 1000)
         conn = self._conn()
         existing = conn.execute("SELECT key FROM preferences WHERE key = ?", (key,)).fetchone()
