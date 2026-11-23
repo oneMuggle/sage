@@ -331,6 +331,19 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     riskLevel: 'low',
     constraints: { type: 'boolean' },
   },
+  'orch.allowDeepDecomposition': {
+    key: 'orch.allowDeepDecomposition',
+    label: '允许深层拆分',
+    description: '复杂任务可拆出子任务层级（parent_task_id）',
+    scope: 'global',
+    storage: 'app_settings',
+    storageKey: 'orch.allowDeepDecomposition',
+    defaultValue: false,
+    applyMode: 'next-run',
+    visibility: 'advanced',
+    riskLevel: 'low',
+    constraints: { type: 'boolean' },
+  },
   'orch.maxConcurrentSubagents': {
     ...orchNumber(
       'orch.maxConcurrentSubagents',

@@ -1,6 +1,7 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0–M3.2 已实施（M3.2 失败驱动 re-plan 本分支），M3.3 与 M4 待实施
+> 状态：M0–M3.3 已实施（M3.3 计划卡预估 + 拆深开关 本分支），M4 待实施
+> 分支：M3.3 `feat/orch-plan-estimates`
 > 分支：M3.2 `feat/orch-failed-replan`
 > 分支：M3.1 `feat/orch-subagent-types`
 > 分支：M2.5 `feat/orch-pause-resume`
@@ -112,6 +113,8 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 1. **落地 `subagent_type`**：`agent` 工具按角色注册表（DB profiles + `.sage/agents/*.md`）选择子代理角色；schema 提供可用角色列表与 description（LLM 据此选择）；内置 Explore（只读）/Plan（规划）/general-purpose（全工具受策略约束）三类默认角色。
 2. **失败驱动重规划**：task 失败/连续重试失败时，conductor 携带失败上下文调用 planner 重排剩余任务（复用 `replan_tool` 的 `add/update/cancel_pending_task`），而不是仅 retry。
 3. **拆分预检强化**：计划卡展示每任务预估轮次/成本与拆分理由；复杂任务识别 subtask 拆深（depth>1）作为可选开关。
+   - M3.3 已交付：Planner prompt 要求 LLM 为每个任务给出 `estimated_iterations`（整数 1–15，越界/非整型由 `sanitize_llm_plan_tasks` 丢弃）与 `complexity`（low/medium/high）；计划卡逐任务渲染复杂度徽章与「≈N 轮」徽章，卡片标题汇总「预估 ≈N 轮」（只累加提供了预估的任务）；新增设置 `orch.allowDeepDecomposition`（默认关闭），控制 planner 是否允许输出 `parent_task_id` 深层拆分。
+   - **成本估算刻意延后**：单任务成本取决于执行期实际选用的模型定价与 token 消耗，计划期不可知，强行估算会给出误导性数字；留待 M4.3「编排通知 + 成本透明」在执行期核算后回填。
 4. （P3）**确定性 Workflow 模板**：把文献流水线、设计管线等高频链路固化为 `template:<id>` DAG（复用现有模板机制），失败重入点明确。
 
 验收：同一请求下 `agent` 工具能按角色选择到不同工具集的子代理；构造一个必然失败的任务验证自动 re-plan 生成的替代任务；模板 DAG 在 App 内可端到端跑通并有进度视图。
@@ -141,7 +144,7 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 - [x] M2.5 task pause/resume + run resume 端点
 - [x] M3.1 `subagent_type` 角色注册表落地
 - [x] M3.2 失败驱动 re-plan
-- [ ] M3.3 计划卡成本预估 + 拆深开关
+- [x] M3.3 计划卡成本预估 + 拆深开关（预估轮次/复杂度已落地；成本估算延至 M4.3）
 - [ ] M4.1 工具耗时 + transcript 全文引用
 - [ ] M4.2 统一运行视图
 - [ ] M4.3 编排通知 + 成本透明
@@ -232,3 +235,22 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 **设计偏差说明（M1.3）**：计划原写"按展示契约转发生成事件"，实现改为**落盘全量 + 前端按档位渲染**——后端无需知道用户档位（档位是前端设置），实时性由 2s 轮询保障，避免在事件白名单/EventHub 中新增高噪声事件类型。后续如需逐字实时，可在此模型上加轻量 `task.transcript.appended` 事件。
 
 验证：后端新测试 15 + 调度器/编排回归 152 全绿；前端 transcript/任务详情/进度 102 用例全绿；`tsc --noEmit`、ESLint、架构棘轮（database 2767 / chat_dispatcher 2432）、silent-exceptions 均通过。
+
+## 10. M3.3 实施记录（2026-11-23）
+
+| 改动 | 文件 |
+|---|---|
+| Planner 提示词新增 `estimated_iterations`（整数 1–15）与 `complexity`（low/medium/high）契约；`sanitize_llm_plan_tasks` 对越界/非整型值静默丢弃（提示词与校验共用 `MAX_ESTIMATED_ITERATIONS` 常量，避免两侧漂移） | `backend/orchestration/planner.py` |
+| 深层拆分开关：默认关闭（提示词要求平铺、禁用 `parent_task_id`），开启后允许 Planner 输出子任务层级；设置读取失败按关闭处理 | `backend/orchestration/planner.py`、`backend/orchestration/orch_settings.py` |
+| 计划条目透传预估字段（`plan_override` 与 decompose 两条路径） | `backend/api/legacy_routes.py` |
+| 设置链路打通：`allow_deep_decomposition` ↔ `allowDeepDecomposition` 别名 + 编排段白名单（白名单缺项会让编排段任一保存 400 `invalid_settings_shape`，前端静默吞错） | `backend/data/settings_canonicalizer.py` |
+| 计划卡：逐任务复杂度徽章（高/中/低，配色走主题 token）+「≈N 轮」徽章；卡片标题汇总「预估 ≈N 轮」（只累加提供了预估的任务，缺省时不渲染任何徽章） | `src/components/PlanCard.tsx`、`src/shared/api/types/chatAndEventTypes.ts` |
+| 设置页：编排 tab 新增「允许深层拆分」开关，同步注册表 / 设置搜索 / 审计导出 | `src/pages/settings/OrchestrationTab.tsx`、`src/entities/setting/settingsRegistry.ts`、`src/entities/setting/types.ts`、`src/pages/settings/settingsSearchEntries.ts`、`src/pages/settings/settingsAuditExports.ts` |
+| 中英文案 | `src/shared/lib/i18n/locales/zh/settingsUi.ts`、`src/shared/lib/i18n/locales/en/settingsUi.ts` |
+| 测试 | `backend/tests/unit/orchestration/test_planner_estimates.py`（9）、`backend/tests/contract/test_settings_schema_parity.py`、`src/widgets/chat/__tests__/PlanCard.test.tsx`（+3）、`src/pages/settings/__tests__/OrchestrationTab.test.tsx`（+4） |
+
+**成本估算刻意延后到 M4.3**：单任务成本取决于执行期实际选用的模型定价与 token 消耗，计划期不可知，强行给出货币数字会误导用户。M3.3 只给「预估轮次 + 复杂度档位」这两个计划期可知的相对量；真实成本待 M4.3 在执行期核算 `usage_events` 后回填。
+
+**已知边界**：另一条「计划文本 → 任务」通道（`backend/api/orch_routes.py` 的 `_PLAN_ITEMS_PROMPT` / `_PLAN_REVISION_PROMPT`）未接入预估字段，该路径产出的计划不显示预估徽章 —— 该文件 797 行、距 800 行架构棘轮上限仅 3 行，本 PR 不动它。
+
+验证：`tsc --noEmit` 通过；ESLint 0 error（123 warning 为既有）；后端契约 + 预估专项 154 用例全绿；前端 PlanCard + OrchestrationTab 61 用例全绿；`ruff check`（改动文件）、`lint-imports`（六边形契约）、架构棘轮、体积门禁（最大 chunk 2246KB / 预算 2304KB）均通过。

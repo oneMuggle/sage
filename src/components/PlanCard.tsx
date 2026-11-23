@@ -56,6 +56,21 @@ interface PlanCardProps {
   onConfirmed?: (confirmedAt: number) => void;
 }
 
+/**
+ * M3.3: 复杂度档位 → 徽章文案 / 配色。
+ *
+ * 配色走主题 token（error / warning / success），随暗色模式联动；
+ * 不用 Tailwind 原生调色板（不随主题走）。
+ */
+const COMPLEXITY_BADGE: Record<
+  NonNullable<TaskPlanItem['complexity']>,
+  { label: string; className: string }
+> = {
+  high: { label: '高', className: 'text-error' },
+  medium: { label: '中', className: 'text-warning' },
+  low: { label: '低', className: 'text-success' },
+};
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function formatPlanCardMarkdown(
   runId: string,
@@ -199,6 +214,16 @@ export function PlanCard({
 
   /* v8 ignore stop */
 
+  // M3.3: 预估汇总 —— 只有提供预估的任务计入（避免伪造）。
+  const estimatedCount = items.filter(
+    (it) => typeof it.estimated_iterations === 'number',
+  ).length;
+  const totalEstimate = items.reduce(
+    (sum, it) =>
+      sum + (typeof it.estimated_iterations === 'number' ? it.estimated_iterations : 0),
+    0,
+  );
+
   // 编排计划卡片 UX (2026-10-26): 乐观折叠 —— 点"开始执行"成功即收起成
   // 一行摘要，把会话区底部还给任务板/进度条；用户仍可展开回看（派发后
   // 后端 409 锁编辑，展开态为纯只读）。
@@ -223,7 +248,10 @@ export function PlanCard({
   return (
     <div className="border rounded p-3 bg-bg-hover" data-testid="plan-card">
       <div className="flex justify-between mb-2">
-        <h3 className="text-sm font-semibold">编排计划（{items.length} 项）</h3>
+        <h3 className="text-sm font-semibold">
+          编排计划（{items.length} 项
+          {estimatedCount > 0 ? ` · 预估 ≈${totalEstimate} 轮` : ''}）
+        </h3>
         <div className="flex gap-2">
           <button
             disabled={effectiveLocked || revising}
@@ -272,6 +300,25 @@ export function PlanCard({
           data-testid={`plan-row-${item.task_id}`}
         >
           <span className="px-1 rounded bg-primary/10 text-primary">{item.agent_id}</span>
+          {/* M3.3: 复杂度 + 预估轮次徽章。 */}
+          {item.complexity && COMPLEXITY_BADGE[item.complexity] && (
+            <span
+              title={`复杂度：${COMPLEXITY_BADGE[item.complexity].label}`}
+              data-testid={`plan-complexity-${item.task_id}`}
+              className={`text-ui-2xs shrink-0 ${COMPLEXITY_BADGE[item.complexity].className}`}
+            >
+              {COMPLEXITY_BADGE[item.complexity].label}
+            </span>
+          )}
+          {item.estimated_iterations != null && (
+            <span
+              data-testid={`plan-estimate-${item.task_id}`}
+              title="预估 LLM 迭代轮次"
+              className="text-ui-2xs text-text-muted shrink-0 tabular-nums"
+            >
+              ≈{item.estimated_iterations} 轮
+            </span>
+          )}
           <textarea
             value={item.goal}
             disabled={effectiveLocked}

@@ -340,6 +340,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'orch 编排 侦察 事实 计划前置 planscoutenabled',
   },
   {
+    key: 'orch.allowDeepDecomposition',
+    tab: 'orchestration',
+    label: '允许深层拆分',
+    labelEn: 'Allow deep decomposition',
+    keywords: 'orch 编排 拆分 层级 子任务 parent allowdeepdecomposition',
+  },
+  {
     key: 'orch.maxIterations',
     tab: 'orchestration',
     label: 'Agent 迭代次数上限',

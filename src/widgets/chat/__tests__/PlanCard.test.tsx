@@ -370,3 +370,39 @@ describe('PlanCard 编排 UX (2026-10-26)', () => {
     );
   });
 });
+
+// ===== M3.3: 计划卡预估徽章（预估轮次 + 复杂度档位） =====
+describe('PlanCard M3.3 预估徽章', () => {
+  it('展示单任务预估轮次与复杂度档位', () => {
+    const plan: TaskPlanItem[] = [
+      {
+        task_id: 't1',
+        agent_id: 'researcher',
+        goal: 'G',
+        estimated_iterations: 4,
+        complexity: 'high',
+      },
+    ];
+    render(<PlanCard runId="r1" plan={plan} locked={false} onCancel={() => {}} />);
+    expect(screen.getByTestId('plan-estimate-t1')).toHaveTextContent('≈4 轮');
+    expect(screen.getByTestId('plan-complexity-t1')).toHaveTextContent('高');
+  });
+
+  it('无预估字段时不渲染徽章，标题也不显示汇总', () => {
+    const plan: TaskPlanItem[] = [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }];
+    render(<PlanCard runId="r1" plan={plan} locked={false} onCancel={() => {}} />);
+    expect(screen.queryByTestId('plan-estimate-t1')).toBeNull();
+    expect(screen.queryByTestId('plan-complexity-t1')).toBeNull();
+    expect(screen.getByTestId('plan-card')).not.toHaveTextContent('预估');
+  });
+
+  it('标题汇总只累加提供了预估的任务', () => {
+    const plan: TaskPlanItem[] = [
+      { task_id: 't1', agent_id: 'researcher', goal: 'G', estimated_iterations: 3 },
+      { task_id: 't2', agent_id: 'writer', goal: 'G2', estimated_iterations: 5 },
+      { task_id: 't3', agent_id: 'writer', goal: 'G3' },
+    ];
+    render(<PlanCard runId="r1" plan={plan} locked={false} onCancel={() => {}} />);
+    expect(screen.getByTestId('plan-card')).toHaveTextContent('预估 ≈8 轮');
+  });
+});

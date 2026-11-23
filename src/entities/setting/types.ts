@@ -172,6 +172,8 @@ export interface OrchSettings {
   planPreflightEnabled: boolean; // true
   // Round 1: 侦察先行单独开关（澄清不受它控制；总闸关闭时两者皆停）。
   planScoutEnabled: boolean; // true
+  // M3.3: 允许 Planner 为复杂任务拆出子任务层级（parent_task_id）。
+  allowDeepDecomposition: boolean; // false
   // 2026-10-27: 侦察子代理 ReAct 迭代预算（立即生效，透传 run_loop）。
   // 与后端 ``OrchSettings.max_scout_iterations`` camelCase 对齐；默认 4
   // 与 plan_preflight.SCOUT_MAX_ITERATIONS 一致。
@@ -332,6 +334,7 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   budgetMaxExtensions: 3,
   planPreflightEnabled: true,
   planScoutEnabled: true,
+  allowDeepDecomposition: false,
   maxScoutIterations: 4, // 2026-10-27: 侦察 ReAct 预算（立即生效）
   maxPlannerIterations: 8, // 2026-10-27: Planner ReAct 预算（预配置）
   // 2026-10-28: ask_user_question 工具的可配置限制
