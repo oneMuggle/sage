@@ -1,0 +1,173 @@
+/* ==========================================================================
+   Editorial Design System — CSS Custom Properties
+   ==========================================================================
+   An editorial magazine design system with serif headings, generous whitespace,
+   and refined typography. Inspired by Monocle and FT magazine aesthetics.
+
+   Token prefix: --ds-editorial-
+   ========================================================================== */
+
+:root {
+  /* ========================================================================
+     COLORS — Warm Paper Palette
+     ======================================================================== */
+
+  /* Backgrounds — warm paper tones */
+  --ds-editorial-color-bg: #faf8f5;
+  --ds-editorial-color-bg-subtle: #f3f0eb;
+  --ds-editorial-color-bg-muted: #ebe6de;
+  --ds-editorial-color-bg-inverse: #1a1a1a;
+  --ds-editorial-color-bg-overlay: rgba(26, 26, 26, 0.6);
+
+  /* Foregrounds — ink tones */
+  --ds-editorial-color-fg: #1a1a1a;
+  --ds-editorial-color-fg-muted: #6b6560;
+  --ds-editorial-color-fg-subtle: #9a948c;
+  --ds-editorial-color-fg-inverse: #faf8f5;
+
+  /* Primary accent — burnt sienna */
+  --ds-editorial-color-primary: #a0522d;
+  --ds-editorial-color-primary-hover: #8b4526;
+  --ds-editorial-color-primary-muted: #c4896b;
+  --ds-editorial-color-primary-subtle: #f0e4db;
+
+  /* Semantic colors — muted, editorially appropriate */
+  --ds-editorial-color-success: #5a7a5a;
+  --ds-editorial-color-success-subtle: #e8f0e8;
+  --ds-editorial-color-warning: #b8860b;
+  --ds-editorial-color-warning-subtle: #f5f0e0;
+  --ds-editorial-color-error: #8b3a3a;
+  --ds-editorial-color-error-subtle: #f0e4e4;
+  --ds-editorial-color-info: #4a6b8a;
+  --ds-editorial-color-info-subtle: #e4ecf4;
+
+  /* Borders — hairline rules */
+  --ds-editorial-color-border: #d4cfc7;
+  --ds-editorial-color-border-subtle: #e5e0d8;
+  --ds-editorial-color-border-strong: #1a1a1a;
+
+  /* ========================================================================
+     TYPOGRAPHY — Serif Display + Sans Body
+     ======================================================================== */
+
+  /* Font stacks */
+  --ds-editorial-font-display: 'Playfair Display', 'Noto Serif SC',
+    'Source Han Serif SC', 'Source Han Serif', Georgia, 'Times New Roman', serif;
+  --ds-editorial-font-body: 'Inter', 'Noto Sans SC', 'Source Han Sans SC',
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ds-editorial-font-mono: 'JetBrains Mono', 'Source Code Pro', 'Fira Code',
+    Consolas, 'Courier New', monospace;
+
+  /* Font sizes — 8-level scale */
+  --ds-editorial-typography-display-xl: 4rem; /* 64px — hero headlines */
+  --ds-editorial-typography-display-lg: 3rem; /* 48px — feature headlines */
+  --ds-editorial-typography-display-md: 2.5rem; /* 40px — section titles */
+  --ds-editorial-typography-display-sm: 2rem; /* 32px — article titles */
+  --ds-editorial-typography-heading: 1.5rem; /* 24px — subheadings */
+  --ds-editorial-typography-body-lg: 1.125rem; /* 18px — lead paragraphs */
+  --ds-editorial-typography-body: 1rem; /* 16px — body text */
+  --ds-editorial-typography-caption: 0.875rem; /* 14px — captions */
+  --ds-editorial-typography-footnote: 0.75rem; /* 12px — footnotes */
+
+  /* Line heights */
+  --ds-editorial-typography-leading-tight: 1.1;
+  --ds-editorial-typography-leading-snug: 1.25;
+  --ds-editorial-typography-leading-normal: 1.5;
+  --ds-editorial-typography-leading-relaxed: 1.7;
+
+  /* Letter spacing */
+  --ds-editorial-typography-tracking-tighter: -0.02em;
+  --ds-editorial-typography-tracking-tight: -0.01em;
+  --ds-editorial-typography-tracking-normal: 0;
+  --ds-editorial-typography-tracking-loose: 0.01em;
+  --ds-editorial-typography-tracking-looser: 0.08em; /* small-caps */
+
+  /* Font weights */
+  --ds-editorial-typography-weight-regular: 400;
+  --ds-editorial-typography-weight-medium: 500;
+  --ds-editorial-typography-weight-semibold: 600;
+  --ds-editorial-typography-weight-bold: 700;
+
+  /* ========================================================================
+     SPACING — 8px Grid with Generous Section Gaps
+     ======================================================================== */
+
+  --ds-editorial-space-1: 0.25rem; /* 4px — micro adjustments */
+  --ds-editorial-space-2: 0.5rem; /* 8px — inline gaps */
+  --ds-editorial-space-3: 0.75rem; /* 12px — component padding */
+  --ds-editorial-space-4: 1rem; /* 16px — standard padding */
+  --ds-editorial-space-5: 1.5rem; /* 24px — card padding */
+  --ds-editorial-space-6: 2rem; /* 32px — between components */
+  --ds-editorial-space-7: 3rem; /* 48px — between groups */
+  --ds-editorial-space-8: 4rem; /* 64px — between sections */
+  --ds-editorial-space-9: 5rem; /* 80px — major section gaps */
+  --ds-editorial-space-10: 7.5rem; /* 120px — narrative acts */
+
+  /* ========================================================================
+     BORDERS — Hairline Rules
+     ======================================================================== */
+
+  /* Border widths */
+  --ds-editorial-border-width-hairline: 1px;
+  --ds-editorial-border-width-rule: 1px;
+  --ds-editorial-border-width-accent: 2px;
+  --ds-editorial-border-width-thick: 3px;
+
+  /* Border styles */
+  --ds-editorial-border-hairline: 1px solid var(--ds-editorial-color-border);
+  --ds-editorial-border-rule: 1px solid var(--ds-editorial-color-fg);
+  --ds-editorial-border-accent: 2px solid var(--ds-editorial-color-primary);
+  --ds-editorial-border-thick: 3px solid var(--ds-editorial-color-fg);
+
+  /* Border radius — always 0 (no rounded corners) */
+  --ds-editorial-radius-none: 0;
+  --ds-editorial-radius-default: 0;
+  --ds-editorial-radius-lg: 0;
+
+  /* ========================================================================
+     SHADOWS — NONE (editorial uses borders for depth)
+     ======================================================================== */
+
+  --ds-editorial-shadow-none: none;
+
+  /* ========================================================================
+     TRANSITIONS — Subtle 200ms
+     ======================================================================== */
+
+  --ds-editorial-transition-fast: 150ms ease;
+  --ds-editorial-transition-base: 200ms ease;
+  --ds-editorial-transition-slow: 400ms ease;
+
+  /* ========================================================================
+     LAYOUT — Content Widths
+     ======================================================================== */
+
+  --ds-editorial-layout-article: 800px; /* optimal reading measure */
+  --ds-editorial-layout-magazine: 1200px; /* multi-column grids */
+  --ds-editorial-layout-narrow: 480px; /* sidebars, captions */
+  --ds-editorial-layout-gutter: 1.5rem; /* 24px grid gutters */
+
+  /* Responsive breakpoints */
+  --ds-editorial-breakpoint-sm: 640px;
+  --ds-editorial-breakpoint-md: 768px;
+  --ds-editorial-breakpoint-lg: 1024px;
+  --ds-editorial-breakpoint-xl: 1280px;
+  --ds-editorial-breakpoint-2xl: 1536px;
+
+  /* ========================================================================
+     Z-INDEX — Minimal (editorial is flat)
+     ======================================================================== */
+
+  --ds-editorial-z-base: 0;
+  --ds-editorial-z-dropdown: 10;
+  --ds-editorial-z-sticky: 20;
+  --ds-editorial-z-overlay: 30;
+  --ds-editorial-z-modal: 40;
+
+  /* ========================================================================
+     FOCUS STATES — Accessible, editorially appropriate
+     ======================================================================== */
+
+  --ds-editorial-focus-ring: 2px solid var(--ds-editorial-color-primary);
+  --ds-editorial-focus-offset: 2px;
+}
