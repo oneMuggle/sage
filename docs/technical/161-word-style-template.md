@@ -145,4 +145,4 @@ OfficeWordGenerateRequest: … + format_spec_preset / template_docx_path
 2. **前端 UI**：自由创建页的「版式」下拉、模板库的样式模板分区、已有文档「套用模板」入口；交付抽屉的 Lint 使用所选模板。
 3. **LLM 工具注册**：`office_apply_word_style`（WRITE_LOCAL）与 `office_style_from_rulepack`（READ）尚未注册，golden 快照待同步。
 4. **工作区级样式模板持久化**：复用 `spec_library` 的绑定模型，把「规则包 → 样式画像」结果存成可复用模板。
-5. **release/win7 同步**：本特性尚未 cherry-pick 到 `release/win7`（py38 兼容门禁已通过，冲突点在 `architecture-baseline.json` 与本文档编号）。
+5. **release/win7 同步**：已同步（PR #3240，2026-11-23）；win7 侧技术文档编号为 164。
