@@ -17,6 +17,7 @@ from backend.services.permission_gate import (
     ApprovalRequest,
     get_permission_gate,
     init_permission_gate,
+    redact_sensitive_args,
     reset_permission_gate,
     summarize_tool_args,
 )
@@ -381,3 +382,55 @@ def test_summarize_tool_args_survives_cyclic_structures():
     # Assert
     assert isinstance(summary, str)
     assert "x" in summary
+
+
+def test_redact_sensitive_args_redacts_without_truncating():
+    """结构保留式脱敏：秘密值替成 ***，其余类型与全文保持不变。"""
+    # Arrange
+    args = {
+        "api_key": "sk-secret-123",
+        "query": "sage",
+        "limit": 5,
+        "flags": [True, {"auth_token": "tok-9", "name": "x"}],
+    }
+
+    # Act
+    safe = redact_sensitive_args(args)
+
+    # Assert
+    assert safe["api_key"] == "***"
+    assert safe["query"] == "sage"
+    assert safe["limit"] == 5  # 非字符串叶子保类型
+    assert safe["flags"][0] is True
+    assert safe["flags"][1]["auth_token"] == "***"
+    assert safe["flags"][1]["name"] == "x"
+    assert "sk-secret-123" not in str(safe)
+    assert "tok-9" not in str(safe)
+
+
+def test_redact_sensitive_args_preserves_long_values():
+    """与 summarize_tool_args 不同：落盘场景不截断长值。"""
+    # Arrange
+    long_text = "a" * (ARG_VALUE_MAX_CHARS * 2)
+
+    # Act
+    safe = redact_sensitive_args({"content": long_text})
+
+    # Assert
+    assert safe["content"] == long_text
+
+
+def test_redact_sensitive_args_handles_non_dict_and_cycles():
+    """非 dict 输入原样返回；自引用结构被深度封顶切断。"""
+    # Arrange
+    cycle: dict = {"name": "x"}
+    cycle["self"] = cycle
+
+    # Act
+    safe_cycle = redact_sensitive_args(cycle)
+    safe_str = redact_sensitive_args("plain")
+
+    # Assert
+    assert safe_str == "plain"
+    assert safe_cycle["name"] == "x"
+    assert "超过嵌套深度上限" in str(safe_cycle)
