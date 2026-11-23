@@ -1,4 +1,4 @@
-# 160 — Word 样式模板（样式画像 / 预设 / 参考文档 / 规则包转换 / 已有文档套用）
+# 161 — Word 样式模板（样式画像 / 预设 / 参考文档 / 规则包转换 / 已有文档套用）
 
 > 状态：已实现（2026-11-23，分支 `feat/word-style-template`）
 > 相关代码：`backend/office/word_style_presets.py`、`word_style_profile.py`、`word_style_apply.py`、`word_layout.py`、`word_lint.py`、`backend/api/office_word_style_routes.py`

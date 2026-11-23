@@ -40,7 +40,7 @@
 | `backend/api/office_routes.py` | 挂载新子路由 |
 | `backend/office/tool_service.py` | `_coerce_word_request` 透传 `format_spec_preset`/`template_docx_path`/`font_family`/`ascii_font` |
 | `backend/tools/office_create_tool.py` | content schema 暴露 `format_spec_preset`/`template_docx_path` |
-| `docs/technical/160-word-style-template.md`（新建） + `docs/technical/README.md` | 技术文档归档 |
+| `docs/technical/161-word-style-template.md`（新建） + `docs/technical/README.md` | 技术文档归档 |
 
 测试文件：
 
@@ -254,7 +254,7 @@ class WordStyleProfileConversion(BaseModel):
 
 ### Task 7：工具/受管路径契约 + 技术文档
 
-**Files:** `tool_service.py`、`office_create_tool.py`、`docs/technical/160-word-style-template.md`、`docs/technical/README.md`
+**Files:** `tool_service.py`、`office_create_tool.py`、`docs/technical/161-word-style-template.md`、`docs/technical/README.md`
 **Test:** `backend/tests/unit/tools/test_office_create_tool.py`（既有文件扩展）
 
 - [x] 写失败测试：`_coerce_word_request` 透传 preset/参考文档/全局字体；`OfficeCreateTool` content 携带 `format_spec_preset` 时产物样式生效。
