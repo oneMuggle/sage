@@ -42,7 +42,7 @@ def set_current_task_id(task_id: Optional[str]) -> None:
 current_run_id: ContextVar = ContextVar("current_run_id", default=None)
 
 
-def set_current_run_id(run_id: str | None) -> None:
+def set_current_run_id(run_id: Optional[str]) -> None:
     """设置 / 清除当前编排 run 归因 ID（dispatcher 在子任务启停时调用）。"""
     current_run_id.set(run_id)
 
