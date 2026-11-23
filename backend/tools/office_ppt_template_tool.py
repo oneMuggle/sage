@@ -38,12 +38,12 @@ from backend.tools.base import BaseTool, ToolResult, ToolSchema
 from backend.tools.context import ToolExecutionContext, current_tool_context
 from backend.tools.file_tool import _record_artifact_safely
 from backend.tools.office_template_tool import (
-    _bounded,
     _office_error_result,
     _resolve_bound_document,
     _strip_workspace_path,
     _workspace_for_input,
 )
+from backend.tools.office_tool_common import bounded_output
 
 
 def _resolve_ppt_template_input(  # noqa: PLR0911 — 错误早退路径多，保持线性可读
@@ -156,7 +156,7 @@ class OfficeAnalyzePptTemplateTool(BaseTool):
         if doc is not None:
             data["file_path"] = doc.generated_filename
         return ToolResult(
-            success=True, content=_bounded(data, self._policy.max_output_bytes)
+            success=True, content=bounded_output(data, self._policy.max_output_bytes)
         )
 
 

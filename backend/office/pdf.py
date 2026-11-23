@@ -64,6 +64,18 @@ MAX_PDF_SIZE = 50 * 1024 * 1024  # 50 MiB
 MAX_PDF_PAGES = 10_000
 MAX_PDF_OUTPUT_SIZE = 200 * 1024 * 1024  # 200 MiB
 
+# ── M6c: 内嵌图片提取（预检 + 有界预览）────────────────────────────
+# 图片相关的常量与实现全部在 ``pdf_images`` 模块 —— 那里才是「不可信
+# PDF」的边界所在（过滤器白名单、解码预算、alpha 合成）。
+from .pdf_images import (  # noqa: E402 — 放在常量区，保持阅读顺序
+    MAX_EMBEDDED_IMAGE_BYTES,
+    MAX_IMAGES_PER_PAGE,
+    MAX_TOTAL_EMBEDDED_IMAGE_BYTES,
+    ImageExtractionState,
+    extract_page_images,
+    list_page_images,
+)
+
 #: Round 2 R2a: per-page cap on extracted table cells. Pathological PDFs
 #: (huge ruled grids, or dense line art misread as tables) are truncated
 #: here instead of ballooning the read result; the truncation is logged.
@@ -213,11 +225,33 @@ def read_pdf(
     *,
     workspace_path: str,
     document_id: Optional[str] = None,
+    include_images: bool = False,
+    max_images_per_page: int = 3,
+    embed_image_data: bool = False,
+    max_image_bytes: int = MAX_EMBEDDED_IMAGE_BYTES,
+    max_total_image_bytes: int = MAX_TOTAL_EMBEDDED_IMAGE_BYTES,
 ) -> PdfReadResult:
     """Read a PDF file and extract text, tables, images, and metadata.
 
     Round 2 R2a: ``tables`` per page now comes from PyMuPDF ``find_tables``
     (text-layer ruled tables); scanned/image-only PDFs still report no tables.
+
+    M6c: ``include_images`` 时按页提取内嵌图的**有界预览**。预算与上限在
+    本函数内部强制执行（不依赖调用方自觉）：
+
+    - ``include_images=False`` 时**完全不枚举**图片 —— 病理 PDF 的
+      ``get_images()`` 单页可达 0.1s，而这条路径会被聊天附件 / LaTeX /
+      Zotero / remote MCP 全部命中；
+    - ``max_images_per_page`` 被 clamp 到 ``0..MAX_IMAGES_PER_PAGE``；
+    - 单图在**解码前**按过滤器白名单 + 像素/字节预检（解压炸弹在这一步
+      被挡住）；
+    - 全文档的 base64 总量不超过 ``max_total_image_bytes``。
+
+    ``embed_image_data=False`` 时只返回图片元数据，不带 ``data_url``。
+
+    ``image_count`` 只在 ``include_images=True`` 时统计（没枚举就没有
+    总数可言）；``images_omitted`` 是本页检测到但**未返回**的图片数
+    （超出每页上限 / 预检拒绝 / 预算放不下）。
     """
     file_path = Path(file_path)
 
@@ -232,6 +266,13 @@ def read_pdf(
 
     _validate_pdf_file(file_path)
 
+    # Clamp the per-page image count — callers are untrusted.
+    try:
+        per_page_limit = int(max_images_per_page)
+    except (TypeError, ValueError):
+        per_page_limit = 0
+    per_page_limit = max(0, min(per_page_limit, MAX_IMAGES_PER_PAGE))
+
     # Re-open for content extraction (preflight closed its own handle).
     from backend.core.lazy import load_module
 
@@ -243,6 +284,8 @@ def read_pdf(
         raise OfficePdfParseError("Failed to open PDF", file_path=file_path) from exc
 
     pages: List[PdfPageContent] = []
+    # 跨页共享的图片提取状态（输出预算 + xref 缓存 + 跳过集合 + 计数）。
+    image_state = ImageExtractionState(max(0, int(max_total_image_bytes)))
     try:
         for page_num in range(len(doc)):
             page = doc[page_num]
@@ -256,12 +299,28 @@ def read_pdf(
             if ocr_text is not None:
                 text = ocr_text
                 ocr_used = True
+            image_count = 0
+            page_images: List[Dict[str, Any]] = []
+            if include_images:
+                image_infos = list_page_images(pymupdf, page, image_state)
+                image_count = len(image_infos)
+                page_images = extract_page_images(
+                    pymupdf,
+                    doc,
+                    image_infos,
+                    per_page_limit,
+                    image_state,
+                    embed_image_data=embed_image_data,
+                    max_image_bytes=max(0, int(max_image_bytes)),
+                )
             pages.append(
                 PdfPageContent(
                     page_number=page_num + 1,
                     text=text,
                     tables=_extract_page_tables(page, page_number=page_num + 1),
-                    images=[],
+                    images=page_images,
+                    image_count=image_count,
+                    images_omitted=max(0, image_count - len(page_images)),
                     ocr=ocr_used,
                 )
             )
