@@ -1855,7 +1855,7 @@ git commit -m "feat(document-parse): 解析结果 SQLite 缓存"
 - Produces: `CircuitBreaker(threshold=3, cooldown_seconds=60.0, clock=time.monotonic)`：`closed()`、`record_success()`、`record_failure()`。
 - Produces: `DocumentParseService(*, local, mineru_factory, cache, settings_loader, breaker=None)`：`async parse(ParseRequest) -> ParseResult`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_document_parse_service.py
@@ -2004,12 +2004,12 @@ def test_cache_short_circuits_repeat_parse() -> None:
     assert local.calls == 1
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_document_parse_service.py -q`
 Expected: ImportError
 
-- [ ] **Step 3: 写实现**
+- [x] **Step 3: 写实现**
 
 `backend/adapters/out/document_parse/mineru_engine.py`：
 
@@ -2304,12 +2304,12 @@ class DocumentParseService:
         return result
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_document_parse_service.py -q`
 Expected: 8 passed
 
-- [ ] **Step 5: ruff + commit**
+- [x] **Step 5: ruff + commit**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m ruff check backend/application/document_parse.py backend/adapters/out/document_parse/mineru_engine.py backend/tests/unit/test_document_parse_service.py
