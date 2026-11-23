@@ -315,8 +315,9 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 - [x] `office_create` 的 pdf 枚举：明确拒绝并引导 `office_generate_pdf`（消除分派漂移）
 - [x] 工具面一致性：`office_delete` / `workspace_search` 覆盖 pdf/csv；Wiki 队列 PDF 路径
 - [x] `POST /office/extract`（统一提取）与 `POST /office/compare`（Word/Excel/PPT/PDF/CSV diff + Markdown 报告）
-- [ ] 工作台对比入口（前端；后端已就绪）
-- [ ] 聊天附件 docx/xlsx/pptx 富预览；Excel 图表 / PPT 图片在结构化预览中渲染；`@` Office chip 点击预览
+- [x] 工作台对比入口（前端；后端已就绪）—— 文档库「对比」按钮 + `OfficeCompareDialog`（左右各选一份 → 行级 diff 汇总 + Markdown 报告）
+- [x] 聊天附件 docx/xlsx/pptx 富预览（附件链路复用 `WordPreview`/`ExcelPreview`/`PptPreview`）；Excel 图表 / 条件格式 / 数据验证、PPT 版式 / 占位符 / 图表在结构化预览中渲染；`@` Office chip 点击右栏预览（跨工作区 chip 不劫持点击）
+- [ ] PPT 图片在结构化预览中渲染（后端尚未提取 PPT 内嵌图片像素）
 - [ ] Word 模板 Profile/填充前端入口
 - [ ] Excel/PPT 基础规则审校（范围/锚点/只读），AI 语义审校视成本评估
 
@@ -359,13 +360,26 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 测试：unit 29（过滤器白名单/伪造尺寸回归/零枚举/预算/clamp/metadata-only/归一化）
 >   + 端点 5 + 工具面 6；PDF 相关 95 passed；ruff / py38 兼容门禁 / architecture 棘轮绿
 
+> **实施记录（2026-11-23，M6b 前端批次：对比入口 / 读侧 extras 渲染 / chip 点击预览）**
+> - 前端契约：`src/shared/api/types/officeCompareTypes.ts` + `src/shared/api/officeCompareApi.ts`（`POST /api/v1/office/compare`）
+> - 对比入口：`src/features/office/OfficeCompareDialog.tsx` + `src/pages/Office.tsx` 文档库「对比」按钮；
+>   路径统一走 `officeDocumentRelativePath()`（`office/<doc_type>/<id>/<filename>`），与右栏预览一致
+> - 读侧 extras 渲染：`OfficeStructuredPreviews.tsx` 补 PPT 版式/占位符/图表 + Excel 图表/条件格式/数据验证；
+>   `src/shared/api/types.ts` 补对应 wire 类型
+> - `@` Office chip：`src/widgets/chat/OfficeRefChip.tsx` message 变体点击 → 右栏 `openFilePreview()`；
+>   发送时工作区 ≠ 当前工作区时不劫持点击（右键菜单仍可用）
+> - i18n：zh/en 各 +20 key；feature barrel 审计符号 17 → 18
+> - 测试：新增 2 个测试文件 + 扩展 2 个；前端 100 文件 / 547 用例绿；tsc / eslint / prettier / architecture 棘轮绿
+> - 双分支：main PR #3232 + win7 PR #3233（cherry-pick 同步，无 Python 依赖变更）
+> - 限制：PPT 内嵌图片像素后端未提取 → 本批不渲染 PPT 图片缩略图
+
 ### M7 — 前端一致性与漂移清理（P1，对应 G11/G12）
 
 - [ ] 生成结果内联预览（复用 `DocumentCanvas`），结果卡不再只给「在文档页打开」
 - [ ] `TemplateLibrary` 接回缩略图（现逻辑在未挂载的 `OfficeGenerateSubforms`），PPT 模板选版式走同一缩略图
 - [ ] 清理孤儿 `OfficeGenerateForm`；修正技术 §123 / 用户手册 §30 的过时描述（`GenerateWorkspace` + `OfficeIntake`）
 - [ ] Design Studio Office 融合前端入口（Word→大纲 / 图表嵌入 / Live Artifact，原 M7 未做项）
-- [ ] 前端测试：生成内联预览、缩略图、附件预览、chip 点击
+- [ ] 前端测试：生成内联预览、缩略图（附件预览、chip 点击已由 M6b 前端批次覆盖）
 
 ### M8 — 大文件、并发与可选沙箱（P2，对应 G7/G15）
 
@@ -425,9 +439,9 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 [^kimi-capability]: Kimi 帮助中心，《Kimi 能做什么？》（100MB/50 个文件、K3 1M token）. https://www.kimi.ai/zh-hans/help/others/capability
 [^kimi-docs]: Kimi 帮助中心，《Kimi 文档与 Kimi 表格概览》（可编辑 docx/xlsx/pptx/pdf、批注与修订）. https://www.kimi.ai/zh-hans/help/docs-and-sheets/docs-and-sheets-overview
 
-## 10. 实施进度总览（2026-11-21）
+## 10. 实施进度总览（2026-11-23）
 
-> 分支：`feat/office-document-ai-upgrade`（worktree `.worktrees/feat-office-document-ai-upgrade`，未 push）。
+> 分支：main（PR #3232）+ release/win7（PR #3233，cherry-pick 同步）。
 
 | 里程碑 | 状态 | 提交 | 验证 |
 |---|---|---|---|
@@ -445,7 +459,8 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 | M5 OOXML + Skills | ✅ | 本轮提交 | OOXML 单测 10 + 端点 3 + 工具 6；全量 2243 passed |
 | M6b 解析适配器 + 对比 + 工具面 | ✅ 后端 | 本轮提交 | unit 10 + 端点 3 + 工具面 44；全量 2274 passed |
 | M6c PDF 图片读取 + 真 flatten | ✅ | 本轮提交 | 80 PDF 相关测试（安全返工后）；architecture 棘轮绿 |
-| M7 前端接入 | ⏳ | — | 未开始 |
+| M6b 前端批次（对比入口 / 读侧 extras / chip 预览） | ✅ 前端 | `45adac67c` | main PR #3232 + win7 PR #3233；前端 100 文件 / 547 用例 |
+| M7 前端接入 | ⏳ | — | 未开始（M6b 前端批次已先行落 A/B/C/D 四项） |
 | M8 大文件/并发/沙箱 | ⏳ | — | 未开始 |
 
 **环境说明**：本机无 LibreOffice / Word COM，渲染与重算通过注入导出器与降级路径测试；真实转换需在带转换器的机器上做验收。
