@@ -123,6 +123,48 @@ export function PptPreview({ data }: { data: OfficePptReadResult }) {
               ))}
             </ul>
           )}
+          {slide.layout && (
+            <div className="text-xs text-muted mt-1">
+              {t('office.preview.layout')}: <span className="font-mono">{slide.layout}</span>
+            </div>
+          )}
+          {slide.placeholders && slide.placeholders.length > 0 && (
+            <div className="mt-2" data-testid="office-ppt-placeholders">
+              <div className="text-xs text-muted mb-1">
+                {t('office.preview.placeholders')} ({slide.placeholders.length})
+              </div>
+              <ul className="text-xs text-text-secondary space-y-0.5">
+                {slide.placeholders.map((ph) => (
+                  <li key={ph.idx} className="truncate">
+                    <span className="font-mono text-muted">#{ph.idx}</span> {ph.name || ph.type}
+                    {ph.text ? ` · ${ph.text}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {slide.charts && slide.charts.length > 0 && (
+            <div className="mt-2" data-testid="office-ppt-charts">
+              <div className="text-xs text-muted mb-1">
+                {t('office.preview.charts')} ({slide.charts.length})
+              </div>
+              <ul className="text-xs text-text-secondary space-y-0.5">
+                {slide.charts.map((chart, i) => {
+                  const seriesNames = chart.series
+                    .map((s) => s.name)
+                    .filter((name) => name.trim() !== '')
+                    .join(', ');
+                  return (
+                    <li key={i}>
+                      <span className="font-medium">{chart.type}</span>
+                      {seriesNames && ` · ${seriesNames}`}
+                      {chart.truncated && ' …'}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
           {(slide.table_count > 0 || slide.image_count > 0) && (
             <div className="text-xs text-muted mt-2">
               {slide.table_count > 0 && `${slide.table_count} ${t('office.preview.tableCount')} `}
@@ -479,6 +521,66 @@ function ExcelSheetTable({ sheet }: { sheet: OfficeExcelSheetContent }) {
           {sheet.note && (
             <p className="text-xs text-muted italic mt-1">{t('office.preview.formulasNote')}</p>
           )}
+        </div>
+      )}
+      {sheet.charts && sheet.charts.length > 0 && (
+        <div
+          className="border border-border rounded bg-bg-subtle/60 p-2"
+          data-testid="office-excel-charts"
+        >
+          <div className="text-xs text-muted mb-1">
+            {t('office.preview.charts')} ({sheet.charts.length})
+          </div>
+          <ul className="space-y-0.5 text-xs text-text-secondary">
+            {sheet.charts.map((chart, i) => (
+              <li key={i}>
+                <span className="font-medium">{chart.type}</span>
+                {chart.title ? ` · ${chart.title}` : ''}
+                {` · series: ${chart.series}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {sheet.conditional_formats && sheet.conditional_formats.length > 0 && (
+        <div
+          className="border border-border rounded bg-bg-subtle/60 p-2"
+          data-testid="office-excel-conditional-formats"
+        >
+          <div className="text-xs text-muted mb-1">
+            {t('office.preview.conditionalFormats')} ({sheet.conditional_formats.length})
+          </div>
+          <ul className="space-y-0.5 text-xs text-text-secondary">
+            {sheet.conditional_formats.map((entry, i) => (
+              <li key={i}>
+                <span className="font-mono">{entry.range}</span>
+                {entry.rules.length > 0 &&
+                  ` · ${entry.rules
+                    .map((rule) => rule.type ?? rule.operator ?? rule.formula ?? 'custom')
+                    .join(', ')}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {sheet.data_validations && sheet.data_validations.length > 0 && (
+        <div
+          className="border border-border rounded bg-bg-subtle/60 p-2"
+          data-testid="office-excel-data-validations"
+        >
+          <div className="text-xs text-muted mb-1">
+            {t('office.preview.dataValidations')} ({sheet.data_validations.length})
+          </div>
+          <ul className="space-y-0.5 text-xs text-text-secondary">
+            {sheet.data_validations.map((entry, i) => (
+              <li key={i}>
+                <span className="font-mono">{entry.sqref}</span>
+                {entry.type && ` · ${entry.type}`}
+                {entry.operator && ` ${entry.operator}`}
+                {entry.formula1 && ` ${entry.formula1}`}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

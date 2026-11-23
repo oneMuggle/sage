@@ -36,6 +36,7 @@ import { useOfficeWorkspaceStore } from '../entities/office/officeWorkspaceStore
 import { JournalPanel } from '../features/journal';
 import {
   GenerateWorkspace,
+  OfficeCompareDialog,
   OfficeDocumentList,
   OfficeDuplicateDialog,
   OfficeEditPreviewDialog,
@@ -180,6 +181,10 @@ export function Office() {
 
   // Item 2.5: 编辑预览 dialog
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+
+  // M6b: 跨文档对比 dialog（仅未归档文档可参与）
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const comparableDocuments = documents.filter((doc) => doc.archived_at == null);
   // 导入进行中：文档库工具栏的上传按钮据此禁用，避免重复打开文件选择器。
   const [importing, setImporting] = useState(false);
   const editDoc = preview ? preview.data.summary : null;
@@ -423,6 +428,15 @@ export function Office() {
           {t('office.section.library')} ({documents.length})
         </h2>
         <div className="ml-auto flex gap-2">
+          <button
+            type="button"
+            onClick={() => setIsCompareOpen(true)}
+            disabled={!workspacePath || comparableDocuments.length < 2}
+            data-testid="office-compare-open"
+            className="px-3 py-1.5 rounded text-sm border border-border text-text-secondary hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {t('office.compare.button')}
+          </button>
           {(
             [
               ['live', t('office.view.live')],
@@ -639,6 +653,13 @@ export function Office() {
       )}
 
       <OfficeDuplicateDialog pending={pendingDuplicate} onChoose={resolvePendingDuplicate} />
+
+      <OfficeCompareDialog
+        isOpen={isCompareOpen}
+        onClose={() => setIsCompareOpen(false)}
+        workspacePath={workspacePath}
+        documents={comparableDocuments}
+      />
 
       <WorkspaceBindModal
         isOpen={isBindModalOpen}

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { OfficeRefChip } from '../OfficeRefChip';
 
@@ -135,5 +136,45 @@ describe('OfficeRefChip — context menu', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: '打开' }));
 
     expect(mocks.openOfficeDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe('OfficeRefChip — right-panel preview', () => {
+  beforeEach(() => {
+    useRightPanelStore.setState({
+      open: false,
+      selectedFilePath: null,
+      selectedArtifactId: null,
+    });
+  });
+
+  function renderMessageChip(
+    chipData: { docId: string; docType: 'word'; filename: string; workspacePath?: string } = chip,
+  ) {
+    setOfficeApi(true);
+    return render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeRefChip chip={chipData} variant="message" />
+      </I18nProvider>,
+    );
+  }
+
+  it('previews the document in the right panel for the current workspace', () => {
+    renderMessageChip();
+
+    fireEvent.click(screen.getByTestId('message-office-ref'));
+
+    expect(useRightPanelStore.getState().open).toBe(true);
+    expect(useRightPanelStore.getState().selectedFilePath).toBe('office/word/doc-1/方案.docx');
+  });
+
+  it('keeps chips recorded in another workspace inert', () => {
+    renderMessageChip({ ...chip, workspacePath: '/old/ws' });
+
+    const element = screen.getByTestId('message-office-ref');
+    expect(element).not.toHaveAttribute('role', 'button');
+    fireEvent.click(element);
+
+    expect(useRightPanelStore.getState().selectedFilePath).toBeNull();
   });
 });
