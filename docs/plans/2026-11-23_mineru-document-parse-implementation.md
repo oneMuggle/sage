@@ -1653,7 +1653,7 @@ git commit -m "refactor(document-parse): 提取器下沉 services + 质量信号
 **Interfaces:**
 - Produces: `SqliteParseCache(db=None)`，`get(content_hash, engine) -> Optional[ParseResult]`、`put(content_hash, engine, result) -> None`；任何异常都吞掉并记日志（缓存不得阻断解析）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_document_parse_cache.py
@@ -1700,12 +1700,12 @@ def test_broken_db_never_raises() -> None:
     assert cache.get("h", "local") is None
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_document_parse_cache.py -q`
 Expected: ImportError
 
-- [ ] **Step 3: 写实现**
+- [x] **Step 3: 写实现**
 
 `backend/data/database.py`：在 `init_db` 的 schema 构建处（现有 `cursor.execute("""CREATE TABLE IF NOT EXISTS ...""")` 序列末尾）追加：
 
@@ -1823,7 +1823,7 @@ class SqliteParseCache:
             logger.warning("写入解析缓存失败", exc_info=True)
 ```
 
-- [ ] **Step 4: 跑测试 + 棘轮 + 回填 baseline**
+- [x] **Step 4: 跑测试 + 棘轮 + 回填 baseline**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_document_parse_cache.py -q
@@ -1832,7 +1832,7 @@ node scripts/architecture-check.mjs
 
 若报 `backend/data/database.py` 超 baseline：把 `architecture-baseline.json` 中该文件值改为报错提示的实际行数，重跑至通过。
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add backend/data/database.py backend/services/document_parse/cache.py backend/tests/unit/test_document_parse_cache.py architecture-baseline.json
