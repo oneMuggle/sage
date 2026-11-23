@@ -52,7 +52,7 @@ backend/tools/parse_document_tool.py                    parse_document 工具
 backend/api/mineru_routes.py                            GET /api/v1/mineru/status
 src/shared/api/mineruApi.ts                             前端状态 API
 src/pages/settings/MineruServiceCard.tsx                设置卡片
-docs/technical/160-mineru-document-parse.md             技术文档
+docs/technical/162-mineru-document-parse.md             技术文档
 ```
 
 ---
@@ -3512,13 +3512,13 @@ git commit -m "feat(document-parse): MinerU 设置卡片与状态 API"
 ### Task 11: 技术文档 + 全量门禁 + spec 状态回写
 
 **Files:**
-- Create: `docs/technical/160-mineru-document-parse.md`
+- Create: `docs/technical/162-mineru-document-parse.md`
 - Modify: `docs/technical/README.md`（目录表追加 160）
 - Modify: `docs/plans/2026-11-23_mineru-document-parse-subsystem.md`（勾选已完成的 M1–M7）
 
 - [ ] **Step 1: 写技术文档**
 
-`docs/technical/160-mineru-document-parse.md` 必含章节：
+`docs/technical/162-mineru-document-parse.md` 必含章节：
 
 1. 架构分层图（domain/application/adapters/services 职责与依赖方向）
 2. `ParseEngine` 契约与 `DocumentParseService` 路由表（hint/扩展名/质量阈值/熔断/大小上限）
@@ -3535,7 +3535,7 @@ git commit -m "feat(document-parse): MinerU 设置卡片与状态 API"
 `docs/technical/README.md` 目录表追加：
 
 ```markdown
-| 160 | [MinerU 文档解析](./160-mineru-document-parse.md) | 可插拔解析引擎 / async API 客户端 / 质量路由 / 缓存 / 双阶段附件 |
+| 162 | [MinerU 文档解析](./162-mineru-document-parse.md) | 可插拔解析引擎 / async API 客户端 / 质量路由 / 缓存 / 双阶段附件 |
 ```
 
 - [ ] **Step 2: 全量后端门禁**
@@ -3560,7 +3560,7 @@ npx vitest run src/pages/settings/__tests__
 在 spec §5 的 M1–M7 条目上标记 `[x]`，然后：
 
 ```bash
-git add docs/technical/160-mineru-document-parse.md docs/technical/README.md docs/plans/2026-11-23_mineru-document-parse-subsystem.md
+git add docs/technical/162-mineru-document-parse.md docs/technical/README.md docs/plans/2026-11-23_mineru-document-parse-subsystem.md
 git commit -m "docs(document-parse): 技术文档与轨道 A 状态回写"
 ```
 

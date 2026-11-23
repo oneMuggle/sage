@@ -108,7 +108,7 @@ Sage 现有的文档抽取能力只有两层：
 | `scripts/mineru-offline-bundle/verify.sh`（改） | 第 6 项改探真需鉴权端点 |
 | `docs/technical/154-mineru-deployment.md`（改） | 校正 10 处漂移 |
 | `docs/technical/157-mineru-deployment.md`（win7 改） | 同上 |
-| `docs/technical/160-mineru-document-parse-subsystem.md`（新建） | 本设计的归档版（实现完成后并入技术手册） |
+| `docs/technical/162-mineru-document-parse.md`（新建） | 本设计的归档版（实现完成后并入技术手册） |
 
 ---
 
@@ -448,32 +448,32 @@ def unwrap_mineru_service_json(raw: str | None) -> str | None: ...
 
 ### 轨道 A：Sage 侧解析子系统
 
-- [ ] **M0 设计文档落地**（本文件）+ feature 分支创建
-- [ ] **M1 领域契约与 MinerU 客户端**
+- [x] **M0 设计文档落地**（本文件）+ feature 分支创建
+- [x] **M1 领域契约与 MinerU 客户端**
   - `backend/domain/document_parse.py`
   - `backend/adapters/out/document_parse/{mineru_models,mineru_errors,mineru_client}.py`
   - 单测：`httpx.MockTransport` 覆盖 4 步全链路、401、415、任务 failed、轮询超时+取消、`exclude_none` 字段缺失、非法文件名、baseUrl 带路径前缀、连接错误重试退避、创建任务不重试
   - 验收：`pytest backend/tests/unit/test_mineru_client.py` 全绿；py38 兼容检查通过
-- [ ] **M2 配置与密钥**
+- [x] **M2 配置与密钥**
   - `backend/services/document_parse/config.py`（`MineruConfig` + `load_mineru_config()`）
   - `backend/services/secret_box.py` 加 `wrap/unwrap_mineru_service_json`
   - `backend/data/settings_repo.py` KEYS 白名单 + 加解密接入
   - 单测：preferences 读取、env 覆盖优先级、加密往返、单字段解密失败置空、读取异常回退默认值、**apiKey 为空 ⇒ 匿名模式（不发 `Authorization` 头）**
-- [ ] **M3 LocalEngine + 质量评分 + DocumentParseService 路由**
+- [x] **M3 LocalEngine + 质量评分 + DocumentParseService 路由**
   - `backend/adapters/out/document_parse/{quality,local_engine}.py`
   - `backend/application/document_parse.py`
   - 单测：质量评分四信号扣分与阈值判定、auto 路由各分支、非 PDF 输入走本地、MinerU 不可达降级本地、显式 `engine=local` 绝不调 MinerU
-- [ ] **M4 缓存 + 后台队列**
+- [x] **M4 缓存 + 后台队列**
   - `backend/data/database.py` 建 `document_parse_cache` 表
   - `backend/services/document_parse/{cache,queue}.py`
   - 单测：同内容二次命中 / 不同内容不命中 / local 与 mineru 两条独立条目 / 队列同 hash 去重 / 失败产物不入缓存
-- [ ] **M5 工具注册**
+- [x] **M5 工具注册**
   - `backend/tools/parse_document_tool.py` + `__init__.py` `_LAZY_TOOL_EXPORTS` + `tool_bundles.py`
   - 单测：schema 生成、execute 各 engine 分支、metadata 字段完整
-- [ ] **M6 聊天附件双阶段接入**
+- [x] **M6 聊天附件双阶段接入**
   - `backend/api/chat_attachment_routes.py` PDF 分支改造
   - 单测：阶段 1 输出与改造前一致；阶段 2 在低质量时提交；阶段 2 失败不影响阶段 1；阶段 1 仍受 30s 约束
-- [ ] **M7 状态端点 + 设置 UI**
+- [x] **M7 状态端点 + 设置 UI**
   - `backend/api/mineru_routes.py` + `backend/main.py` 挂载
   - `src/shared/api/mineruApi.ts` + `src/pages/settings/MineruServiceCard.tsx` + `ModelsTab.tsx` 挂载
   - 单测（vitest）：卡片渲染、apiKey 掩码、apiKey 留空（匿名模式）可用、「测试连接」成功/失败态、`serverAuthMode="bearer"` 且无 key 时的红字提示
@@ -594,7 +594,7 @@ def unwrap_mineru_service_json(raw: str | None) -> str | None: ...
 | 依赖 | `backend/requirements.txt` | `backend/requirements-py38.txt`（**不互改**） |
 | 新增依赖 | 无（httpx 0.26.0 已有） | 无 |
 | 代码差异 | 基准 | py38 适配：`X \| Y` → `Optional[X]`/`Union[X, Y]`；不用 `asyncio.to_thread`（用 `run_in_executor`）；不用泛型下标；`isinstance` tuple 形式（`# noqa: UP038`） |
-| 文档 | §154 → 校正 + 新增 §160 | §157 → 校正（不改 §160 编号，避免双分支编号冲突） |
+| 文档 | §154 → 校正 + 新增 §162 | §157 → 校正 + 新增 §162（沿用 main 编号，避免双分支编号冲突） |
 | 同步方式 | — | **cherry-pick**（严禁 merge；严禁删分支） |
 
 **顺序**：main 全绿并合并 → cherry-pick 到 win7 → py38 适配 → win7 CI 绿。
