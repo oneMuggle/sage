@@ -115,7 +115,8 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
     try:
         db.init_db()  # v1-v18 自动注册（runner.py 模块级）
         versions = applied_versions(db.get_connection())
-        # v1 基线 + v2-v19 迁移（v18 归一化历史秒级时间戳；v19 浏览器动作审计）
+        # v1 基线 + v2-v20 迁移（v18 归一化历史秒级时间戳；v19 浏览器动作审计；
+        # v20 usage_events.run_id 归因回填）
         assert versions == {
             1,
             2,
@@ -136,6 +137,7 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
             17,
             18,
             19,
+            20,
         }
         # schema_version 表已建（账本就绪）
     finally:
@@ -317,5 +319,102 @@ def test_v19_browser_actions_table_and_index() -> None:
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
         }
         assert "idx_browser_action_session" in indexes
+    finally:
+        conn.close()
+
+
+def test_v20_backfills_usage_run_id() -> None:
+    """v20（M4.3b）：历史 usage_events.run_id 按 task_id + session + 时间窗
+    回填；窗口外/从未启动的任务不归因；未知定价不影响归因；幂等。"""
+    import sqlite3
+
+    from backend.data.migrations.runner import MIGRATIONS, _v20_usage_events_run_id
+
+    assert (20, "usage_events_run_id") in [(v, name) for v, name, _fn in MIGRATIONS]
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    try:
+        # 旧库形态：usage_events 无 run_id。
+        conn.execute(
+            "CREATE TABLE orch_runs (run_id TEXT PRIMARY KEY, session_id TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE orch_tasks (task_id TEXT PRIMARY KEY, run_id TEXT NOT NULL,"
+            " started_at INTEGER, finished_at INTEGER)"
+        )
+        conn.execute(
+            "CREATE TABLE usage_events (id TEXT PRIMARY KEY, session_id TEXT,"
+            " task_id TEXT, created_at INTEGER, estimated_cost_usd REAL)"
+        )
+        conn.executemany(
+            "INSERT INTO orch_runs (run_id, session_id) VALUES (?, ?)",
+            [("run-a", "sess-1"), ("run-b", "sess-1")],
+        )
+        conn.executemany(
+            "INSERT INTO orch_tasks (task_id, run_id, started_at, finished_at)"
+            " VALUES (?, ?, ?, ?)",
+            [
+                ("t1", "run-a", 1763900000000, 1763900060000),
+                ("t2", "run-b", 1763900100000, 1763900160000),
+                ("t3", "run-a", 1763900180000, 1763900220000),
+                # 从未启动的任务（started_at 为空）—— 不得吸收整条时间线。
+                ("t4", "run-a", None, None),
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO usage_events (id, session_id, task_id, created_at,"
+            " estimated_cost_usd) VALUES (?, ?, ?, ?, ?)",
+            [
+                # t1 窗口内、已定价 → run-a
+                ("e1", "sess-1", "t1", 1763900010000, 0.002),
+                # t1 的 task_id 但已出 t1 窗口 → 不可归因，保持 NULL
+                ("e2", "sess-1", "t1", 1763900120000, 0.003),
+                # t2 窗口内 → run-b
+                ("e3", "sess-1", "t2", 1763900110000, 0.004),
+                # 别的会话 → 不匹配任何 run
+                ("e4", "sess-2", "t1", 1763900020000, 0.005),
+                # t1 窗口内但定价未知 → run_id 仍回填（归因与定价无关）
+                ("e5", "sess-1", "t1", 1763900030000, None),
+                # t3 窗口内 → run-a
+                ("e6", "sess-1", "t3", 1763900190000, None),
+                # t4 从未启动 → 不归因（时间窗无法界定）
+                ("e7", "sess-1", "t4", 1763900010000, 0.009),
+            ],
+        )
+        conn.commit()
+
+        _v20_usage_events_run_id(conn)
+
+        run_ids = {
+            row["id"]: row["run_id"]
+            for row in conn.execute("SELECT id, run_id FROM usage_events")
+        }
+        assert run_ids == {
+            "e1": "run-a",
+            "e2": None,
+            "e3": "run-b",
+            "e4": None,
+            "e5": "run-a",
+            "e6": "run-a",
+            "e7": None,
+        }
+
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(usage_events)")}
+        assert "run_id" in columns
+        indexes = {
+            row["name"]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
+        }
+        assert "idx_usage_events_run" in indexes
+
+        # 幂等重跑：已回填行不重复处理
+        _v20_usage_events_run_id(conn)
+        assert (
+            conn.execute("SELECT run_id FROM usage_events WHERE id = 'e2'").fetchone()[
+                "run_id"
+            ]
+            is None
+        )
     finally:
         conn.close()

@@ -19,6 +19,8 @@ export interface OrchRunDetail {
   plan: Array<Record<string, unknown>>;
   tasks: Array<Record<string, unknown>>;
   original_request?: string | null;
+  // M4.3b: run 级金额（USD 估算）—— 定价未知为 null（前端隐藏，不显示 $0）。
+  cost_usd?: number | null;
   // 2026-11-10: 确认/派发时间戳 —— 前端恢复锁定态的依据。
   confirmed_at?: number | null;
   dispatched_at?: number | null;

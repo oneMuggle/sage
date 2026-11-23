@@ -602,6 +602,9 @@ export interface TaskStatusEvent {
   // round24 起语义收敛为 per-task 归因（usage_events.task_id 过滤），
   // 且预算关闭也携带；queued/running 不带。任务树渲染消耗可见性。
   used_tokens?: number;
+  // M4.3b (2026-11-23): 终态任务已定价金额（USD 估算）—— usage_events
+  // 中该 task 的已知定价行合计；全未知定价不带键（未知 ≠ 免费）。
+  used_cost_usd?: number;
   // BU13 (round24): 终态任务执行时长（毫秒）—— started_at→finished_at；
   // 二者齐备才携带。任务树行内渲染耗时徽章。
   duration_ms?: number;

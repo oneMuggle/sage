@@ -46,7 +46,7 @@ from backend.orchestration.topology import (
     find_cycle,
 )
 from backend.orchestration.transcript import TaskTranscriptRecorder
-from backend.services.usage_tracker import set_current_task_id
+from backend.services.usage_tracker import set_current_run_id, set_current_task_id
 
 logger = logging.getLogger(__name__)
 
@@ -350,6 +350,8 @@ class ChatDispatcher:
         # BU17 (round31): 任务级消耗 memo —— _aggregate 块标题标注用；
         # 终态即定格，preset 回放（0 消耗）与查询失败（None）不缓存值。
         self._task_tokens: Dict[str, int] = {}
+        # M4.3b: 任务级金额 memo（与 _task_tokens 同模式；只缓存非 None）。
+        self._task_cost: Dict[str, float] = {}
         self._budget_limit = 0
         # BU7 (round18): 80% 预警一次性标志。
         self._budget_warned = False
@@ -1060,6 +1062,30 @@ class ChatDispatcher:
         self._task_tokens[task_id] = used
         return used
 
+    def _task_cost_usd(self, task_id: str) -> Optional[float]:
+        """M4.3b: 任务级累计金额（已知定价行合计，run 内 memoize）。
+
+        金额以 ``usage_events`` 为唯一真相源，按 (run_id, task_id) 聚合 ——
+        不落 ``orch_tasks``，因为该表主键 task_id 跨 run 复用会互相覆盖。
+
+        无已定价行 → None（渲染层隐藏金额，不把"未知"显示成 0）；
+        查询失败返 None 且不缓存（下次聚合重试）。调用方仅终态块查询
+        （终态金额定格，memo 安全）。
+        """
+        if task_id in self._task_cost:
+            return self._task_cost[task_id]
+        if not self.run_id:
+            return None
+        try:
+            from backend.data.usage_cost_repo import UsageCostRepository
+
+            cost = UsageCostRepository().task_cost_usd(self.run_id, task_id)
+        except Exception:  # noqa: BLE001 — 增强信息，失败跳过
+            return None
+        if cost is not None:
+            self._task_cost[task_id] = cost
+        return cost
+
     def background_snapshot(self) -> Dict[str, Any]:
         """BD3 (round13): 非阻塞快照 —— 各子任务当前状态与结果预览。
 
@@ -1405,9 +1431,6 @@ class ChatDispatcher:
                 state.status = "running"
                 state.started_at = time.time()
                 self._emit_task_status(state)
-                # RT23 (round23): 设置任务归因 ContextVar —— 子代理执行期间
-                # LLM 用量自动携带 task_id（ContextVar 随 asyncio 任务传播）。
-                set_current_task_id(state.task_id)
                 # 让其他子任务也有机会 emit running,保证 queued/running/done 三阶段序
                 await asyncio.sleep(0)
                 # RV1 (round8): 已完成任务回放 —— 计划条目带 preset_output
@@ -1427,6 +1450,13 @@ class ChatDispatcher:
                     state.finished_at = time.time()
                     self._emit_task_status(state)
                     return
+                # RT23 (round23) / M4.3b: 设置任务 + run 归因 ContextVar ——
+                # 子代理执行期间 LLM 用量自动携带 task_id/run_id（ContextVar
+                # 随 asyncio 任务传播）。必须位于 preset 回放早退之后：回放
+                # 不产生 LLM 调用，且早退路径不经 finally 清理（设置在早退
+                # 之前会泄漏归因到下一个任务）。
+                set_current_task_id(state.task_id)
+                set_current_run_id(self.run_id)
                 # O2 (2026-09-08): wall-clock 超时 —— wait_for 取消内层协程
                 # （子 run_loop 的 async for 在取消点收口，同 agent_tool 异步
                 # 通路的 L12 根修语义）。0 = 关闭。超时任务置 failed（error
@@ -1479,8 +1509,9 @@ class ChatDispatcher:
                     self._check_run_budget()
                     # BU11 (round21): 墙钟守门 —— run 整体时长超限同款收口。
                     self._check_run_wall_clock()
-                    # RT23 (round23): 清除任务归因 ContextVar。
+                    # RT23 (round23) / M4.3b: 清除任务/run 归因 ContextVar。
                     set_current_task_id(None)
+                    set_current_run_id(None)
 
         # P1 拓扑调度 (spec 2026-08-21): 依 depends_on 分波执行。
         # - 波内 asyncio.gather 全并行（信号量限流不变）
@@ -2025,6 +2056,10 @@ class ChatDispatcher:
                 )
             except Exception:  # noqa: BLE001 — 增强字段，失败不带键
                 logger.debug("task_usage_since lookup skipped", exc_info=True)
+            # M4.3b: 任务级金额（仅已知定价行；无已定价行不带键）。
+            _used_cost = self._task_cost_usd(state.task_id)
+            if _used_cost is not None:
+                event["used_cost_usd"] = _used_cost
             # BU13 (round24): 执行时长（秒级时间戳差 ×1000）；两脚齐备才带键。
             if state.started_at and state.finished_at:
                 event["duration_ms"] = int(
