@@ -1,6 +1,8 @@
 import { Copy, ExternalLink, FolderOpen, X } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { officeDocumentRelativePath } from '../../features/office/officeDocumentPath';
+import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { copyToClipboard } from '../../shared/lib/clipboard';
 import { fillTemplate } from '../../shared/lib/formatTemplate';
 import { useI18n } from '../../shared/lib/i18n';
@@ -119,17 +121,49 @@ export function OfficeRefChip({
   };
 
   const isComposer = variant === 'composer';
+  // 右栏预览解析的是「当前会话工作区」下的相对路径；历史消息记录的
+  // 发送时工作区与当前不一致时点击没有意义 —— 仅开放给右键菜单。
+  const effectiveWorkspace = chip.workspacePath ?? workspacePath;
+  const canPreviewInPanel =
+    !isComposer && workspacePath != null && effectiveWorkspace === workspacePath;
+  const handlePreview = () => {
+    if (!canPreviewInPanel) return;
+    useRightPanelStore.getState().openFilePreview(
+      officeDocumentRelativePath({
+        doc_type: chip.docType,
+        id: chip.docId,
+        generated_filename: chip.filename,
+      }),
+    );
+  };
   return (
     <ContextMenu items={menuItems}>
       <span
         className={
           isComposer
             ? 'office-ref-chip inline-flex items-center gap-1 px-2 py-0.5 rounded-radius-sm bg-primary/10 text-primary text-xs'
-            : 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-ui-2xs border border-border bg-bg-subtle text-text-secondary'
+            : `inline-flex items-center gap-1 px-2 py-0.5 rounded text-ui-2xs border border-border bg-bg-subtle text-text-secondary${
+                canPreviewInPanel ? ' cursor-pointer hover:bg-bg-hover hover:text-text' : ''
+              }`
         }
         data-testid={testId ?? (isComposer ? 'office-ref-chip' : 'message-office-ref')}
         data-doc-id={chip.docId}
-        title={chip.filename}
+        role={canPreviewInPanel ? 'button' : undefined}
+        tabIndex={canPreviewInPanel ? 0 : undefined}
+        onClick={canPreviewInPanel ? handlePreview : undefined}
+        onKeyDown={
+          canPreviewInPanel
+            ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  handlePreview();
+                }
+              }
+            : undefined
+        }
+        title={
+          canPreviewInPanel ? `${chip.filename} — ${t('office.ref.clickToPreview')}` : chip.filename
+        }
       >
         <span aria-hidden="true">{kindEmoji(chip.docType)}</span>
         <span className={isComposer ? undefined : 'truncate max-w-48'}>{chip.filename}</span>

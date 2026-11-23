@@ -4,6 +4,7 @@ export * from './types/templateAndTaskTypes';
 export * from './types/officeGenerateTypes';
 export * from './types/officeRulesTypes';
 export * from './types/officePdfTypes';
+export * from './types/officeCompareTypes';
 
 export type OfficeDocType = 'ppt' | 'word' | 'excel' | 'pdf';
 
@@ -55,6 +56,28 @@ export interface OfficePptSlideContent {
   table_count: number;
   image_count: number;
   notes: string | null;
+  /** M2: 版式名（读取失败时为 null）。 */
+  layout?: string | null;
+  /** M2: 占位符清单（后端 _extract_placeholders 输出）。 */
+  placeholders?: OfficePptPlaceholder[];
+  /** M2: 原生图表（类别/系列，后端每系列截断到 50 点）。 */
+  charts?: OfficePptChart[];
+}
+
+/** One PPT placeholder (backend backend/office/ppt.py _extract_placeholders). */
+export interface OfficePptPlaceholder {
+  idx: number;
+  type: string;
+  name: string;
+  text: string | null;
+}
+
+/** One PPT native chart (backend backend/office/ppt.py _extract_charts). */
+export interface OfficePptChart {
+  type: string;
+  categories: (string | null)[];
+  series: { name: string; values: unknown[] }[];
+  truncated: boolean;
 }
 
 export interface OfficePptReadResult {
@@ -137,6 +160,34 @@ export interface OfficeExcelSheetContent {
   formulas?: string[] | null;
   /** One-line hint shown when formulas lack cached values. */
   note?: string | null;
+  /** M4: 读侧图表清单（backend _extract_sheet_charts）。 */
+  charts?: OfficeExcelChart[];
+  /** M4: 条件格式规则组（backend _extract_conditional_formats）。 */
+  conditional_formats?: OfficeExcelConditionalFormat[];
+  /** M4: 数据验证（backend _extract_data_validations）。 */
+  data_validations?: OfficeExcelDataValidation[];
+}
+
+/** One native Excel chart on a sheet (type/series count/title only). */
+export interface OfficeExcelChart {
+  type: string;
+  series: number;
+  title: string | null;
+}
+
+/** One conditional-formatting range with its rules. */
+export interface OfficeExcelConditionalFormat {
+  range: string;
+  rules: { type: string | null; operator: string | null; formula: string | null }[];
+}
+
+/** One data-validation entry (dropdown / range checks). */
+export interface OfficeExcelDataValidation {
+  type: string | null;
+  operator: string | null;
+  formula1: string | null;
+  formula2: string | null;
+  sqref: string;
 }
 
 export interface OfficeExcelReadResult {
