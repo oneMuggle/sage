@@ -50,6 +50,7 @@ _RAW_KEYS = {
     "budgetMaxExtensions": "budget_max_extensions",
     "planPreflightEnabled": "plan_preflight_enabled",
     "planScoutEnabled": "plan_scout_enabled",
+    "allowDeepDecomposition": "allow_deep_decomposition",
     # 2026-10-27: 计划前置 / Planner 迭代预算（Scout 立即生效；Planner 为
     # 阶段 2.1 ReAct 接入后的预配置）。键名与前端 OrchSettings 逐字一致。
     "maxScoutIterations": "max_scout_iterations",
@@ -160,6 +161,9 @@ class OrchSettings:
     #: 计划前置 (2026-09-19): 侦察先行单独开关（澄清不受它控制；总闸关闭
     #: 时两者皆停）。侦察有独立墙钟 env ``SAGE_ORCH_SCOUT_TIMEOUT``。
     plan_scout_enabled: bool = True
+    #: M3.3: 允许 Planner 为复杂任务输出子任务层级（parent_task_id）。
+    #: 关闭（默认）时提示词要求平铺拆解。
+    allow_deep_decomposition: bool = False
     #: 2026-10-27: 侦察子代理的 ReAct 迭代预算。此前硬编码为
     #: ``plan_preflight.SCOUT_MAX_ITERATIONS``（4）；开放 UI 可调后由
     #: ``run_plan_preflight`` 透传给 ``_scout``。默认 4 保持既有行为。

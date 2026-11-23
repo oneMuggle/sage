@@ -490,3 +490,71 @@ describe('OrchestrationTab — 提问限制 (2026-10-28)', () => {
     });
   });
 });
+
+// ============================================================================
+// M3.3 (2026-11-23): 深层拆分开关（allowDeepDecomposition）
+// ============================================================================
+
+describe('OrchestrationTab — 深层拆分开关 (M3.3)', () => {
+  it('渲染开关且默认关闭', () => {
+    renderTab();
+    // Toggle 渲染为 <button role="switch" aria-checked>，不是 <input>。
+    const toggle = screen.getByTestId('orch-allow-deep-decomposition');
+    expect(toggle).toBeInTheDocument();
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('开启后走部分更新契约（保留其余 orch 键）', () => {
+    renderTab();
+    fireEvent.click(screen.getByTestId('orch-allow-deep-decomposition'));
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        allowDeepDecomposition: true,
+        maxRetryOfChains: 10, // 保留其余键（部分更新契约）
+      }),
+    });
+  });
+
+  it('审计快照与 JSON 透出深层拆分开关', () => {
+    const base = {
+      planPreflightEnabled: true,
+      planScoutEnabled: true,
+      maxScoutIterations: 4,
+      maxPlannerIterations: 8,
+      maxConcurrentSubagents: 4,
+      maxRetries: 2,
+      maxLaneIterations: 8,
+      maxSubagentIterations: 6,
+      subagentApprovalMode: 'ask',
+      worktreeIsolation: false,
+      scratchRoot: 'orch_scratch',
+    };
+    const snapshot = formatOrchestrationTabAuditSnapshot({
+      ...base,
+      allowDeepDecomposition: true,
+    });
+    expect(snapshot).toContain('允许深层拆分: 开启');
+
+    const json = JSON.parse(
+      formatOrchestrationTabAuditJson({ ...base, allowDeepDecomposition: true }),
+    );
+    expect(json.allowDeepDecomposition).toBe(true);
+  });
+
+  it('缺省时不改既有快照输出（向后兼容）', () => {
+    const snapshot = formatOrchestrationTabAuditSnapshot({
+      planPreflightEnabled: true,
+      planScoutEnabled: true,
+      maxScoutIterations: 4,
+      maxPlannerIterations: 8,
+      maxConcurrentSubagents: 4,
+      maxRetries: 2,
+      maxLaneIterations: 8,
+      maxSubagentIterations: 6,
+      subagentApprovalMode: 'ask',
+      worktreeIsolation: false,
+      scratchRoot: 'orch_scratch',
+    });
+    expect(snapshot).not.toContain('允许深层拆分');
+  });
+});

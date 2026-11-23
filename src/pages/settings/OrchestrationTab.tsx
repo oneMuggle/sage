@@ -30,6 +30,8 @@ export interface OrchestrationTabAuditInput {
   scratchRoot: string;
   /** 2026-11-04: 迭代预算模式（auto | fixed）。可选 —— 缺省时不改变既有快照输出。 */
   budgetMode?: string;
+  /** 2026-11-23 (M3.3): 允许深层拆分。可选 —— 缺省时不改变既有快照输出。 */
+  allowDeepDecomposition?: boolean;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -48,6 +50,9 @@ export function formatOrchestrationTabAuditSnapshot(input: OrchestrationTabAudit
     `- Worktree 隔离: ${input.worktreeIsolation ? '开启' : '关闭'}`,
     `- Scratch 根目录: ${input.scratchRoot || 'orch_scratch'}`,
     ...(input.budgetMode === undefined ? [] : [`- 迭代预算模式: ${input.budgetMode}`]),
+    ...(input.allowDeepDecomposition === undefined
+      ? []
+      : [`- 允许深层拆分: ${input.allowDeepDecomposition ? '开启' : '关闭'}`]),
   ].join('\n');
 }
 
@@ -67,6 +72,9 @@ export function formatOrchestrationTabAuditJson(input: OrchestrationTabAuditInpu
       worktreeIsolation: input.worktreeIsolation,
       scratchRoot: input.scratchRoot || 'orch_scratch',
       ...(input.budgetMode === undefined ? {} : { budgetMode: input.budgetMode }),
+      ...(input.allowDeepDecomposition === undefined
+        ? {}
+        : { allowDeepDecomposition: input.allowDeepDecomposition }),
     },
     null,
     2,
@@ -221,6 +229,19 @@ export function OrchestrationTab() {
             testId="orch-plan-scout"
             value={settings.orch.planScoutEnabled}
             onChange={(v) => setOrch({ planScoutEnabled: v })}
+          />
+        </SettingRow>
+        <SettingRow
+          anchor="orch.allowDeepDecomposition"
+          label={t('settings.orch.allow_deep_decomposition.label')}
+          desc={t('settings.orch.allow_deep_decomposition.desc')}
+          value={settings.orch.allowDeepDecomposition}
+          onReset={() => resetOrchKey('allowDeepDecomposition')}
+        >
+          <Toggle
+            testId="orch-allow-deep-decomposition"
+            value={settings.orch.allowDeepDecomposition}
+            onChange={(v) => setOrch({ allowDeepDecomposition: v })}
           />
         </SettingRow>
         <NumberField

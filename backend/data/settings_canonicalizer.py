@@ -77,6 +77,8 @@ ALIASES: Dict[str, str] = {
     # Round 1/3 (2026-09-19) 计划前置旋钮（orch_settings.plan_*_enabled）。
     "plan_preflight_enabled": "planPreflightEnabled",
     "plan_scout_enabled": "planScoutEnabled",
+    # M3.3 (2026-11-23): 允许深层拆分（Planner 输出子任务层级）。
+    "allow_deep_decomposition": "allowDeepDecomposition",
     # RD15 (2026-09): 守门三键透出设置页, 同款 snake→camel 翻译必须同步。
     "run_wall_clock_limit_minutes": "runWallClockLimitMinutes",
     "subagent_task_timeout_s": "subagentTaskTimeoutS",
@@ -271,6 +273,8 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         # 任一保存 400 invalid_settings_shape（round26 同款回归,前端静默吞错）。
         "planPreflightEnabled",
         "planScoutEnabled",
+        # M3.3: 允许深层拆分 —— 白名单缺失会让编排段任一保存 400。
+        "allowDeepDecomposition",
         "runWallClockLimitMinutes",
         "subagentTaskTimeoutS",
         "maxRetryOfChains",

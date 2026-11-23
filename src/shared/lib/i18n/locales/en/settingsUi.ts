@@ -455,6 +455,9 @@ export const enSettingsUi = {
   'settings.orch.plan_scout.desc':
     'Before decomposing a task, dispatch a read-only subagent to quickly gather workspace/network/memory facts as planning evidence; adds a small wait',
   'settings.orch.plan_scout.label': 'Fact scouting before decomposition',
+  'settings.orch.allow_deep_decomposition.label': 'Allow deep decomposition',
+  'settings.orch.allow_deep_decomposition.desc':
+    'When enabled, complex tasks may be split into a subtask hierarchy (parent_task_id); otherwise plans stay flat.',
   'settings.orch.question_limits_intro':
     'Controls how often and how broadly the agent asks you questions via ask_user_question. Once consecutive unanswered questions reach the limit, the agent stops asking and continues with sensible defaults.',
   'settings.orch.run_token_budget.desc':

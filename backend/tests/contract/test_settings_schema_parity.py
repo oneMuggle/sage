@@ -163,7 +163,8 @@ def test_legal_orch_keys_is_stable() -> None:
     (maxConsecutiveUnansweredQuestions / minOptionsPerQuestion /
     maxOptionsPerQuestion / maxClarifyQuestionsInPrompt /
     maxClarifyQuestionsPerRound)。2026-11-04 补 budgetMode（显式预算模式，
-    取代 maxIterations==25 哨兵）。
+    取代 maxIterations==25 哨兵）。2026-11-23 补 allowDeepDecomposition
+    （M3.3 深层拆分开关）。
     """
     assert frozenset(
         {
@@ -179,6 +180,8 @@ def test_legal_orch_keys_is_stable() -> None:
             "scratchRoot",
             "planPreflightEnabled",
             "planScoutEnabled",
+            # 2026-11-23 M3.3 允许深层拆分（Planner 子任务层级）
+            "allowDeepDecomposition",
             "runWallClockLimitMinutes",
             "subagentTaskTimeoutS",
             "maxRetryOfChains",

@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 # Hard cap on planner-emitted tasks (LLM output is truncated to this).
 MAX_PLAN_TASKS = 8
 
+#: M3.3: 计划卡预估轮次的合法区间。prompt 契约与 sanitizer 共用本常量，
+#: 避免 LLM 按 prompt 产出的值被源头静默丢弃（契约漂移）。
+MAX_ESTIMATED_ITERATIONS = 15
+
 
 def _is_dispatchable_agent(agent_id: str) -> bool:
     """agent_id 当前是否可被 ChatDispatcher 派发（存在且启用）。
@@ -121,6 +125,22 @@ def sanitize_llm_plan_tasks(raw_tasks: Any) -> List[Dict[str, Any]]:
             # F4 (2026-08-12): 只接受可派发角色，非法 hint 静默丢弃
             # （见 _is_dispatchable_agent docstring）。
             parameters["agent_hint"] = agent_hint.strip()
+
+        # M3.3: 单任务预估（LLM 迭代轮次 / 复杂度）—— 非法值静默丢弃。
+        estimated = raw.get("estimated_iterations")
+        if (
+            isinstance(estimated, int)
+            and not isinstance(estimated, bool)
+            and 1 <= estimated <= MAX_ESTIMATED_ITERATIONS
+        ):
+            parameters["estimated_iterations"] = estimated
+        complexity = raw.get("complexity")
+        if isinstance(complexity, str) and complexity.strip().lower() in (
+            "low",
+            "medium",
+            "high",
+        ):
+            parameters["complexity"] = complexity.strip().lower()
 
         sanitized.append(
             {
@@ -479,6 +499,16 @@ class Planner:
             return self._simple_decompose(request)
         return tasks, reasoning
 
+    @staticmethod
+    def _allow_deep_decomposition() -> bool:
+        """M3.3: 深层拆分开关（设置读取失败按关闭处理）。"""
+        try:
+            from backend.orchestration.orch_settings import load_orch_settings
+
+            return bool(load_orch_settings().allow_deep_decomposition)
+        except Exception:  # noqa: BLE001 — 读配置失败按关闭处理
+            return False
+
     def _build_decomposition_prompt(
         self,
         request: str,
@@ -522,6 +552,21 @@ class Planner:
                 "（范围/格式/验收标准），不得偏离。"
             )
 
+        # M3.3: 深层拆分开关 —— 关闭（默认）时要求平铺；打开时允许子任务层级。
+        if self._allow_deep_decomposition():
+            hierarchy_rule = (
+                '2b. Optionally group tasks into a hierarchy via "parent_task_id" '
+                "referencing an\n    earlier task id (subtasks allowed for complex "
+                "work). It expresses\n    ownership/display only — it never creates "
+                'an execution dependency, so add\n    "depends_on" as well when a '
+                "child must wait."
+            )
+        else:
+            hierarchy_rule = (
+                '2b. Do NOT use "parent_task_id" (keep a flat list). Split large '
+                "goals into\n    additional top-level tasks instead."
+            )
+
         return f"""You are a task planning assistant. Decompose the following goal into a directed acyclic graph of tasks.
 
 Goal: {request}
@@ -532,10 +577,10 @@ Context:
 Instructions:
 1. Break the goal into discrete, actionable tasks (at most {MAX_PLAN_TASKS}).
 2. Express dependencies via "depends_on" referencing earlier task ids only.
-2b. Optionally group tasks into a hierarchy via "parent_task_id" referencing an
-    earlier task id. It expresses ownership/display only — it never creates an
-    execution dependency, so add "depends_on" as well when a child must wait.
+{hierarchy_rule}
 3. Use "agent_hint" to suggest an executor role (e.g. researcher, coder, memory_manager) or omit.
+3b. For every task add "estimated_iterations" (integer 1-{MAX_ESTIMATED_ITERATIONS}: expected ReAct
+    iterations) and "complexity" (one of low / medium / high).
 4. Keep titles short; descriptions carry the detail (做什么 / 涉及对象 / 预期产出 / 完成定义（验收标准）).{extra_rule}
 
 Output format — return ONLY valid JSON, no markdown fences, no extra text:
@@ -547,7 +592,9 @@ Output format — return ONLY valid JSON, no markdown fences, no extra text:
       "description": "Detailed description of the work",
       "depends_on": [],
       "parent_task_id": null,
-      "agent_hint": "researcher"
+      "agent_hint": "researcher",
+      "estimated_iterations": 4,
+      "complexity": "medium"
     }}
   ],
   "reasoning": "Explanation of the decomposition strategy"

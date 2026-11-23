@@ -423,6 +423,9 @@ export const zhSettingsUi = {
   'settings.orch.plan_scout.desc':
     '拆解任务前派一个只读子代理快速收集工作区/网络/记忆事实,作为计划依据;会增加少量等待时间',
   'settings.orch.plan_scout.label': '拆解前事实侦察',
+  'settings.orch.allow_deep_decomposition.label': '允许深层拆分',
+  'settings.orch.allow_deep_decomposition.desc':
+    '开启后复杂任务可拆出子任务层级（parent_task_id）；关闭时保持平铺。',
   'settings.orch.question_limits_intro':
     '控制 agent 通过 ask_user_question 向你提问的频率与规模。连续未应答达到上限后 agent 会停止提问并按合理默认值继续推进任务。',
   'settings.orch.run_token_budget.desc':
