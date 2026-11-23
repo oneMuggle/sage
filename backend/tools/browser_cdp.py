@@ -1,6 +1,6 @@
 """浏览器自动化基础设施（对标增强 G7，docs/plans §2.1）。
 
-经 CDP（Chrome DevTools Protocol）驱动本机 Chrome/Edge：
+经 CDP（Chrome DevTools Protocol）驱动本机 Chrome/Edge/Firefox：
 
 - **发现**：环境变量 ``SAGE_BROWSER_PATH`` 优先，回退平台常见安装路径
   与 PATH（chrome / chromium / edge）；
@@ -38,8 +38,8 @@ from collections import deque
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional
-from urllib.parse import quote
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from urllib.parse import quote, urlparse
 
 from .browser_ws import ws_close, ws_connect, ws_recv_text, ws_send_text
 
@@ -110,6 +110,16 @@ CDP_TIMEOUT_SECONDS = 20.0
 #: DevToolsActivePort 轮询间隔
 _LAUNCH_POLL_INTERVAL = 0.2
 
+#: Firefox 的调试端口是固定的（``-start-debugger-server <port>``），不像
+#: Chromium 支持 ``--remote-debugging-port=0`` 随机端口
+FIREFOX_CDP_PORT = 9229
+
+#: Firefox CDP 握手轮询间隔（Firefox 启动与调试服务就绪都比 Chromium 慢）
+_FIREFOX_POLL_INTERVAL = 0.5
+
+#: ``SAGE_BROWSER_PATH`` 的 Firefox 专用别名（优先级紧随其后）
+FIREFOX_PATH_ENV = "SAGE_FIREFOX_PATH"
+
 
 class BrowserCDPError(RuntimeError):
     """CDP 命令失败（协议错误 / 目标丢失 / 命令报 errorText）。"""
@@ -120,9 +130,10 @@ EMBEDDED_EXECUTABLE = "(embedded)"
 
 
 class BrowserType(str, Enum):
-    """浏览器类型（main：外部 Chromium / Electron 内置 / 用户日常浏览器扩展）。"""
+    """浏览器类型（外部 Chromium / Firefox / Electron 内置 / 用户日常浏览器扩展）。"""
 
     CHROME = "chrome"
+    FIREFOX = "firefox"
     EMBEDDED = "embedded"
     EXTERNAL = "external"
 
@@ -169,6 +180,22 @@ def _windows_candidates() -> List[Path]:
     return [Path(base) / rel for base in bases if base for rel in (chrome_rel, edge_rel)]
 
 
+def _windows_firefox_candidates() -> List[Path]:
+    """Firefox 常见安装位置（Chromium 全部缺失时的兜底，Win7 场景）。"""
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")  # noqa: SIM112
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")  # noqa: SIM112
+    firefox_rel = r"Mozilla Firefox\firefox.exe"
+    bases = [program_files, program_files_x86]
+    return [Path(base) / firefox_rel for base in bases if base]
+
+
+def _infer_browser_type(executable: str) -> BrowserType:
+    """按可执行文件名推断浏览器类型（本模块只需区分 Chromium / Firefox）。"""
+    if "firefox" in Path(executable).name.lower():
+        return BrowserType.FIREFOX
+    return BrowserType.CHROME
+
+
 def _get_user_browser_path() -> Optional[str]:
     """从设置中读取用户配置的浏览器路径。
 
@@ -189,11 +216,18 @@ def _get_user_browser_path() -> Optional[str]:
 
 
 def discover_browser_executable() -> Optional[str]:  # noqa: PLR0911 — 浏览器发现逻辑需要多级 fallback
-    """按 环境变量 → 用户设置 → 内置兜底 → 平台路径/PATH 顺序找 Chromium 系浏览器。"""
+    """按 环境变量 → 用户设置 → 内置兜底 → 平台路径/PATH 顺序找浏览器。
+
+    Chromium 系（Chrome/Edge/Chromium）优先，全部缺失时回退 Firefox
+    （Win7 等装不上新 Chrome 的环境，见 docs/technical/160）。
+    """
     # 环境变量覆盖（运维/CI/排障）
     env_override = os.environ.get("SAGE_BROWSER_PATH")
     if env_override and Path(env_override).is_file():
         return env_override
+    firefox_override = os.environ.get(FIREFOX_PATH_ENV)
+    if firefox_override and Path(firefox_override).is_file():
+        return firefox_override
     # 用户设置覆盖（设置页显式选择；"(embedded)" 哨兵 → 内置内核）
     user_override = _get_user_browser_path()
     if user_override == EMBEDDED_EXECUTABLE:
@@ -208,12 +242,22 @@ def discover_browser_executable() -> Optional[str]:  # noqa: PLR0911 — 浏览�
         for candidate in _windows_candidates():
             if candidate.is_file():
                 return str(candidate)
+        for candidate in _windows_firefox_candidates():
+            if candidate.is_file():
+                return str(candidate)
+        for name in ("chrome", "msedge", "firefox"):
+            found = shutil.which(name)
+            if found:
+                return found
         return None
     # POSIX：Linux/WSL 走 PATH
     for name in _LINUX_CANDIDATES:
         found = shutil.which(name)
         if found:
             return found
+    firefox = shutil.which("firefox")
+    if firefox:
+        return firefox
     # macOS 应用包路径
     return _darwin_candidates()
 
@@ -223,8 +267,13 @@ def _darwin_candidates() -> Optional[str]:
 
     if platform.system() != "Darwin":
         return None
-    for app in ("Google Chrome", "Microsoft Edge", "Chromium"):
-        candidate = Path("/Applications") / f"{app}.app" / "Contents" / "MacOS" / app
+    for app, exe in (
+        ("Google Chrome", "Google Chrome"),
+        ("Microsoft Edge", "Microsoft Edge"),
+        ("Chromium", "Chromium"),
+        ("Firefox", "firefox"),
+    ):
+        candidate = Path("/Applications") / f"{app}.app" / "Contents" / "MacOS" / exe
         if candidate.is_file():
             return str(candidate)
     return None
@@ -805,10 +854,28 @@ def _build_launch_command(
 ) -> List[str]:
     """构造浏览器启动命令（纯函数便于单测）。
 
+    Chromium 用 ``--remote-debugging-port=0`` 随机端口 + ``--user-data-dir``；
+    Firefox 没有对应开关，用 ``-start-debugger-server <固定端口>`` +
+    ``-profile`` + ``-no-remote``。Firefox v1 不支持 ``proxy_flag``
+    （命令行无法覆盖代理，需要写 profile prefs，超出最小兼容层范围）。
+
     ``proxy_flag`` 非空时追加 ``--proxy-server=``（用户级代理配置，见
     http_factory.browser_proxy_flag）——否则浏览器通道绕过代理，代理用户
     经 headless 渲染访问被墙站点依旧不通。
     """
+    if _infer_browser_type(executable) == BrowserType.FIREFOX:
+        command = [
+            executable,
+            "-start-debugger-server",
+            str(FIREFOX_CDP_PORT),
+            "-profile",
+            user_data_dir,
+            "-no-remote",
+        ]
+        command.append("about:blank")
+        if headless:
+            command.insert(1, "-headless")
+        return command
     command = [
         executable,
         "--remote-debugging-port=0",
@@ -838,6 +905,43 @@ def _build_launch_command(
         # Chrome 107）由 headless_flag 降级为旧无头模式
         command.insert(1, headless_flag(executable))
     return command
+
+
+def _wait_for_firefox_cdp(process: subprocess.Popen, deadline: float) -> Tuple[int, str]:
+    """轮询 Firefox 的 ``/json/version`` 完成 CDP 握手。
+
+    Firefox 不写 ``DevToolsActivePort`` 文件；固定端口上暴露 HTTP
+    ``/json/version``，从中解析 ``webSocketDebuggerUrl`` 得到 browser
+    端 WS 路径（可能带 query）。Firefox 的调试端点要求非空 User-Agent。
+    """
+    url = f"http://127.0.0.1:{FIREFOX_CDP_PORT}/json/version"
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise BrowserCDPError(
+                f"Firefox 进程提前退出（退出码 {process.returncode}）——可尝试 headless=false 排查"
+            )
+        try:
+            request = urllib.request.Request(  # noqa: S310 — 仅回环地址
+                url, headers={"User-Agent": "Sage-Diagnostic"}
+            )
+            with urllib.request.urlopen(request, timeout=1.0) as response:  # noqa: S310
+                if response.getcode() == 200:
+                    payload = json.loads(response.read().decode("utf-8"))
+                    ws_url = str(payload.get("webSocketDebuggerUrl") or "")
+                    if ws_url:
+                        parsed = urlparse(ws_url)
+                        ws_path = parsed.path
+                        if parsed.query:
+                            ws_path += "?" + parsed.query
+                        if ws_path.startswith("/devtools/"):
+                            return FIREFOX_CDP_PORT, ws_path
+        except (urllib.error.URLError, OSError, ValueError):
+            pass
+        time.sleep(_FIREFOX_POLL_INTERVAL)
+    raise BrowserCDPError(
+        f"等待 Firefox CDP 接口超时（{LAUNCH_TIMEOUT_SECONDS:.0f} 秒，"
+        f"端口 {FIREFOX_CDP_PORT}）——浏览器可能未完成启动"
+    )
 
 
 class _EmbeddedProcess:
@@ -880,10 +984,16 @@ def launch_browser(
     embedded = _discover_embedded_env()
     env_override = os.environ.get("SAGE_BROWSER_PATH", "")
     env_path_ok = bool(env_override) and Path(env_override).is_file()
+    firefox_override = os.environ.get(FIREFOX_PATH_ENV, "")
+    firefox_path_ok = bool(firefox_override) and Path(firefox_override).is_file()
     user_choice = _get_user_browser_path()
     # 优先级与 discover_browser_executable 保持一致：显式环境变量 / 用户选择
     # 的真实浏览器优先于 Win7 内置兜底内核；仅未选择或显式选择内置时用内置。
-    if embedded and not env_path_ok and user_choice in (None, EMBEDDED_EXECUTABLE):
+    if (
+        embedded
+        and not (env_path_ok or firefox_path_ok)
+        and user_choice in (None, EMBEDDED_EXECUTABLE)
+    ):
         session_id = browser_id or uuid.uuid4().hex[:12]
         bridge_token = str(embedded["token"])
         bridge_query = (
@@ -909,7 +1019,8 @@ def launch_browser(
     executable = discover_browser_executable()
     if not executable:
         raise BrowserCDPError(
-            "未找到 Chrome/Edge 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH 指定可执行文件路径"
+            "未找到 Chrome/Edge/Firefox 浏览器：请安装，或用环境变量 "
+            "SAGE_BROWSER_PATH / SAGE_FIREFOX_PATH 指定可执行文件路径"
         )
 
     if persistent:
@@ -936,7 +1047,41 @@ def launch_browser(
             _remove_dir_with_retry(user_data_dir)
         raise BrowserCDPError(f"浏览器启动失败: {exc}")
 
+    browser_type = _infer_browser_type(executable)
     deadline = time.monotonic() + LAUNCH_TIMEOUT_SECONDS
+    if browser_type == BrowserType.FIREFOX:
+        try:
+            port, ws_path = _wait_for_firefox_cdp(process, deadline)
+        except BrowserCDPError:
+            _terminate_session(
+                BrowserSession(
+                    "",
+                    executable,
+                    headless,
+                    user_data_dir,
+                    process,
+                    0,
+                    "",
+                    persistent=persistent,
+                    browser_type=browser_type,
+                )
+            )
+            raise
+        session = BrowserSession(
+            browser_id=browser_id or uuid.uuid4().hex[:12],
+            executable=executable,
+            headless=headless,
+            user_data_dir=user_data_dir,
+            process=process,
+            port=port,
+            ws_path=ws_path,
+            persistent=persistent,
+            profile_name=str(profile_name or "") if persistent else "",
+            browser_type=browser_type,
+        )
+        get_browser_manager().register(session)
+        return session
+
     port_file = Path(user_data_dir) / "DevToolsActivePort"
     while time.monotonic() < deadline:
         if process.poll() is not None:
@@ -964,6 +1109,7 @@ def launch_browser(
                     ws_path=ws_path,
                     persistent=persistent,
                     profile_name=str(profile_name or "") if persistent else "",
+                    browser_type=browser_type,
                 )
                 get_browser_manager().register(session)
                 return session
