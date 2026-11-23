@@ -111,6 +111,17 @@ def _scrub_value(value: Any, depth: int) -> Any:
     return value
 
 
+def redact_sensitive_args(value: Any) -> Any:
+    """结构保留式脱敏：只把敏感键名的值替换为 ``"***"``，其余原样。
+
+    与 :func:`summarize_tool_args` 的区别：后者面向流事件的展示做字符串化
+    与截断；落盘场景（子代理 transcript 的 ``tool_call`` 行）需要完整参数
+    供过程回放，故单独提供本函数。嵌套递归与循环结构防护复用
+    ``_scrub_value`` 的深度封顶（``MAX_SCRUB_DEPTH``）。
+    """
+    return _scrub_value(value, 1)
+
+
 def _resolve_preview_path(raw: str, workspace_root: str | None) -> Path | None:
     """把工具参数里的路径解析为可读路径；相对路径挂在 workspace 下。"""
     if not isinstance(raw, str) or not raw.strip():
