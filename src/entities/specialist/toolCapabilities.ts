@@ -180,6 +180,14 @@ export const TOOL_CAPABILITY_PACKS: readonly ToolCapabilityPack[] = [
     requiresMode: 'workspace_write',
   },
   {
+    id: 'document-parse',
+    label: '文档解析',
+    description:
+      '把 PDF/Office 文档解析为 Markdown 或结构化文本（本地优先，质量不足时可升级到内网 MinerU）',
+    tools: ['parse_document'],
+    requiresMode: 'workspace_write',
+  },
+  {
     id: 'design',
     label: '设计原型',
     description: '列出设计系统/模板并生成、迭代、导出原型',
