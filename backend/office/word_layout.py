@@ -10,11 +10,14 @@
   "models 仅依赖 pydantic" 前提；
 - ``apply_format_spec`` 对 ``spec`` 的每个子项独立判空：None 项完全不触碰
   文档，因此不传 ``format_spec`` 时 ``generate_docx`` 行为与历史版本一致；
-- 样式补丁只动字号/加粗/颜色/间距/对齐，字体（rFonts）仍由
-  ``word.set_doc_default_font`` 统一负责，避免两条路径互相覆盖；
+- 样式补丁动字号/字体/加粗/颜色/间距/对齐；``set_doc_default_font`` 仍负责
+  全局默认字体，本模块的按样式字体（font_family/ascii_font）在其之后覆盖
+  具体样式，两条路径不互相覆盖（None = 不触碰）；
 - 颜色写入时同步清除 ``w:themeColor`` 等 theme 属性 —— 与
   ``_patch_style_rfonts`` 清 theme 引用同理，theme 属性优先级高于显式值，
-  不清掉某些渲染端会忽略显式颜色。
+  不清掉某些渲染端会忽略显式颜色；
+- 按样式字体同时同步 ``<w:link>`` 关联的 character style（Heading1Char
+  等），否则 Word 渲染时字符样式会覆盖段落样式的 rFonts。
 
 Word 兼容性说明：页码使用 ``w:fldSimple w:instr="PAGE"`` 域，Word / WPS /
 LibreOffice 打开即渲染（fldSimple 自带占位 run，无需打开后手动更新域）。
@@ -36,10 +39,12 @@ from ._docx_lazy import (
 )
 from .models import (
     WordBodyStyleSpec,
+    WordCaptionStyleSpec,
     WordFormatSpec,
     WordHeaderFooterSpec,
     WordHeadingStyleSpec,
     WordPageSetupSpec,
+    WordTableTextStyleSpec,
 )
 
 #: format_spec 的 align 取值 → python-docx 段落对齐枚举（惰性解析）
@@ -82,6 +87,76 @@ def _hex_to_rgb(color: str) -> Any:
     from docx.shared import RGBColor
 
     return RGBColor.from_string(color.lstrip("#").upper())
+
+
+#: rFonts 上会覆盖显式字体名的 theme 引用属性
+_RFONT_THEME_ATTRS = ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme")
+
+
+def _write_rfonts(rfonts, *, font_family: Optional[str], ascii_font: Optional[str]) -> None:
+    """写 rFonts：font_family → eastAsia；ascii_font → ascii/hAnsi/cs。
+
+    theme 引用优先级高于显式值，必须清除（与 ``word._patch_style_rfonts``
+    同一原因：日语 Word 会解析 theme 为 ＭＳ ゴシック）。
+    """
+    for theme_attr in _RFONT_THEME_ATTRS:
+        qualified = qn(f"w:{theme_attr}")
+        if qualified in rfonts.attrib:
+            del rfonts.attrib[qualified]
+    if font_family is not None:
+        rfonts.set(qn("w:eastAsia"), font_family)
+    if ascii_font is not None:
+        rfonts.set(qn("w:ascii"), ascii_font)
+        rfonts.set(qn("w:hAnsi"), ascii_font)
+        rfonts.set(qn("w:cs"), ascii_font)
+
+
+def _set_style_fonts(
+    style, *, font_family: Optional[str] = None, ascii_font: Optional[str] = None
+) -> None:
+    """按样式设置字体（None 项不触碰）。"""
+    if font_family is None and ascii_font is None:
+        return
+    rPr = style.element.get_or_add_rPr()
+    _write_rfonts(
+        rPr.get_or_add_rFonts(), font_family=font_family, ascii_font=ascii_font
+    )
+
+
+def _patch_linked_char_style(
+    doc: Document,
+    style,
+    *,
+    font_family: Optional[str] = None,
+    ascii_font: Optional[str] = None,
+) -> None:
+    """同步 ``<w:link>`` 关联的 character style 字体。
+
+    Word 渲染时 linked character style（Heading1Char / TitleChar 等）的
+    rFonts 会覆盖段落样式，仅改段落样式不够。
+    """
+    link = style.element.find(qn("w:link"))
+    if link is None:
+        return
+    char_style_id = link.get(qn("w:val"))
+    for candidate in doc.styles:
+        if candidate.style_id == char_style_id:
+            _set_style_fonts(
+                candidate, font_family=font_family, ascii_font=ascii_font
+            )
+            return
+
+
+def _set_run_fonts(
+    run, *, font_family: Optional[str] = None, ascii_font: Optional[str] = None
+) -> None:
+    """按 run 设置字体（题注/表格文字等无对应样式的元素使用）。"""
+    if font_family is None and ascii_font is None:
+        return
+    rPr = run._r.get_or_add_rPr()
+    _write_rfonts(
+        rPr.get_or_add_rFonts(), font_family=font_family, ascii_font=ascii_font
+    )
 
 
 def _apply_page_setup(doc: Document, page: WordPageSetupSpec) -> None:
@@ -159,13 +234,21 @@ def _apply_body_style(doc: Document, body: WordBodyStyleSpec) -> None:
     style = _style_or_none(doc, "Normal")
     if style is None:
         return
+    _set_style_fonts(
+        style, font_family=body.font_family, ascii_font=body.ascii_font
+    )
     if body.font_size_pt is not None:
         style.font.size = Pt(body.font_size_pt)
     paragraph_format = style.paragraph_format
-    if body.line_spacing is not None:
+    # 固定行距（pt）优先于倍数行距；两者都未给时不触碰。
+    if body.line_spacing_pt is not None:
+        paragraph_format.line_spacing = Pt(body.line_spacing_pt)
+    elif body.line_spacing is not None:
         paragraph_format.line_spacing = body.line_spacing
     if body.first_line_indent_cm is not None:
         paragraph_format.first_line_indent = Cm(body.first_line_indent_cm)
+    if body.space_before_pt is not None:
+        paragraph_format.space_before = Pt(body.space_before_pt)
     if body.space_after_pt is not None:
         paragraph_format.space_after = Pt(body.space_after_pt)
     if body.align is not None:
@@ -176,6 +259,13 @@ def _apply_heading_style(doc: Document, style_name: str, spec: WordHeadingStyleS
     style = _style_or_none(doc, style_name)
     if style is None:
         return
+    if spec.font_family is not None or spec.ascii_font is not None:
+        _set_style_fonts(
+            style, font_family=spec.font_family, ascii_font=spec.ascii_font
+        )
+        _patch_linked_char_style(
+            doc, style, font_family=spec.font_family, ascii_font=spec.ascii_font
+        )
     if spec.font_size_pt is not None:
         style.font.size = Pt(spec.font_size_pt)
     if spec.bold is not None:
@@ -250,6 +340,28 @@ def apply_format_spec(doc: Document, spec: Optional[WordFormatSpec]) -> None:
         _apply_header(doc, spec.header)
     if spec.footer is not None:
         _apply_footer(doc, spec.footer)
+
+
+def apply_style_definitions(doc: Document, spec: Optional[WordFormatSpec]) -> None:
+    """只应用样式定义（页面/正文/标题），不触碰页眉页脚与生成期项。
+
+    供「已有文档套用样式模板」复用：目录/编号/参考文献等属于生成期特性，
+    对既有文档不适用；页眉页脚保持用户原文。生成路径仍用
+    :func:`apply_format_spec`。
+    """
+    if spec is None:
+        return
+    if spec.page is not None:
+        _apply_page_setup(doc, spec.page)
+    if spec.body is not None:
+        _apply_body_style(doc, spec.body)
+    if spec.title is not None:
+        _apply_heading_style(doc, "Title", spec.title)
+    if spec.headings:
+        for key, heading_spec in spec.headings.items():
+            style_name = _HEADING_STYLE_NAMES.get(key)
+            if style_name is not None:
+                _apply_heading_style(doc, style_name, heading_spec)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -347,16 +459,31 @@ def apply_cell_merges(table: Any, merges: Any, *, n_rows: int, n_cols: int) -> N
         anchor.merge(other)
 
 
-def add_caption(doc: Document, text: str, *, kind: str, number: int) -> None:
-    """追加居中题注段落（"图N　caption" / "表N　caption"，9pt 小五）。
+def add_caption(
+    doc: Document,
+    text: str,
+    *,
+    kind: str,
+    number: int,
+    spec: Optional[WordCaptionStyleSpec] = None,
+) -> None:
+    """追加题注段落（"图N　caption" / "表N　caption"）。
 
     ``kind``: "figure"（图，题注在图下方）/ "table"（表，题注在表上方）——
     位置由调用方的插入顺序决定，本函数只负责段落样式与编号文本。
+    ``spec`` 为空时保持历史行为：居中、9pt。给定 spec 时按 spec 覆盖
+    字号/字体/加粗/对齐（None 字段保持默认）。
     """
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     paragraph = doc.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    size_pt = 9.0
+    if spec is not None:
+        if spec.font_size_pt is not None:
+            size_pt = float(spec.font_size_pt)
+        if spec.align is not None:
+            paragraph.alignment = align_map_ltr()[spec.align]
     label = "图" if kind == "figure" else "表"
     # Round 46：题注编号套书签（REF 交叉引用目标）。w:id 分段（图
     # 100000+、表 200000+）避免与用户书签冲突；编号确定命名可复现。
@@ -366,7 +493,6 @@ def add_caption(doc: Document, text: str, *, kind: str, number: int) -> None:
     bm_start.set(qn("w:name"), f"{'_RefFig' if kind == 'figure' else '_RefTbl'}{number}")
     paragraph._p.append(bm_start)
     label_run = paragraph.add_run(label)
-    label_run.font.size = Pt(9)
     # Round 42：编号以 SEQ 复杂域承载（Word 据此把段落识别为题注条目，
     # TOC \c 可收录生成图/表目录）；缓存编号保证未更新域时的显示与
     # python-docx 回读文本同既有字面形态完全一致（lint 零改动通过）。
@@ -377,13 +503,46 @@ def add_caption(doc: Document, text: str, *, kind: str, number: int) -> None:
     paragraph._p.append(instr_el)
     _fld_char(paragraph, "separate")
     number_run = paragraph.add_run(str(number))
-    number_run.font.size = Pt(9)
     _fld_char(paragraph, "end")
     bm_end = OxmlElement("w:bookmarkEnd")
     bm_end.set(qn("w:id"), str(bm_id))
     paragraph._p.append(bm_end)
     text_run = paragraph.add_run("　" + text)
-    text_run.font.size = Pt(9)
+    for run in (label_run, number_run, text_run):
+        run.font.size = Pt(size_pt)
+        if spec is not None:
+            _set_run_fonts(
+                run, font_family=spec.font_family, ascii_font=spec.ascii_font
+            )
+            if spec.bold is not None:
+                run.font.bold = spec.bold
+
+
+def apply_table_text_style(
+    table: Any, spec: Optional[WordTableTextStyleSpec]
+) -> None:
+    """按样式规范设置表格单元格文字（字号/字体/表头加粗）。
+
+    表格文字没有独立命名的 Word 样式（单元格默认继承 Normal），
+    因此这里落到 run 级格式；``header_bold`` 仅作用于首行。
+    """
+    if spec is None:
+        return
+    from docx.shared import Pt
+
+    for row_index, row in enumerate(table.rows):
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    if spec.font_size_pt is not None:
+                        run.font.size = Pt(float(spec.font_size_pt))
+                    _set_run_fonts(
+                        run,
+                        font_family=spec.font_family,
+                        ascii_font=spec.ascii_font,
+                    )
+                    if row_index == 0 and spec.header_bold is not None:
+                        run.font.bold = spec.header_bold
 
 
 def heading_number_prefix(counters: Any, level: int) -> str:

@@ -242,23 +242,48 @@ class WordPageSetupSpec(BaseModel):
 
 
 class WordBodyStyleSpec(BaseModel):
-    """正文（Normal 样式）默认排版。行距为倍数（如 1.5 倍）。"""
+    """正文（Normal 样式）默认排版。
+
+    行距支持两种单位：``line_spacing`` 为倍数（如 1.5 倍），
+    ``line_spacing_pt`` 为固定磅值（公文 28 磅行距）；两者同时给定时
+    ``line_spacing_pt`` 优先。``font_family`` 写 eastAsia 字体（中文字体），
+    ``ascii_font`` 写 ascii/hAnsi 字体（西文字体）。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
+    font_family: Optional[str] = Field(
+        default=None, max_length=100, description="中文（eastAsia）字体名，如'仿宋_GB2312'"
+    )
+    ascii_font: Optional[str] = Field(
+        default=None, max_length=100, description="西文字体名，如'Times New Roman'"
+    )
     line_spacing: Optional[float] = Field(default=None, ge=1.0, le=3.0)
+    line_spacing_pt: Optional[float] = Field(
+        default=None,
+        ge=1.0,
+        le=200.0,
+        description="固定行距（磅）；与 line_spacing 同时给出时优先",
+    )
     first_line_indent_cm: Optional[float] = Field(default=None, ge=0.0, le=5.0)
+    space_before_pt: Optional[float] = Field(default=None, ge=0.0, le=48.0)
     space_after_pt: Optional[float] = Field(default=None, ge=0.0, le=48.0)
     align: Optional[Literal["left", "center", "right", "justify"]] = None
 
 
 class WordHeadingStyleSpec(BaseModel):
-    """标题样式覆盖（作用于 Title / Heading 1-3 样式定义本身）。"""
+    """标题样式覆盖（作用于 Title / Heading 1-5 样式定义本身）。"""
 
     model_config = ConfigDict(extra="forbid")
 
     font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
+    font_family: Optional[str] = Field(
+        default=None, max_length=100, description="中文（eastAsia）字体名，如'黑体'"
+    )
+    ascii_font: Optional[str] = Field(
+        default=None, max_length=100, description="西文字体名"
+    )
     bold: Optional[bool] = None
     color: Optional[str] = Field(
         default=None,
@@ -269,6 +294,29 @@ class WordHeadingStyleSpec(BaseModel):
     align: Optional[Literal["left", "center", "right", "justify"]] = None
     space_before_pt: Optional[float] = Field(default=None, ge=0.0, le=96.0)
     space_after_pt: Optional[float] = Field(default=None, ge=0.0, le=96.0)
+
+
+class WordCaptionStyleSpec(BaseModel):
+    """题注样式（图/表题注段落，默认 9pt 居中）。全字段可选。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    font_family: Optional[str] = Field(default=None, max_length=100)
+    ascii_font: Optional[str] = Field(default=None, max_length=100)
+    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
+    bold: Optional[bool] = None
+    align: Optional[Literal["left", "center", "right", "justify"]] = None
+
+
+class WordTableTextStyleSpec(BaseModel):
+    """表格文字样式（单元格 runs）。``header_bold`` 仅作用于表头首行。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    font_family: Optional[str] = Field(default=None, max_length=100)
+    ascii_font: Optional[str] = Field(default=None, max_length=100)
+    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
+    header_bold: Optional[bool] = None
 
 
 class WordHeaderFooterSpec(BaseModel):
@@ -309,6 +357,9 @@ class WordFormatSpec(BaseModel):
         Dict[Literal["h1", "h2", "h3", "h4", "h5"], WordHeadingStyleSpec]
     ] = None
     title: Optional[WordHeadingStyleSpec] = None
+    # 样式模板：题注与表格文字样式（None = 历史行为：9pt 居中 / 不触碰）
+    caption: Optional[WordCaptionStyleSpec] = None
+    table_text: Optional[WordTableTextStyleSpec] = None
     header: Optional[WordHeaderFooterSpec] = None
     footer: Optional[WordHeaderFooterSpec] = None
     # Round 8：多级标题自动编号（h1-h5 计数器，字面 "N.M.K" 文本前缀）。
@@ -399,6 +450,20 @@ class OfficeWordGenerateRequest(BaseModel):
     format_spec: Optional[WordFormatSpec] = Field(
         default=None,
         description="版式规范；None 保持默认版式（行为与历史版本一致）",
+    )
+    # 样式模板：命名预设（default / report / gb9704-gongwen / academic-thesis）。
+    # 与 format_spec 深合并，显式字段优先；None = 不使用预设。
+    format_spec_preset: Optional[str] = Field(
+        default=None,
+        max_length=80,
+        description="命名样式预设 id；与 format_spec 深合并，显式字段优先",
+    )
+    # 样式模板：参考文档（reference.docx）——提供 styles/theme/页面设置基座，
+    # 正文字内容不入产物；相对路径按 workspace_path 解析。
+    template_docx_path: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+        description="参考文档 .docx 路径（样式基座）；相对路径按工作区解析",
     )
     # Round 49：文档核心属性（core properties，期刊/公文归档要求）。
     metadata: Optional[WordMetadataSpec] = Field(

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from ._docx_lazy import Document, page_field_xpath, qn
 from .errors import OfficeParseError
@@ -53,6 +53,17 @@ _CITATION_MARKER_RE = re.compile(r"\[(\d+)(?:-(\d+))?\]")
 
 def _issue(rule_id: str, severity: str, message: str, fix_hint: str = "") -> WordLintIssue:
     return WordLintIssue(rule_id=rule_id, severity=severity, message=message, fix_hint=fix_hint)
+
+
+def _style_font_names(style: Any) -> Tuple[Optional[str], Optional[str]]:
+    """读取样式 rPr/rFonts 的 (eastAsia, ascii) 字体名（未设置为 None）。"""
+    rPr = style.element.find(qn("w:rPr"))
+    if rPr is None:
+        return None, None
+    rFonts = rPr.find(qn("w:rFonts"))
+    if rFonts is None:
+        return None, None
+    return rFonts.get(qn("w:eastAsia")), rFonts.get(qn("w:ascii"))
 
 
 def _document_has_field_with_instr(doc: Document, token: str) -> bool:
@@ -173,6 +184,19 @@ def _check_page(doc: Document, page: WordPageSetupSpec, issues: List[WordLintIss
 def _check_body(doc: Document, body: WordBodyStyleSpec, issues: List[WordLintIssue]) -> None:
     style = doc.styles["Normal"]
     paragraph_format = style.paragraph_format
+    east_font, ascii_font = _style_font_names(style)
+    if body.font_family is not None and east_font != body.font_family:
+        issues.append(_issue(
+            "body/font_family", "error",
+            f"正文字体实测 {east_font!r}，期望 {body.font_family!r}",
+            f"把 Normal 样式中文字体改为 {body.font_family}",
+        ))
+    if body.ascii_font is not None and ascii_font != body.ascii_font:
+        issues.append(_issue(
+            "body/ascii_font", "error",
+            f"正文西文字体实测 {ascii_font!r}，期望 {body.ascii_font!r}",
+            f"把 Normal 样式西文字体改为 {body.ascii_font}",
+        ))
     if body.font_size_pt is not None:
         actual = style.font.size.pt if style.font.size else None
         if actual is None or abs(actual - body.font_size_pt) > 0.01:
@@ -188,6 +212,15 @@ def _check_body(doc: Document, body: WordBodyStyleSpec, issues: List[WordLintIss
                 "body/line_spacing", "error",
                 f"正文行距实测 {actual}，期望 {body.line_spacing} 倍",
                 f"把 Normal 样式行距改为 {body.line_spacing} 倍",
+            ))
+    if body.line_spacing_pt is not None:
+        actual = paragraph_format.line_spacing
+        actual_pt = float(actual.pt) if hasattr(actual, "pt") else None
+        if actual_pt is None or abs(actual_pt - body.line_spacing_pt) > 0.1:
+            issues.append(_issue(
+                "body/line_spacing_pt", "error",
+                f"正文行距实测 {actual_pt}pt，期望 {body.line_spacing_pt}pt",
+                f"把 Normal 样式行距改为固定 {body.line_spacing_pt} 磅",
             ))
     if body.first_line_indent_cm is not None:
         actual = _cm(paragraph_format.first_line_indent)
@@ -210,6 +243,19 @@ def _check_heading_style(
         style = doc.styles[style_name]
     except KeyError:
         return
+    east_font, ascii_font = _style_font_names(style)
+    if spec.font_family is not None and east_font != spec.font_family:
+        issues.append(_issue(
+            f"{rule_prefix}/font_family", "error",
+            f"{style_name} 中文字体实测 {east_font!r}，期望 {spec.font_family!r}",
+            f"把 {style_name} 样式中文字体改为 {spec.font_family}",
+        ))
+    if spec.ascii_font is not None and ascii_font != spec.ascii_font:
+        issues.append(_issue(
+            f"{rule_prefix}/ascii_font", "error",
+            f"{style_name} 西文字体实测 {ascii_font!r}，期望 {spec.ascii_font!r}",
+            f"把 {style_name} 样式西文字体改为 {spec.ascii_font}",
+        ))
     if spec.font_size_pt is not None:
         actual = style.font.size.pt if style.font.size else None
         if actual is None or abs(actual - spec.font_size_pt) > 0.01:

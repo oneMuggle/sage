@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from backend.compat.win7.pydantic_compat import ConfigDict
 
 from .doc_profile_models import WordTextAnchor
+from .models import WordFormatSpec
 
 RuleCategory = Literal["page", "style", "structure", "content", "table"]
 RuleSeverity = Literal["error", "warning"]
@@ -308,6 +309,29 @@ class WordBatchAuditResult(BaseModel):
     report_markdown: Optional[str] = None
 
 
+class WordStyleUnmappedRule(BaseModel):
+    """规则包转换时未能映射到样式画像的一条规则（附原因）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: str = Field(min_length=1, max_length=80)
+    kind: str = Field(default="", max_length=80)
+    reason: str = Field(default="", max_length=200)
+
+
+class WordStyleProfileConversion(BaseModel):
+    """规则包 → 样式画像转换结果（POST /office/word/style/from-rulepack）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool = True
+    rulepack_id: str = Field(default="", max_length=80)
+    format_spec: WordFormatSpec
+    applied_rule_ids: List[str] = Field(default_factory=list)
+    unmapped: List[WordStyleUnmappedRule] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+
+
 __all__ = [
     "IssueScope",
     "PackOrigin",
@@ -334,4 +358,6 @@ __all__ = [
     "WordRulePackListResult",
     "WordRulePackSummary",
     "WordRuleSpec",
+    "WordStyleProfileConversion",
+    "WordStyleUnmappedRule",
 ]
