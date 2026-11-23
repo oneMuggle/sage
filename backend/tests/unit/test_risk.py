@@ -253,6 +253,8 @@ class TestBuiltinToolDeclarations:
             "schedule_task": RiskClass.WRITE_LOCAL,
             "list_scheduled_tasks": RiskClass.READ,
             "cancel_scheduled_task": RiskClass.WRITE_LOCAL,
+            # MinerU 解析在 engine=auto/mineru 时把文档上传到内网服务
+            "parse_document": RiskClass.EXTERNAL,
         }
         for name, risk in expected.items():
             assert registry.risk_of(name) is risk, f"{name} risk mismatch"

@@ -2567,7 +2567,7 @@ git commit -m "feat(document-parse): 后台队列与装配工厂"
 - Consumes: Task 7 `get_document_parse_service()`；`MediaStore`；`current_tool_context`；`backend.tools.base._is_safe_path`。
 - Produces: 工具名 `parse_document`，`requires_tool_context=True`，`risk=RiskClass.EXTERNAL`，`is_blocking=True`；`execute(path=None, media_id=None, engine="auto", output_format="markdown", pages=None, tier=None)`；`ToolResult.content` = 文本（docx/html 时为产物说明），`ToolResult.output` = `{engine_used,tier_used,quality_score,cached,duration_ms,warnings,media_url,assets}`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_parse_document_tool.py
@@ -2618,12 +2618,12 @@ def test_execute_uses_service(monkeypatch) -> None:
     assert result.output["engine_used"] == "local"
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_parse_document_tool.py -q`
 Expected: ImportError
 
-- [ ] **Step 3: 写实现**
+- [x] **Step 3: 写实现**
 
 `backend/tools/parse_document_tool.py`：
 
@@ -2860,7 +2860,7 @@ def _install_document_parse(ctx: Any) -> None:
 - `_EXPECTED_BUNDLE_NAMES`：在 `"multimodal",` 之后插入 `"document_parse",`。
 - `_EXPECTED_SCHEMA_NAMES` **不变**：`get_schemas_for_llm()` 在无活动 `ToolExecutionContext` 时过滤 `requires_tool_context=True` 的工具（`ocr_image` 同样缺席），`parse_document` 与之同构。
 
-- [ ] **Step 4: 跑工具/快照/风险测试**
+- [x] **Step 4: 跑工具/快照/风险测试**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_parse_document_tool.py backend/tests/unit/test_tool_bundles_parity.py backend/tests/unit/test_risk.py -q
@@ -2868,7 +2868,7 @@ def _install_document_parse(ctx: Any) -> None:
 
 若 `test_risk.py` 存在内置工具风险验收表：把 `parse_document: RiskClass.EXTERNAL` 加入。
 
-- [ ] **Step 5: 棘轮回填 + ruff + commit**
+- [x] **Step 5: 棘轮回填 + ruff + commit**
 
 ```bash
 node scripts/architecture-check.mjs   # 按提示回填 architecture-baseline.json
