@@ -234,9 +234,18 @@ def test_background_guide_documents_snapshot_strategy():
 
 
 def _seed_task_usage(
-    session_id: str, task_id: str, total_tokens: int, created_at_ms: int
+    session_id: str,
+    task_id: str,
+    total_tokens: int,
+    created_at_ms: int,
+    cost: float | None = None,
+    run_id: str | None = None,
 ) -> None:
-    """插带 task_id 归因的 usage_events 行（模拟子任务执行期间的 LLM 用量）。"""
+    """插带 task_id 归因的 usage_events 行（模拟子任务执行期间的 LLM 用量）。
+
+    M4.3b：``cost`` 缺省 None（定价未知 → 不出金额键）；``run_id`` 用于
+    run 维度归因（金额账本按 run_id 聚合）。
+    """
     import uuid
 
     from backend.data.database import get_database
@@ -245,9 +254,17 @@ def _seed_task_usage(
     conn.execute(
         "INSERT INTO usage_events (id, session_id, model, prompt_tokens,"
         " completion_tokens, total_tokens, estimated_cost_usd, created_at,"
-        " cached_tokens, task_id)"
-        " VALUES (?, ?, 'test-model', 0, 0, ?, 0.0, ?, 0, ?)",
-        (str(uuid.uuid4()), session_id, total_tokens, created_at_ms, task_id),
+        " cached_tokens, task_id, run_id)"
+        " VALUES (?, ?, 'test-model', 0, 0, ?, ?, ?, 0, ?, ?)",
+        (
+            str(uuid.uuid4()),
+            session_id,
+            total_tokens,
+            cost,
+            created_at_ms,
+            task_id,
+            run_id,
+        ),
     )
     conn.commit()
 
@@ -364,6 +381,7 @@ async def test_running_event_lacks_tokens_and_duration(tmp_path, monkeypatch):
     assert running, "应存在 running 事件"
     assert "used_tokens" not in running[0]
     assert "duration_ms" not in running[0]
+    assert "used_cost_usd" not in running[0]
     done = [e for e in events if e["status"] == "done"]
     assert done
     assert "duration_ms" in done[0]
@@ -543,6 +561,9 @@ async def test_persist_task_state_records_usage_and_duration(tmp_path, monkeypat
     tasks = {t["task_id"]: t for t in resp.json()["tasks"]}
     assert tasks["t1"]["used_tokens"] == 4321
     assert tasks["t1"]["duration_ms"] is not None
+
+
+# ---- M4.3b (2026-11-23): 任务级金额用例见 test_orch_cost_attribution.py -------
 
 
 # ---- BU18 (round34): 聚合头部守门行量化补全 ------------------------------------

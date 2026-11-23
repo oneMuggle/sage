@@ -174,6 +174,36 @@ async def test_run_loop_session_attribution():
     assert client.session_id == "s9"
 
 
+def test_record_persists_contextvar_task_and_run_attribution(
+    tracker_with_db: UsageTracker,
+):
+    """M4.3b: record() 落库自动携带 task_id + run_id ContextVar 归因。"""
+    from backend.data.database import get_database
+    from backend.services.usage_tracker import (
+        set_current_run_id,
+        set_current_task_id,
+    )
+
+    set_current_task_id("tA")
+    set_current_run_id("orch-x")
+    try:
+        tracker_with_db.record("gpt-4o", 1, 1, session_id="s-attr")
+    finally:
+        set_current_run_id(None)
+        set_current_task_id(None)
+
+    row = (
+        get_database()
+        .get_connection()
+        .execute(
+            "SELECT task_id, run_id FROM usage_events WHERE session_id = 's-attr'"
+        )
+        .fetchone()
+    )
+    assert row["task_id"] == "tA"
+    assert row["run_id"] == "orch-x"
+
+
 # ---- F6 用户级规则 ----
 
 

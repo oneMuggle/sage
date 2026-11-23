@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { orchRunClient } from '../../../shared/api/orchRunClient';
 import type { OrchRunDetail } from '../../../shared/api/orchRunClient';
 
+import { formatCostUsd } from './progressFormat';
+
 interface SessionRunHistoryProps {
   sessionId: string;
   onSelectRun: (run: OrchRunDetail) => void;
@@ -90,6 +92,9 @@ export function SessionRunHistory({ sessionId, onSelectRun, excludeRunId }: Sess
           (sum, t) => sum + (typeof t.used_tokens === 'number' ? t.used_tokens : 0),
           0,
         );
+        // M4.3b: run 级金额（USD 估算）—— 由后端按 run_id 从 usage_events
+        // 账本聚合；定价未知为 null → 不显示（未知 ≠ 免费）。
+        const totalCost = typeof run.cost_usd === 'number' ? run.cost_usd : null;
         return (
           <button
             key={run.run_id}
@@ -121,6 +126,15 @@ export function SessionRunHistory({ sessionId, onSelectRun, excludeRunId }: Sess
             {totalTokens > 0 && (
               <span className="text-text-muted shrink-0" data-testid={`run-history-tokens-${run.run_id}`}>
                 {totalTokens.toLocaleString()} tokens
+              </span>
+            )}
+            {/* M4.3b: run 级金额（USD 估算）—— 定价未知则不显示。 */}
+            {totalCost !== null && (
+              <span
+                className="text-text-muted shrink-0 tabular-nums"
+                data-testid={`run-history-cost-${run.run_id}`}
+              >
+                {formatCostUsd(totalCost)}
               </span>
             )}
             <span className="text-text-muted shrink-0 text-ui-xs">

@@ -24,7 +24,7 @@ import { findPluginToolOwner } from '../../../shared/lib/permissionInsights';
 
 import { ContextInput } from './ContextInput';
 import { EventTimeline } from './EventTimeline';
-import { formatDuration, formatElapsed, formatTokens } from './progressFormat';
+import { formatCostUsd, formatDuration, formatElapsed, formatTokens } from './progressFormat';
 
 // M1: Transcript 面板按需加载 —— 主 chunk 已逼近 bundle size 门禁预算，
 // 面板与轮询 hook 拆到独立 chunk，只有切到「对话」tab 时才拉取。
@@ -247,6 +247,12 @@ export function TaskDetailView({
           )}
           {(status?.used_tokens ?? 0) > 0 && (
             <span className="tabular-nums">消耗 {formatTokens(status!.used_tokens!)}</span>
+          )}
+          {/* M4.3b: 已定价金额（USD 估算）—— 定价未知不显（不等于免费）。 */}
+          {typeof status?.used_cost_usd === 'number' && (
+            <span className="tabular-nums" data-testid="task-detail-cost">
+              金额 {formatCostUsd(status.used_cost_usd)}
+            </span>
           )}
           {(status?.retry_count ?? 0) > 0 && (
             <span data-testid="task-detail-retry-count">已重试 ×{status?.retry_count}</span>

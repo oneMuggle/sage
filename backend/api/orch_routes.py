@@ -26,6 +26,7 @@ from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与�
 )
 from backend.data.orch_run_repo import OrchRun, OrchRunRepository
 from backend.data.orch_task_repo import OrchTaskRepository
+from backend.data.usage_cost_repo import UsageCostRepository
 
 router = APIRouter(prefix="/orch", tags=["orchestration-runs"])
 router.include_router(_pause_router)
@@ -54,9 +55,10 @@ class OrchRunDetail(BaseModel):
     # RT27 (round62): run 级聚合统计 —— 历史回看一目了然。
     total_used_tokens: Optional[int] = None
     total_duration_ms: Optional[int] = None
-    # 2026-11-10: 确认/派发时间戳 —— 前端恢复锁定态的依据。
-    # confirmed_at 非 null 表示用户已确认（PlanCard locked）；
-    # dispatched_at 非 null 表示首个 task_status 已到达（PlanCard 消失）。
+    # M4.3b (2026-11-23): run 级金额（USD 估算）—— 定价未知为 None。
+    cost_usd: Optional[float] = None
+    # 2026-11-10: 确认/派发时间戳 —— 前端恢复锁定态的依据（非 null = 已确认 /
+    # 已派发，PlanCard 据此锁定或消失）。
     confirmed_at: Optional[int] = None
     dispatched_at: Optional[int] = None
 
@@ -84,6 +86,8 @@ class PlanUpdateRequest(BaseModel):
 def _run_detail(run: OrchRun) -> OrchRunDetail:
     """C1 (2026-09-09): OrchRun → OrchRunDetail（get_run / 会话列表共用）。"""
     task_repo = OrchTaskRepository()
+    # M4.3b: 金额按 run_id 从 usage_events 账本聚合（不入 orch_tasks）。
+    costs = UsageCostRepository().run_costs_usd(run.run_id)
     plan = json.loads(run.plan_json).get("tasks", [])
     tasks = [
         {
@@ -100,6 +104,7 @@ def _run_detail(run: OrchRun) -> OrchRunDetail:
             # RT24 (round32): 任务级用量/时长 —— 终态落库值，历史回看可见。
             "used_tokens": getattr(t, "used_tokens", None),
             "duration_ms": getattr(t, "duration_ms", None),
+            "cost_usd": costs["tasks"].get(t.task_id),
             "retry_of": getattr(t, "retry_of", None),
             # 任务层级：历史回放需返回父子与深度（spec 2026-09-19）。
             "parent_task_id": getattr(t, "parent_task_id", None),
@@ -107,12 +112,8 @@ def _run_detail(run: OrchRun) -> OrchRunDetail:
         }
         for t in task_repo.list_by_run(run.run_id)
     ]
-    total_used = sum(
-        t["used_tokens"] for t in tasks if isinstance(t.get("used_tokens"), int)
-    )
-    total_dur = sum(
-        t["duration_ms"] for t in tasks if isinstance(t.get("duration_ms"), int)
-    )
+    total_used = sum(t["used_tokens"] for t in tasks if isinstance(t.get("used_tokens"), int))
+    total_dur = sum(t["duration_ms"] for t in tasks if isinstance(t.get("duration_ms"), int))
     return OrchRunDetail(
         run_id=run.run_id,
         session_id=run.session_id,
@@ -124,6 +125,7 @@ def _run_detail(run: OrchRun) -> OrchRunDetail:
         # RT27 (round62): run 级聚合统计。
         total_used_tokens=total_used if total_used > 0 else None,
         total_duration_ms=total_dur if total_dur > 0 else None,
+        cost_usd=costs["total"],
         # 2026-11-10: 确认/派发时间戳透传 —— 前端恢复锁定态。
         confirmed_at=run.confirmed_at,
         dispatched_at=run.dispatched_at,
