@@ -13,6 +13,7 @@ import type { DisplayMode } from '../../../features/chat/displayMode/types';
 import { useDisplayMode } from '../../../features/chat/displayMode/useDisplayMode';
 import type { TaskTranscriptMessage } from '../../../shared/api/orchEvents';
 
+import { formatDuration } from './progressFormat';
 import { useTaskTranscript } from './useTaskTranscript';
 
 interface TaskTranscriptPanelProps {
@@ -37,12 +38,6 @@ function summarizeArgs(args: unknown): string {
   }
 }
 
-function formatDuration(durationMs: number | null): string {
-  if (durationMs === null || durationMs === undefined) return '';
-  if (durationMs < 1000) return `${durationMs}ms`;
-  return `${(durationMs / 1000).toFixed(1)}s`;
-}
-
 function ReasoningBlock({ text, mode }: { text: string; mode: DisplayMode }) {
   const open = mode === 'detail';
   const label =
@@ -61,7 +56,13 @@ function ReasoningBlock({ text, mode }: { text: string; mode: DisplayMode }) {
   );
 }
 
-function ToolCallBlock({ message }: { message: TaskTranscriptMessage }) {
+function ToolCallBlock({
+  message,
+  durationMs,
+}: {
+  message: TaskTranscriptMessage;
+  durationMs?: number | null;
+}) {
   const args = summarizeArgs(message.tool_args);
   const fullArgs = useMemo(() => {
     if (message.tool_args === null || message.tool_args === undefined) return '';
@@ -81,6 +82,15 @@ function ToolCallBlock({ message }: { message: TaskTranscriptMessage }) {
     >
       <div className="text-xs text-primary break-words">
         🔧 {message.tool_name ?? 'tool'}
+        {durationMs !== null && durationMs !== undefined && (
+          <span
+            data-testid="task-transcript-tool-call-duration"
+            className="text-text-muted tabular-nums"
+          >
+            {' '}
+            · {formatDuration(durationMs)}
+          </span>
+        )}
         {args && <span className="text-text-secondary"> {args}</span>}
       </div>
       {fullArgs && fullArgs !== args && (
@@ -98,7 +108,10 @@ function ToolCallBlock({ message }: { message: TaskTranscriptMessage }) {
 }
 
 function ToolResultBlock({ message }: { message: TaskTranscriptMessage }) {
-  const duration = formatDuration(message.duration_ms);
+  const duration =
+    message.duration_ms !== null && message.duration_ms !== undefined
+      ? formatDuration(message.duration_ms)
+      : '';
   return (
     <details
       open={message.is_error}
@@ -122,7 +135,15 @@ function ToolResultBlock({ message }: { message: TaskTranscriptMessage }) {
   );
 }
 
-function MessageRow({ message, mode }: { message: TaskTranscriptMessage; mode: DisplayMode }) {
+function MessageRow({
+  message,
+  mode,
+  durationByCallId,
+}: {
+  message: TaskTranscriptMessage;
+  mode: DisplayMode;
+  durationByCallId: ReadonlyMap<string, number>;
+}) {
   switch (message.message_type) {
     case 'goal':
       return (
@@ -145,7 +166,14 @@ function MessageRow({ message, mode }: { message: TaskTranscriptMessage; mode: D
         </div>
       );
     case 'tool_call':
-      return <ToolCallBlock message={message} />;
+      return (
+        <ToolCallBlock
+          message={message}
+          durationMs={
+            message.tool_call_id ? (durationByCallId.get(message.tool_call_id) ?? null) : null
+          }
+        />
+      );
     case 'tool_result':
       return <ToolResultBlock message={message} />;
     case 'error':
@@ -180,6 +208,22 @@ export function TaskTranscriptPanel({
   });
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [followupDraft, setFollowupDraft] = useState('');
+
+  // M4.1: tool_call 行本身不含耗时（后端在 OBSERVING 时才知道），
+  // 按 tool_call_id 关联 tool_result 行的 duration_ms 展示。
+  const durationByCallId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const message of messages) {
+      if (
+        message.message_type === 'tool_result' &&
+        message.tool_call_id &&
+        typeof message.duration_ms === 'number'
+      ) {
+        map.set(message.tool_call_id, message.duration_ms);
+      }
+    }
+    return map;
+  }, [messages]);
 
   const submitFollowup = () => {
     const text = followupDraft.trim();
@@ -225,7 +269,7 @@ export function TaskTranscriptPanel({
           <ul className="space-y-2">
             {messages.map((message) => (
               <li key={message.seq}>
-                <MessageRow message={message} mode={mode} />
+                <MessageRow message={message} mode={mode} durationByCallId={durationByCallId} />
               </li>
             ))}
           </ul>
