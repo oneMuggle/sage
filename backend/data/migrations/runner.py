@@ -32,6 +32,7 @@ from typing import Any, Callable, List, Tuple
 
 from backend.data.migrations.v17_office_rules import _v17_office_rules
 from backend.data.migrations.v19_browser_actions import _v19_browser_actions
+from backend.data.migrations.v20_usage_run_id import _v20_usage_events_run_id
 
 logger = logging.getLogger(__name__)
 
@@ -591,6 +592,7 @@ register_migration(
 )
 
 register_migration(19, "browser_actions", _v19_browser_actions)
+register_migration(20, "usage_events_run_id", _v20_usage_events_run_id)
 
 
 def ensure_version_table(conn: Any) -> None:

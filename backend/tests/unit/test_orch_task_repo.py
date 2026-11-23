@@ -154,3 +154,20 @@ def test_blocked_by_roundtrip_json(repo):
     )
     row = repo.get("t1")
     assert row.blocked_by == ["a", "b", "c"]
+
+
+def test_orch_tasks_schema_has_no_cost_usd_column(tmp_path, monkeypatch):
+    """M4.3b: orch_tasks 刻意**不存**金额 —— task_id 是主键且计划编号跨
+    run 复用，同会话第二个 run 会覆盖第一个 run 的行（金额会串 run）。
+    金额以 usage_events 为唯一真相源（按 run_id 聚合）。"""
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("SAGE_DB_PATH", str(db_path))
+    monkeypatch.setattr(db_mod, "_db", None)
+    db = db_mod.get_database()
+    db.init_db()
+
+    columns = {
+        row["name"]: row["type"]
+        for row in db.get_connection().execute("PRAGMA table_info(orch_tasks)")
+    }
+    assert "cost_usd" not in columns

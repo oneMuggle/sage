@@ -9,7 +9,7 @@ import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 import { usePluginNames } from '../../../shared/lib/hooks/usePluginNames';
 import { findPluginToolOwner } from '../../../shared/lib/permissionInsights';
 
-import { formatDuration, formatElapsed, formatTokens } from './progressFormat';
+import { formatCostUsd, formatDuration, formatElapsed, formatTokens } from './progressFormat';
 import { buildTaskTree, descendantsOf, flattenTree } from './taskTree';
 
 const STATUS_ICON: Record<TaskStatusValue, string> = {
@@ -239,6 +239,13 @@ export function TaskTreeSection({
         const hasChildren = childIds.length > 0;
         const isCollapsed = collapsed.has(item.task_id);
         const clickable = Boolean(onSelectTask);
+        // M4.3b: 任务级用量徽章 —— token / 耗时 / 已定价金额。金额仅在有
+        // 已定价行时出现（定价未知 = 不显示，不是 $0）。
+        const usageParts = [
+          (st?.used_tokens ?? 0) > 0 ? formatTokens(st!.used_tokens!) : null,
+          (st?.duration_ms ?? 0) > 0 ? formatDuration(st!.duration_ms!) : null,
+          typeof st?.used_cost_usd === 'number' ? formatCostUsd(st.used_cost_usd) : null,
+        ].filter((part): part is string => part !== null);
         return (
           <div
             key={item.task_id}
@@ -361,15 +368,14 @@ export function TaskTreeSection({
                 </span>
               )}
               {/* BU13 (round24): 终态任务消耗/耗时徽章 —— per-task 归因值，
-                  任一存在即展示（对标 Claude Code per-task token + 耗时）。 */}
-              {(st?.used_tokens ?? 0) > 0 || (st?.duration_ms ?? 0) > 0 ? (
+                  任一存在即展示（对标 Claude Code per-task token + 耗时）。
+                  M4.3b: 追加已定价金额（定价未知不显）。 */}
+              {usageParts.length > 0 ? (
                 <span
                   data-testid={`task-tree-usage-${item.task_id}`}
                   className="text-text-muted text-ui-2xs shrink-0"
                 >
-                  {(st?.used_tokens ?? 0) > 0 && formatTokens(st!.used_tokens!)}
-                  {(st?.used_tokens ?? 0) > 0 && (st?.duration_ms ?? 0) > 0 && ' · '}
-                  {(st?.duration_ms ?? 0) > 0 && formatDuration(st!.duration_ms!)}
+                  {usageParts.join(' · ')}
                 </span>
               ) : null}
               {/* RD18 (round33): 级联跳过根因徽章 —— 上游失败导致本任务

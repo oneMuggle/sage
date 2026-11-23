@@ -36,6 +36,17 @@ def set_current_task_id(task_id: str | None) -> None:
     """设置 / 清除当前任务归因 ID（dispatcher 在子任务启停时调用）。"""
     current_task_id.set(task_id)
 
+
+# M4.3b (2026-11-23): 编排 run 级归因 —— 与 task_id 同源设置，_persist
+# 落库时携带 run_id，支撑 run 级成本汇总与历史回看。
+current_run_id: ContextVar = ContextVar("current_run_id", default=None)
+
+
+def set_current_run_id(run_id: str | None) -> None:
+    """设置 / 清除当前编排 run 归因 ID（dispatcher 在子任务启停时调用）。"""
+    current_run_id.set(run_id)
+
+
 # 每百万 token 的美元定价: (input, output)。键按最长前缀优先匹配
 # (lowercased 模型名), 未知模型 → 成本 None。
 # 数据来源: 各厂商公开定价 (2026-07), 仅用于估算。
@@ -376,6 +387,8 @@ class UsageTracker:
                 # RT23 (round23): 编排子任务归因（ContextVar 自动携带）。
                 current_task_id.get(),
                 breakdown_json,
+                # M4.3b: run 级归因（与 task_id 同时设置）。
+                current_run_id.get(),
             )
             with _SQLITE_LOCK:
                 get_database().get_connection().execute(
@@ -383,8 +396,8 @@ class UsageTracker:
                     " completion_tokens, total_tokens, estimated_cost_usd, created_at,"
                     " cached_tokens, cache_read_tokens, cache_creation_tokens,"
                     " first_token_ms, latency_ms, endpoint_id, price_snapshot, task_id,"
-                    " context_breakdown)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " context_breakdown, run_id)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     row,
                 )
                 get_database().get_connection().commit()

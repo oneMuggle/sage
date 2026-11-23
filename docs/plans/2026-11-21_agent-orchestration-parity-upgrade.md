@@ -1,6 +1,7 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0–M4.2 已实施并合并 main（并已同步 win7）：M4.1 工具耗时 + transcript 全文引用、M4.3a 编排通知 + 任务深链（main #3225 / win7 #3226）、M4.2 统一运行视图（main #3227 / win7 #3234）；M4.3b 成本透明待实施
+> 状态：M0–M4.2 已实施并合并 main（并已同步 win7）：M4.1 工具耗时 + transcript 全文引用、M4.3a 编排通知 + 任务深链（main #3225 / win7 #3226）、M4.2 统一运行视图（main #3227 / win7 #3234）；M4.3b 成本透明实施中（见 §14）
+> 分支：M4.3b `feat/orch-cost-transparency`（usage_events run_id 维度 + 每任务/每 run 金额展示，实施计划见 §14）
 > 分支：M4.2 `feat/orch-unified-run-view`（已合并 #3227，canonical run 目录 + 右栏回落，实施记录见 §13）
 > 分支：M4.3a `feat/orch-run-notifications`（已合并 #3225，编排 run 通知 + 任务深链，实施计划见 §12）
 > 分支：M4.1 `feat/orch-tool-duration`
@@ -444,8 +445,96 @@ Layer 2 视图   TaskCenter（canonical 条目 + 内存 live 叠加）
 
 **收敛形态落地**：run 级兜底行只覆盖「已确认未派发 / 全部子任务终态后仍在收尾 / 子任务全部终态后 run 失败」三种没有可见子任务行的窗口，避免同一 run 在任务中心出现父子两层重复行；子任务行 canonical 与内存天然同 id 去重，`awaiting_approval` 是唯一由内存侧压过 canonical 的状态（DB 不存待审批）。合成右栏任务板不写回 `chatStreamStore` —— 内存板一旦出现即优先，canonical 事件订阅用合成板 runId 继续补齐实时细节。
 
-**已知遗留**：LaneBoard 仍是 lane 域独立数据源（lane 与 orch run 是两套调度单元，本里程碑只保证其在 TaskCenter 中与 run 条目并列可见）；目录轮询为全量 `limit=50`，run 数量大时无增量游标；右栏合成板不含 `liveStep`（canonical 不存），进程重启后事件时间线为空但任务状态正确；§12.5 提到的 `task.paused/resumed` 映射与 `task.skipped` 白名单两处事件映射缺陷未在本里程碑修复（不影响目录聚合的状态正确性）；M4.3b 成本透明未做。
+**已知遗留**：LaneBoard 仍是 lane 域独立数据源（lane 与 orch run 是两套调度单元，本里程碑只保证其在 TaskCenter 中与 run 条目并列可见）；目录轮询为全量 `limit=50`，run 数量大时无增量游标；右栏合成板不含 `liveStep`（canonical 不存），进程重启后事件时间线为空但任务状态正确；§12.5 提到的 `task.paused/resumed` 映射与 `task.skipped` 白名单两处事件映射缺陷未在本里程碑修复（不影响目录聚合的状态正确性）；M4.3b 成本透明见 §14。
 
 验证：后端目录端点专项 14 用例 + 邻居 140 用例全绿，`ruff check` 通过；前端 task-center 套件（含 i18n 字节对与 IPC 契约）130 用例全绿；`tsc --noEmit`、ESLint（改动文件 0 error）、`prettier --check`、架构棘轮、`ipc:manifest:check`（428 命令）均通过。
 
 win7 同步（PR #3234，cherry-pick 自 main #3227）：Python 3.8 环境（`sage-backend-py38`）下目录端点 14 用例全绿、`ruff check` 通过，新增后端代码仅用 `typing.Dict/List/Optional/Literal`（无 PEP 604/585）；前端 task-center + orchestration + electron commands 23 文件 253 用例全绿，`tsc --noEmit`、架构棘轮、`ipc:manifest:check`（428 命令）、ESLint（0 error，1 个 pre-existing warning）均通过；CI 全绿（Backend Python 3.8 / Frontend TypeScript / Architecture check / Electron build ×2 / Electron smoke / count-lines）。
+
+## 14. M4.3b 实施计划（成本透明，2026-11-23）
+
+### 14.1 背景与目标
+
+M4 第 3 条验收线"run 汇总成本与后端账一致"；M3.3 亦把成本估算刻意延后到本里程碑
+（执行期才知道实际模型定价与 token 数）。当前缺口：
+
+| 缺口 | 证据 |
+| --- | --- |
+| `usage_events` 无 run 维度 | 表只有 `task_id`（RT23），run 级金额无法直接聚合 |
+| 用量行无 run 归属回填 | 历史 `usage_events` 行缺 run 归属，历史 run 无法出金额 |
+| `orch_tasks` 无金额字段 | 历史回看只有 `used_tokens`/`duration_ms`（RT24），无 USD |
+| 前端无金额展示 | 任务树/详情/StatusBar/历史记录均只显示 tokens |
+
+注意：**per-task `used_tokens` + `duration_ms` 的展示链路已于 RT23/BU13/RT24 落地**，
+本里程碑不重复建设，只补金额维度。
+
+### 14.2 技术方案
+
+> **实施期修订（2026-11-23）**：原方案把金额落 `orch_tasks.cost_usd`，实施时发现该表主键是
+> `task_id` 而计划编号跨 run 复用（t1..tN），同会话第二个 run 会在 `ON CONFLICT(task_id)`
+> 上覆盖第一个 run 的行 → **金额会串到别的 run**。故改为：**金额只存 `usage_events`
+> （既有 `estimated_cost_usd` 列即账本），一切按 `run_id` 现场聚合**。`orch_tasks.cost_usd`
+> 已从 schema/仓储/API 全链路移除（见 14.2.1）。
+
+1. **Schema（`backend/data/database.py` + 新迁移 `backend/data/migrations/v20_usage_run_id.py`）**
+   - `usage_events` 增 `run_id TEXT`（**新库与旧库同走 init_db 防御 ALTER** —— 与同表的
+     `task_id`/`context_breakdown` 等列一致的做法；v20 迁移再兜底一次），
+     索引 `idx_usage_events_run(run_id, task_id, created_at)`（索引须在 ALTER 之后建）。
+   - v20 一次性回填：`task_id` 非空的用量行按 `orch_tasks`（task_id + session + started/finished
+     时间窗）反查 `run_id`；**从未启动的任务（`started_at IS NULL`）不归因**（时间窗无法界定，
+     宁可漏也不串）；只处理 `run_id IS NULL` 的行，迁移框架保证只执行一次。
+   - **不新增金额列**：`usage_events.estimated_cost_usd` 本身即账本（NULL = 定价未知）。
+2. **归因（`backend/services/usage_tracker.py` + `backend/orchestration/chat_dispatcher.py`）**
+   - 新 `current_run_id` ContextVar + `set_current_run_id`；`_persist` INSERT 携带 `run_id`。
+   - dispatcher `_run_one` 在子任务执行前设置 task/run 两个 ContextVar（原 task 设置在 preset 回放早退前会泄漏，
+     一并挪到执行入口），finally 清除。
+   - dispatcher `_task_cost_usd(task_id)` 按 **(run_id, task_id)** 查账本并 run 内 memoize
+     （对照 `_task_tokens_used`）；查询失败 fail-open（返回 None，不阻断终态事件）。
+3. **金额账本（新增 `backend/data/usage_cost_repo.py`）**
+   - `UsageCostRepository.task_cost_usd(run_id, task_id)`：run 内某任务已定价行合计；无已定价行 → None。
+   - `UsageCostRepository.run_costs_usd(run_id)`：`{"total": float | None, "tasks": {task_id: amount}}`；
+     `tasks` 只含已定价任务（未知定价任务不出现 → 前端隐藏）；无已定价行 → `total=None`。
+   - 口径：**只算已知定价行**；DB 故障 fail-open（None / 空结果）。
+4. **API（`backend/api/orch_routes.py`）**
+   - `_run_detail` 任务字典补 `cost_usd`（取账本 task 级）；run 级 `cost_usd` 取账本 `total`；
+     两处均以 `Optional[float]` 表达"未知定价"（NULL ≠ 0）。
+5. **前端**
+   - `TaskStatusEvent` 增 `used_cost_usd?`；`OrchRunDetail` 增 `cost_usd?: number | null`；
+     `restoreRunToBoard` 映射历史任务 `cost_usd`。
+   - `progressFormat.formatCostUsd`：`≈ $0.0123`，极小值 `≈<$0.0001`（`≈` 表示仅合计已知定价请求）。
+   - 展示点：任务树行内徽章、任务详情统计行、StatusBar run 合计、SessionRunHistory run 合计
+     （历史列表用**后端聚合好的 run 级 `cost_usd`**，不再由前端对 `tasks[].cost_usd` 求和）。
+6. **成本口径（写入注释，避免误解）**：run 成本 = 该 run 内**子代理** LLM 调用的定价估算合计；
+   conductor 自身（主会话）调用与未知定价模型不计入。conductor 用量与普通会话用量在同一 `session_id`
+   下无法区分，强归因会污染会话账本。
+
+#### 14.2.1 为什么金额不入 `orch_tasks`（已知限制与后续项）
+
+| 事实 | 影响 |
+| --- | --- |
+| `orch_tasks` 主键是 `task_id`（非复合键），计划编号 t1..tN 跨 run 复用 | 同会话第二个 run 的 `t1` 覆盖第一个 run 的 `t1` 行（`ON CONFLICT(task_id) DO UPDATE`） |
+| 后果 | 金额若落该表会串 run；连带的 `used_tokens`/`duration_ms`/`goal`/`status` 也会被旧 run 的行覆盖 → **历史 run 回看时旧 run 的任务行缺失** |
+| 本里程碑的对策 | 金额一律按 `run_id` 从 `usage_events` 聚合（uuid 主键 + 显式 run_id 列，天然免疫该串扰）；run 级金额在两个 run 同名任务时各自正确 |
+| 遗留 | **旧 run 的任务行仍会缺失**（`list_by_run` 查不到）→ 该旧 run 的任务级金额无处展示（run 级金额仍在）。彻底修复需把 `orch_tasks` 主键改为 `(run_id, task_id)` 复合键 —— 独立里程碑（M4.4 / 后续项），本里程碑不越界 |
+
+### 14.3 实施步骤
+
+- [x] M4.3b-1 v20 迁移：`usage_events.run_id` + 索引 + 历史回填（窗口内 + 从未启动不归因）
+- [x] M4.3b-2 usage_tracker：`current_run_id` ContextVar、`_persist` 写 run_id
+- [x] M4.3b-3 dispatcher：ContextVar 设置/清除、`_task_cost_usd`（按 run+task 查账本）、终态事件 `used_cost_usd`
+- [x] M4.3b-4 金额账本 `backend/data/usage_cost_repo.py`（task 级 / run 级聚合、只算已定价行、fail-open）
+- [x] M4.3b-5 orch_routes：`_run_detail` 透出任务级 + run 级 `cost_usd`（`Optional[float]`）
+- [x] M4.3b-6 前端类型/恢复映射/格式化 + 四处展示（历史列表用 run 级 `cost_usd`）
+- [x] M4.3b-7 测试（后端迁移/归因/账本聚合/事件/API/跨 run 隔离 + 前端展示与恢复）
+- [x] M4.3b-8 门禁与双分支同步（ruff / py38 兼容 / lint-imports / silent-exceptions / 棘轮 / tsc / ESLint / vitest / build）
+
+### 14.4 风险与依赖
+
+| 风险 | 缓解 |
+| --- | --- |
+| `orch_routes.py` 余量仅 2 行 | 只加任务字段 + run 级字段；紧凑写法守 800 上限（实测 countLines 799 = `wc -l` 798） |
+| `chat_dispatcher.py` 棘轮零余量 | 新增逻辑尽量复用既有块；行数按合并后实测上调基线 |
+| 历史 task_id 跨 run 可能重名（`t1..tN`） | 回填按 task_id + session_id + 起止时间窗匹配，且只作用于 `run_id IS NULL` 行；从未启动的任务不归因 |
+| `orch_tasks` 主键是 task_id → 跨 run 覆盖 | 金额不入该表（13.2.1）；旧 run 任务行缺失列为后续项 |
+| 未知定价模型使金额低估 | UI 用 `≈` 前缀；后端无已定价行时返回 NULL 而非 0 |
+| 子代理用量与 conductor 用量同 session | 只归因 dispatcher 子任务上下文；口径写入文档与代码注释 |

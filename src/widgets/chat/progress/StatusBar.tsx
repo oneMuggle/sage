@@ -18,7 +18,7 @@ import { useSettings } from '../../../features/manage-settings/useSettings';
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import { orchRunControlClient } from '../../../shared/api/orchRunControlClient';
 
-import { formatElapsed, formatTokens } from './progressFormat';
+import { formatCostUsd, formatElapsed, formatTokens } from './progressFormat';
 
 const STATE_LABELS: Record<string, string> = {
   thinking: '思考中',
@@ -82,6 +82,19 @@ export function StatusBar({
   const usedTokens = board
     ? Object.values(board.statuses).reduce((sum, st) => sum + (st.used_tokens ?? 0), 0)
     : 0;
+
+  // M4.3b: run 级已定价金额求和 —— 只统计带金额的任务；一个都没有则不显示
+  // （"未知定价"不等于"免费"，不显示 $0）。
+  const costUsd = board
+    ? Object.values(board.statuses).reduce(
+        (sum, st) =>
+          typeof st.used_cost_usd === 'number' ? sum + st.used_cost_usd : sum,
+        0
+      )
+    : 0;
+  const hasCostUsd = board
+    ? Object.values(board.statuses).some((st) => typeof st.used_cost_usd === 'number')
+    : false;
 
   // live-events P1: run 级审批模式开关（乐观更新，后端事件回显为准）。
   const [approvalMode, setApprovalMode] = useState<'ask' | 'auto'>(board?.approvalMode ?? 'ask');
@@ -231,6 +244,11 @@ export function StatusBar({
             )}
             {usedTokens > 0 && (
               <span className="tabular-nums">消耗 {formatTokens(usedTokens)}</span>
+            )}
+            {hasCostUsd && (
+              <span className="tabular-nums" data-testid="task-run-cost">
+                金额 {formatCostUsd(costUsd)}
+              </span>
             )}
           </div>
         </>

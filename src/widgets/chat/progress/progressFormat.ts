@@ -10,6 +10,14 @@ export const formatTokens = (tokens: number): string =>
 export const formatDuration = (ms: number): string =>
   ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1).replace(/\.0$/, '')}s`;
 
+/**
+ * M4.3b: 已定价金额（USD 估算）—— 一律带 "≈" 前缀（金额来自内置价格表
+ * 估算，不是账单真值）。小于 $0.0001 折叠为 "≈<$0.0001"，避免显示 $0.0000
+ * 被误读成"免费"。调用方仅在拿到金额时调用 —— 定价未知不应显示 0。
+ */
+export const formatCostUsd = (cost: number): string =>
+  cost < 0.0001 ? '≈<$0.0001' : `≈ $${cost.toFixed(4)}`;
+
 /** 运行中耗时：<60s 显秒、<1h 显分秒、否则时分。 */
 export const formatElapsed = (ms: number): string => {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
