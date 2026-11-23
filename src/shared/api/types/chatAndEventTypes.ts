@@ -557,6 +557,10 @@ export interface TaskPlanItem {
   // 2026-10-28 (Plan Mode 增强 Phase 3): 自动确认标记。
   // confirm_marker 规则引擎扫描 goal 后写入；true 表示执行前弹 StepConfirmDialog。
   auto_confirm?: boolean;
+  // M3.3: Planner 对单任务 LLM 迭代轮次的预估（1-15，可缺省）。
+  estimated_iterations?: number | null;
+  // M3.3: 复杂度档位（low | medium | high，可缺省）。
+  complexity?: 'low' | 'medium' | 'high' | null;
 }
 
 export interface TaskPlanEvent {

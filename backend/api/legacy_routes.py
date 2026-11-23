@@ -1022,6 +1022,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 # 层级透传（override 可带 parent；depth 由下方
                                 # 归一化统一重算，客户端值不作权威）。
                                 "parent_task_id": it.get("parent_task_id"),
+                                # M3.3: 预估字段透传（缺省 None，前端可选展示）。
+                                "estimated_iterations": it.get("estimated_iterations"),
+                                "complexity": it.get("complexity"),
                             }
                             for it in data.plan_override
                         ]
@@ -1045,6 +1048,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     else None
                                 ),
                                 "depth": int(getattr(t, "depth", 0) or 0),
+                                # M3.3: Planner 预估（缺省 None，前端可选展示）。
+                                "estimated_iterations": t.parameters.get(
+                                    "estimated_iterations"
+                                ),
+                                "complexity": t.parameters.get("complexity"),
                             }
                             for i, t in enumerate(plan_tasks, 1)
                         ]
