@@ -22,6 +22,12 @@ def client(tmp_path, monkeypatch):
     db = tmp_path / "test.db"
     monkeypatch.setenv("SAGE_DB_PATH", str(db))
     monkeypatch.setattr(db_mod, "_db", None)
+    # 全量套件下 backend.main 可能已被早前用例装配过模块级 _task_repo
+    # （绑定旧的 Database 句柄）→ 目录端点的 tasks 查询会落到旧库。
+    # 重置后端点按本用例的 tmp 库现建仓库。
+    from backend.api import orch_run_control
+
+    monkeypatch.setattr(orch_run_control, "_task_repo", None)
     db_mod.get_database().init_db()
     from backend.main import app
 
