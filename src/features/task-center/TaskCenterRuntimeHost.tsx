@@ -5,6 +5,7 @@
 // 后台 shell 退出将永远反映不到任务中心（spec §5.4）。
 import { useEffect } from 'react';
 
+import { useRunDirectoryStore } from '../../entities/orchestration/runDirectoryStore';
 import { listShells } from '../../shared/api/shellApi';
 
 import { useTaskCenterStore } from './taskCenterStore';
@@ -13,6 +14,9 @@ import { useUnifiedTaskStore } from './unifiedTaskStore';
 const SHELL_TASK_POLL_MS = 3_000;
 const GOAL_POLL_MS = 10_000;
 const SLOW_SOURCE_POLL_MS = 30_000;
+
+/** M4.2: canonical run 目录轮询 cadence —— 与 shell 轮询同频（实时性优先）。 */
+const RUN_DIRECTORY_POLL_MS = SHELL_TASK_POLL_MS;
 
 const NON_TERMINAL_GOAL = new Set(['pending', 'running', 'paused']);
 
@@ -67,6 +71,17 @@ export function TaskCenterRuntimeHost(): null {
       if (todos.some((t) => t.status === 'in_progress')) void refreshTodos();
       if (scheduledTasks.some((t) => t.last_status === 'running')) void refreshScheduled();
     }, SLOW_SOURCE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // M4.2: canonical run 目录 3s 轮询 —— 统一运行视图真相层。store 自带
+  // loading 并发保护；失败时保留上一轮数据（任务中心是增强信息）。
+  useEffect(() => {
+    const { refresh } = useRunDirectoryStore.getState();
+    void refresh();
+    const timer = window.setInterval(() => {
+      void useRunDirectoryStore.getState().refresh();
+    }, RUN_DIRECTORY_POLL_MS);
     return () => window.clearInterval(timer);
   }, []);
 

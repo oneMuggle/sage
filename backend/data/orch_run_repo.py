@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, List, Optional, Sequence
 
 from backend.data.database import get_database
 
@@ -74,17 +74,7 @@ class OrchRunRepository:
         row = cursor.fetchone()
         if not row:
             return None
-        return OrchRun(
-            run_id=row["run_id"],
-            session_id=row["session_id"],
-            status=row["status"],
-            created_at=row["created_at"],
-            plan_json=row["plan_json"],
-            final_summary=row["final_summary"],
-            dispatched_at=row["dispatched_at"],
-            original_request=row["original_request"],
-            confirmed_at=row["confirmed_at"],
-        )
+        return self._row_to_run(row)
 
     def list(self, limit: int = 50, offset: int = 0) -> List[OrchRun]:
         conn = self.db.get_connection()
@@ -93,20 +83,7 @@ class OrchRunRepository:
             "SELECT * FROM orch_runs ORDER BY created_at DESC LIMIT ? OFFSET ?",
             (limit, offset),
         )
-        return [
-            OrchRun(
-                run_id=row["run_id"],
-                session_id=row["session_id"],
-                status=row["status"],
-                created_at=row["created_at"],
-                plan_json=row["plan_json"],
-                final_summary=row["final_summary"],
-                dispatched_at=row["dispatched_at"],
-                original_request=row["original_request"],
-                confirmed_at=row["confirmed_at"],
-            )
-            for row in cursor.fetchall()
-        ]
+        return [self._row_to_run(row) for row in cursor.fetchall()]
 
     def list_by_session(self, session_id: str, limit: int = 20) -> List[OrchRun]:
         """C1 (2026-09-09): 按会话列编排 run（新→旧），历史任务板恢复用。
@@ -121,20 +98,46 @@ class OrchRunRepository:
             "ORDER BY created_at DESC LIMIT ?",
             (session_id, limit),
         )
-        return [
-            OrchRun(
-                run_id=row["run_id"],
-                session_id=row["session_id"],
-                status=row["status"],
-                created_at=row["created_at"],
-                plan_json=row["plan_json"],
-                final_summary=row["final_summary"],
-                dispatched_at=row["dispatched_at"],
-                original_request=row["original_request"],
-                confirmed_at=row["confirmed_at"],
-            )
-            for row in cursor.fetchall()
-        ]
+        return [self._row_to_run(row) for row in cursor.fetchall()]
+
+    def list_by_statuses(
+        self, statuses: Sequence[str], limit: int = 50
+    ) -> List[OrchRun]:
+        """M4.2 (2026-11-23): 跨会话按状态集合列 run（新→旧）。
+
+        canonical run 目录（TaskCenter 统一运行视图）的数据源：会话从未在
+        前端加载过时，内存 taskBoard 为空，目录端点仍能在此命中该 run。
+        ``statuses`` 只来自内部固定枚举（非用户输入）；空集合直接返回空。
+        """
+        if not statuses:
+            return []
+        placeholders = ",".join("?" for _ in statuses)
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM orch_runs WHERE status IN ("
+            + placeholders
+            + ") ORDER BY created_at DESC LIMIT ?",
+            (*statuses, limit),
+        )
+        return [self._row_to_run(row) for row in cursor.fetchall()]
+
+    def list_active(self, limit: int = 50) -> List[OrchRun]:
+        """M4.2: 所有运行中（status='running'）的 run，跨会话。"""
+        return self.list_by_statuses(("running",), limit=limit)
+
+    def _row_to_run(self, row: Any) -> OrchRun:
+        return OrchRun(
+            run_id=row["run_id"],
+            session_id=row["session_id"],
+            status=row["status"],
+            created_at=row["created_at"],
+            plan_json=row["plan_json"],
+            final_summary=row["final_summary"],
+            dispatched_at=row["dispatched_at"],
+            original_request=row["original_request"],
+            confirmed_at=row["confirmed_at"],
+        )
 
     def mark_confirmed(self, run_id: str, confirmed_at: int) -> None:
         """2026-11-10: 用户确认时间戳落库（幂等,first-confirm-wins）。
