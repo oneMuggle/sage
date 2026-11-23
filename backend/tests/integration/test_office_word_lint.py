@@ -129,6 +129,42 @@ def test_heading_style_violation(tmp_path: Path) -> None:
     assert "headings/h1/bold" in rule_ids
 
 
+def test_body_font_match_and_violation(tmp_path: Path) -> None:
+    spec = {"body": {"font_family": "仿宋_GB2312", "ascii_font": "Times New Roman"}}
+    conforming = _gen_and_lint(tmp_path, spec, spec, paragraphs=[{"text": "正文"}])
+    assert conforming.ok
+    result = _lint(
+        tmp_path,
+        "doc.docx",
+        {"body": {"font_family": "黑体", "ascii_font": "Arial"}},
+    )
+    rule_ids = {i.rule_id for i in result.issues}
+    assert {"body/font_family", "body/ascii_font"} <= rule_ids
+
+
+def test_heading_font_violation(tmp_path: Path) -> None:
+    gen_spec = {"headings": {"h1": {"font_family": "黑体"}}}
+    conforming = _gen_and_lint(
+        tmp_path,
+        gen_spec,
+        gen_spec,
+        paragraphs=[{"text": "第一章", "heading": "h1"}],
+    )
+    assert conforming.ok
+    result = _lint(tmp_path, "doc.docx", {"headings": {"h1": {"font_family": "宋体"}}})
+    assert any(i.rule_id == "headings/h1/font_family" for i in result.issues)
+
+
+def test_body_exact_line_spacing_violation(tmp_path: Path) -> None:
+    gen_spec = {"body": {"line_spacing_pt": 28}}
+    conforming = _gen_and_lint(
+        tmp_path, gen_spec, gen_spec, paragraphs=[{"text": "正文"}]
+    )
+    assert conforming.ok
+    result = _lint(tmp_path, "doc.docx", {"body": {"line_spacing_pt": 24}})
+    assert any(i.rule_id == "body/line_spacing_pt" for i in result.issues)
+
+
 def test_header_text_violation(tmp_path: Path) -> None:
     result = _gen_and_lint(
         tmp_path, {"header": {"text": "A"}}, {"header": {"text": "B"}}
