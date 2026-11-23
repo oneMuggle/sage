@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
+import { useRunDirectoryStore } from '../../entities/orchestration/runDirectoryStore';
 import { useStore } from '../../shared/lib/store';
 import { useChatStreamStore } from '../send-message/chatStreamStore';
 
@@ -13,6 +14,9 @@ import type { UnifiedTaskEntry } from './unifiedTaskModel';
 import {
   compareUnifiedTasks,
   isTerminalStatus,
+  mergeSubagentEntries,
+  normalizeCanonicalRun,
+  normalizeCanonicalTask,
   normalizeChatTask,
   normalizeGoalTask,
   normalizeLaneTask,
@@ -44,6 +48,7 @@ export function useUnifiedTasks(): UnifiedTasksResult {
   const registryTasks = useTaskCenterStore((s) => s.tasks);
   const streamSessions = useChatStreamStore((s) => s.sessions);
   const lanes = useLaneBoardStore((s) => s.lanes);
+  const directoryRuns = useRunDirectoryStore((s) => s.runs);
   const sessions = useStore((s) => s.sessions);
   const currentSessionId = useStore((s) => s.currentSessionId);
 
@@ -99,8 +104,24 @@ export function useUnifiedTasks(): UnifiedTasksResult {
       );
     }
 
+    // M4.2: canonical run 目录 → 子任务行 + run 兜底行。会话从未在本窗口
+    // 加载过（或跨窗口运行）时，内存 taskBoard 缺失，这里是唯一可见来源。
+    const canonicalById = new Map<string, UnifiedTaskEntry>();
+    const canonicalRunEntries: UnifiedTaskEntry[] = [];
+    for (const run of directoryRuns) {
+      const title = sessionTitle.get(run.session_id) ?? run.session_id;
+      for (const task of run.tasks) {
+        const entry = normalizeCanonicalTask(run, task, title);
+        if (entry) canonicalById.set(entry.id, entry);
+      }
+      const runEntry = normalizeCanonicalRun(run);
+      if (runEntry) canonicalRunEntries.push(runEntry);
+    }
+
     // M2.4: 编排任务板子任务 → 任务中心条目的（活跃/失败），
     // 由 TaskCenter 直接"打开子代理线程"（定位到任务详情）。
+    // M4.2: 同 id 的 canonical 行在此合并 —— canonical 定状态，内存补
+    // liveStep / 待审批 / 真实会话标题。
     for (const [sid, slots] of Object.entries(streamSessions)) {
       const board = slots.taskBoard;
       if (!board) continue;
@@ -122,9 +143,18 @@ export function useUnifiedTasks(): UnifiedTasksResult {
           startedAt: status.runningSince ?? null,
           error: status.error ?? null,
         });
-        if (entry) entries.push(entry);
+        if (!entry) continue;
+        const canonical = canonicalById.get(entry.id);
+        if (canonical) {
+          canonicalById.delete(entry.id);
+          entries.push(mergeSubagentEntries(canonical, entry));
+        } else {
+          entries.push(entry);
+        }
       }
     }
+    for (const entry of canonicalById.values()) entries.push(entry);
+    for (const entry of canonicalRunEntries) entries.push(entry);
 
     for (const lane of lanes) {
       const e = normalizeLaneTask(lane);
@@ -147,7 +177,17 @@ export function useUnifiedTasks(): UnifiedTasksResult {
     }
 
     return entries.sort(compareUnifiedTasks);
-  }, [registryTasks, activeStreamIds, sessionTitle, lanes, goals, todos, scheduledTasks, streamSessions]);
+  }, [
+    registryTasks,
+    activeStreamIds,
+    sessionTitle,
+    lanes,
+    goals,
+    todos,
+    scheduledTasks,
+    streamSessions,
+    directoryRuns,
+  ]);
 
   const groups = useMemo<UnifiedTaskGroups>(() => {
     const active: UnifiedTaskEntry[] = [];

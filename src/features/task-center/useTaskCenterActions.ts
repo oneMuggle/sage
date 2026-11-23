@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { cancelGoal, pauseGoal, startGoal } from '../../entities/autonomous-goals/goalApi';
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import { useOrchestrationFocusStore } from '../../entities/orchestration/orchestrationFocusStore';
+import { useRunDirectoryStore } from '../../entities/orchestration/runDirectoryStore';
 import { invoke } from '../../shared/api/desktopInvoke';
 import { scheduledClient } from '../../shared/api/scheduledClient';
 import { useRightPanelStore } from '../right-panel/rightPanelStore';
@@ -49,6 +50,11 @@ export function useTaskCenterActions(): TaskCenterActions {
           await cancelSessionStream(rawId);
         } else if (source === 'lane') {
           await cancelLane(rawId);
+        } else if (source === 'run') {
+          // M4.2: run 级兜底行取消 —— 复用 run 取消控制端点，
+          // 立即刷新目录让行状态尽快收敛（轮询兜底 3s）。
+          await invoke('orchestration_cancel_run_control', { run_id: rawId });
+          void useRunDirectoryStore.getState().refresh();
         } else if (source === 'goal') {
           await cancelGoal(rawId);
         }
@@ -106,6 +112,14 @@ export function useTaskCenterActions(): TaskCenterActions {
             runId: target.runId,
             taskId: target.taskId,
           });
+          const panel = useRightPanelStore.getState();
+          panel.setTab('progress');
+          panel.setOpen(true);
+          navigate(`/chat?session=${encodeURIComponent(target.sessionId)}`);
+          return;
+        } else if (target.kind === 'run-progress') {
+          // M4.2: run 级行 —— 切到聊天页并聚焦右栏进度；右栏任务板在
+          // 内存缺失时由 Chat.tsx 用 canonical 目录合成（跨窗口可见）。
           const panel = useRightPanelStore.getState();
           panel.setTab('progress');
           panel.setOpen(true);
