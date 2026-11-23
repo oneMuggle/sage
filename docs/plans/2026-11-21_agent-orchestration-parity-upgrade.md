@@ -1,7 +1,7 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0–M4.2 已实施（M4.1 工具耗时 + transcript 全文引用、M4.3a 编排通知 + 任务深链均已合并 main；M4.2 统一运行视图 待合并），M4.3b 成本透明待实施
-> 分支：M4.2 `feat/orch-unified-run-view`（实施计划/记录见 §13）
+> 状态：M0–M4.2 已实施并合并 main（并已同步 win7）：M4.1 工具耗时 + transcript 全文引用、M4.3a 编排通知 + 任务深链（main #3225 / win7 #3226）、M4.2 统一运行视图（main #3227 / win7 #3234）；M4.3b 成本透明待实施
+> 分支：M4.2 `feat/orch-unified-run-view`（已合并 #3227，canonical run 目录 + 右栏回落，实施记录见 §13）
 > 分支：M4.3a `feat/orch-run-notifications`（已合并 #3225，编排 run 通知 + 任务深链，实施计划见 §12）
 > 分支：M4.1 `feat/orch-tool-duration`
 > 分支：M3.3 `feat/orch-plan-estimates`
