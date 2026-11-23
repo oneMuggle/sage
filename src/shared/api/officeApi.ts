@@ -40,6 +40,7 @@ import type {
   OfficePdfFormReadResult,
   OfficePdfReadResult,
   OfficePptGenerateRequest,
+  OfficePptReadRequest,
   OfficePptReadResult,
   OfficeReadRequest,
   OfficeRecalcResult,
@@ -70,12 +71,16 @@ export const officeApi = {
    * No retry — a parse failure should surface immediately so the caller
    * can discard the staged import via `discardOfficeImport`.
    */
-  async readPpt(req: OfficeReadRequest): Promise<OfficePptReadResult> {
+  async readPpt(req: OfficePptReadRequest): Promise<OfficePptReadResult> {
     try {
       return await invoke<OfficePptReadResult>('office_ppt_read', {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
         maxSizeBytes: req.max_size_bytes,
+        // M6d: 未传的开关保持 undefined，JSON 序列化时丢弃 → 后端默认关闭。
+        includeImages: req.include_images,
+        maxImagesPerSlide: req.max_images_per_slide,
+        embedImageData: req.embed_image_data,
       });
     } catch (error) {
       throw handleApiError(error);
@@ -783,4 +788,8 @@ export const officeApi = {
   },
 };
 
-export { auditOfficeApiGovernance, formatOfficeWordLintJson, formatOfficeWordLintSummary } from './officeApiFormatters';
+export {
+  auditOfficeApiGovernance,
+  formatOfficeWordLintJson,
+  formatOfficeWordLintSummary,
+} from './officeApiFormatters';

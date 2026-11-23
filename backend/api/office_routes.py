@@ -47,6 +47,7 @@ from backend.office.models import (
     OfficeExcelGenerateRequest,
     OfficeExcelReadResult,
     OfficePptGenerateRequest,
+    OfficePptReadRequest,
     OfficePptReadResult,
     OfficeReadRequest,
     OfficeWordGenerateRequest,
@@ -294,12 +295,14 @@ def _persist_read_summary(
 
 
 @router.post("/ppt/read", response_model=OfficePptReadResult)
-def read_ppt_endpoint(req: OfficeReadRequest) -> OfficePptReadResult:
+def read_ppt_endpoint(req: OfficePptReadRequest) -> OfficePptReadResult:
     """Read a .pptx file and return structured content.
 
     SECURITY: file_path is validated to lie inside workspace_path.
     Plan §6 R1: rejects files >max_size_bytes (default 50MB) to prevent OOM.
     M0 Task 3: persists a ``parsed`` row keyed by the managed directory UUID.
+    M6d: ``include_images`` / ``max_images_per_slide`` / ``embed_image_data``
+    控制内嵌图片枚举与像素返回（默认关闭）。
     """
     logger.info("Reading PPT: %s", req.file_path)
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
@@ -309,15 +312,23 @@ def read_ppt_endpoint(req: OfficeReadRequest) -> OfficePptReadResult:
     canonical_workspace = str(Path(req.workspace_path).resolve())
     # Round D P8: (path, mtime, size) 缓存 —— 预览/列表/编辑的同文档三连
     # 读只解析一次。options_key 覆盖影响 summary 的所有请求参数。
+    # M6d: 图片开关必须进 key —— 否则先读文本的缓存会吞掉后读图片的请求。
+    image_options = (
+        f"img:{int(req.include_images)}:"
+        f"{req.max_images_per_slide}:{int(req.embed_image_data)}"
+    )
     result = read_cache.get_or_read(
         "ppt",
         file_path,
-        f"{canonical_workspace}|{req.original_filename or ''}",
+        f"{canonical_workspace}|{req.original_filename or ''}|{image_options}",
         lambda: read_ppt(
             file_path=file_path,
             workspace_path=canonical_workspace,
             generated_filename=file_path.name,
             original_filename=req.original_filename,
+            include_images=req.include_images,
+            max_images_per_slide=req.max_images_per_slide,
+            embed_image_data=req.embed_image_data,
         ),
     )
     _persist_read_summary(
