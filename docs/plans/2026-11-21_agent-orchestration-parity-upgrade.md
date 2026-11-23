@@ -1,6 +1,7 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0–M4.1 已实施（M4.1 工具耗时 + transcript 全文引用 本分支），M4.2/M4.3 待实施
+> 状态：M0–M4.1 已实施并合并 main（M4.1 工具耗时 + transcript 全文引用）；M4.3a 实施完成待合并，M4.2/M4.3b 待实施
+> 分支：M4.3a `feat/orch-run-notifications`（编排 run 通知 + 任务深链，实施计划见 §12）
 > 分支：M4.1 `feat/orch-tool-duration`
 > 分支：M3.3 `feat/orch-plan-estimates`
 > 分支：M3.2 `feat/orch-failed-replan`
@@ -148,7 +149,8 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 - [x] M3.3 计划卡成本预估 + 拆深开关（预估轮次/复杂度已落地；成本估算延至 M4.3）
 - [x] M4.1 工具耗时 + transcript 全文引用（含 M1 transcript 接线缺陷修复，见 M4.1 实施记录）
 - [ ] M4.2 统一运行视图
-- [ ] M4.3 编排通知 + 成本透明
+- [x] M4.3a 编排通知 + 任务深链（run 结束/失败/待审批系统通知，点击跳转任务中心）
+- [ ] M4.3b 成本透明（run_id 维度 + 每任务/每 run 金额展示）
 
 ## 6. 风险与依赖
 
@@ -274,3 +276,105 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 **已知遗留（不在本 PR）**：transcript 的 `_dump_args` 落盘未脱敏（`summarize_tool_args` 的密钥清洗只作用于实时镜像）；全文引用场景下如需脱敏应在 recorder 侧补同款清洗，另行跟进。
 
 验证：后端 subagent_events + transcript + canonical publish + chat_dispatcher 80 用例全绿；前端 transcript/时间线/任务详情 26 用例全绿；`tsc --noEmit`、ESLint（改动文件 0 error）、`prettier --check`、`ruff check`、架构棘轮均通过。
+
+## 12. M4.3a 实施计划（2026-11-23）
+
+M4.3 拆成两个里程碑：**M4.3a 编排通知 + 任务深链**（本节）与 **M4.3b 成本透明**（run_id 维度 + 金额展示）。
+拆分理由：M4.3b 依赖 `usage_events` 增加 run_id 维度并回填历史账目，与 M4.2「统一运行视图」共用同一批数据字段；
+先让 M4.3a 把 canonical run 终态事件与通知通道落地，M4.3b 才有稳定的 run 级锚点。
+
+### 12.1 背景与目标
+
+M4 第 3 条要求"编排 run 结束/失败/等待审批发系统通知（沿用后台任务通知通道），任务中心跳转深链"，
+验收线是"run 结束 5 秒内系统通知可点击跳转"。当前缺口（均为实际代码位置）：
+
+| 缺口 | 证据 |
+| --- | --- |
+| run 终态无系统通知 | `backend/api/chat_stream_support.py:25` 的 `_finalize_orch_run` 只落 `orch_runs` 表，无任何通知副作用 |
+| run 终态无 canonical 事件 | 全仓无 `run.completed` / `run.failed` / `run.cancelled` 的生产发布点（`backend/domain/orch_events.py:239-241` 只定义枚举，`backend/orchestration/snapshot_store.py:108` 只消费） |
+| 审批等待无系统通知 | `backend/orchestration/subagent_events.py:218` 只发 `task.waiting_approval` canonical 事件 |
+| 轮询节奏 15s > 5s 验收线 | `electron/schedulerNotifications.ts:44` `SCHEDULER_NOTIFICATION_POLL_MS = 15_000` |
+| 通知无点击跳转 | `electron/main.ts:2784` 的 `notify` 只 `new Notification(...).show()`，丢弃 payload，无 click handler |
+| 通知载荷无编排维度 | `electron/schedulerNotifications.ts:12` 的 `PendingNotificationItem` 只有 `session_id`，无 `run_id` / `task_id` |
+
+### 12.2 技术方案
+
+沿用既有"后端内存队列 → `GET /api/v1/scheduled/notifications/pending` 原子排空 → Electron 主进程轮询 → OS 通知"通道
+（`backend/services/background_notifications.py` + `electron/schedulerNotifications.ts`），新增第六路队列 `orch_runs`，
+**不引入第二套通知协议**（对齐 §7 "一切以 canonical 事件为准"）。
+
+1. **后端队列（新文件 `backend/services/orch_run_notifications.py`）**
+   - `OrchRunNotificationQueue`：线程安全有界 deque（maxlen=100），`push(...)` / `drain()`，与 `BackgroundNotificationQueue` 同构。
+   - `get_orch_run_notification_queue()` 模块级单例。
+   - `push_run_notification(run_id, status, *, session_id=None, task_id=None, title=None, body=None)`：统一入口，自身吞错（通知失败不影响主流）。
+   - `resolve_session_id(run_id)`：按 run_id 查 `orch_runs.session_id`（查不到返回空串）—— 使事件发布方无需自带 session_id。
+2. **run 终态通知 + canonical 事件（`backend/api/chat_stream_support.py`）**
+   - `_finalize_orch_run` 在 `OrchRunRepository().finalize(...)` 之后：
+     - finalize **前**先读一次旧 status，判定 `cancelled`（用户取消端点 `backend/api/orch_routes.py:398` 先写 `cancelled`，随后被 finalize 覆盖）→ 避免取消被误报为失败。
+     - 发布 canonical `run.completed` / `run.failed` / `run.cancelled`（`make_event` + EventHub；未装配则降级跳过）。
+     - 推 `orch_runs` 队列通知（标题含 run 终态，正文含摘要前 N 字）。
+   - 新增段独立 try/except，不影响既有 finalize 闭环。
+3. **审批等待通知（`backend/orchestration/subagent_events.py`）**
+   - `task.waiting_approval` 发布后调用 `push_run_notification(..., status="awaiting_approval", task_id=...)`。
+   - session_id 由 `resolve_session_id(run_id)` 解析 → **无需改 `chat_dispatcher.py`**（该文件已达架构棘轮上限 2635，零余量）。
+4. **pending 端点（`backend/api/scheduled_router.py`）**
+   - `drain_pending_notifications` 返回体新增 `"orch_runs": get_orch_run_notification_queue().drain()`。
+5. **Electron 侧（`electron/schedulerNotifications.ts` + 新文件 `electron/orchNotifications.ts`）**
+   - `PendingNotificationsPayload` 新增 `orch_runs`；`PendingNotificationItem` 新增 `run_id` / `task_id`。
+   - `collectNotificationItems` 合并第六路队列。
+   - `notify` 签名由 `(title, body)` 改为 `(item)` —— 点击跳转需要 run/task 维度；`electron/main.ts` 的回调改为一行委托（净减行数，不动棘轮）。
+   - 新文件 `electron/orchNotifications.ts` 承载"创建通知 + click → 聚焦窗口 + 回发 `sage:event:orch-notify-click`"，main.ts 只调一行。
+   - 轮询间隔 `SCHEDULER_NOTIFICATION_POLL_MS` 15s → 4s（满足 5s 验收线；轮询为单个 localhost GET，开销可忽略）。
+6. **Renderer 深链（`src/App.tsx` + 新文件 `src/features/orch-notify/orchNotify.ts`）**
+   - 复用 preload 的通用 `listen` shim（`ipcRenderer.on('sage:event:<event>')`），**无需改 `electron/preload.ts`**（且 preload 尚有 13 行余量）。
+   - `OrchNotifyBridge`：收到 `{sessionId, runId, taskId}` → 复用任务中心的深链三元组
+     （`useOrchestrationFocusStore.focusThread` + `useRightPanelStore.setTab('progress')` / `setOpen(true)` + `navigate('/chat?session=...')`，
+     见 `src/features/task-center/useTaskCenterActions.ts:104-112`）。
+
+### 12.3 实施步骤
+
+- [x] M4.3a-1 后端队列 + `push_run_notification` + `resolve_session_id`
+- [x] M4.3a-2 `_finalize_orch_run` 发 canonical run 终态事件 + 推通知
+- [x] M4.3a-3 `task.waiting_approval` 推审批通知
+- [x] M4.3a-4 pending 端点新增 `orch_runs` 队列
+- [x] M4.3a-5 Electron：载荷扩展 + `notify(item)` + click 回发 + 4s 轮询
+- [x] M4.3a-6 Renderer：`OrchNotifyBridge` 深链跳转
+- [x] M4.3a-7 测试（后端队列/终态/审批 + 前端 collect/notify/bridge）
+- [x] M4.3a-8 门禁（ruff / lint-imports / 架构棘轮 / 体积 / tsc / vitest / eslint）
+
+### 12.4 风险与依赖
+
+| 风险 | 缓解 |
+| --- | --- |
+| 轮询 15s → 4s 增加后端请求量 | 单次 localhost GET，队列为空即返回空数组；沿用既有"上一轮未完成跳过本轮"防堆积 |
+| 通知与终态事件双通道各发一次导致重复通知 | 通知只由 `push_run_notification` 单点产生；canonical 事件本身不直接产通知 |
+| 取消 run 被误报为"失败" | finalize 前先读旧 status，`cancelled` 优先判定 |
+| 用户关闭窗口时点击通知无处可跳 | 点击前先 restore/show/focus 窗口（复用 `sage:session:notify` 既有做法） |
+| `orch_routes.py` 已 797 行（上限 800） | 本里程碑不改该文件；取消通知依赖旧状态读取而非新增端点钩子 |
+| `chat_dispatcher.py` 已达棘轮上限 2635 | 审批通知改在 `subagent_events.py`（415 行）落地，不动 dispatcher |
+| 摘要过长撑爆通知 | 摘要截断至 120 字；标题 120 / 正文 200 字上限沿用 Electron 侧既有裁剪 |
+
+### 12.5 与后续里程碑的关系
+
+- **M4.3b（成本透明）**：run 终态通知已带 run_id，可作为成本汇总展示的入口；金额字段仍待 `usage_events` 增加 run_id 维度并回填。
+- **M4.2（统一运行视图）**：本里程碑补上的 canonical `run.completed/failed/cancelled` 是 M4.2"三套视图收敛到同一事件模型"的缺失拼图；
+  M4.2 需同时修 `task.paused/resumed` 未映射（`runControlStore.ts:182`、`laneBoardStore.ts:58`）与 `task.skipped` 被白名单丢弃（`orchEventStream.ts:17`）两处映射缺陷。
+
+## 12.6 M4.3a 实施记录（2026-11-23）
+
+| 改动 | 文件 |
+| --- | --- |
+| 第六路通知队列：`OrchRunNotificationQueue`（有界 deque，maxlen=100）+ `push_run_notification` 统一入口（自身吞错）+ `resolve_session_id` 按 run_id 反查 `orch_runs.session_id` + `summarize_for_notification`（压行 + 120 字截断） | `backend/services/orch_run_notifications.py`（新） |
+| `_finalize_orch_run` 闭环后补两件事：发布 canonical `run.completed/failed/cancelled`（EventHub 未装配降级跳过）+ 推 `orch_runs` 队列通知；finalize **前**快照旧 status，**DB 终态为准**（`finalize` 只改 `status='running'` 行，已被取消端点写成 `cancelled` 的行不被迟到的 producer finally 覆盖，通知也报 `cancelled` 而非失败） | `backend/api/chat_stream_support.py` |
+| `task.waiting_approval` canonical 事件后推 `awaiting_approval` 通知（session_id 经 `resolve_session_id` 解析，不改 `chat_dispatcher.py`） | `backend/orchestration/subagent_events.py` |
+| pending 端点返回体新增 `orch_runs`（第六键，排空语义不变） | `backend/api/scheduled_router.py` |
+| 载荷扩展 `run_id` / `task_id` + `notify(item)` 签名 + 六路队列合并 + 轮询 15s → 4s（满足 5s 验收线） | `electron/schedulerNotifications.ts` |
+| 通知创建 + 点击聚焦窗口 + 回发 `sage:event:orch-notify-click`（标题 120 / 正文 200 截断；无 `run_id` 的通知仅展示、不挂点击）；main.ts 只留一行委托（棘轮零增长） | `electron/orchNotifications.ts`（新）、`electron/main.ts` |
+| `OrchNotifyBridge`：点击 → `focusThread` + 右栏 progress 面板 + `navigate('/chat?session=')`（复用 preload 通用 `sage:event:*` shim，未改 preload） | `src/features/orch-notify/orchNotify.ts`（新）、`src/App.tsx` |
+| 测试 | 后端 `test_orch_run_notifications.py`（16）+ `test_orch_run_notifications_route.py`（2）；前端 `orchNotifications.test.ts`（6）、`schedulerNotifications.test.ts` 扩至 9、`orchNotify.test.ts`（4） |
+
+**设计要点**：通知与 canonical 事件是同一收尾点的两条观测通道 —— 通知只由 `push_run_notification` 单点产生（不会与 canonical 事件重复通知）；`effective_status` 以 `orch_runs` 行的最终状态为准，取消端点对已终态 run 返回 409，所以"finalize 前已是 cancelled"即用户主动取消。
+
+**已知边界**：通知队列为进程内内存队列，App 未运行时产生的编排终态不会补发（与既有五路通知通道语义一致）。
+
+验证：后端 6 文件 53 用例全绿（含新增 18 例）；`ruff check`、py38 兼容、silent-exceptions、`lint-imports`、架构棘轮、`tsc --noEmit`、ESLint、vitest（受影响 3 文件 19 用例）全部通过。

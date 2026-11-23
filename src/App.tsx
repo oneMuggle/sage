@@ -15,6 +15,7 @@ import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
 import { onOpenFeedbackRequest } from './features/feedback/feedbackMenu';
 import { useSettingsStore } from './features/manage-settings/settingsStore';
+import { focusOrchThread, onOrchNotifyClick } from './features/orch-notify/orchNotify';
 import { onSessionNotifyClick } from './features/send-message/sessionNotify';
 import { Chat } from './pages/Chat';
 import { Welcome } from './pages/Welcome';
@@ -217,6 +218,25 @@ function SessionNotifyBridge() {
   return null;
 }
 
+// 2026-11-23 (M4.3a): 编排 run 终态 / 等待审批通知点击 → 深链到任务中心。
+// 主进程 'sage:event:orch-notify-click' 回发 {sessionId, runId, taskId}；
+// 这里写编排定位请求 + 展开右侧 progress 面板 + 跳到对应会话。
+function OrchNotifyBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const unlisten = onOrchNotifyClick((payload) => {
+      if (!focusOrchThread(payload)) return;
+      if (!payload.sessionId) return;
+      useStore.getState().setCurrentSessionId(payload.sessionId);
+      navigate(`/chat?session=${encodeURIComponent(payload.sessionId)}`);
+    });
+    return () => {
+      void unlisten?.then((fn) => fn?.());
+    };
+  }, [navigate]);
+  return null;
+}
+
 // 2026-10-29 (Phase 1.11): 帮助菜单「反馈问题...」→ 主进程回发事件 →
 // 跳转 /feedback。与 SessionNotifyBridge 同构。
 function FeedbackMenuBridge() {
@@ -307,6 +327,7 @@ function App() {
         <AppStartupRestore />
         <AppStartupSettings />
         <SessionNotifyBridge />
+        <OrchNotifyBridge />
         <FeedbackMenuBridge />
         <PetSettingsBridge />
         <PetFocusBridge />

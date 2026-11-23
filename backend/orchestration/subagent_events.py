@@ -227,6 +227,30 @@ class SubagentEventSink:
             _entity_step(self._entity_task_id, self._agent_id),
             {"reason": "awaiting_subagent_approval", "request_id": request_id},
         )
+        self._notify_awaiting_approval(request_id)
+
+    def _notify_awaiting_approval(self, request_id: str) -> None:
+        """推"子代理任务等待审批"系统通知（M4.3a）。
+
+        审批是**人在等**的时刻 —— 与 run 终态同一条通知通道，点击可深链
+        到该任务。``session_id`` 由 ``orch_runs`` 反查（子代理 sink 不持有
+        会话上下文）。通知失败只记日志，不影响审批流程。
+        """
+        try:
+            from backend.services.orch_run_notifications import (
+                push_run_notification,
+                resolve_session_id,
+            )
+
+            push_run_notification(
+                self._run_id,
+                "awaiting_approval",
+                session_id=resolve_session_id(self._run_id) or None,
+                task_id=self._entity_task_id,
+                body=f"请求 {request_id}" if request_id else "",
+            )
+        except Exception as exc:  # noqa: BLE001 — 通知降级不影响审批
+            logger.debug("审批等待通知失败 (%s): %s", self._run_id, exc)
 
     # -- 子代理提问 ----------------------------------------------------
 

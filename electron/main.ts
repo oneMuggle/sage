@@ -80,6 +80,7 @@ import {
   type PendingNotificationsPayload,
 } from './schedulerNotifications';
 import { createWebhookDeliver } from './webhookDelivery';
+import { showPendingNotification } from './orchNotifications';
 import { applyTaskbarAttention, decideTaskbarAttention } from './notifyOverlay';
 import { readLogTimezone, writeLogTimezone } from './logTimezone';
 import { setLogTimezone } from './logger';
@@ -2781,14 +2782,8 @@ async function registerIpcHandlers(): Promise<void> {
         return (result ?? {}) as PendingNotificationsPayload;
       },
       isEnabled: () => notificationPrefs.enabled && notificationPrefs.backgroundTasks,
-      notify: (title, body) => {
-        if (!Notification.isSupported()) return;
-        new Notification({
-          title: title.slice(0, 120),
-          body: body.slice(0, 200),
-          silent: false,
-        }).show();
-      },
+      // 2026-11-23 M4.3a: 通知展示 + 编排深链点击统一走 orchNotifications。
+      notify: (item) => showPendingNotification(item, () => mainWindow),
       // 2026-11-06 Phase 3/4: 每条通知额外投递 Webhook / Slack（fire-and-forget）
       deliver: createWebhookDeliver(() => notificationPrefs, {
         fetchImpl: fetch as unknown as NonNullable<
