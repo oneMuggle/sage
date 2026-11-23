@@ -294,6 +294,9 @@ class OfficeCreateTool(BaseTool):
                             "doc_type: word → {title, format_spec?:{page?, "
                             "body?, headings?, title?, header?, footer?, "
                             "numbering?, bibliography?} 版式规范, "
+                            "format_spec_preset?:'default'|'report'|"
+                            "'gb9704-gongwen'|'academic-thesis' 命名预设, "
+                            "template_docx_path?:str 参考文档, "
                             "references?:[{key, ref_type, title, authors[], "
                             "year?, source?, volume?, issue?, pages?, "
                             "publisher?, address?, url?, doi?, "
@@ -413,14 +416,33 @@ class OfficeCreateTool(BaseTool):
                                                 "type": "number",
                                                 "description": "正文字号（磅），如 12=小四",
                                             },
+                                            "font_family": {
+                                                "type": "string",
+                                                "description": (
+                                                    "正文中文字体（eastAsia），"
+                                                    "如'仿宋_GB2312'/'宋体'"
+                                                ),
+                                            },
+                                            "ascii_font": {
+                                                "type": "string",
+                                                "description": "正文西文字体，如'Times New Roman'",
+                                            },
                                             "line_spacing": {
                                                 "type": "number",
                                                 "description": "行距倍数，如 1.5",
+                                            },
+                                            "line_spacing_pt": {
+                                                "type": "number",
+                                                "description": (
+                                                    "固定行距（磅），如公文 28；"
+                                                    "与 line_spacing 同时给出时优先"
+                                                ),
                                             },
                                             "first_line_indent_cm": {
                                                 "type": "number",
                                                 "description": "首行缩进（厘米），如 0.74=2字符",
                                             },
+                                            "space_before_pt": {"type": "number"},
                                             "space_after_pt": {"type": "number"},
                                             "align": {
                                                 "type": "string",
@@ -443,6 +465,14 @@ class OfficeCreateTool(BaseTool):
                                                 "type": "object",
                                                 "properties": {
                                                     "font_size_pt": {"type": "number"},
+                                                    "font_family": {
+                                                        "type": "string",
+                                                        "description": "标题中文字体（eastAsia），如'黑体'",
+                                                    },
+                                                    "ascii_font": {
+                                                        "type": "string",
+                                                        "description": "标题西文字体",
+                                                    },
                                                     "bold": {"type": "boolean"},
                                                     "color": {
                                                         "type": "string",
@@ -467,6 +497,14 @@ class OfficeCreateTool(BaseTool):
                                                 "type": "object",
                                                 "properties": {
                                                     "font_size_pt": {"type": "number"},
+                                                    "font_family": {
+                                                        "type": "string",
+                                                        "description": "标题中文字体（eastAsia），如'黑体'",
+                                                    },
+                                                    "ascii_font": {
+                                                        "type": "string",
+                                                        "description": "标题西文字体",
+                                                    },
                                                     "bold": {"type": "boolean"},
                                                     "color": {"type": "string"},
                                                     "align": {
@@ -486,6 +524,14 @@ class OfficeCreateTool(BaseTool):
                                                 "type": "object",
                                                 "properties": {
                                                     "font_size_pt": {"type": "number"},
+                                                    "font_family": {
+                                                        "type": "string",
+                                                        "description": "标题中文字体（eastAsia），如'黑体'",
+                                                    },
+                                                    "ascii_font": {
+                                                        "type": "string",
+                                                        "description": "标题西文字体",
+                                                    },
                                                     "bold": {"type": "boolean"},
                                                     "color": {"type": "string"},
                                                     "align": {
@@ -506,6 +552,14 @@ class OfficeCreateTool(BaseTool):
                                                 "description": "四级标题样式（Round 20）",
                                                 "properties": {
                                                     "font_size_pt": {"type": "number"},
+                                                    "font_family": {
+                                                        "type": "string",
+                                                        "description": "标题中文字体（eastAsia），如'黑体'",
+                                                    },
+                                                    "ascii_font": {
+                                                        "type": "string",
+                                                        "description": "标题西文字体",
+                                                    },
                                                     "bold": {"type": "boolean"},
                                                     "color": {"type": "string"},
                                                     "align": {
@@ -526,6 +580,14 @@ class OfficeCreateTool(BaseTool):
                                                 "description": "五级标题样式（Round 20）",
                                                 "properties": {
                                                     "font_size_pt": {"type": "number"},
+                                                    "font_family": {
+                                                        "type": "string",
+                                                        "description": "标题中文字体（eastAsia），如'黑体'",
+                                                    },
+                                                    "ascii_font": {
+                                                        "type": "string",
+                                                        "description": "标题西文字体",
+                                                    },
                                                     "bold": {"type": "boolean"},
                                                     "color": {"type": "string"},
                                                     "align": {
@@ -548,6 +610,11 @@ class OfficeCreateTool(BaseTool):
                                         "description": "文档主标题样式（Title 样式）。",
                                         "properties": {
                                             "font_size_pt": {"type": "number"},
+                                            "font_family": {
+                                                "type": "string",
+                                                "description": "主标题中文字体，如'方正小标宋简体'",
+                                            },
+                                            "ascii_font": {"type": "string"},
                                             "bold": {"type": "boolean"},
                                             "color": {"type": "string"},
                                             "align": {
@@ -561,6 +628,43 @@ class OfficeCreateTool(BaseTool):
                                             },
                                             "space_before_pt": {"type": "number"},
                                             "space_after_pt": {"type": "number"},
+                                        },
+                                    },
+                                    "caption": {
+                                        "type": "object",
+                                        "description": (
+                                            "图/表题注样式（默认 9pt 居中）。"
+                                            "font_size_pt 覆盖字号，align 覆盖"
+                                            "对齐，bold 加粗；font_family/"
+                                            "ascii_font 设置题注字体。"
+                                        ),
+                                        "properties": {
+                                            "font_family": {"type": "string"},
+                                            "ascii_font": {"type": "string"},
+                                            "font_size_pt": {"type": "number"},
+                                            "bold": {"type": "boolean"},
+                                            "align": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "left",
+                                                    "center",
+                                                    "right",
+                                                    "justify",
+                                                ],
+                                            },
+                                        },
+                                    },
+                                    "table_text": {
+                                        "type": "object",
+                                        "description": (
+                                            "表格文字样式（单元格 runs）。"
+                                            "header_bold 只作用于表头首行。"
+                                        ),
+                                        "properties": {
+                                            "font_family": {"type": "string"},
+                                            "ascii_font": {"type": "string"},
+                                            "font_size_pt": {"type": "number"},
+                                            "header_bold": {"type": "boolean"},
                                         },
                                     },
                                     "header": {
@@ -736,6 +840,29 @@ class OfficeCreateTool(BaseTool):
                                         },
                                     },
                                 },
+                            },
+                            "format_spec_preset": {
+                                "type": "string",
+                                "enum": [
+                                    "default",
+                                    "report",
+                                    "gb9704-gongwen",
+                                    "academic-thesis",
+                                ],
+                                "description": (
+                                    "word 可选：命名样式预设（默认/通用报告/"
+                                    "党政机关公文 GB/T 9704/学术论文）。"
+                                    "与 format_spec 深合并，显式字段优先。"
+                                ),
+                            },
+                            "template_docx_path": {
+                                "type": "string",
+                                "description": (
+                                    "word 可选：参考文档（reference.docx）路径。"
+                                    "其 styles/theme/页面设置作为样式基座，"
+                                    "正文内容不会带入产物；相对路径按绑定"
+                                    "工作区解析，未绑定时用绝对路径。"
+                                ),
                             },
                             "references": {
                                 "type": "array",
