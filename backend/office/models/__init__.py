@@ -97,6 +97,7 @@ from ._word_gen import (
     ReferenceSpec,
     ReferenceType,
     WordBodyStyleSpec,
+    WordCaptionStyleSpec,
     WordCellMergeSpec,
     WordFormatSpec,
     WordHeaderFooterSpec,
@@ -113,6 +114,7 @@ from ._word_gen import (
     WordRepairResult,
     WordSectionBreakSpec,
     WordTableSpec,
+    WordTableTextStyleSpec,
     WordTocSpec,
 )
 
@@ -165,9 +167,11 @@ __all__ = [
     "BibTeXParseResponse",
     "WordCellMergeSpec",
     "WordTableSpec",
+    "WordTableTextStyleSpec",
     "WordPageMarginsSpec",
     "WordPageSetupSpec",
     "WordBodyStyleSpec",
+    "WordCaptionStyleSpec",
     "WordHeadingStyleSpec",
     "WordHeaderFooterSpec",
     "WordSectionBreakSpec",

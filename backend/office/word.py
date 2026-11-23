@@ -1184,11 +1184,13 @@ def _add_inline_image(
     output_path: Path,
     workspace_path: Optional[str],
     trailing: bool = False,
+    caption_spec: Any = None,
 ) -> None:
     """写入一张插图；带题注时图居中并在下方追加 "图N　caption" 题注。
 
     无题注的文末插图走 ``doc.add_picture`` 原路径（渲染与批次 2.1 逐字节
-    一致）；其余（行内插图 / 带题注）用居中段落承载。
+    一致）；其余（行内插图 / 带题注）用居中段落承载。``caption_spec`` 为
+    format_spec.caption 的题注样式（None = 历史 9pt 居中）。
     """
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Inches
@@ -1212,17 +1214,24 @@ def _add_inline_image(
     paragraph.add_run().add_picture(stream, width=width, height=height)
     caption = getattr(image, "caption", None)
     if caption:
-        add_caption(doc, caption, kind="figure", number=figure_no)
+        add_caption(
+            doc, caption, kind="figure", number=figure_no, spec=caption_spec
+        )
 
 
-def _style_table(doc: Document, table: Any, table_spec: Any) -> None:
+def _style_table(
+    doc: Document, table: Any, table_spec: Any, table_text_spec: Any = None
+) -> None:
     """Round 8 表格排版：三线表 / 显式网格 / 表头重复 / 固定列宽 / 合并。
 
     ``style`` 为 None 时不触碰表样式（与历史行为一致）。列宽长度与列数
     不一致直接抛错（外层统一包成 OfficeGenerateError），不做静默截断。
+    ``table_text_spec`` 为 format_spec.table_text 的单元格文字样式（None
+    不触碰）。
     """
     from .word_layout import (
         apply_cell_merges,
+        apply_table_text_style,
         apply_three_line_table,
         enable_header_repeat,
         set_fixed_column_widths,
@@ -1253,6 +1262,8 @@ def _style_table(doc: Document, table: Any, table_spec: Any) -> None:
             n_rows=1 + len(table_spec.rows),
             n_cols=len(table_spec.headers),
         )
+    if table_text_spec is not None:
+        apply_table_text_style(table, table_text_spec)
 
 
 def _resolve_references(
@@ -1316,6 +1327,74 @@ def _add_bibliography(
             run.font.size = Pt(font_size)
 
 
+def _normal_style_font_names(
+    doc: Document,
+) -> Tuple[Optional[str], Optional[str]]:
+    """读取参考文档 Normal 样式的 (eastAsia, ascii) 字体名（未设置为 None）。"""
+    try:
+        style = doc.styles["Normal"]
+    except KeyError:
+        return None, None
+    rPr = style.element.find(qn("w:rPr"))
+    if rPr is None:
+        return None, None
+    rFonts = rPr.find(qn("w:rFonts"))
+    if rFonts is None:
+        return None, None
+    return rFonts.get(qn("w:eastAsia")), rFonts.get(qn("w:ascii"))
+
+
+#: 参考文档大小上限（与模板填充同量级，防异常大文件）
+MAX_REFERENCE_DOCX_BYTES = 20 * 1024 * 1024
+
+
+def _load_reference_document(template_docx_path: str, workspace_path: str) -> Document:
+    """打开参考文档（reference.docx）并清空正文，只保留样式基座。
+
+    - 相对路径按 ``workspace_path`` 解析并限制在工作区内（``resolve_within``）；
+    - 仅接受 ``.docx``，大小 ≤ 20MB；
+    - body 除 ``w:sectPr`` 外全部移除——模板正文/占位符不进入产物，
+      而 styles.xml / theme / numbering / 页眉页脚部件与节属性保留。
+    """
+    from docx import Document as _Doc
+
+    from .errors import OfficeGenerateError
+    from .path_safety import resolve_within
+    from .storage import validate_workspace
+
+    raw = Path(template_docx_path)
+    if workspace_path:
+        workspace = validate_workspace(Path(workspace_path))
+        candidate = raw if raw.is_absolute() else workspace / raw
+        candidate = resolve_within(workspace, candidate)
+    elif raw.is_absolute():
+        candidate = raw
+    else:
+        raise OfficeGenerateError(
+            f"参考文档需为绝对路径或提供 workspace_path: {template_docx_path}"
+        )
+    if candidate.suffix.lower() != ".docx":
+        raise OfficeGenerateError(f"参考文档必须是 .docx: {candidate.name}")
+    if not candidate.is_file():
+        raise OfficeGenerateError(f"参考文档不存在: {candidate}")
+    if candidate.stat().st_size > MAX_REFERENCE_DOCX_BYTES:
+        raise OfficeGenerateError(
+            f"参考文档超过 {MAX_REFERENCE_DOCX_BYTES // (1024 * 1024)}MB: {candidate}"
+        )
+    try:
+        doc = _Doc(str(candidate))
+    except Exception as exc:
+        raise OfficeGenerateError(
+            f"无法打开参考文档: {exc}", file_path=candidate
+        ) from exc
+    body = doc.element.body
+    sect_pr = body.find(qn("w:sectPr"))
+    for child in list(body):
+        if child is not sect_pr:
+            body.remove(child)
+    return doc
+
+
 def generate_docx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .docx file from structured Pydantic input.
 
@@ -1341,12 +1420,41 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         output_path = managed_document_path(workspace, OfficeDocType.WORD, doc_id, req.filename)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # 样式模板：命名预设与显式 format_spec 深合并（显式字段优先）。
+    # 合并结果回写进 req，下游全部沿用 req.format_spec 的既有引用。
+    from .word_style_presets import resolve_effective_format_spec
+
+    effective_spec = resolve_effective_format_spec(
+        getattr(req, "format_spec_preset", None), req.format_spec
+    )
+    if effective_spec is not req.format_spec:
+        req = req.model_copy(update={"format_spec": effective_spec})
+
     try:
-        doc = _Doc()
+        # 样式模板：参考文档提供样式基座（清空正文），否则从空白文档开始。
+        template_docx = getattr(req, "template_docx_path", None)
+        if template_docx:
+            doc = _load_reference_document(template_docx, req.workspace_path)
+        else:
+            doc = _Doc()
         # ★ 新增：显式设置字体（修"字体奇怪"bug）
-        ascii_font = getattr(req, "ascii_font", None) or DEFAULT_ASCII_FONT
-        ea_font = getattr(req, "font_family", None) or DEFAULT_EA_FONT
-        set_doc_default_font(doc, ascii_font, ea_font)
+        # 参考文档模式下未显式传字体时不覆盖模板字体；显式传则全局覆盖。
+        req_ascii = getattr(req, "ascii_font", None)
+        req_ea = getattr(req, "font_family", None)
+        if template_docx:
+            if req_ascii is not None or req_ea is not None:
+                template_ea, template_ascii = _normal_style_font_names(doc)
+                set_doc_default_font(
+                    doc,
+                    req_ascii or template_ascii or DEFAULT_ASCII_FONT,
+                    req_ea or template_ea or DEFAULT_EA_FONT,
+                )
+        else:
+            set_doc_default_font(
+                doc,
+                req_ascii or DEFAULT_ASCII_FONT,
+                req_ea or DEFAULT_EA_FONT,
+            )
 
         # Round 7 FormatSpec：显式版式（页边距/正文/标题样式/页眉页脚）。
         # None 时不触碰文档，行为与历史版本一致；样式补丁需在写正文之前
@@ -1355,6 +1463,11 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
             from .word_layout import apply_format_spec, heading_number_prefix
 
             apply_format_spec(doc, req.format_spec)
+        # 样式模板：题注与表格文字样式（None = 历史行为：9pt 居中 / 不触碰）
+        caption_spec = req.format_spec.caption if req.format_spec is not None else None
+        table_text_spec = (
+            req.format_spec.table_text if req.format_spec is not None else None
+        )
 
         # Round 42：分桶前置——图目录条目预收集（目录段）与正文插图
         # 共用同一 images_by_position/trailing_images，保证编号一致。
@@ -1592,14 +1705,27 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
             for image in images_by_position.get(pi, []):
                 if getattr(image, "caption", None):
                     figure_no += 1
-                _add_inline_image(doc, image, figure_no, output_path, req.workspace_path)
+                _add_inline_image(
+                    doc,
+                    image,
+                    figure_no,
+                    output_path,
+                    req.workspace_path,
+                    caption_spec=caption_spec,
+                )
         # Tables
         for table_spec in req.tables:
             if table_spec.caption:
                 table_no += 1
                 from .word_layout import add_caption as _add_caption
 
-                _add_caption(doc, table_spec.caption, kind="table", number=table_no)
+                _add_caption(
+                    doc,
+                    table_spec.caption,
+                    kind="table",
+                    number=table_no,
+                    spec=caption_spec,
+                )
             table = doc.add_table(rows=1 + len(table_spec.rows), cols=len(table_spec.headers))
             # Header row
             for ci, header in enumerate(table_spec.headers):
@@ -1609,13 +1735,19 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                 for ci, cell in enumerate(row):
                     if ci < len(table_spec.headers):
                         table.cell(ri + 1, ci).text = cell
-            _style_table(doc, table, table_spec)
+            _style_table(doc, table, table_spec, table_text_spec=table_text_spec)
         # 文末插图（批次 2.1 既有行为：按顺序追加在正文之后）
         for image in trailing_images:
             if getattr(image, "caption", None):
                 figure_no += 1
             _add_inline_image(
-                doc, image, figure_no, output_path, req.workspace_path, trailing=True
+                doc,
+                image,
+                figure_no,
+                output_path,
+                req.workspace_path,
+                trailing=True,
+                caption_spec=caption_spec,
             )
         # Round 9：文末参考文献节（带 references 时生成；heading 不参与
         # 多级标题编号——编号只作用于 req.paragraphs 的显式标题）

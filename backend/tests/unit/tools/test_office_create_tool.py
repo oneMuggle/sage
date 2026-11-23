@@ -271,6 +271,63 @@ def _ctx(session_id: str, binding_generation: int) -> ToolExecutionContext:
     )
 
 
+def test_create_word_with_style_preset(tmp_path):
+    tool = _tool()
+    result = tool.execute(
+        doc_type="word",
+        output_dir=str(tmp_path),
+        filename="styled.docx",
+        content={
+            "title": "报告",
+            "paragraphs": [{"text": "第一章", "heading": "h1"}, {"text": "正文"}],
+            "format_spec_preset": "report",
+        },
+    )
+    assert result.success, getattr(result, "error", None)
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    doc = Document(str(tmp_path / "styled.docx"))
+    assert doc.styles["Normal"].font.size.pt == pytest.approx(12)
+    rPr = doc.styles["Heading 1"].element.get_or_add_rPr()
+    rFonts = rPr.find(qn("w:rFonts"))
+    assert rFonts is not None
+    assert rFonts.get(qn("w:eastAsia")) == "黑体"
+
+
+def test_create_word_with_reference_docx(tmp_path):
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    reference = Document()
+    rPr = reference.styles["Normal"].element.get_or_add_rPr()
+    rFonts = rPr.get_or_add_rFonts()
+    for attr in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+        if qn(f"w:{attr}") in rFonts.attrib:
+            del rFonts.attrib[qn(f"w:{attr}")]
+    rFonts.set(qn("w:eastAsia"), "华文楷体")
+    ref_path = tmp_path / "ref.docx"
+    reference.save(str(ref_path))
+
+    tool = _tool()
+    result = tool.execute(
+        doc_type="word",
+        output_dir=str(tmp_path / "out"),
+        filename="from-ref.docx",
+        content={
+            "title": "参考文档",
+            "paragraphs": [{"text": "正文"}],
+            "template_docx_path": str(ref_path),
+        },
+    )
+    assert result.success, getattr(result, "error", None)
+    doc = Document(str(tmp_path / "out" / "from-ref.docx"))
+    normal_rPr = doc.styles["Normal"].element.get_or_add_rPr()
+    normal_fonts = normal_rPr.find(qn("w:rFonts"))
+    assert normal_fonts is not None
+    assert normal_fonts.get(qn("w:eastAsia")) == "华文楷体"
+
+
 def test_create_with_session_binding_registers_document(tmp_path, monkeypatch):
     """When a session binding is active, ``office_create`` must delegate to
     ``OfficeToolService.create`` so the doc is registered for list/read.

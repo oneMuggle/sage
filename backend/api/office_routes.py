@@ -755,6 +755,12 @@ from backend.api.office_word_audit_routes import (  # noqa: E402
 
 router.include_router(_word_audit_router)
 
+from backend.api.office_word_style_routes import (  # noqa: E402
+    router as _word_style_router,
+)
+
+router.include_router(_word_style_router)
+
 from backend.api.office_dedup_routes import router as _dedup_router  # noqa: E402
 
 router.include_router(_dedup_router)
