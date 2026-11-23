@@ -12,14 +12,106 @@ legacy_routes 再导出全部名字——调用方（producer）留在 legacy_ro
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from backend.orchestration.chat_dispatcher import ChatDispatcher
 from backend.orchestration.orch_settings import load_orch_settings
 
 logger = logging.getLogger(__name__)
+
+#: run 终态 → canonical 事件类型（M4.3a）。
+_RUN_TERMINAL_EVENT_TYPES: Dict[str, str] = {
+    "completed": "run.completed",
+    "failed": "run.failed",
+    "cancelled": "run.cancelled",
+}
+
+
+def _read_orch_run_snapshot(run_id: str) -> Tuple[str, str]:
+    """读 run 的 (status, session_id)；读失败按 ("", "") 降级。
+
+    必须在 finalize **之前**读：用户取消端点先把 status 写成 ``cancelled``，
+    随后的 finalize 会覆盖它 —— 只有提前快照才能识别出"被取消"。
+    """
+    try:
+        from backend.data.orch_run_repo import OrchRunRepository
+
+        run = OrchRunRepository().get(run_id)
+        if run is None:
+            return "", ""
+        return getattr(run, "status", "") or "", getattr(run, "session_id", "") or ""
+    except Exception as exc:  # noqa: BLE001 — 读失败不影响主流
+        logger.debug("读取 orch run 快照失败 (%s): %s", run_id, exc)
+        return "", ""
+
+
+def _publish_run_terminal_event(
+    run_id: str, status: str, final_summary: Optional[str]
+) -> None:
+    """发布 canonical run 终态事件（M4.3a）。
+
+    EventHub 未装配 / 无运行中的事件循环时静默跳过 —— canonical 事件是
+    观测通道，不能反过来阻断 run 收尾。
+    """
+    event_type = _RUN_TERMINAL_EVENT_TYPES.get(status)
+    if event_type is None:
+        return
+    try:
+        from backend.api.orch_run_control import get_event_hub
+
+        hub = get_event_hub()
+    except Exception as exc:  # noqa: BLE001 — 通道缺失不影响主流
+        logger.debug("run 终态事件发布跳过 (%s): %s", run_id, exc)
+        return
+    if hub is None:
+        return
+    try:
+        from backend.domain.orch_events import make_event
+
+        event = make_event(
+            run_id=run_id,
+            seq=0,
+            event_type=event_type,
+            producer="chat-stream-support",
+            payload={"status": status, "final_summary": final_summary or ""},
+        )
+    except Exception as exc:  # noqa: BLE001 — 构造失败不影响主流
+        logger.debug("run 终态事件构造失败 (%s): %s", run_id, exc)
+        return
+
+    async def _publish() -> None:
+        try:
+            await hub.publish(event)
+        except Exception as exc:  # noqa: BLE001 — 观测尽力而为
+            logger.debug("run 终态事件发布失败 (%s): %s", run_id, exc)
+
+    try:
+        asyncio.get_running_loop().create_task(_publish())
+    except RuntimeError:  # pragma: no cover — 均在协程上下文调用
+        return
+
+
+def _notify_orch_run_terminal(
+    run_id: str, status: str, final_summary: Optional[str], session_id: str
+) -> None:
+    """推编排 run 终态系统通知（M4.3a）。失败只记日志，不影响主流。"""
+    try:
+        from backend.services.orch_run_notifications import (
+            push_run_notification,
+            summarize_for_notification,
+        )
+
+        push_run_notification(
+            run_id,
+            status,
+            session_id=session_id or None,
+            body=summarize_for_notification(final_summary),
+        )
+    except Exception as exc:  # noqa: BLE001 — 通知降级不影响主流
+        logger.debug("编排 run 终态通知失败 (%s): %s", run_id, exc)
 
 
 def _finalize_orch_run(
@@ -29,15 +121,34 @@ def _finalize_orch_run(
 
     此前 OrchRunRepository.finalize 生产路径零调用者，orch_runs 永远
     停留 "running"。single 路径 run_id=None 直接跳过。
+
+    M4.3a: 闭环成功后补两件事 —— 发布 canonical run 终态事件
+    （``run.completed`` / ``run.failed`` / ``run.cancelled``）、推系统通知。
     """
     if not run_id:
         return
+    previous_status, session_id = _read_orch_run_snapshot(run_id)
     try:
         from backend.data.orch_run_repo import OrchRunRepository
 
         OrchRunRepository().finalize(run_id, status, final_summary)
     except Exception as exc:  # noqa: BLE001 — 闭环失败不影响主流
         logger.warning("orch run finalize 失败 (%s): %s", run_id, exc)
+        return
+    # effective_status 必须与 orch_runs 行的**最终状态**一致 ——
+    # OrchRunRepository.finalize 的 SQL 只更新 status='running' 的行，
+    # 已是终态的行不动（P0-4：不被迟到的 producer finally 覆盖）。
+    #   - 之前 running → 行被写成 status
+    #   - 之前已是终态 → 行保持原状态，通知也报原状态
+    # 用户取消端点先写 cancelled 且对终态 run 返回 409，所以"之前是
+    # cancelled"就意味着用户主动取消 —— 通知报 cancelled 而非 failed。
+    if previous_status in _RUN_TERMINAL_EVENT_TYPES:
+        effective_status = previous_status
+    else:
+        effective_status = status if status in _RUN_TERMINAL_EVENT_TYPES else "failed"
+    _publish_run_terminal_event(run_id, effective_status, final_summary)
+    _notify_orch_run_terminal(run_id, effective_status, final_summary, session_id)
+
 
 def _build_orchestration_dispatcher(
     *,
