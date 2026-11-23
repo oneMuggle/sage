@@ -1,6 +1,6 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0–M4.2 已实施并合并 main 与 win7（M4.1 工具耗时 + transcript 全文引用、M4.3a 编排通知 + 任务深链 main #3225 / win7 #3226、M4.2 统一运行视图 main #3227 / win7 #3234）；M4.3b 成本透明已实施（见 §14）
+> 状态：M0–M4.3b 已实施并合并 main 与 win7（M4.1 工具耗时 + transcript 全文引用、M4.3a 编排通知 + 任务深链 main #3225 / win7 #3226、M4.2 统一运行视图 main #3227 / win7 #3234、M4.3b 成本透明 main #3243 / win7 #3247，见 §14）
 > 分支：M4.3b `feat/orch-cost-transparency`（main #3243）/ `feat/orch-cost-transparency-win7`（win7 同步；usage_events run_id 维度 + 每任务/每 run 金额展示，实施记录见 §14）
 > 分支：M4.2 `feat/orch-unified-run-view`（main #3227）/ `feat/orch-unified-run-view-win7`（win7 #3234；canonical run 目录 + 右栏回落，实施记录见 §13）
 > 分支：M4.3a `feat/orch-run-notifications`（main #3225）/ `feat/orch-run-notifications-win7`（win7 #3226；编排 run 通知 + 任务深链，实施计划见 §12）
@@ -152,7 +152,7 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 - [x] M4.1 工具耗时 + transcript 全文引用（含 M1 transcript 接线缺陷修复，见 M4.1 实施记录）
 - [x] M4.2 统一运行视图（canonical run 目录 + 右栏回落，见 §13 M4.2 实施记录）
 - [x] M4.3a 编排通知 + 任务深链（run 结束/失败/待审批系统通知，点击跳转任务中心，见 §12）
-- [ ] M4.3b 成本透明（run_id 维度 + 每任务/每 run 金额展示）
+- [x] M4.3b 成本透明（run_id 维度 + 每任务/每 run 金额展示）
 
 ## 6. 风险与依赖
 
