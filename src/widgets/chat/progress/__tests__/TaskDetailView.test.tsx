@@ -38,8 +38,12 @@ vi.mock('../../../../shared/api/orchRunControlClient', () => ({
       task_id: 'fu1',
       status: 'dispatched',
     }),
-    pauseTask: vi.fn().mockResolvedValue({ ok: true, run_id: 'run-1', task_id: 't1', status: 'paused' }),
-    resumeTask: vi.fn().mockResolvedValue({ ok: true, run_id: 'run-1', task_id: 't1', status: 'running' }),
+    pauseTask: vi
+      .fn()
+      .mockResolvedValue({ ok: true, run_id: 'run-1', task_id: 't1', status: 'paused' }),
+    resumeTask: vi
+      .fn()
+      .mockResolvedValue({ ok: true, run_id: 'run-1', task_id: 't1', status: 'running' }),
   },
 }));
 
@@ -126,9 +130,7 @@ describe('TaskDetailView', () => {
       expect(followupTaskMock).toHaveBeenCalledWith('run-1', 't1', '再补充第三节'),
     );
     // 派发成功后详情页切换到新任务 fu1，transcript 轮询随之切换
-    await waitFor(() =>
-      expect(getTaskTranscriptMock).toHaveBeenCalledWith('run-1', 'fu1', 0, 200),
-    );
+    await waitFor(() => expect(getTaskTranscriptMock).toHaveBeenCalledWith('run-1', 'fu1', 0, 200));
   });
 
   it('M2.5: paused 任务显示已暂停并提供恢复按钮', async () => {
@@ -259,6 +261,34 @@ describe('TaskDetailView', () => {
     const eventsList = screen.getByTestId('task-detail-events');
     expect(eventsList).toBeInTheDocument();
     expect(eventsList).toHaveTextContent('read_file');
+  });
+
+  it('M4.1: tool_result 实时事件显示工具耗时', () => {
+    const board = buildBoard({
+      live: {
+        t1: {
+          liveStep: null,
+          waitingApproval: null,
+          events: [
+            {
+              state: 'subagent_event',
+              run_id: 'run-1',
+              task_id: 't1',
+              agent_id: 'researcher',
+              goal: '搜集资料',
+              phase: 'tool_result',
+              tool_name: 'web_search',
+              is_error: false,
+              duration_ms: 1200,
+              ts: Date.now(),
+            },
+          ],
+        } as SubagentLiveState,
+      },
+    });
+    render(<TaskDetailView board={board} taskId="t1" onBack={() => {}} />);
+
+    expect(screen.getByTestId('task-detail-events')).toHaveTextContent('返回 · 1.2s');
   });
 
   it('无事件时显示空提示', () => {
