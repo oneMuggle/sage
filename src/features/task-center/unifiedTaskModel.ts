@@ -3,6 +3,11 @@
 // 统一任务模型：六种异构任务源 → 单一 UnifiedTaskEntry。
 // 只在 features 层（shared 不得导入 features，见 eslint.config.js FSD 规则）。
 import type { Goal, GoalStatus } from '../../entities/autonomous-goals/types';
+import type {
+  DirectoryRun,
+  DirectoryRunStatus,
+  DirectoryTask,
+} from '../../shared/api/orchRunClient';
 import type { Lane, LaneStatus, ScheduledTask, Todo, TodoItemStatus } from '../../shared/api/types';
 import type { TaskStatusValue } from '../../shared/api/types/chatAndEventTypes';
 
@@ -14,6 +19,7 @@ export type UnifiedTaskSource =
   | 'chat'
   | 'lane'
   | 'subagent'
+  | 'run'
   | 'goal'
   | 'todo'
   | 'scheduled';
@@ -31,7 +37,9 @@ export type UnifiedTaskOpenTarget =
       sessionId: string;
       runId: string;
       taskId: string;
-    };
+    }
+  // M4.2: run 级行（无可见子任务时的兜底）—— 打开会话并聚焦右栏进度。
+  | { kind: 'run-progress'; sessionId: string; runId: string };
 
 export interface UnifiedTaskEntry {
   /** 全局唯一：`<source>:<rawId>` */
@@ -91,9 +99,7 @@ export const LANE_STATUS_MAP: Readonly<Record<LaneStatus, TaskCenterStatus>> = {
 };
 
 /** M2.4: 编排任务板子任务状态 → 任务中心状态。 */
-export const SUBAGENT_STATUS_MAP: Readonly<
-  Record<TaskStatusValue, TaskCenterStatus>
-> = {
+export const SUBAGENT_STATUS_MAP: Readonly<Record<TaskStatusValue, TaskCenterStatus>> = {
   queued: 'queued',
   running: 'running',
   paused: 'paused',
@@ -105,12 +111,20 @@ export const SUBAGENT_STATUS_MAP: Readonly<
 
 /** M2.4: 任务中心只展示活跃 + 失败的子代理任务（done 在 run 摘要/transcript 回看）。 */
 export function isSubagentTaskVisible(status: TaskStatusValue): boolean {
-  return (
-    status === 'queued' ||
-    status === 'running' ||
-    status === 'paused' ||
-    status === 'failed'
-  );
+  return status === 'queued' || status === 'running' || status === 'paused' || status === 'failed';
+}
+
+/** M4.2: canonical run 状态（orch_runs.status）→ 任务中心状态。 */
+export const CANONICAL_RUN_STATUS_MAP: Readonly<Record<DirectoryRunStatus, TaskCenterStatus>> = {
+  running: 'running',
+  completed: 'succeeded',
+  failed: 'failed',
+  cancelled: 'cancelled',
+};
+
+/** M4.2: run 级行仅展示活跃 + 失败；completed/cancelled 属于已结束噪音。 */
+export function isCanonicalRunVisible(status: DirectoryRunStatus): boolean {
+  return status === 'running' || status === 'failed';
 }
 
 export const STATUS_PRIORITY: Readonly<Record<TaskCenterStatus, number>> = {
@@ -237,13 +251,9 @@ export interface SubagentTaskInput {
 }
 
 /** M2.4: 编排任务板子任务 → 任务中心条目（活跃/失败可见）。 */
-export function normalizeSubagentTask(
-  input: SubagentTaskInput,
-): UnifiedTaskEntry | null {
+export function normalizeSubagentTask(input: SubagentTaskInput): UnifiedTaskEntry | null {
   if (!isSubagentTaskVisible(input.status)) return null;
-  const mapped = input.waitingApproval
-    ? 'awaiting_approval'
-    : SUBAGENT_STATUS_MAP[input.status];
+  const mapped = input.waitingApproval ? 'awaiting_approval' : SUBAGENT_STATUS_MAP[input.status];
   const goal = (input.goal || '').trim();
   return {
     id: `subagent:${input.sessionId}:${input.runId}:${input.taskId}`,
@@ -272,6 +282,153 @@ export function normalizeSubagentTask(
       liveStep: input.liveStep,
       waitingApproval: input.waitingApproval,
     },
+  };
+}
+
+/**
+ * M4.2: canonical 子任务（orch_tasks 投影）→ 任务中心条目。
+ *
+ * 与内存行共用 ``subagent:<session>:<run>:<task>`` id：同名条目在
+ * useUnifiedTasks 中按 id 合并，canonical 定状态、内存补实时细节。
+ * 会话标题不在目录接口中，先用 sessionId 占位（内存行合并时覆盖）。
+ */
+export function normalizeCanonicalTask(
+  run: DirectoryRun,
+  task: DirectoryTask,
+  sessionTitle?: string | null,
+): UnifiedTaskEntry | null {
+  const base = normalizeSubagentTask({
+    sessionId: run.session_id,
+    // 目录接口不带会话标题：调用方可用全局会话列表补齐，缺省 sessionId 占位。
+    sessionTitle: (sessionTitle ?? '').trim() || run.session_id,
+    runId: run.run_id,
+    taskId: task.task_id,
+    agentId: task.agent_id,
+    goal: task.goal,
+    status: task.status,
+    liveStep: null,
+    waitingApproval: null,
+    startedAt: task.started_at,
+    error: task.error,
+  });
+  if (!base) return null;
+  return {
+    ...base,
+    meta: {
+      ...base.meta,
+      retryCount: task.retry_count,
+      depth: task.depth,
+    },
+  };
+}
+
+export interface CanonicalRunProgress {
+  total: number;
+  /** done + failed + cancelled + skipped —— 已落定数。 */
+  settled: number;
+  running: number;
+  queued: number;
+  paused: number;
+  failed: number;
+  /** 0-100；无任务时为 null（不伪造）。 */
+  percent: number | null;
+}
+
+export function canonicalRunProgress(tasks: readonly DirectoryTask[]): CanonicalRunProgress {
+  let settled = 0;
+  let running = 0;
+  let queued = 0;
+  let paused = 0;
+  let failed = 0;
+  for (const task of tasks) {
+    switch (task.status) {
+      case 'done':
+      case 'cancelled':
+      case 'skipped':
+        settled += 1;
+        break;
+      case 'failed':
+        settled += 1;
+        failed += 1;
+        break;
+      case 'running':
+        running += 1;
+        break;
+      case 'queued':
+        queued += 1;
+        break;
+      case 'paused':
+        paused += 1;
+        break;
+    }
+  }
+  const total = tasks.length;
+  return {
+    total,
+    settled,
+    running,
+    queued,
+    paused,
+    failed,
+    percent: total > 0 ? Math.round((settled / total) * 100) : null,
+  };
+}
+
+/**
+ * M4.2: canonical run 级兜底行。
+ *
+ * 正常情况下 run 由子任务行代表；只有**没有可见子任务**时（已确认未派发、
+ * 全部 done 后仍在收尾合成、或子任务全部终态后 run 才失败）才出 run 行，
+ * 避免同一 run 在任务中心出现两层重复行。
+ */
+export function normalizeCanonicalRun(run: DirectoryRun): UnifiedTaskEntry | null {
+  if (!isCanonicalRunVisible(run.status)) return null;
+  if (run.tasks.some((task) => isSubagentTaskVisible(task.status))) return null;
+  const progress = canonicalRunProgress(run.tasks);
+  const request = (run.original_request ?? '').trim();
+  return {
+    id: `run:${run.run_id}`,
+    source: 'run',
+    title: request ? request.slice(0, 80) : run.run_id,
+    status: CANONICAL_RUN_STATUS_MAP[run.status],
+    startedAt: run.dispatched_at ?? run.created_at,
+    updatedAt: null,
+    percent: progress.percent,
+    error: null,
+    cancellable: run.status === 'running',
+    detailPath: `/chat?session=${encodeURIComponent(run.session_id)}`,
+    openTarget: {
+      kind: 'run-progress',
+      sessionId: run.session_id,
+      runId: run.run_id,
+    },
+    cancelRef: { source: 'run', rawId: run.run_id },
+    meta: {
+      sessionId: run.session_id,
+      runId: run.run_id,
+      taskCount: progress.total,
+      settledCount: progress.settled,
+    },
+  };
+}
+
+/**
+ * M4.2: canonical 行与内存行合并（同 id）。
+ *
+ * canonical（DB）是状态真相；唯一例外是内存侧 pending 审批 —— 它在 DB 里
+ * 不可见，存在时必须覆盖为 awaiting_approval。内存侧还提供 liveStep
+ * 与真实会话标题。
+ */
+export function mergeSubagentEntries(
+  canonical: UnifiedTaskEntry,
+  memory: UnifiedTaskEntry,
+): UnifiedTaskEntry {
+  return {
+    ...canonical,
+    status: memory.status === 'awaiting_approval' ? 'awaiting_approval' : canonical.status,
+    startedAt: canonical.startedAt ?? memory.startedAt,
+    error: canonical.error ?? memory.error,
+    meta: { ...canonical.meta, ...memory.meta },
   };
 }
 

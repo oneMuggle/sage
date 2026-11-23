@@ -28,6 +28,69 @@ export interface SessionRunsResponse {
   runs: OrchRunDetail[];
 }
 
+// ---------------------------------------------------------------------------
+// M4.2 (2026-11-23): canonical run 目录 —— TaskCenter 统一运行视图数据源。
+// 与内存 taskBoard 不同，这里直接读 orch_runs/orch_tasks 真相层：会话从未在
+// 前端加载过（或跨窗口运行时）也能看到运行中的 run 与子任务。
+// ---------------------------------------------------------------------------
+
+export type RunDirectoryScope = 'active' | 'failed' | 'finished' | 'all';
+
+/** orch_runs.status 原样值（DB 词表，不做前端映射）。 */
+export type DirectoryRunStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+
+/** orch_tasks.status 原样值（dispatcher 终态写 done/failed/cancelled/skipped）。 */
+export type DirectoryTaskStatus =
+  | 'queued'
+  | 'running'
+  | 'paused'
+  | 'done'
+  | 'failed'
+  | 'cancelled'
+  | 'skipped';
+
+export interface DirectoryTask {
+  task_id: string;
+  run_id: string;
+  agent_id: string;
+  goal: string;
+  status: DirectoryTaskStatus;
+  retry_count: number;
+  error: string | null;
+  output_preview: string | null;
+  started_at: number | null;
+  finished_at: number | null;
+  used_tokens: number | null;
+  duration_ms: number | null;
+  parent_task_id: string | null;
+  depth: number;
+  retry_of: string | null;
+}
+
+export interface DirectoryRun {
+  run_id: string;
+  session_id: string;
+  status: DirectoryRunStatus;
+  /** epoch ms */
+  created_at: number;
+  /** epoch ms；null = 尚未派发 */
+  dispatched_at: number | null;
+  /** epoch ms；用户确认计划的时间 */
+  confirmed_at: number | null;
+  original_request: string | null;
+  final_summary: string | null;
+  /** plan_json 里拆解出的计划任务（损坏时为空数组）。 */
+  plan: TaskPlanItem[];
+  tasks: DirectoryTask[];
+}
+
+export interface RunDirectoryResponse {
+  /** epoch ms */
+  generated_at: number;
+  scope: RunDirectoryScope;
+  runs: DirectoryRun[];
+}
+
 export interface CancelRunResponse {
   ok: boolean;
   run_id: string;
@@ -64,6 +127,22 @@ export const orchRunClient = {
       limit,
     });
   },
+  // M4.2 (2026-11-23): canonical run 目录（跨会话，新→旧）—— 统一运行视图
+  // 真相层投影。scope: active=running / failed / finished=completed+cancelled / all。
+  async listRunDirectory(
+    scope: RunDirectoryScope = 'all',
+    limit = 50,
+  ): Promise<RunDirectoryResponse> {
+    const resp = await invoke<RunDirectoryResponse>('orchestration_list_run_directory', {
+      scope,
+      limit,
+    });
+    return {
+      generated_at: typeof resp?.generated_at === 'number' ? resp.generated_at : Date.now(),
+      scope: resp?.scope ?? scope,
+      runs: Array.isArray(resp?.runs) ? resp.runs : [],
+    };
+  },
   // B3 (2026-09-09): 单任务跳过 —— queued 短路 / running 软中断，其余子任务不受影响。
   // 409 = 任务不在本批或已终态；404 = run 不在活动注册表。
   cancelTask(
@@ -75,7 +154,9 @@ export const orchRunClient = {
   // Fix #3 (2026-09-06): 用户确认 → 唤醒 producer 启动 conductor 执行。
   // 2026-11-10: 返回 confirmed_at 供前端写入 store 恢复锁定态。
   confirmRun(runId: string): Promise<{ ok: boolean; confirmed_at: number }> {
-    return invoke<{ ok: boolean; confirmed_at: number }>('orchestration_confirm_run', { run_id: runId });
+    return invoke<{ ok: boolean; confirmed_at: number }>('orchestration_confirm_run', {
+      run_id: runId,
+    });
   },
   // RV2 (round8): 构造"只重跑失败任务"的计划覆盖 —— done 子任务带
   // preset_output（结果回放，不重新执行），失败子任务原样重建。
