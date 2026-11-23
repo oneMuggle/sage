@@ -1,7 +1,8 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0–M4.1 已实施并合并 main（M4.1 工具耗时 + transcript 全文引用）；M4.3a 实施完成待合并，M4.2/M4.3b 待实施
-> 分支：M4.3a `feat/orch-run-notifications`（编排 run 通知 + 任务深链，实施计划见 §12）
+> 状态：M0–M4.2 已实施（M4.1 工具耗时 + transcript 全文引用、M4.3a 编排通知 + 任务深链均已合并 main；M4.2 统一运行视图 待合并），M4.3b 成本透明待实施
+> 分支：M4.2 `feat/orch-unified-run-view`（实施计划/记录见 §13）
+> 分支：M4.3a `feat/orch-run-notifications`（已合并 #3225，编排 run 通知 + 任务深链，实施计划见 §12）
 > 分支：M4.1 `feat/orch-tool-duration`
 > 分支：M3.3 `feat/orch-plan-estimates`
 > 分支：M3.2 `feat/orch-failed-replan`
@@ -148,8 +149,8 @@ Sage 已有：主聊天三档思考展示（detail/trace/result，三级作用�
 - [x] M3.2 失败驱动 re-plan
 - [x] M3.3 计划卡成本预估 + 拆深开关（预估轮次/复杂度已落地；成本估算延至 M4.3）
 - [x] M4.1 工具耗时 + transcript 全文引用（含 M1 transcript 接线缺陷修复，见 M4.1 实施记录）
-- [ ] M4.2 统一运行视图
-- [x] M4.3a 编排通知 + 任务深链（run 结束/失败/待审批系统通知，点击跳转任务中心）
+- [x] M4.2 统一运行视图（canonical run 目录 + 右栏回落，见 §13 M4.2 实施记录）
+- [x] M4.3a 编排通知 + 任务深链（run 结束/失败/待审批系统通知，点击跳转任务中心，见 §12）
 - [ ] M4.3b 成本透明（run_id 维度 + 每任务/每 run 金额展示）
 
 ## 6. 风险与依赖
@@ -378,3 +379,71 @@ M4 第 3 条要求"编排 run 结束/失败/等待审批发系统通知（沿用
 **已知边界**：通知队列为进程内内存队列，App 未运行时产生的编排终态不会补发（与既有五路通知通道语义一致）。
 
 验证：后端 6 文件 53 用例全绿（含新增 18 例）；`ruff check`、py38 兼容、silent-exceptions、`lint-imports`、架构棘轮、`tsc --noEmit`、ESLint、vitest（受影响 3 文件 19 用例）全部通过。
+## 13. M4.2 统一运行视图（2026-11-23）
+
+### 13.1 根因定位（第一手证据）
+
+「三套数据源不同步」不是视图没接上，而是 **canonical 数据没有跨会话查询入口**：
+
+| 层 | 事实 |
+|---|---|
+| 真相层 | `orch_runs` / `orch_tasks` 已由 `ChatDispatcher.init_orch_run` / `_persist_task_state` 逐次落库，字段齐全（状态 / 起止 / 用量 / 层级 / 错误 / 父子关系） |
+| 投影层 | `OrchRunRepository.list()`（跨会话全量列表）**存在但零调用者**；`GET /orch/runs` 强制要求 `session_id`；`GET /orch/runs/{id}/snapshot` 只读进程内 `SnapshotStore`（重启后为空）且一次只能看一个 run；`OrchTaskRepository` 无批量查询 |
+| 视图层 | TaskCenter 的子代理条目来自**内存** `useChatStreamStore.taskBoard`（只覆盖前端加载过的会话）；右栏进度同源；LaneBoard 属 lane 域，独立数据源 |
+
+结果：**会话未被前端加载过 ⇒ 该 run 及其子任务在 TaskCenter 里根本不存在**；应用重启后右栏进度同样空白。这正是验收条目「仅在 TaskCenter 一处即可看到所有运行中 run 与子任务」当前无法满足的原因。
+
+### 13.2 分层视图设计
+
+```
+Layer 0 真相   orch_runs + orch_tasks + orch_events（SQLite，已落库）
+Layer 1 投影   GET /api/v1/orch/runs/directory?scope=all → 一次拿到「run + 其子任务」
+               （scope: active/failed/finished/all；limit 1..200，默认 50）
+               前端 runDirectoryStore（3s 轮询）→ 唯一投影层
+Layer 2 视图   TaskCenter（canonical 条目 + 内存 live 叠加）
+               右栏进度（内存优先，缺失时回落 canonical）
+               SubagentLivePanel / LaneBoard（内存/领域数据，作为实时叠加层）
+```
+
+收敛原则：**canonical 定状态，内存定实时细节**。子任务 id 统一为 `subagent:<session_id>:<run_id>:<task_id>`，canonical 与内存条目同 id ⇒ 天然去重，内存只补 `liveStep` / `waitingApproval`（canonical 不存这两项）。
+
+### 13.3 实施步骤
+
+- [x] 步骤 1：`OrchRunRepository.list_active()`（跨会话活动 run，新→旧，limit）
+- [x] 步骤 2：`OrchTaskRepository.list_by_runs()`（批量取子任务）
+- [x] 步骤 3：`GET /orch/runs/directory` 端点（`orch_run_control` 路由，`scope` 四档 + limit 1..200；挂在 legacy `/orch/runs/{run_id}` 之前避免路径吞并）
+- [x] 步骤 4：Electron IPC 通道 `orchestration_list_run_directory` + ipc-manifest 映射
+- [x] 步骤 5：前端类型 + 客户端（扩展 `src/shared/api/orchRunClient.ts`，未另建目录客户端文件）
+- [x] 步骤 6：`runDirectoryStore`（entities 层，zustand，3s 轮询刷新）
+- [x] 步骤 7：统一模型新增 `'run'` 来源 + `normalizeCanonicalRun` / `normalizeCanonicalTask`
+- [x] 步骤 8：`useUnifiedTasks` 合并 canonical 与内存条目（同 id 去重，canonical 定状态）
+- [x] 步骤 9：`TaskCenterRuntimeHost` 挂 3s 轮询（与 shell 同 cadence）
+- [x] 步骤 10：任务中心交互（run 级取消 / 跳转会话）
+- [x] 步骤 11：中英文案 `taskCenter.source.run`
+- [x] 步骤 12：右栏进度 canonical 回落（内存 taskBoard 缺失时用 canonical 合成）
+- [x] 步骤 13：测试（后端 pytest + 前端 vitest）与架构棘轮核对
+
+### 13.4 实施记录（2026-11-23）
+
+| 改动 | 文件 |
+|---|---|
+| 跨会话目录查询 `list_by_statuses()`（状态过滤 + 新→旧 + limit） | `backend/data/orch_run_repo.py` |
+| 批量取子任务 `list_by_runs()`（IN 查询，空列表短路） | `backend/data/orch_task_repo.py` |
+| 目录端点 `GET /orch/runs/directory`（scope 四档 + limit 1..200；plan_json 解析、子任务 15 字段投影） | `backend/api/orch_run_control.py` |
+| Electron IPC `orchestration_list_run_directory` + manifest 再生成（428 命令） | `electron/commandRoutes/orchestration.ts`、`electron/ipc-manifest.json` |
+| 前端类型与客户端：`DirectoryRun`/`DirectoryTask`、`listRunDirectory(scope, limit)`（防御性归一） | `src/shared/api/orchRunClient.ts` |
+| `runDirectoryStore`（zustand：3s 轮询、loading 并发去重、失败保留上一轮数据）+ `findActiveRunForSession` | `src/entities/orchestration/runDirectoryStore.ts` |
+| 统一模型：`'run'` 来源、`CANONICAL_RUN_STATUS_MAP`、`normalizeCanonicalTask`（与内存行同 id）、`canonicalRunProgress`、`normalizeCanonicalRun`（run 级兜底行仅在无可见子任务时出）、`mergeSubagentEntries`（canonical 定状态；内存补审批 / liveStep / 真实标题） | `src/features/task-center/unifiedTaskModel.ts` |
+| `useUnifiedTasks`：canonical 条目先入 Map，内存行同 id 合并，未被合并的 canonical 条目（含 run 级行）追加 | `src/features/task-center/useUnifiedTasks.ts` |
+| `TaskCenterRuntimeHost`：3s 目录轮询（与 shell cadence 一致，跨窗口会话也能出条目） | `src/features/task-center/TaskCenterRuntimeHost.tsx` |
+| 任务中心交互：run 级取消走 `orchestration_cancel_run_control` 并立即刷新；`run-progress` 打开右栏进度并跳会话 | `src/features/task-center/useTaskCenterActions.ts` |
+| 卡片来源图标 + 中英文案 `taskCenter.source.run` | `TaskCenterCard.tsx`、locales zh/en `taskCenter.ts` |
+| 右栏 canonical 回落：`buildCanonicalTaskBoard` 把目录投影为 `TaskBoardState`（plan 空时用任务行兜底；计划中未落库任务按 queued 合成；paused 计入 queued 保持旧事件口径）；`Chat.tsx` 以 `effectiveTaskBoard = taskBoard ?? canonicalTaskBoard` 供事件订阅 / 粘性滚动 / 计划卡 / 右栏 | `src/features/task-center/canonicalTaskBoard.ts`、`src/pages/Chat.tsx` |
+| 架构棘轮：按协议仅上调本 PR 触及条目（`src/pages/Chat.tsx` 889→908） | `architecture-baseline.json` |
+| 测试 | 后端 `test_run_directory.py`（新，14）；前端 `unifiedTaskModel.test.ts`（+9）、`canonicalTaskBoard.test.ts`（新，4）、`runDirectoryStore.test.ts`（新，4） |
+
+**收敛形态落地**：run 级兜底行只覆盖「已确认未派发 / 全部子任务终态后仍在收尾 / 子任务全部终态后 run 失败」三种没有可见子任务行的窗口，避免同一 run 在任务中心出现父子两层重复行；子任务行 canonical 与内存天然同 id 去重，`awaiting_approval` 是唯一由内存侧压过 canonical 的状态（DB 不存待审批）。合成右栏任务板不写回 `chatStreamStore` —— 内存板一旦出现即优先，canonical 事件订阅用合成板 runId 继续补齐实时细节。
+
+**已知遗留**：LaneBoard 仍是 lane 域独立数据源（lane 与 orch run 是两套调度单元，本里程碑只保证其在 TaskCenter 中与 run 条目并列可见）；目录轮询为全量 `limit=50`，run 数量大时无增量游标；右栏合成板不含 `liveStep`（canonical 不存），进程重启后事件时间线为空但任务状态正确；§12.5 提到的 `task.paused/resumed` 映射与 `task.skipped` 白名单两处事件映射缺陷未在本里程碑修复（不影响目录聚合的状态正确性）；M4.3b 成本透明未做。
+
+验证：后端目录端点专项 14 用例 + 邻居 140 用例全绿，`ruff check` 通过；前端 task-center 套件（含 i18n 字节对与 IPC 契约）130 用例全绿；`tsc --noEmit`、ESLint（改动文件 0 error）、`prettier --check`、架构棘轮、`ipc:manifest:check`（428 命令）均通过。

@@ -6,6 +6,10 @@ import { toast } from 'sonner';
 import { StepConfirmDialog } from '../components/StepConfirmDialog';
 import type { StepConfirmAction } from '../components/StepConfirmDialog';
 import { useCompactionArchives } from '../entities/chat/compactionArchivesStore';
+import {
+  findActiveRunForSession,
+  useRunDirectoryStore,
+} from '../entities/orchestration/runDirectoryStore';
 import { useOrchEventSubscription } from '../entities/orchestration/useOrchEventSubscription';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
@@ -22,6 +26,7 @@ import { buildMessageDisplayMeta } from '../features/send-message/messageDisplay
 import { restoreRunToBoard } from '../features/send-message/orchestrationEvents';
 import type { PendingComposerOptions } from '../features/send-message/pendingComposerOptions';
 import { useChat } from '../features/send-message/useChat';
+import { buildCanonicalTaskBoard } from '../features/task-center/canonicalTaskBoard';
 import { useTerminalPanelStore } from '../features/terminal-panel/terminalPanelStore';
 import { type ChatOfficeRef } from '../shared/api';
 import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
@@ -101,14 +106,6 @@ export function Chat() {
     cancelSteer, // 2026-11-07: 撤回一条暂存插话
   } = useChat();
 
-  // 编排 canonical 事件订阅：任务详情的事件时间线与聊天框插话入口都依赖
-  // runControlStore 里的 run 快照。此前该订阅 hook 无任何生产调用点，
-  // 导致 knownRun 恒空（时间线/ContextInput 不渲染）、编排插话静默降级排队。
-  // 只订阅真实编排 run（`orch-` 前缀）；`agent-task-*` 是单 agent 委派的
-  // 临时合成板，没有 canonical run，不应发事件请求。
-  const orchSubscriptionRunId =
-    taskBoard?.runId && taskBoard.runId.startsWith('orch-') ? taskBoard.runId : null;
-  useOrchEventSubscription(orchSubscriptionRunId);
   // right-panel R1 批次 A: 开合上抬 rightPanelStore（自动唤起/内联卡片需要
   // 跨组件写面板状态）；localStorage 迁移进 store，此处只读订阅。
   const isMobile = useIsMobile();
@@ -123,6 +120,28 @@ export function Chat() {
     isLoading: storeLoading,
     removeMessage,
   } = useStore();
+  // M4.2: canonical run 目录（TaskCenter/右栏共用的唯一运行真相源，3s 轮询
+  // 在 TaskCenterRuntimeHost 中统一启动）。本会话有 running run 但内存任务板
+  // 缺失时（会话未在本窗口加载 / run 在另一窗口发起），用目录合成兜底任务板，
+  // 只在渲染期投影、不写回 chatStreamStore —— 内存板一旦出现即优先（含实时
+  // liveStep 等细节）；合成板的 runId 让下面的 canonical 事件订阅照常接管。
+  const directoryRuns = useRunDirectoryStore((s) => s.runs);
+  const canonicalTaskBoard = useMemo(() => {
+    const run = findActiveRunForSession(directoryRuns, currentSessionId);
+    return run ? buildCanonicalTaskBoard(run) : null;
+  }, [directoryRuns, currentSessionId]);
+  const effectiveTaskBoard = taskBoard ?? canonicalTaskBoard;
+
+  // 编排 canonical 事件订阅：任务详情的事件时间线与聊天框插话入口都依赖
+  // runControlStore 里的 run 快照。此前该订阅 hook 无任何生产调用点，
+  // 导致 knownRun 恒空（时间线/ContextInput 不渲染）、编排插话静默降级排队。
+  // 只订阅真实编排 run（`orch-` 前缀）；`agent-task-*` 是单 agent 委派的
+  // 临时合成板，没有 canonical run，不应发事件请求。
+  const orchSubscriptionRunId =
+    effectiveTaskBoard?.runId && effectiveTaskBoard.runId.startsWith('orch-')
+      ? effectiveTaskBoard.runId
+      : null;
+  useOrchEventSubscription(orchSubscriptionRunId);
   const [tempChatSessions, setTempChatSessions] = useSessionMemoryPause(currentSessionId);
   const { t } = useI18n();
   const [orchMode, setOrchMode] = useState<string>('auto');
@@ -244,7 +263,7 @@ export function Chat() {
     currentSessionId,
     messages,
     streamingMessageId,
-    taskBoard,
+    taskBoard: effectiveTaskBoard,
   });
 
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
@@ -691,7 +710,7 @@ export function Chat() {
               messages={messages}
               sendMessage={sendMessage as never}
               preflightPhase={preflightPhase}
-              taskBoard={taskBoard ?? null}
+              taskBoard={effectiveTaskBoard ?? null}
               onCancelRun={handleCancelRun}
               recommendedExecutionMode={executionModeRecommendation?.mode ?? null}
               executionModeReasoning={executionModeRecommendation?.reasoning}
@@ -807,7 +826,7 @@ export function Chat() {
           toolCalls={streamingToolCalls ?? EMPTY_TOOL_CALLS}
           isLoading={isLoading}
           sessionId={currentSessionId}
-          taskBoard={taskBoard ?? null}
+          taskBoard={effectiveTaskBoard ?? null}
           // C4+H1 (2026-08-15): 任意阶段取消都走 handleCancelRun ——
           // cancelRun（未派发时后端置 cancelled + dispatcher.cancel() 阻止
           // 自动派发）+ 清空 taskBoard。

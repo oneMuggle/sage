@@ -150,6 +150,18 @@ export const orchestrationRoutes: Record<string, CommandRoute> = {
     path: (a) =>
       `/api/v1/orch/runs?session_id=${encodeURIComponent(String(a.session_id))}&limit=${encodeURIComponent(String(a.limit ?? 20))}`,
   },
+  // M4.2 (2026-11-23): canonical run 目录 —— 跨会话 run + 子任务（统一运行视图）。
+  // 路由必须早于 legacy /orch/runs/{run_id}；orch_run_control 在 main.py 中先挂载。
+  orchestration_list_run_directory: {
+    method: 'GET',
+    path: (a) => {
+      const search = new URLSearchParams();
+      if (a.scope !== undefined) search.set('scope', String(a.scope));
+      if (a.limit !== undefined) search.set('limit', String(a.limit));
+      const qs = search.toString();
+      return `/api/v1/orch/runs/directory${qs ? `?${qs}` : ''}`;
+    },
+  },
   // B3 (2026-09-09): 单任务跳过 —— POST /orch/runs/{run_id}/tasks/{task_id}/cancel。
   // queued 任务 acquire 后短路 / running 任务软中断，不影响其余子任务。
   orchestration_cancel_run_task: {

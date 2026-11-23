@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Sequence
 
 from backend.data.database import get_database
 
@@ -126,6 +126,26 @@ class OrchTaskRepository:
         cursor.execute(
             "SELECT * FROM orch_tasks WHERE run_id = ? ORDER BY task_id ASC",
             (run_id,),
+        )
+        return [self._row_to_task(row) for row in cursor.fetchall()]
+
+    def list_by_runs(self, run_ids: Sequence[str]) -> List[OrchTask]:
+        """M4.2 (2026-11-23): 批量取多个 run 的子任务（canonical run 目录用）。
+
+        逐 run 调 ``list_by_run`` 会产生 N 次查询；目录端点一次最多覆盖
+        几十个 run，批量写法避免 N+1。``run_ids`` 来自内部查询结果（非用户
+        输入）；空集合直接返回空列表。
+        """
+        if not run_ids:
+            return []
+        placeholders = ",".join("?" for _ in run_ids)
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM orch_tasks WHERE run_id IN ("
+            + placeholders
+            + ") ORDER BY run_id ASC, task_id ASC",
+            tuple(run_ids),
         )
         return [self._row_to_task(row) for row in cursor.fetchall()]
 

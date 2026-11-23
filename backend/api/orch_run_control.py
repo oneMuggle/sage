@@ -14,7 +14,7 @@ import json
 import logging
 import time
 from collections import defaultdict, deque
-from typing import Deque, Dict, Optional, Tuple
+from typing import Any, Deque, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -23,7 +23,8 @@ from backend.data.orch_context_repo import (
     OrchestrationContextError,
     OrchestrationContextRepository,
 )
-from backend.data.orch_task_repo import OrchTaskRepository
+from backend.data.orch_run_repo import OrchRunRepository
+from backend.data.orch_task_repo import OrchTask, OrchTaskRepository
 from backend.data.orch_transcript_repo import OrchTranscriptRepository
 from backend.domain.orch_events import ControlEventType, Visibility, make_event
 from backend.orchestration.event_hub import EventHub
@@ -71,6 +72,98 @@ def get_snapshot_store() -> SnapshotStore | None:
     未启动/未装配返回 ``None``，调用方降级为不注册该工具。
     """
     return _snapshot_store
+
+
+# ---------------------------------------------------------------------------
+# M4.2: canonical run 目录（TaskCenter 统一运行视图数据源）
+# ---------------------------------------------------------------------------
+
+# scope → orch_runs.status 集合。只作内部映射键，不接受用户自定义状态值。
+_DIRECTORY_SCOPES: Dict[str, Tuple[str, ...]] = {
+    "active": ("running",),
+    "failed": ("failed",),
+    "finished": ("completed", "cancelled"),
+    "all": ("running", "completed", "failed", "cancelled"),
+}
+
+
+def _plan_tasks(plan_json: Optional[str]) -> List[Dict[str, Any]]:
+    """解析 plan_json 的 tasks 列表（损坏/缺失降级为空，不阻断目录）。"""
+    try:
+        plan = json.loads(plan_json or "{}")
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(plan, dict):
+        return []
+    tasks = plan.get("tasks")
+    return tasks if isinstance(tasks, list) else []
+
+
+def _task_to_dict(task: OrchTask) -> Dict[str, Any]:
+    return {
+        "task_id": task.task_id,
+        "run_id": task.run_id,
+        "agent_id": task.agent_id,
+        "goal": task.goal,
+        "status": task.status,
+        "retry_count": task.retry_count,
+        "error": task.error,
+        "output_preview": task.output_preview,
+        "started_at": task.started_at,
+        "finished_at": task.finished_at,
+        "used_tokens": task.used_tokens,
+        "duration_ms": task.duration_ms,
+        "parent_task_id": task.parent_task_id,
+        "depth": task.depth,
+        "retry_of": task.retry_of,
+    }
+
+
+@router.get("/directory")
+async def list_run_directory(
+    scope: Literal["active", "failed", "finished", "all"] = Query(default="active"),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> JSONResponse:
+    """M4.2: canonical run 目录 —— 跨会话列出 run 及其子任务。
+
+    不依赖前端内存 taskBoard：会话从未被前端加载过时，TaskCenter 仍能
+    从这里看到运行中的 run 与子任务（统一运行视图的真相层投影）。
+
+    scope: active=running / failed=failed / finished=completed+cancelled / all
+
+    注意：本路由必须早于 legacy ``/orch/runs/{run_id}`` 注册。orch_run_control
+    在 ``backend/main.py`` 中先于 legacy_router 挂载，故 /directory 不会被
+    当成 run_id 落到 catch-all 上。
+    """
+    runs = OrchRunRepository().list_by_statuses(
+        _DIRECTORY_SCOPES[scope], limit=limit
+    )
+    tasks_by_run: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    if runs:
+        task_repo = _task_repo or OrchTaskRepository()
+        for task in task_repo.list_by_runs([run.run_id for run in runs]):
+            tasks_by_run[task.run_id].append(_task_to_dict(task))
+    return JSONResponse(
+        {
+            "generated_at": int(time.time() * 1000),
+            "scope": scope,
+            "runs": [
+                {
+                    "run_id": run.run_id,
+                    "session_id": run.session_id,
+                    "status": run.status,
+                    "created_at": run.created_at,
+                    "dispatched_at": run.dispatched_at,
+                    "confirmed_at": run.confirmed_at,
+                    "original_request": run.original_request,
+                    "final_summary": run.final_summary,
+                    "plan": _plan_tasks(run.plan_json),
+                    "tasks": tasks_by_run.get(run.run_id, []),
+                }
+                for run in runs
+            ],
+        }
+    )
 
 
 @router.get("/{run_id}/snapshot")

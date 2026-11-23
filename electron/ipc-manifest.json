@@ -159,6 +159,7 @@
     "orchestration_lane_decision": { "method": "POST", "path": "/api/v1/orchestration/lanes/{lane_id}/decision" },
     "orchestration_list_lane_events": { "method": "GET", "path": "/api/v1/orchestration/lanes/{lane_id}/events" },
     "orchestration_list_lanes": { "method": "GET", "path": "/api/v1/orchestration/lanes" },
+    "orchestration_list_run_directory": { "method": "GET", "path": "/api/v1/orch/runs/directory" },
     "orchestration_list_session_runs": { "method": "GET", "path": "/api/v1/orch/runs" },
     "orchestration_pause_run": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/pause" },
     "orchestration_pause_task": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/tasks/{task_id}/pause" },

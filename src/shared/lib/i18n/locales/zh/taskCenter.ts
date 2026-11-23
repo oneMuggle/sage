@@ -11,6 +11,7 @@ export const zhTaskCenter = {
   'taskCenter.source.chat': '后台会话',
   'taskCenter.source.lane': '编排',
   'taskCenter.source.subagent': '子代理',
+  'taskCenter.source.run': '编排运行',
   'taskCenter.source.goal': '闲时目标',
   'taskCenter.source.todo': '待办',
   'taskCenter.source.scheduled': '定时任务',
