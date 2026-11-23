@@ -74,14 +74,10 @@ export function MineruServiceCard() {
     }
   };
 
-  const authMismatch =
-    status?.reachable && status.serverAuthMode === 'required' && !config.apiKey;
+  const authMismatch = status?.reachable && status.serverAuthMode === 'required' && !config.apiKey;
 
   return (
-    <div
-      className="space-y-3 rounded border border-border p-3"
-      data-testid="mineru-service-card"
-    >
+    <div className="space-y-3 rounded border border-border p-3" data-testid="mineru-service-card">
       <div className="text-sm font-semibold">{t('settings.mineru.title')}</div>
       <p className="text-xs text-muted">{t('settings.mineru.desc')}</p>
 
@@ -89,10 +85,7 @@ export function MineruServiceCard() {
         <div className="text-xs" data-testid="mineru-status">
           {status.reachable
             ? t('settings.mineru.reachable').replace('{mode}', status.serverAuthMode)
-            : t('settings.mineru.unreachable').replace(
-                '{reason}',
-                status.reason || 'unknown',
-              )}
+            : t('settings.mineru.unreachable').replace('{reason}', status.reason || 'unknown')}
         </div>
       )}
       {authMismatch && (
@@ -134,9 +127,7 @@ export function MineruServiceCard() {
           <input
             type="checkbox"
             checked={config.useInChatAttachment}
-            onChange={(e) =>
-              setConfig({ ...config, useInChatAttachment: e.target.checked })
-            }
+            onChange={(e) => setConfig({ ...config, useInChatAttachment: e.target.checked })}
           />
           {t('settings.mineru.chat_attachment')}
         </label>

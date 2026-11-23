@@ -675,8 +675,7 @@ export const zhSettingsUi = {
   'updates.advanced.telemetry.label': '启用更新遥测',
   'updates.advanced.title': '高级更新设置',
   'settings.mineru.title': 'MinerU 文档解析',
-  'settings.mineru.desc':
-    '内网 MinerU 服务；本地文本质量不足时自动升级（会把文档上传到该服务）',
+  'settings.mineru.desc': '内网 MinerU 服务；本地文本质量不足时自动升级（会把文档上传到该服务）',
   'settings.mineru.reachable': '服务可达（鉴权模式：{mode}）',
   'settings.mineru.unreachable': '服务不可达（{reason}）',
   'settings.mineru.auth_required': '服务端需要 API Key：请填写后保存',
