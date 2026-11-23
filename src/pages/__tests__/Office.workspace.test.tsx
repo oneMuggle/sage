@@ -64,6 +64,7 @@ vi.mock('../../features/office', () => ({
   OfficeCapabilityBar: () => <div data-testid="office-capability-bar" />,
   OfficeDocumentList: () => <div data-testid="office-document-list" />,
   OfficeDuplicateDialog: () => null,
+  OfficeCompareDialog: () => null,
   OfficeIntake: ({ children }: { children?: ReactNode }) => (
     <div data-testid="office-intake">{children}</div>
   ),
