@@ -340,6 +340,19 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - `fill_pdf_form(flatten=True)` 使用 `Document.bake(widgets=True)` 真扁平化；旧版 PyMuPDF 回退只读位
 > - 测试：PDF 读取/表单/工具 58 passed；Office 全量 2260 passed / 2 skipped；门禁绿
 
+> **实施记录（2026-11-23，M6c 安全返工：审查 BLOCK 修复）**
+> - 审查代理判 BLOCK 的三个根因：预算在**解码之后**才判定（用户可控 PDF 里的 Flate 位图 = 解压炸弹）、
+>   工具面返回**被截断的 base64**（响应体静默损坏）、工具面**没有上界**
+> - 解码前预检：`MAX_EMBEDDED_IMAGE_PIXELS`（12MP）+ `MAX_EMBEDDED_IMAGE_DECODED_BYTES`（64MB），
+>   超限图跳过并 `logger.warning`，PDF 其余部分照常读出
+> - 预览归一：统一 JPEG（去 alpha → RGB）+ 最长边缩放到 `MAX_EMBEDDED_IMAGE_EDGE`（1024px）
+> - 资源三分离：输出预算（base64 20MB）/ 常驻缓存字节（`cache_bytes`）/ 已跳过 xref（`skipped`）
+> - 服务端 clamp：`max_images_per_page` 收敛到 `MAX_IMAGES_PER_PAGE`（10），负数/非数字 → 0
+> - 工具面默认 **metadata-only**（只回宽高/数量，零解码），`embed_image_data` 显式开关才嵌像素
+> - `fill_pdf_form` 产物加 `MAX_PDF_OUTPUT_SIZE` 上限；`bake()` 注释纠正（自 PyMuPDF 1.24.0 起提供）
+> - 测试：新增 unit 17（预算/预检/clamp/metadata-only/归一化）+ 端点 3 + 工具面 2；
+>   PDF 相关 80 passed；ruff / py38 兼容门禁 / architecture 棘轮绿
+
 ### M7 — 前端一致性与漂移清理（P1，对应 G11/G12）
 
 - [ ] 生成结果内联预览（复用 `DocumentCanvas`），结果卡不再只给「在文档页打开」
@@ -425,7 +438,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 | 门禁 | ✅ | — | ruff / py38 / silent-exceptions / architecture |
 | M5 OOXML + Skills | ✅ | 本轮提交 | OOXML 单测 10 + 端点 3 + 工具 6；全量 2243 passed |
 | M6b 解析适配器 + 对比 + 工具面 | ✅ 后端 | 本轮提交 | unit 10 + 端点 3 + 工具面 44；全量 2274 passed |
-| M6c PDF 图片读取 + 真 flatten | ✅ | 本轮提交 | 58 PDF 相关测试；全量 2260 passed |
+| M6c PDF 图片读取 + 真 flatten | ✅ | 本轮提交 | 80 PDF 相关测试（安全返工后）；architecture 棘轮绿 |
 | M7 前端接入 | ⏳ | — | 未开始 |
 | M8 大文件/并发/沙箱 | ⏳ | — | 未开始 |
 
