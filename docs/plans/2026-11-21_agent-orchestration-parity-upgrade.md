@@ -447,3 +447,5 @@ Layer 2 视图   TaskCenter（canonical 条目 + 内存 live 叠加）
 **已知遗留**：LaneBoard 仍是 lane 域独立数据源（lane 与 orch run 是两套调度单元，本里程碑只保证其在 TaskCenter 中与 run 条目并列可见）；目录轮询为全量 `limit=50`，run 数量大时无增量游标；右栏合成板不含 `liveStep`（canonical 不存），进程重启后事件时间线为空但任务状态正确；§12.5 提到的 `task.paused/resumed` 映射与 `task.skipped` 白名单两处事件映射缺陷未在本里程碑修复（不影响目录聚合的状态正确性）；M4.3b 成本透明未做。
 
 验证：后端目录端点专项 14 用例 + 邻居 140 用例全绿，`ruff check` 通过；前端 task-center 套件（含 i18n 字节对与 IPC 契约）130 用例全绿；`tsc --noEmit`、ESLint（改动文件 0 error）、`prettier --check`、架构棘轮、`ipc:manifest:check`（428 命令）均通过。
+
+win7 同步（PR #3234，cherry-pick 自 main #3227）：Python 3.8 环境（`sage-backend-py38`）下目录端点 14 用例全绿、`ruff check` 通过，新增后端代码仅用 `typing.Dict/List/Optional/Literal`（无 PEP 604/585）；前端 task-center + orchestration + electron commands 23 文件 253 用例全绿，`tsc --noEmit`、架构棘轮、`ipc:manifest:check`（428 命令）、ESLint（0 error，1 个 pre-existing warning）均通过；CI 全绿（Backend Python 3.8 / Frontend TypeScript / Architecture check / Electron build ×2 / Electron smoke / count-lines）。
