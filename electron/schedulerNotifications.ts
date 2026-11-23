@@ -18,6 +18,9 @@ export interface PendingNotificationItem {
   kind?: string;
   session_id?: string;
   created_at?: string;
+  /** 2026-11-23 M4.3a: 编排深链锚点（点击通知跳到对应 run / task） */
+  run_id?: string;
+  task_id?: string;
 }
 
 export interface PendingNotificationsPayload {
@@ -29,21 +32,24 @@ export interface PendingNotificationsPayload {
   goal_notifications?: PendingNotificationItem[];
   /** 2026-11-14 M1: 项目健康告警（逾期 / 阻塞） */
   project_health?: PendingNotificationItem[];
+  /** 2026-11-23 M4.3a: 编排 run 终态 / 等待审批通知 */
+  orch_runs?: PendingNotificationItem[];
 }
 
 export interface SchedulerNotificationPollerDeps {
   fetchPending: () => Promise<PendingNotificationsPayload>;
   isEnabled: () => boolean;
-  notify: (title: string, body: string) => void;
+  /** 2026-11-23 M4.3a: 收整条 item（深链锚点随行），不再只收 title/body。 */
+  notify: (item: PendingNotificationItem) => void;
   /** 2026-11-06 Phase 3: 每条通知额外投递（Webhook / Slack），可选。 */
   deliver?: (item: PendingNotificationItem) => void;
   intervalMs?: number;
   log?: (event: string, details?: Record<string, unknown>) => void;
 }
 
-export const SCHEDULER_NOTIFICATION_POLL_MS = 15_000;
+export const SCHEDULER_NOTIFICATION_POLL_MS = 4_000;
 
-/** 合并四路队列并丢弃没有标题的条目。 */
+/** 合并六路队列并丢弃没有标题的条目。 */
 export function collectNotificationItems(
   payload: PendingNotificationsPayload | null | undefined,
 ): PendingNotificationItem[] {
@@ -53,6 +59,7 @@ export function collectNotificationItems(
     ...(payload?.background_tasks ?? []),
     ...(payload?.goal_notifications ?? []),
     ...(payload?.project_health ?? []),
+    ...(payload?.orch_runs ?? []),
   ];
   return items.filter((item) => typeof item.title === 'string' && item.title.length > 0);
 }
@@ -76,7 +83,7 @@ export function startSchedulerNotificationPoller(
     try {
       const payload = await deps.fetchPending();
       for (const item of collectNotificationItems(payload)) {
-        deps.notify(item.title ?? '', item.body ?? '');
+        deps.notify(item);
         // fire-and-forget 外发；deliver 内部自行隔离异常
         deps.deliver?.(item);
       }

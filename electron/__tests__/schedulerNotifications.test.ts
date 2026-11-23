@@ -8,14 +8,33 @@ import {
 } from '../schedulerNotifications';
 
 describe('collectNotificationItems', () => {
-  it('合并定时任务、待办提醒、后台任务与闲时目标四路队列', () => {
+  it('合并定时任务、待办提醒、后台任务、闲时目标、项目健康与编排六路队列', () => {
     const payload: PendingNotificationsPayload = {
       scheduled_tasks: [{ title: '✅ 定时任务已完成：日报', body: '内容' }],
       todo_reminders: [{ title: '⏰ 待办紧急', body: '写周报' }],
       background_tasks: [{ title: '✅ 后台任务完成：pytest -q', body: 'exit=0' }],
       goal_notifications: [{ title: '✅ 闲时目标完成：整理文献', status: 'succeeded' }],
+      project_health: [{ title: '⚠️ 项目健康告警', body: '任务逾期' }],
+      orch_runs: [{ title: '✅ 编排运行完成：orch-1', body: '3 个任务' }],
     };
-    expect(collectNotificationItems(payload)).toHaveLength(4);
+    expect(collectNotificationItems(payload)).toHaveLength(6);
+  });
+
+  it('编排通知保留深链锚点（run_id / task_id / session_id）', () => {
+    const items = collectNotificationItems({
+      orch_runs: [
+        {
+          title: '⏸ 编排任务等待审批：orch-1',
+          run_id: 'orch-1',
+          task_id: 'task-7',
+          session_id: 's-42',
+        },
+      ],
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].run_id).toBe('orch-1');
+    expect(items[0].task_id).toBe('task-7');
+    expect(items[0].session_id).toBe('s-42');
   });
 
   it('丢弃没有标题的条目，容忍空载荷', () => {
@@ -73,8 +92,8 @@ describe('startSchedulerNotificationPoller', () => {
       intervalMs: 1000,
     });
     await vi.advanceTimersByTimeAsync(1000);
-    expect(notify).toHaveBeenCalledWith('A', 'a');
-    expect(notify).toHaveBeenCalledWith('B', '');
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: 'A', body: 'a' }));
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: 'B' }));
     stop();
   });
 
@@ -114,7 +133,7 @@ describe('startSchedulerNotificationPoller', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(log).toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1000);
-    expect(notify).toHaveBeenCalledWith('恢复', '');
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: '恢复' }));
     stop();
   });
 

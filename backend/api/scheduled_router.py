@@ -254,6 +254,9 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
             get_background_notification_queue,
         )
         from backend.services.goal_notifications import get_goal_notification_queue
+        from backend.services.orch_run_notifications import (
+            get_orch_run_notification_queue,
+        )
         from backend.services.project_health_notifications import (
             get_project_health_notification_queue,
         )
@@ -273,6 +276,8 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
             "goal_notifications": get_goal_notification_queue().drain(),
             # 2026-11-14 M1: 项目健康告警（逾期 / 阻塞）
             "project_health": get_project_health_notification_queue().drain(),
+            # 2026-11-23 M4.3a: 编排 run 终态 / 等待审批通知
+            "orch_runs": get_orch_run_notification_queue().drain(),
         }
 
     return router
