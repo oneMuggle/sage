@@ -16,7 +16,8 @@ class PdfPageContent(BaseModel):
     text: str
     tables: List[List[List[str]]] = Field(default_factory=list)
     images: List[Dict[str, Any]] = Field(default_factory=list)
-    # M6b: 页内嵌图片总数（images 列表受 include_images/预算限制可能更少）。
+    # M6b: 页内嵌图片总数（images 列表受 include_images/预算限制可能更少；
+    # embed_image_data=False 时 images 只含元数据、不含 data_url）。
     image_count: int = Field(default=0, ge=0)
     # P4-A (office-p4a): 该页文本是否来自 OCR 兜底（SAGE_OCR=1 且 pytesseract
     # 可用时，扫描/纯图页触发）。additive 字段，前端/摘要可安全忽略。
@@ -43,6 +44,12 @@ class PdfReadRequest(BaseModel):
     # M6b: 返回页内嵌图片（data_url）；默认关闭，避免普通读取膨胀。
     include_images: bool = Field(default=False, description="是否返回页内嵌图片 data_url")
     max_images_per_page: int = Field(default=3, ge=0, le=10)
+    # M6c: 只返回图片元数据（宽高/数量）而不返回像素。False 时**完全不解码**，
+    # 因此不存在解压炸弹风险；True 时按服务端预算（单图 ≤1.5MB base64，
+    # 全文档 ≤20MB base64）截断。
+    embed_image_data: bool = Field(
+        default=True, description="是否把图片像素（base64 data_url）一并返回"
+    )
 
 
 class PdfDataRequest(BaseModel):

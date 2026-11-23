@@ -12,6 +12,7 @@ Security posture mirrors ``pdf.py`` and ``word_template.py``:
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List
 
@@ -32,7 +33,7 @@ from .models import (
     PdfFormReadResult,
 )
 from .path_safety import resolve_within
-from .pdf import _validate_pdf_file
+from .pdf import MAX_PDF_OUTPUT_SIZE, _validate_pdf_file
 from .storage import validate_workspace
 
 
@@ -214,8 +215,9 @@ def fill_pdf_form(req: PdfFormFillRequest) -> PdfFormFillResult:
                 # and remove the fields (annotations stay untouched).
                 bake(annots=False, widgets=True)
             else:
-                # Older PyMuPDF (release/win7 1.24.x may lack bake): at least
-                # make fields read-only (bit 0 of field_flags).
+                # 极老运行时兜底：bake() 自 PyMuPDF 1.24.0 起提供
+                # （release/win7 钉 1.24.11 → 可用），这里只防更早的版本。
+                # 退化行为：把字段置为只读（field_flags bit 0）。
                 for page in doc:
                     widgets = page.widgets()
                     if not widgets:
@@ -225,6 +227,16 @@ def fill_pdf_form(req: PdfFormFillRequest) -> PdfFormFillResult:
                         widget.update()
 
         doc.save(str(output_path))
+        output_size = output_path.stat().st_size
+        if output_size > MAX_PDF_OUTPUT_SIZE:
+            # 产物超上限 —— 删掉半成品，不给磁盘留下垃圾。
+            with contextlib.suppress(OSError):
+                output_path.unlink()
+            raise OfficeSizeLimitError(
+                output_size,
+                MAX_PDF_OUTPUT_SIZE,
+                file_path=output_path,
+            )
     except OfficePdfFormError:
         raise
     except OfficeSizeLimitError:

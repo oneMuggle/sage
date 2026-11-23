@@ -253,15 +253,23 @@ class OfficeReadPdfTool(BaseTool):
                     "include_images": {
                         "type": "boolean",
                         "description": (
-                            "返回页内嵌图片 data_url（默认 false；单图 ≤1.5MB，"
-                            "单次总预算 20MB）"
+                            "返回页内嵌图片的**元数据**（序号/尺寸/数量），"
+                            "默认 false"
+                        ),
+                    },
+                    "embed_image_data": {
+                        "type": "boolean",
+                        "description": (
+                            "把图片像素（base64 data_url）一并返回。默认 false —— "
+                            "像素对文本模型无用且会挤占输出预算；确需预览时再开。"
+                            "服务端强制：单图 base64 ≤1.5MB，全文档 ≤20MB"
                         ),
                     },
                     "max_images_per_page": {
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 10,
-                        "description": "每页最多返回的图片数（默认 3）",
+                        "description": "每页最多返回的图片数（默认 3，服务端再 clamp 一次）",
                     },
                 },
                 "required": [],
@@ -273,6 +281,7 @@ class OfficeReadPdfTool(BaseTool):
         doc_id: Optional[str] = None,
         file_path: Optional[str] = None,
         include_images: bool = False,
+        embed_image_data: bool = False,
         max_images_per_page: int = 3,
         **kwargs: Any,
     ) -> ToolResult:
@@ -294,6 +303,7 @@ class OfficeReadPdfTool(BaseTool):
                 document_id=doc.id if doc is not None else None,
                 include_images=bool(include_images),
                 max_images_per_page=int(max_images_per_page),
+                embed_image_data=bool(embed_image_data),
             )
         except OfficeError as exc:
             return _office_error_result(exc, "read_failed")

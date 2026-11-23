@@ -473,3 +473,60 @@ def test_fill_pdf_form_rejects_existing_output(tmp_path: Path):
         )
     assert result.success is False
     assert result.error.startswith("file_exists")
+
+
+# ── office_read_pdf：图片元数据 vs 像素 ────────────────────────────────
+
+
+def _make_pdf_with_image(path: Path) -> Path:
+    """一页一张 20×20 纯色 PNG 的 PDF。"""
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (20, 20), "red").save(buffer, format="PNG")
+    doc = pymupdf.open()
+    try:
+        page = doc.new_page(width=400, height=300)
+        page.insert_image(pymupdf.Rect(50, 50, 150, 150), stream=buffer.getvalue())
+        doc.save(str(path))
+    finally:
+        doc.close()
+    return path
+
+
+def test_read_pdf_include_images_is_metadata_only_by_default(tmp_path: Path):
+    """include_images 默认只回元数据 —— 像素对文本模型无用且挤占输出预算。"""
+    env = _BoundWorkspace(tmp_path)
+    pdf = _make_pdf_with_image(env.work / "with-image.pdf")
+    with env.patch():
+        token = set_tool_context(env.context())
+        try:
+            result = _tool(OfficeReadPdfTool).execute(
+                file_path=str(pdf), include_images=True
+            )
+        finally:
+            reset_tool_context(token)
+
+    assert result.success is True
+    entry = result.content["pages"][0]["images"][0]
+    assert "data_url" not in entry
+    assert entry["width"] == 20
+
+
+def test_read_pdf_embed_image_data_opts_in_to_pixels(tmp_path: Path):
+    """显式 embed_image_data=True 才把 base64 塞进工具输出。"""
+    env = _BoundWorkspace(tmp_path)
+    pdf = _make_pdf_with_image(env.work / "with-image.pdf")
+    with env.patch():
+        token = set_tool_context(env.context())
+        try:
+            result = _tool(OfficeReadPdfTool).execute(
+                file_path=str(pdf), include_images=True, embed_image_data=True
+            )
+        finally:
+            reset_tool_context(token)
+
+    assert result.success is True
+    assert result.content["pages"][0]["images"][0]["data_url"].startswith("data:image/")

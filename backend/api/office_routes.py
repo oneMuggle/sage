@@ -590,6 +590,7 @@ def read_pdf_endpoint(req: PdfReadRequest) -> PdfReadResult:
         workspace_path=req.workspace_path,
         include_images=req.include_images,
         max_images_per_page=req.max_images_per_page,
+        embed_image_data=req.embed_image_data,
     )
     # Item 1.2: PDF 读取与 PPT/Word/Excel 一致入库，出现在文档列表里
     _persist_read_summary(
