@@ -3137,7 +3137,7 @@ git commit -m "feat(document-parse): 聊天附件双阶段与 MinerU 状态接�
 - Produces: `mineruApi.status(): Promise<MineruStatus>`；`MineruStatus` 字段与后端一致。
 - Produces: preferences `mineru_service` JSON：`{enabled,baseUrl,apiKey,defaultTier,timeoutSeconds,maxUploadMb,useInChatAttachment,minQualityThreshold}`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```tsx
 // src/pages/settings/__tests__/MineruServiceCard.test.tsx
@@ -3217,14 +3217,14 @@ describe('MineruServiceCard', () => {
 });
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 npx vitest run src/pages/settings/__tests__/MineruServiceCard.test.tsx
 ```
 Expected: 找不到 `MineruServiceCard`
 
-- [ ] **Step 3: 写实现**
+- [x] **Step 3: 写实现**
 
 `src/shared/api/mineruApi.ts`：
 
@@ -3493,14 +3493,14 @@ i18n `zh/settingsUi.ts` 追加（`en/settingsUi.ts` 同键英文）：
 
 > 若设置页存在「偏好键完整性」校验测试（如 settingsRegistry 快照 / 搜索索引），按测试提示登记 `mineru_service`。
 
-- [ ] **Step 4: 跑前端测试 + 类型检查**
+- [x] **Step 4: 跑前端测试 + 类型检查**
 
 ```bash
 npx vitest run src/pages/settings/__tests__/MineruServiceCard.test.tsx
 npx tsc --noEmit -p tsconfig.json
 ```
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src/shared/api/mineruApi.ts src/pages/settings/MineruServiceCard.tsx src/pages/settings/__tests__/MineruServiceCard.test.tsx src/pages/settings/ModelsTab.tsx src/entities/setting/settingsRegistry.ts src/shared/api/settingsClient.ts src/shared/lib/i18n/locales
