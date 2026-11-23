@@ -1352,6 +1352,16 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         output_path = managed_document_path(workspace, OfficeDocType.WORD, doc_id, req.filename)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # 样式模板：命名预设与显式 format_spec 深合并（显式字段优先）。
+    # 合并结果回写进 req，下游全部沿用 req.format_spec 的既有引用。
+    from .word_style_presets import resolve_effective_format_spec
+
+    effective_spec = resolve_effective_format_spec(
+        getattr(req, "format_spec_preset", None), req.format_spec
+    )
+    if effective_spec is not req.format_spec:
+        req = req.model_copy(update={"format_spec": effective_spec})
+
     try:
         doc = _Doc()
         # ★ 新增：显式设置字体（修"字体奇怪"bug）
