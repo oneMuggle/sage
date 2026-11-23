@@ -585,7 +585,13 @@ def read_pdf_endpoint(req: PdfReadRequest) -> PdfReadResult:
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     _check_size_limit(file_path, MAX_PDF_SIZE)
     canonical_workspace = str(Path(req.workspace_path).resolve())
-    result = read_pdf(file_path, workspace_path=req.workspace_path)
+    result = read_pdf(
+        file_path,
+        workspace_path=req.workspace_path,
+        include_images=req.include_images,
+        max_images_per_page=req.max_images_per_page,
+        embed_image_data=req.embed_image_data,
+    )
     # Item 1.2: PDF 读取与 PPT/Word/Excel 一致入库，出现在文档列表里
     _persist_read_summary(
         result,

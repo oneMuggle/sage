@@ -174,7 +174,7 @@ def test_fill_pdf_form_sets_field_values(tmp_path: Path):
 
 
 def test_fill_pdf_form_flatten(tmp_path: Path):
-    """Flatten=True makes fields read-only in the output."""
+    """Flatten=True bakes field appearances and removes interactive fields."""
     import pymupdf
 
     from backend.office.pdf_forms import fill_pdf_form
@@ -191,11 +191,14 @@ def test_fill_pdf_form_flatten(tmp_path: Path):
     assert result.filled_count == 1
 
     doc = pymupdf.open(result.output_path)
-    for page in doc:
-        for w in page.widgets():
-            # Read-only is bit 0 of field_flags (PDF_FIELD_IS_READ_ONLY).
-            assert w.field_flags & 1 == 1
+    widgets = [widget for page in doc for widget in page.widgets()]
+    text = "".join(page.get_text() for page in doc)
     doc.close()
+    if hasattr(pymupdf.Document, "bake"):
+        assert widgets == []
+        assert "Bob" in text
+    else:  # pragma: no cover — release/win7 PyMuPDF without bake()
+        assert all(widget.field_flags & 1 == 1 for widget in widgets)
 
 
 def test_fill_pdf_form_absolute_filename(tmp_path: Path):

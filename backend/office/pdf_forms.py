@@ -12,6 +12,7 @@ Security posture mirrors ``pdf.py`` and ``word_template.py``:
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List
 
@@ -32,7 +33,7 @@ from .models import (
     PdfFormReadResult,
 )
 from .path_safety import resolve_within
-from .pdf import _validate_pdf_file
+from .pdf import MAX_PDF_OUTPUT_SIZE, _validate_pdf_file
 from .storage import validate_workspace
 
 
@@ -208,16 +209,40 @@ def fill_pdf_form(req: PdfFormFillRequest) -> PdfFormFillResult:
                     filled_count += 1
 
         if req.flatten:
-            for page in doc:
-                widgets = page.widgets()
-                if not widgets:
-                    continue
-                for widget in widgets:
-                    # Set the read-only bit (bit 0) in field_flags.
-                    widget.field_flags = widget.field_flags | 1
-                    widget.update()
+            bake = getattr(doc, "bake", None)
+            if bake is not None:
+                # True flatten: render widget appearances into page content
+                # and remove the fields (annotations stay untouched).
+                bake(annots=False, widgets=True)
+            else:
+                # 极老运行时兜底：bake() 自 PyMuPDF 1.24.0 起提供
+                # （release/win7 钉 1.24.11 → 可用），这里只防更早的版本。
+                # 退化行为：把字段置为只读（field_flags bit 0）。
+                for page in doc:
+                    widgets = page.widgets()
+                    if not widgets:
+                        continue
+                    for widget in widgets:
+                        widget.field_flags = widget.field_flags | 1
+                        widget.update()
 
-        doc.save(str(output_path))
+        # 先写同目录的隐藏临时文件 → 体积检查 → 原子改名到最终落点。
+        # 直接写 output_path 再检查体积有两个问题：超限时磁盘上已经留下
+        # 一个超大文件（虽然随后被删，但删除失败就留垃圾），而且检查期间
+        # output_path 已经「存在」。
+        # 临时名保留 .pdf 后缀 —— PyMuPDF 的 save() 按扩展名推断输出格式。
+        tmp_output = output_path.with_name(f".{output_path.stem}.sage-tmp.pdf")
+        try:
+            doc.save(str(tmp_output))
+            output_size = tmp_output.stat().st_size
+            if output_size > MAX_PDF_OUTPUT_SIZE:
+                # 产物超上限 —— 删掉半成品，不给磁盘留下垃圾。
+                # 不带 file_path：错误文案里不能出现绝对路径。
+                raise OfficeSizeLimitError(output_size, MAX_PDF_OUTPUT_SIZE)
+            tmp_output.replace(output_path)
+        finally:
+            with contextlib.suppress(OSError):
+                tmp_output.unlink()
     except OfficePdfFormError:
         raise
     except OfficeSizeLimitError:

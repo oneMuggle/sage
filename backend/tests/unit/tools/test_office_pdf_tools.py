@@ -18,8 +18,9 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from unittest.mock import patch
 
 import pytest
@@ -473,3 +474,183 @@ def test_fill_pdf_form_rejects_existing_output(tmp_path: Path):
         )
     assert result.success is False
     assert result.error.startswith("file_exists")
+
+
+# ── office_read_pdf：图片元数据 vs 像素 ────────────────────────────────
+
+
+def _make_pdf_with_image(path: Path) -> Path:
+    """一页一张 20×20 纯色 PNG 的 PDF。"""
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (20, 20), "red").save(buffer, format="PNG")
+    doc = pymupdf.open()
+    try:
+        page = doc.new_page(width=400, height=300)
+        page.insert_image(pymupdf.Rect(50, 50, 150, 150), stream=buffer.getvalue())
+        doc.save(str(path))
+    finally:
+        doc.close()
+    return path
+
+
+def test_read_pdf_include_images_is_metadata_only_by_default(tmp_path: Path):
+    """include_images 默认只回元数据 —— 像素对文本模型无用且挤占输出预算。"""
+    env = _BoundWorkspace(tmp_path)
+    pdf = _make_pdf_with_image(env.work / "with-image.pdf")
+    with env.patch():
+        token = set_tool_context(env.context())
+        try:
+            result = _tool(OfficeReadPdfTool).execute(
+                file_path=str(pdf), include_images=True
+            )
+        finally:
+            reset_tool_context(token)
+
+    assert result.success is True
+    entry = result.content["pages"][0]["images"][0]
+    assert "data_url" not in entry
+    assert entry["width"] == 20
+
+
+def test_read_pdf_embed_image_data_opts_in_to_pixels(tmp_path: Path):
+    """显式 embed_image_data=True 才把 base64 塞进工具输出。"""
+    env = _BoundWorkspace(tmp_path)
+    pdf = _make_pdf_with_image(env.work / "with-image.pdf")
+    with env.patch():
+        token = set_tool_context(env.context())
+        try:
+            result = _tool(OfficeReadPdfTool).execute(
+                file_path=str(pdf), include_images=True, embed_image_data=True
+            )
+        finally:
+            reset_tool_context(token)
+
+    assert result.success is True
+    assert result.content["pages"][0]["images"][0]["data_url"].startswith("data:image/")
+
+
+def _exec_read(env: _BoundWorkspace, **kwargs: Any) -> Any:
+    """在绑定工作区上下文里跑一次 ``office_read_pdf``。"""
+    policy_kwargs = kwargs.pop("policy_kwargs", {})
+    with env.patch():
+        token = set_tool_context(env.context())
+        try:
+            return _tool(OfficeReadPdfTool, **policy_kwargs).execute(**kwargs)
+        finally:
+            reset_tool_context(token)
+
+
+def test_read_pdf_rejects_invalid_include_images(tmp_path: Path):
+    """``bool("false")`` 是 True —— 解释不了的布尔参数必须报错，不能静默当真。"""
+    env = _BoundWorkspace(tmp_path)
+    pdf = _make_pdf_with_image(env.work / "with-image.pdf")
+
+    result = _exec_read(env, file_path=str(pdf), include_images="maybe")
+
+    assert result.success is False
+    assert result.error.startswith("invalid_include_images")
+
+
+def test_read_pdf_rejects_invalid_embed_image_data(tmp_path: Path):
+    env = _BoundWorkspace(tmp_path)
+    pdf = _make_pdf_with_image(env.work / "with-image.pdf")
+
+    result = _exec_read(
+        env, file_path=str(pdf), include_images=True, embed_image_data="maybe"
+    )
+
+    assert result.success is False
+    assert result.error.startswith("invalid_embed_image_data")
+
+
+def test_read_pdf_rejects_invalid_max_images_per_page(tmp_path: Path):
+    env = _BoundWorkspace(tmp_path)
+    pdf = _make_pdf_with_image(env.work / "with-image.pdf")
+
+    result = _exec_read(
+        env, file_path=str(pdf), include_images=True, max_images_per_page="abc"
+    )
+
+    assert result.success is False
+    assert result.error.startswith("invalid_max_images_per_page")
+
+
+def _make_pdf_with_images(path: Path, count: int = 3) -> Path:
+    """一页含 ``count`` 张**互不相同**图片的 PDF（不同颜色 → 不同 xref）。"""
+    import io
+
+    from PIL import Image
+
+    doc = pymupdf.open()
+    try:
+        page = doc.new_page(width=400, height=300)
+        for index in range(count):
+            buffer = io.BytesIO()
+            Image.new("RGB", (20, 20), (index * 60, 40, 200)).save(buffer, format="PNG")
+            left = 20 + index * 30
+            page.insert_image(
+                pymupdf.Rect(left, 20, left + 25, 45), stream=buffer.getvalue()
+            )
+        doc.save(str(path))
+    finally:
+        doc.close()
+    return path
+
+
+def test_read_pdf_images_omitted_reports_per_page_cap(tmp_path: Path):
+    """per-page 上限截断后，``images_omitted`` 让模型知道「还有图没带回来」。"""
+    env = _BoundWorkspace(tmp_path)
+    pdf = _make_pdf_with_images(env.work / "three-images.pdf", count=3)
+
+    result = _exec_read(
+        env, file_path=str(pdf), include_images=True, max_images_per_page=1
+    )
+
+    assert result.success is True
+    page = result.content["pages"][0]
+    assert page["image_count"] == 3
+    assert len(page["images"]) == 1
+    assert page["images_omitted"] == 2
+
+
+def test_read_pdf_drops_image_pixels_before_truncating_the_json(tmp_path: Path):
+    """输出预算不够时优先丢像素、保留结构 —— 不许把整个响应截成半截 JSON。"""
+    env = _BoundWorkspace(tmp_path)
+    pdf = _make_pdf_with_image(env.work / "with-image.pdf")
+
+    generous = _exec_read(
+        env,
+        file_path=str(pdf),
+        include_images=True,
+        embed_image_data=True,
+        policy_kwargs={"max_output_bytes": 200_000},
+    )
+    assert generous.success is True
+    url = generous.content["pages"][0]["images"][0]["data_url"]
+
+    # 预算取「带像素」与「不带像素」两种 JSON 大小的中点 —— 稳定高于
+    # 时间戳类字段的字节抖动，又不至于把正文本身截断。
+    size_with = len(json.dumps(generous.content, ensure_ascii=False, default=str))
+    budget = size_with - len(url) // 2
+
+    tight = _exec_read(
+        env,
+        file_path=str(pdf),
+        include_images=True,
+        embed_image_data=True,
+        policy_kwargs={"max_output_bytes": budget},
+    )
+
+    assert tight.success is True
+    content = tight.content
+    assert "truncated" not in content
+    assert "summary" in content
+    assert content["pages"]
+    entry = content["pages"][0]["images"][0]
+    assert "data_url" not in entry
+    assert entry["width"] == 20
+    assert content["pages"][0]["images_omitted"] == 1
