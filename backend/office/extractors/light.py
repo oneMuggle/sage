@@ -8,27 +8,13 @@ RAG/compare can point back to page/paragraph/sheet/slide.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from .base import ExtractedBlock, StructuredDocument
+from .tables import assess_table_complexity, describe_complexity, table_markdown
 
 _SUPPORTED = (".docx", ".xlsx", ".pptx", ".pdf", ".csv")
 _MAX_ROWS_PER_SHEET = 2000
-
-
-def _cell(value: Any) -> str:
-    text = "" if value is None else str(value)
-    return text.replace("|", "\\|").replace("\n", " ")
-
-
-def _table_markdown(rows: List[List[Any]]) -> str:
-    if not rows:
-        return ""
-    lines = ["| " + " | ".join(_cell(cell) for cell in rows[0]) + " |"]
-    lines.append("| " + " | ".join("---" for _ in rows[0]) + " |")
-    for row in rows[1:]:
-        lines.append("| " + " | ".join(_cell(cell) for cell in row) + " |")
-    return "\n".join(lines)
 
 
 class LightExtractor:
@@ -74,7 +60,7 @@ class LightExtractor:
                 )
             )
         for table_index, table in enumerate(result.tables):
-            markdown = _table_markdown(table.rows)
+            markdown = table_markdown(table.rows)
             if not markdown:
                 continue
             lines.append(markdown)
@@ -113,7 +99,7 @@ class LightExtractor:
                     }
                 )
             if rows:
-                markdown = _table_markdown(rows)
+                markdown = table_markdown(rows)
                 lines.append(markdown)
                 lines.append("")
                 blocks.append(
@@ -164,18 +150,34 @@ class LightExtractor:
     def _extract_pdf(self, path: Path) -> StructuredDocument:
         from ..pdf import read_pdf
 
-        result = read_pdf(path, workspace_path=str(path.parent))
+        # M6b: 打开无边框表格探测 —— 只判断"有没有疑似无边框表格"，
+        # 探测结果不进入正文，由 service 决定是否换结构化后端兜底。
+        result = read_pdf(
+            path,
+            workspace_path=str(path.parent),
+            probe_borderless_tables=True,
+        )
         lines: List[str] = []
         blocks: List[ExtractedBlock] = []
+        warnings: List[Dict[str, str]] = []
         for page in result.pages:
             lines.append(f"--- page {page.page_number} ---")
             text = page.text.strip()
             if text:
                 lines.append(text)
-            for table in page.tables:
-                markdown = _table_markdown(table)
-                if markdown:
-                    lines.append(markdown)
+            table_blocks: List[ExtractedBlock] = []
+            for table_index, table in enumerate(page.tables):
+                markdown = table_markdown(table)
+                if not markdown:
+                    continue
+                lines.append(markdown)
+                table_blocks.append(
+                    ExtractedBlock(
+                        type="table",
+                        text=markdown,
+                        anchor={"page": page.page_number, "table_index": table_index},
+                    )
+                )
             lines.append("")
             blocks.append(
                 ExtractedBlock(
@@ -184,10 +186,22 @@ class LightExtractor:
                     anchor={"page": page.page_number},
                 )
             )
+            blocks.extend(table_blocks)
+        diagnostics = dict(result.table_diagnostics)
+        reasons = assess_table_complexity(diagnostics)
+        if reasons:
+            warnings.append(
+                {
+                    "code": "table_complex",
+                    "message": f"检测到复杂表格：{describe_complexity(reasons)}",
+                }
+            )
         return StructuredDocument(
             source_path=path.name,
             format="pdf",
             extractor=self.name,
             markdown="\n".join(lines).strip(),
             blocks=blocks,
+            warnings=warnings,
+            table_diagnostics=diagnostics,
         )

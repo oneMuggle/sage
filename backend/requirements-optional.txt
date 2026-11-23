@@ -108,3 +108,27 @@ tokenizers>=0.15.0
 # 验证: python -c "import curl_cffi; print('curl_cffi OK')"
 #
 # curl_cffi>=0.7
+
+# =============================================================================
+# 文档结构化提取后端 (M6b) — docling + markitdown
+# =============================================================================
+# 为什么单独放:
+#   两个后端都是**可选**的（backend/office/extractors/registry.py 探测不到
+#   就标 unavailable），不进默认依赖：
+#     - docling 会拖入 torch + transformers 推理栈（数百 MB），只对
+#       "复杂版式 PDF / 复杂表格" 有价值 —— 即 M6b 的兜底路由：
+#       light 后端检测到合并单元格 / 超宽表 / 无边框表格候选时，
+#       自动改用 docling 重解析一次。
+#     - markitdown 轻量但覆盖格式多，适合"通用 markdown 化"场景。
+#   未安装时行为：extract 走 light 后端，复杂表格只发 warning
+#   （table_complex / table_fallback_unavailable），整次提取**不失败**。
+# 启用(main / Python 3.10+):
+#   pip install "docling>=2.0" "markitdown>=0.1"
+# 验证:
+#   python -c "from backend.office.extractors import extractor_available; \
+#              print(extractor_available('docling'), extractor_available('markitdown'))"
+# Win7 (Python 3.8) 不装: docling/markitdown 均要求 Python 3.9/3.10+，
+#   release/win7 的 requirements-py38.txt 保持不变。
+#
+# docling>=2.0
+# markitdown>=0.1

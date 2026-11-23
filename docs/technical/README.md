@@ -140,6 +140,7 @@
 | 164 | [Word 样式模板](./164-word-style-template.md) | 样式画像（按级字体/精确行距/题注/表格文字）+ 命名预设（公文/论文/报告）+ 参考文档（reference.docx）+ 规则包→样式画像转换 + 已有文档批量套用样式 |
 | 165 | [MinerU 文档解析](./165-mineru-document-parse.md) | 可插拔解析引擎 / async API 客户端 / 质量路由 / 缓存 / 双阶段附件 |
 | 166 | [Firefox 浏览器兜底（多浏览器支持）](./166-firefox-browser-fallback.md) | 对齐 release/win7：发现优先级增加 `SAGE_FIREFOX_PATH` 与平台扫描 + 固定端口 9229 `-start-debugger-server` 启动 + `/json/version` 握手 + cookie 归一化（剥离 Chromium 特有字段） |
+| 167 | [Office 结构化提取与 PDF 复杂表格兜底](./167-office-extract-pdf-tables.md) | 提取适配器分层（测量/策略/适配/编排）+ 表格形状诊断（`table_diagnostics`）+ 无边框探测（列数判别式，只探测不产正文）+ 复杂度原因码 + 结构化后端兜底路由（auto/off/force，失败保留原结果） |
 ---
 
 ## 核心章节（基础架构）
