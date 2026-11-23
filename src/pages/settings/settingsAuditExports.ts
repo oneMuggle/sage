@@ -205,6 +205,8 @@ export const SETTINGS_AUDIT_SECTIONS: readonly SettingsAuditSectionDef[] = [
       const input = {
         planPreflightEnabled: Boolean(o.planPreflightEnabled),
         planScoutEnabled: Boolean(o.planScoutEnabled),
+        // 2026-11-23 (M3.3): 深层拆分开关。
+        allowDeepDecomposition: Boolean(o.allowDeepDecomposition),
         maxScoutIterations: Number(o.maxScoutIterations),
         maxPlannerIterations: Number(o.maxPlannerIterations),
         maxConcurrentSubagents: Number(o.maxConcurrentSubagents),
