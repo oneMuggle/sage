@@ -248,19 +248,45 @@ export interface WordSectionBreakSpec {
 
 export interface WordBodyStyleSpec {
   font_size_pt?: number;
+  /** 中文字体（eastAsia），如 '仿宋_GB2312' */
+  font_family?: string;
+  /** 西文字体，如 'Times New Roman' */
+  ascii_font?: string;
   line_spacing?: number;
+  /** 固定行距（磅），如公文 28；与 line_spacing 同时给出时优先 */
+  line_spacing_pt?: number;
   first_line_indent_cm?: number;
+  space_before_pt?: number;
   space_after_pt?: number;
   align?: 'left' | 'center' | 'right' | 'justify';
 }
 
 export interface WordHeadingStyleSpec {
   font_size_pt?: number;
+  font_family?: string;
+  ascii_font?: string;
   bold?: boolean;
   color?: string;
   align?: 'left' | 'center' | 'right' | 'justify';
   space_before_pt?: number;
   space_after_pt?: number;
+}
+
+// 题注样式（图/表题注段落，默认 9pt 居中）
+export interface WordCaptionStyleSpec {
+  font_family?: string;
+  ascii_font?: string;
+  font_size_pt?: number;
+  bold?: boolean;
+  align?: 'left' | 'center' | 'right' | 'justify';
+}
+
+// 表格文字样式（header_bold 仅作用于表头首行）
+export interface WordTableTextStyleSpec {
+  font_family?: string;
+  ascii_font?: string;
+  font_size_pt?: number;
+  header_bold?: boolean;
 }
 
 export interface WordHeaderFooterSpec {
@@ -292,6 +318,9 @@ export interface WordFormatSpec {
   // Round 20：headings 键扩展到 h4/h5
   headings?: Partial<Record<'h1' | 'h2' | 'h3' | 'h4' | 'h5', WordHeadingStyleSpec>>;
   title?: WordHeadingStyleSpec;
+  // 样式模板：题注与表格文字样式（缺省 = 9pt 居中题注 / 不触碰表格）
+  caption?: WordCaptionStyleSpec;
+  table_text?: WordTableTextStyleSpec;
   header?: WordHeaderFooterSpec;
   footer?: WordHeaderFooterSpec;
   // Round 8：多级标题自动编号（h1-h5 → 1 / 1.1 / 1.1.1 … 文本前缀）
@@ -471,6 +500,10 @@ export interface OfficeWordGenerateRequest {
   font_family?: string;
   ascii_font?: string;
   format_spec?: WordFormatSpec;
+  /** 命名样式预设 id（default / report / gb9704-gongwen / academic-thesis） */
+  format_spec_preset?: string;
+  /** 参考文档（reference.docx）路径：样式基座，正文不入产物 */
+  template_docx_path?: string;
   // Round 9 引用体系：结构化文献 + 引用样式
   references?: ReferenceSpec[];
   citation_style?: 'gbt7714' | 'apa';

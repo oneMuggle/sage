@@ -967,6 +967,12 @@ def _coerce_word_request(
         images=content.get("images") or [],
         # Round 7 FormatSpec：受管路径与直通路径同样透传版式规范（None 零变化）
         format_spec=content.get("format_spec"),
+        # 样式模板：命名预设与参考文档（受管路径对齐直通路径）
+        format_spec_preset=content.get("format_spec_preset"),
+        template_docx_path=content.get("template_docx_path"),
+        # 受管路径此前丢弃全局字体（仅直通路径支持）——对齐
+        font_family=content.get("font_family"),
+        ascii_font=content.get("ascii_font"),
         # Round 9 引用体系：结构化文献 + 引用样式随 content 透传
         references=content.get("references") or [],
         citation_style=content.get("citation_style") or "gbt7714",

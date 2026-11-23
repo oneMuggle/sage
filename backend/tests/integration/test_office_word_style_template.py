@@ -22,6 +22,7 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 
+from backend.office.errors import OfficeGenerateError
 from backend.office.models import OfficeWordGenerateRequest
 from backend.office.word import generate_docx
 
@@ -282,7 +283,7 @@ def test_reference_docx_explicit_font_overrides(tmp_path: Path) -> None:
 def test_reference_docx_rejects_non_docx(tmp_path: Path) -> None:
     bogus = tmp_path / "ref.txt"
     bogus.write_text("not a docx", encoding="utf-8")
-    with pytest.raises(Exception):
+    with pytest.raises(OfficeGenerateError):
         _generate(
             tmp_path,
             paragraphs=[{"text": "正文"}],

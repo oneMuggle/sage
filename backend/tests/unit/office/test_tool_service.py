@@ -937,3 +937,25 @@ def test_create_ppt_with_string_content_returns_shape_error(tmp_path: Path):
     assert result["success"] is False
     assert result["error"]["code"] == "content_shape_invalid"
     assert "slides" in result["error"]["message"]
+
+
+def test_coerce_word_request_forwards_style_template_fields():
+    from backend.office.tool_service import _coerce_word_request
+
+    req = _coerce_word_request(
+        "doc",
+        "x.docx",
+        {
+            "title": "T",
+            "paragraphs": [{"text": "正文"}],
+            "format_spec_preset": "report",
+            "template_docx_path": "/ws/ref.docx",
+            "font_family": "仿宋_GB2312",
+            "ascii_font": "Arial",
+        },
+        "/ws",
+    )
+    assert req.format_spec_preset == "report"
+    assert req.template_docx_path == "/ws/ref.docx"
+    assert req.font_family == "仿宋_GB2312"
+    assert req.ascii_font == "Arial"

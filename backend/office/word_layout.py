@@ -93,7 +93,7 @@ def _hex_to_rgb(color: str) -> Any:
 _RFONT_THEME_ATTRS = ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme")
 
 
-def _write_rfonts(rFonts, *, font_family: Optional[str], ascii_font: Optional[str]) -> None:
+def _write_rfonts(rfonts, *, font_family: Optional[str], ascii_font: Optional[str]) -> None:
     """写 rFonts：font_family → eastAsia；ascii_font → ascii/hAnsi/cs。
 
     theme 引用优先级高于显式值，必须清除（与 ``word._patch_style_rfonts``
@@ -101,14 +101,14 @@ def _write_rfonts(rFonts, *, font_family: Optional[str], ascii_font: Optional[st
     """
     for theme_attr in _RFONT_THEME_ATTRS:
         qualified = qn(f"w:{theme_attr}")
-        if qualified in rFonts.attrib:
-            del rFonts.attrib[qualified]
+        if qualified in rfonts.attrib:
+            del rfonts.attrib[qualified]
     if font_family is not None:
-        rFonts.set(qn("w:eastAsia"), font_family)
+        rfonts.set(qn("w:eastAsia"), font_family)
     if ascii_font is not None:
-        rFonts.set(qn("w:ascii"), ascii_font)
-        rFonts.set(qn("w:hAnsi"), ascii_font)
-        rFonts.set(qn("w:cs"), ascii_font)
+        rfonts.set(qn("w:ascii"), ascii_font)
+        rfonts.set(qn("w:hAnsi"), ascii_font)
+        rfonts.set(qn("w:cs"), ascii_font)
 
 
 def _set_style_fonts(

@@ -70,7 +70,7 @@ _PARAGRAPH_FIELDS = {
 }
 
 
-def _style_target(style_name: str) -> Optional[str]:
+def _style_target(style_name: str) -> Optional[str]:  # noqa: PLR0911 — 逐分支早退
     """样式名 → 画像目标：body / title / caption / h1-h5；未知返回 None。"""
     name = (style_name or "").strip()
     if not name:

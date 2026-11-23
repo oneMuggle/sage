@@ -13,6 +13,7 @@ from backend.api.office_word_style_routes import (
     WordStyleApplyRequest,
     apply_style_endpoint,
 )
+from backend.office.errors import OfficeGenerateError
 from backend.office.word_style_apply import apply_style_to_document
 from backend.office.word_style_presets import resolve_effective_format_spec
 
@@ -113,7 +114,7 @@ def test_second_apply_is_idempotent(tmp_path: Path) -> None:
 
 def test_apply_requires_spec_or_preset(tmp_path: Path) -> None:
     source = _make_doc(tmp_path)
-    with pytest.raises(Exception):
+    with pytest.raises(OfficeGenerateError):
         apply_style_endpoint(WordStyleApplyRequest(file_path=str(source)))
 
 
@@ -129,5 +130,5 @@ def test_apply_endpoint_with_preset(tmp_path: Path) -> None:
 def test_apply_rejects_non_docx(tmp_path: Path) -> None:
     bogus = tmp_path / "notes.txt"
     bogus.write_text("not a docx", encoding="utf-8")
-    with pytest.raises(Exception):
+    with pytest.raises(OfficeGenerateError):
         apply_style_to_document(bogus, _spec("report"))
