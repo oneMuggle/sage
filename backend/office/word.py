@@ -1327,6 +1327,74 @@ def _add_bibliography(
             run.font.size = Pt(font_size)
 
 
+def _normal_style_font_names(
+    doc: Document,
+) -> Tuple[Optional[str], Optional[str]]:
+    """读取参考文档 Normal 样式的 (eastAsia, ascii) 字体名（未设置为 None）。"""
+    try:
+        style = doc.styles["Normal"]
+    except KeyError:
+        return None, None
+    rPr = style.element.find(qn("w:rPr"))
+    if rPr is None:
+        return None, None
+    rFonts = rPr.find(qn("w:rFonts"))
+    if rFonts is None:
+        return None, None
+    return rFonts.get(qn("w:eastAsia")), rFonts.get(qn("w:ascii"))
+
+
+#: 参考文档大小上限（与模板填充同量级，防异常大文件）
+MAX_REFERENCE_DOCX_BYTES = 20 * 1024 * 1024
+
+
+def _load_reference_document(template_docx_path: str, workspace_path: str) -> Document:
+    """打开参考文档（reference.docx）并清空正文，只保留样式基座。
+
+    - 相对路径按 ``workspace_path`` 解析并限制在工作区内（``resolve_within``）；
+    - 仅接受 ``.docx``，大小 ≤ 20MB；
+    - body 除 ``w:sectPr`` 外全部移除——模板正文/占位符不进入产物，
+      而 styles.xml / theme / numbering / 页眉页脚部件与节属性保留。
+    """
+    from docx import Document as _Doc
+
+    from .errors import OfficeGenerateError
+    from .path_safety import resolve_within
+    from .storage import validate_workspace
+
+    raw = Path(template_docx_path)
+    if workspace_path:
+        workspace = validate_workspace(Path(workspace_path))
+        candidate = raw if raw.is_absolute() else workspace / raw
+        candidate = resolve_within(workspace, candidate)
+    elif raw.is_absolute():
+        candidate = raw
+    else:
+        raise OfficeGenerateError(
+            f"参考文档需为绝对路径或提供 workspace_path: {template_docx_path}"
+        )
+    if candidate.suffix.lower() != ".docx":
+        raise OfficeGenerateError(f"参考文档必须是 .docx: {candidate.name}")
+    if not candidate.is_file():
+        raise OfficeGenerateError(f"参考文档不存在: {candidate}")
+    if candidate.stat().st_size > MAX_REFERENCE_DOCX_BYTES:
+        raise OfficeGenerateError(
+            f"参考文档超过 {MAX_REFERENCE_DOCX_BYTES // (1024 * 1024)}MB: {candidate}"
+        )
+    try:
+        doc = _Doc(str(candidate))
+    except Exception as exc:
+        raise OfficeGenerateError(
+            f"无法打开参考文档: {exc}", file_path=candidate
+        ) from exc
+    body = doc.element.body
+    sect_pr = body.find(qn("w:sectPr"))
+    for child in list(body):
+        if child is not sect_pr:
+            body.remove(child)
+    return doc
+
+
 def generate_docx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .docx file from structured Pydantic input.
 
@@ -1363,11 +1431,30 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
         req = req.model_copy(update={"format_spec": effective_spec})
 
     try:
-        doc = _Doc()
+        # 样式模板：参考文档提供样式基座（清空正文），否则从空白文档开始。
+        template_docx = getattr(req, "template_docx_path", None)
+        if template_docx:
+            doc = _load_reference_document(template_docx, req.workspace_path)
+        else:
+            doc = _Doc()
         # ★ 新增：显式设置字体（修"字体奇怪"bug）
-        ascii_font = getattr(req, "ascii_font", None) or DEFAULT_ASCII_FONT
-        ea_font = getattr(req, "font_family", None) or DEFAULT_EA_FONT
-        set_doc_default_font(doc, ascii_font, ea_font)
+        # 参考文档模式下未显式传字体时不覆盖模板字体；显式传则全局覆盖。
+        req_ascii = getattr(req, "ascii_font", None)
+        req_ea = getattr(req, "font_family", None)
+        if template_docx:
+            if req_ascii is not None or req_ea is not None:
+                template_ea, template_ascii = _normal_style_font_names(doc)
+                set_doc_default_font(
+                    doc,
+                    req_ascii or template_ascii or DEFAULT_ASCII_FONT,
+                    req_ea or template_ea or DEFAULT_EA_FONT,
+                )
+        else:
+            set_doc_default_font(
+                doc,
+                req_ascii or DEFAULT_ASCII_FONT,
+                req_ea or DEFAULT_EA_FONT,
+            )
 
         # Round 7 FormatSpec：显式版式（页边距/正文/标题样式/页眉页脚）。
         # None 时不触碰文档，行为与历史版本一致；样式补丁需在写正文之前
