@@ -1,7 +1,7 @@
 # 智能体编排协作对标 Claude Code 优化方案
 
-> 状态：M0–M4.2 已实施（M4.1 工具耗时 + transcript 全文引用、M4.3a 编排通知 + 任务深链均已合并 main；M4.2 统一运行视图 待合并），M4.3b 成本透明待实施
-> 分支：M4.2 `feat/orch-unified-run-view`（实施计划/记录见 §13）
+> 状态：M0–M4.2 已实施并合并 main（并已同步 win7）：M4.1 工具耗时 + transcript 全文引用、M4.3a 编排通知 + 任务深链（main #3225 / win7 #3226）、M4.2 统一运行视图（main #3227 / win7 #3234）；M4.3b 成本透明待实施
+> 分支：M4.2 `feat/orch-unified-run-view`（已合并 #3227，canonical run 目录 + 右栏回落，实施记录见 §13）
 > 分支：M4.3a `feat/orch-run-notifications`（已合并 #3225，编排 run 通知 + 任务深链，实施计划见 §12）
 > 分支：M4.1 `feat/orch-tool-duration`
 > 分支：M3.3 `feat/orch-plan-estimates`
@@ -447,3 +447,5 @@ Layer 2 视图   TaskCenter（canonical 条目 + 内存 live 叠加）
 **已知遗留**：LaneBoard 仍是 lane 域独立数据源（lane 与 orch run 是两套调度单元，本里程碑只保证其在 TaskCenter 中与 run 条目并列可见）；目录轮询为全量 `limit=50`，run 数量大时无增量游标；右栏合成板不含 `liveStep`（canonical 不存），进程重启后事件时间线为空但任务状态正确；§12.5 提到的 `task.paused/resumed` 映射与 `task.skipped` 白名单两处事件映射缺陷未在本里程碑修复（不影响目录聚合的状态正确性）；M4.3b 成本透明未做。
 
 验证：后端目录端点专项 14 用例 + 邻居 140 用例全绿，`ruff check` 通过；前端 task-center 套件（含 i18n 字节对与 IPC 契约）130 用例全绿；`tsc --noEmit`、ESLint（改动文件 0 error）、`prettier --check`、架构棘轮、`ipc:manifest:check`（428 命令）均通过。
+
+win7 同步（PR #3234，cherry-pick 自 main #3227）：Python 3.8 环境（`sage-backend-py38`）下目录端点 14 用例全绿、`ruff check` 通过，新增后端代码仅用 `typing.Dict/List/Optional/Literal`（无 PEP 604/585）；前端 task-center + orchestration + electron commands 23 文件 253 用例全绿，`tsc --noEmit`、架构棘轮、`ipc:manifest:check`（428 命令）、ESLint（0 error，1 个 pre-existing warning）均通过；CI 全绿（Backend Python 3.8 / Frontend TypeScript / Architecture check / Electron build ×2 / Electron smoke / count-lines）。
