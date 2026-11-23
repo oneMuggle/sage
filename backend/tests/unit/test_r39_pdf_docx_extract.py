@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.api import chat_attachment_routes
+from backend.services import attachment_extract
 
 pytestmark = pytest.mark.unit
 
@@ -277,7 +278,7 @@ class TestOfficeZipBudget:
         with zipfile.ZipFile(buf, "w") as archive:
             archive.writestr("a.xml", b"012345")
             archive.writestr("b.xml", b"789012")
-        monkeypatch.setattr(chat_attachment_routes, "MAX_OFFICE_UNCOMPRESSED_BYTES", 10)
+        monkeypatch.setattr(attachment_extract, "MAX_OFFICE_UNCOMPRESSED_BYTES", 10)
         with pytest.raises(ValueError, match="解压后过大"):
             chat_attachment_routes._guard_office_zip_budget(buf.getvalue())
 
@@ -287,7 +288,7 @@ class TestOfficeZipBudget:
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as archive:
             archive.writestr("a.xml", b"0123456789")
-        monkeypatch.setattr(chat_attachment_routes, "MAX_OFFICE_UNCOMPRESSED_BYTES", 5)
+        monkeypatch.setattr(attachment_extract, "MAX_OFFICE_UNCOMPRESSED_BYTES", 5)
         with pytest.raises(ValueError, match="成员大小非法"):
             chat_attachment_routes._guard_office_zip_budget(buf.getvalue())
 
@@ -302,6 +303,6 @@ class TestOfficeZipBudget:
         with zipfile.ZipFile(buf, "w") as archive:
             archive.writestr("a.xml", b"<a/>")
             archive.writestr("b.xml", b"<b/>")
-        monkeypatch.setattr(chat_attachment_routes, "MAX_OFFICE_ZIP_MEMBERS", 1)
+        monkeypatch.setattr(attachment_extract, "MAX_OFFICE_ZIP_MEMBERS", 1)
         with pytest.raises(ValueError, match="条目过多"):
             chat_attachment_routes._guard_office_zip_budget(buf.getvalue())

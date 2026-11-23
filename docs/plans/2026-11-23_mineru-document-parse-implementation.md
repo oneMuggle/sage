@@ -74,7 +74,7 @@ docs/technical/160-mineru-document-parse.md             技术文档
 - Produces: `MineruError(code, message, param=None, status_code=None)` 及子类 `MineruConfigError/MineruAuthError/MineruUnavailableError/MineruTimeoutError/MineruRemoteError`。
 - Produces: `build_create_body(...)`、`MineruOutput`、`TaskSnapshot/TaskFile/UploadTarget`、`parse_task_snapshot(payload)`、`unpack_result_payload(payload, output_formats, status)`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_document_parse_domain.py
@@ -157,12 +157,12 @@ def test_unpack_bare_docx() -> None:
     assert out.file_ext == "docx"
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_document_parse_domain.py -q`
 Expected: `ModuleNotFoundError: No module named 'backend.domain.document_parse'`
 
-- [ ] **Step 3: 写实现**
+- [x] **Step 3: 写实现**
 
 `backend/domain/document_parse.py`：
 
@@ -520,12 +520,12 @@ def unpack_result_payload(
     )
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_document_parse_domain.py -q`
 Expected: 7 passed
 
-- [ ] **Step 5: ruff + commit**
+- [x] **Step 5: ruff + commit**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m ruff check backend/domain/document_parse.py backend/adapters/out/document_parse backend/tests/unit/test_document_parse_domain.py
@@ -548,7 +548,7 @@ git commit -m "feat(document-parse): 领域契约与 MinerU 响应模型"
   - `async probe() -> Dict[str, Any]`（键：`reachable/serverAuthMode/serverTiers/serverVersion/reason/accessLevel`，**永不抛异常**）
   - `async cancel(task_id) -> None`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_mineru_client.py
@@ -734,12 +734,12 @@ def test_probe_never_raises_on_transport_error() -> None:
     assert info["reason"] == "unreachable"
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_mineru_client.py -q`
 Expected: `ModuleNotFoundError`
 
-- [ ] **Step 3: 写实现**
+- [x] **Step 3: 写实现**
 
 `backend/adapters/out/document_parse/mineru_client.py`：
 
@@ -1090,12 +1090,12 @@ class MineruClient:
             return base
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_mineru_client.py -q`
 Expected: 5 passed
 
-- [ ] **Step 5: ruff + commit**
+- [x] **Step 5: ruff + commit**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m ruff check backend/adapters/out/document_parse backend/tests/unit/test_mineru_client.py
@@ -1119,7 +1119,7 @@ git commit -m "feat(document-parse): MinerU v1 异步客户端（create/upload/p
 - Produces: `MINERU_CONFIG_KEY = "mineru_service"`；`load_mineru_settings() -> MineruSettings`（env 优先 → preferences → 默认值；任何异常回默认值）。
 - Produces: `wrap_mineru_service_json(raw: str) -> str`、`unwrap_mineru_service_json(raw: str) -> str`（字段 `apiKey` ↔ 加密账户 `mineru:api_key`）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_mineru_config.py
@@ -1182,12 +1182,12 @@ def test_load_settings_falls_back_to_defaults(monkeypatch) -> None:
     assert settings.timeout_seconds == 300.0
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_mineru_config.py -q`
 Expected: ImportError
 
-- [ ] **Step 3: 写实现**
+- [x] **Step 3: 写实现**
 
 在 `backend/services/secret_box.py` 的 search_config 两个函数之后追加（复用同款逐字段逻辑；`List`/`Tuple` 已在文件顶部导入，否则补 `from typing import List, Tuple`）：
 
@@ -1373,7 +1373,7 @@ def load_mineru_settings() -> MineruSettings:
         return MineruSettings()
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_mineru_config.py -q`
 Expected: 全绿
@@ -1382,7 +1382,7 @@ Expected: 全绿
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit -q -k "settings" `
 Expected: 全绿
 
-- [ ] **Step 5: ruff + commit**
+- [x] **Step 5: ruff + commit**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m ruff check backend/services/document_parse backend/services/secret_box.py backend/data/settings_repo.py backend/tests/unit/test_mineru_config.py
@@ -1407,7 +1407,7 @@ git commit -m "feat(document-parse): MinerU 配置加载与 apiKey 静态加密"
 - Produces: `QualitySignals(page_count, text_per_page, blank_page_ratio, has_table, has_formula)`；`score_quality(signals) -> float`；`compute_pdf_signals(content) -> Optional[QualitySignals]`。
 - Produces: `LocalEngine(extractor=None)`（`name = "local"`，`async parse`，`async health`）。
 
-- [ ] **Step 1: 迁移提取函数（保持行为字节级一致）**
+- [x] **Step 1: 迁移提取函数（保持行为字节级一致）**
 
 把 `backend/api/chat_attachment_routes.py` 中以下内容**原样**移到 `backend/services/attachment_extract.py`（连同其私有辅助函数与所需常量）：
 `EXTRACTABLE_DOC_EXTENSIONS`、`MAX_ATTACHMENT_PARSE_SECONDS`、`MAX_OFFICE_ZIP_MEMBERS`、`MAX_OFFICE_UNCOMPRESSED_BYTES`、`CH_NL`、模块 `__getattr__`、`extract_attachment_text`、`extract_attachment_text_async`、`_extract_document_text`、`_extract_pptx_text`、`_guard_office_zip_budget`。
@@ -1425,7 +1425,7 @@ from backend.services.attachment_extract import (  # noqa: F401
 )
 ```
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 ```python
 # backend/tests/unit/test_quality_and_local_engine.py
@@ -1490,12 +1490,12 @@ def test_local_engine_returns_page_marked_text() -> None:
 
 > `--- page 1 ---` 断言依赖现有提取器对 PDF 的页标记格式；Task 4 执行时先用 `grep -n "page " backend/api/chat_attachment_routes.py backend/services/attachment_extract.py` 核对实际标记串，断言以实际实现为准（若现实现无页标记，则改为断言 `"hello" in result.text`）。
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_quality_and_local_engine.py -q`
 Expected: ImportError
 
-- [ ] **Step 4: 写实现**
+- [x] **Step 4: 写实现**
 
 `backend/adapters/out/document_parse/quality.py`：
 
@@ -1627,12 +1627,12 @@ class LocalEngine:
         return EngineHealth(available=True, detail="local extractor")
 ```
 
-- [ ] **Step 5: 跑测试确认通过（含既有附件测试回归）**
+- [x] **Step 5: 跑测试确认通过（含既有附件测试回归）**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_quality_and_local_engine.py backend/tests/unit/test_r39_pdf_docx_extract.py backend/tests/unit/test_attachment_pdf.py -q`
 Expected: 全绿（re-export 保住了既有引用）
 
-- [ ] **Step 6: ruff + commit**
+- [x] **Step 6: ruff + commit**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m ruff check backend/services/attachment_extract.py backend/api/chat_attachment_routes.py backend/adapters/out/document_parse backend/tests/unit/test_quality_and_local_engine.py
