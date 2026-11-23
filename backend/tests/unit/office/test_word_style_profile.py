@@ -11,6 +11,8 @@ from docx.oxml.ns import qn
 from backend.office.errors import OfficeGenerateError
 from backend.office.models import OfficeWordGenerateRequest, WordFormatSpec
 from backend.office.word import generate_docx
+from backend.office.word_audit import audit_word_document
+from backend.office.word_rulepack_builtin import builtin_rulepacks
 from backend.office.word_style_presets import (
     list_style_presets,
     resolve_effective_format_spec,
@@ -114,3 +116,19 @@ def test_preset_plus_explicit_override_generates(tmp_path: Path) -> None:
     normal = Document(str(path)).styles["Normal"]
     assert normal.font.size.pt == pytest.approx(11)
     assert _rfonts(Document(str(path)), "Normal").get(qn("w:eastAsia")) == "宋体"
+
+
+def test_gb9704_preset_passes_gb_rulepack_audit(tmp_path: Path) -> None:
+    path = _generate(
+        tmp_path,
+        paragraphs=[
+            {"text": "一、总体要求", "heading": "h1"},
+            {"text": "正文内容。"},
+        ],
+        format_spec_preset="gb9704-gongwen",
+    )
+    pack = next(
+        pack for pack in builtin_rulepacks() if pack.id == "gb-t-9704-general"
+    )
+    result = audit_word_document(path, pack)
+    assert result.ok, [issue.message for issue in result.issues]
