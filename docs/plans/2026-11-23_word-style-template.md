@@ -40,7 +40,7 @@
 | `backend/api/office_routes.py` | 挂载新子路由 |
 | `backend/office/tool_service.py` | `_coerce_word_request` 透传 `format_spec_preset`/`template_docx_path`/`font_family`/`ascii_font` |
 | `backend/tools/office_create_tool.py` | content schema 暴露 `format_spec_preset`/`template_docx_path` |
-| `docs/technical/135-word-style-template.md`（新建） + `docs/technical/README.md` | 技术文档归档 |
+| `docs/technical/160-word-style-template.md`（新建） + `docs/technical/README.md` | 技术文档归档 |
 
 测试文件：
 
@@ -194,80 +194,80 @@ class WordStyleProfileConversion(BaseModel):
 **Files:** `models/_word_gen.py`、`models/__init__.py`、`word_layout.py`、`word.py`
 **Test:** `backend/tests/integration/test_office_word_style_template.py`
 
-- [ ] 写失败测试：生成时 `format_spec.body.font_family="仿宋_GB2312"`、`headings.h1.font_family="黑体"`、`line_spacing_pt=28` → 回读 Normal rFonts eastAsia=仿宋_GB2312、Heading 1 rFonts eastAsia=黑体、Normal 段落 `line_spacing` 为 28pt；不传新字段时旧断言不变。
-- [ ] 写失败测试：`caption` spec（字号 10.5/楷体/居左）→ 题注段落 runs 字号 10.5、eastAsia=楷体、对齐 left；`table_text` spec → 表内 runs 字号 10.5、表头加粗。
-- [ ] 运行测试确认失败（字段不存在 → ValidationError）。
-- [ ] 实现模型与 `word_layout` 应用逻辑（含 linked char style 同步、`Pt()` 精确行距、题注/表格样式），`word.py` 接线（caption/table_text 传入）。
-- [ ] 运行新测试 + `test_office_word_format_spec.py` + `test_office_word_inline_tables.py` 全绿。
-- [ ] commit：`feat(office): Word 样式画像——按级字体/精确行距/题注与表格文字样式`
+- [x] 写失败测试：生成时 `format_spec.body.font_family="仿宋_GB2312"`、`headings.h1.font_family="黑体"`、`line_spacing_pt=28` → 回读 Normal rFonts eastAsia=仿宋_GB2312、Heading 1 rFonts eastAsia=黑体、Normal 段落 `line_spacing` 为 28pt；不传新字段时旧断言不变。
+- [x] 写失败测试：`caption` spec（字号 10.5/楷体/居左）→ 题注段落 runs 字号 10.5、eastAsia=楷体、对齐 left；`table_text` spec → 表内 runs 字号 10.5、表头加粗。
+- [x] 运行测试确认失败（字段不存在 → ValidationError）。
+- [x] 实现模型与 `word_layout` 应用逻辑（含 linked char style 同步、`Pt()` 精确行距、题注/表格样式），`word.py` 接线（caption/table_text 传入）。
+- [x] 运行新测试 + `test_office_word_format_spec.py` + `test_office_word_inline_tables.py` 全绿。
+- [x] commit：`feat(office): Word 样式画像——按级字体/精确行距/题注与表格文字样式`
 
 ### Task 2：Lint 字体检查
 
 **Files:** `word_lint.py`
 **Test:** `backend/tests/integration/test_office_word_lint.py`
 
-- [ ] 写失败测试：生成带字体 spec 的文档后 lint 通过；把 Normal 字体改错 → `body/font_family` error 出现；同理 Heading 1。
-- [ ] 实现 `_style_fonts` 读取与两项检查，接入 `checked` 列表。
-- [ ] 运行 lint 全量测试。
-- [ ] commit：`feat(office): Word Linter 增加样式字体检查`
+- [x] 写失败测试：生成带字体 spec 的文档后 lint 通过；把 Normal 字体改错 → `body/font_family` error 出现；同理 Heading 1。
+- [x] 实现 `_style_fonts` 读取与两项检查，接入 `checked` 列表。
+- [x] 运行 lint 全量测试。
+- [x] commit：`feat(office): Word Linter 增加样式字体检查`
 
 ### Task 3：命名预设 + 合并解析 + 端点
 
 **Files:** `word_style_presets.py`（新建）、`office_word_style_routes.py`（新建，先只含 presets 端点）、`office_routes.py`、`word.py`
 **Test:** `backend/tests/unit/office/test_word_style_profile.py`
 
-- [ ] 写失败测试：`list_style_presets()` 含 4 个 id；`resolve_effective_format_spec("gb9704-gongwen", None)` 的 body 为仿宋 16pt/28pt 固定行距；显式 spec 覆盖 `body.font_size_pt=12` 时其余预设字段保留；未知 id 抛 `OfficeGenerateError`。
-- [ ] 写失败测试：`OfficeWordGenerateRequest(format_spec_preset="report", ...)` 生成后 Normal 为宋体 12pt、标题黑体。
-- [ ] 实现预设数据、深合并、`generate_docx` 内 `spec = resolve_effective_format_spec(...)`（替换全部 `req.format_spec` 引用）、GET 端点与路由挂载。
-- [ ] 运行预设 + FormatSpec 回归测试。
-- [ ] commit：`feat(office): Word 命名样式预设（公文/论文/报告）`
+- [x] 写失败测试：`list_style_presets()` 含 4 个 id；`resolve_effective_format_spec("gb9704-gongwen", None)` 的 body 为仿宋 16pt/28pt 固定行距；显式 spec 覆盖 `body.font_size_pt=12` 时其余预设字段保留；未知 id 抛 `OfficeGenerateError`。
+- [x] 写失败测试：`OfficeWordGenerateRequest(format_spec_preset="report", ...)` 生成后 Normal 为宋体 12pt、标题黑体。
+- [x] 实现预设数据、深合并、`generate_docx` 内 `spec = resolve_effective_format_spec(...)`（替换全部 `req.format_spec` 引用）、GET 端点与路由挂载。
+- [x] 运行预设 + FormatSpec 回归测试。
+- [x] commit：`feat(office): Word 命名样式预设（公文/论文/报告）`
 
 ### Task 4：参考文档生成
 
 **Files:** `word.py`
 **Test:** `backend/tests/integration/test_office_word_style_template.py`
 
-- [ ] 写失败测试：用 python-docx 构造模板 docx（Normal 设为 华文楷体 13pt、标题段落文本"模板残留"）→ 以 `template_docx_path` 生成新文档：Normal eastAsia=华文楷体、正文不含"模板残留"；显式 `font_family="宋体"` 时覆盖为宋体；相对路径解析到 workspace；越界/非 docx 报错。
-- [ ] 实现 `_load_reference_document` + 字体默认逻辑分支。
-- [ ] 运行新测试 + FormatSpec 兼容测试。
-- [ ] commit：`feat(office): Word 参考文档（reference.docx）生成`
+- [x] 写失败测试：用 python-docx 构造模板 docx（Normal 设为 华文楷体 13pt、标题段落文本"模板残留"）→ 以 `template_docx_path` 生成新文档：Normal eastAsia=华文楷体、正文不含"模板残留"；显式 `font_family="宋体"` 时覆盖为宋体；相对路径解析到 workspace；越界/非 docx 报错。
+- [x] 实现 `_load_reference_document` + 字体默认逻辑分支。
+- [x] 运行新测试 + FormatSpec 兼容测试。
+- [x] commit：`feat(office): Word 参考文档（reference.docx）生成`
 
 ### Task 5：规则包 → 样式画像转换
 
 **Files:** `word_rulepack_models.py`、`word_style_profile.py`（新建）、`office_word_style_routes.py`
 **Test:** `backend/tests/unit/office/test_word_style_from_rulepack.py`
 
-- [ ] 写失败测试：内置 `gb-t-9704-general` 转换 → page A4/纵向/边距、body 仿宋_GB2312 16pt、footer 页码；自定义规则包含 Heading 1 黑体 + 图题楷体 → 映射到 headings.h1/caption；未知样式与 content 规则进入 `unmapped`。
-- [ ] 实现映射函数与结果模型；实现 POST 端点（rulepack_id 加载复用 audit 路由逻辑）。
-- [ ] 运行转换测试 + 路由集成测试。
-- [ ] commit：`feat(office): 规则包转换为 Word 样式画像`
+- [x] 写失败测试：内置 `gb-t-9704-general` 转换 → page A4/纵向/边距、body 仿宋_GB2312 16pt、footer 页码；自定义规则包含 Heading 1 黑体 + 图题楷体 → 映射到 headings.h1/caption；未知样式与 content 规则进入 `unmapped`。
+- [x] 实现映射函数与结果模型；实现 POST 端点（rulepack_id 加载复用 audit 路由逻辑）。
+- [x] 运行转换测试 + 路由集成测试。
+- [x] commit：`feat(office): 规则包转换为 Word 样式画像`
 
 ### Task 6：已有文档套用样式
 
 **Files:** `word_style_apply.py`（新建）、`office_word_style_routes.py`
 **Test:** `backend/tests/unit/office/test_word_style_apply.py`
 
-- [ ] 写失败测试：构造带直接字体格式的 docx → 套用 `report` 预设后 Normal/Heading 定义变化、默认输出 `<stem>-styled.docx`、源文件不变；`clear_direct_formatting=True` 清掉 run 级 `w:sz`/`w:color` 但保留 bold；`dry_run=True` 不落盘且返回 styles_changed；`overwrite=True` 原子覆盖；幂等（二次应用 changed 为空）。
-- [ ] 实现 apply 模块与端点。
-- [ ] 运行 apply 测试 + office 回归。
-- [ ] commit：`feat(office): 已有 Word 文档批量套用样式模板`
+- [x] 写失败测试：构造带直接字体格式的 docx → 套用 `report` 预设后 Normal/Heading 定义变化、默认输出 `<stem>-styled.docx`、源文件不变；`clear_direct_formatting=True` 清掉 run 级 `w:sz`/`w:color` 但保留 bold；`dry_run=True` 不落盘且返回 styles_changed；`overwrite=True` 原子覆盖；幂等（二次应用 changed 为空）。
+- [x] 实现 apply 模块与端点。
+- [x] 运行 apply 测试 + office 回归。
+- [x] commit：`feat(office): 已有 Word 文档批量套用样式模板`
 
 ### Task 7：工具/受管路径契约 + 技术文档
 
-**Files:** `tool_service.py`、`office_create_tool.py`、`docs/technical/135-word-style-template.md`、`docs/technical/README.md`
+**Files:** `tool_service.py`、`office_create_tool.py`、`docs/technical/160-word-style-template.md`、`docs/technical/README.md`
 **Test:** `backend/tests/unit/tools/test_office_create_tool.py`（既有文件扩展）
 
-- [ ] 写失败测试：`_coerce_word_request` 透传 preset/参考文档/全局字体；`OfficeCreateTool` content 携带 `format_spec_preset` 时产物样式生效。
-- [ ] 实现透传与 schema 描述。
-- [ ] 运行工具测试 + 契约测试（`test_ipc_manifest_routes.py`、office 全量）。
-- [ ] 写技术文档 135（能力边界、接口、预设表、映射表、坑）并更新 README 索引。
-- [ ] commit：`feat(office): 样式模板工具契约 + 技术文档 135`
+- [x] 写失败测试：`_coerce_word_request` 透传 preset/参考文档/全局字体；`OfficeCreateTool` content 携带 `format_spec_preset` 时产物样式生效。
+- [x] 实现透传与 schema 描述。
+- [x] 运行工具测试 + 契约测试（`test_ipc_manifest_routes.py`、office 全量）。
+- [x] 写技术文档 135（能力边界、接口、预设表、映射表、坑）并更新 README 索引。
+- [x] commit：`feat(office): 样式模板工具契约 + 技术文档 135`
 
 ### Task 8：全量验证与收尾
 
-- [ ] `home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/office backend/tests/integration/test_office_word_*.py -q`（worktree 内绝对路径）
-- [ ] ruff check 改动文件；py38 兼容脚本；architecture 棘轮（新增文件行数入 baseline）。
-- [ ] 更新本计划勾选状态；汇报变更与遗留项。
+- [x] `home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/office backend/tests/integration/test_office_word_*.py -q`（worktree 内绝对路径）
+- [x] ruff check 改动文件；py38 兼容脚本；architecture 棘轮（新增文件行数入 baseline）。
+- [x] 更新本计划勾选状态；汇报变更与遗留项。
 
 ## 风险评估与依赖
 
