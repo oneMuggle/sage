@@ -31,6 +31,7 @@ from backend.data.orch_transcript_repo import (
     OrchTranscriptRepository,
     TaskTranscriptMessage,
 )
+from backend.services.permission_gate import redact_sensitive_args
 
 logger = logging.getLogger(__name__)
 
@@ -198,10 +199,13 @@ class TaskTranscriptRecorder:
             self._flushed_text = True
 
     def _dump_args(self, arguments: Any) -> Optional[str]:
+        # 与实时镜像（summarize_tool_args）同口径脱敏：键名命中
+        # key/token/password/... 的值替成 ***，避免密钥经 transcript 落盘。
+        safe = redact_sensitive_args(arguments)
         try:
-            dumped = json.dumps(arguments, ensure_ascii=False)
+            dumped = json.dumps(safe, ensure_ascii=False)
         except (TypeError, ValueError):
-            dumped = str(arguments)
+            dumped = str(safe)
         return dumped[:MAX_TOOL_ARGS_CHARS]
 
     def _repo(self) -> Any:

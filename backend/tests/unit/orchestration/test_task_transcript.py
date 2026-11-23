@@ -162,6 +162,58 @@ def test_tool_result_error_flag():
     assert repo.rows[-1].is_error is True
 
 
+def test_tool_call_args_redacts_secret_keys_before_persisting():
+    """密钥类参数键在落盘前被替换为 ***（含嵌套），非秘密值保留全文。"""
+    repo = FakeRepo()
+    _run(
+        _recorder(repo),
+        _ev(AgentState.THINKING),
+        _ev(
+            AgentState.ACTING,
+            tool_call=ToolCallRequest(
+                id="call-secret",
+                name="http_request",
+                arguments={
+                    "url": "https://example.test",
+                    "api_key": "sk-12345",
+                    "headers": {"Authorization": "Bearer tok-9", "Accept": "json"},
+                },
+            ),
+        ),
+    )
+
+    call_row = repo.rows[1]
+    args = json.loads(call_row.tool_args)
+    assert args["url"] == "https://example.test"
+    assert args["api_key"] == "***"
+    assert args["headers"]["Authorization"] == "***"
+    assert args["headers"]["Accept"] == "json"
+    assert "sk-12345" not in call_row.tool_args
+    assert "tok-9" not in call_row.tool_args
+
+
+def test_tool_call_args_redacted_even_when_not_json_serializable():
+    """json.dumps 失败的字符串化兜底路径同样不落明文密钥。"""
+    repo = FakeRepo()
+    _run(
+        _recorder(repo),
+        _ev(AgentState.THINKING),
+        _ev(
+            AgentState.ACTING,
+            tool_call=ToolCallRequest(
+                id="call-raw",
+                name="custom_tool",
+                arguments={"auth_token": "tok-raw", "opaque": object()},
+            ),
+        ),
+    )
+
+    call_row = repo.rows[1]
+    assert call_row.tool_args is not None
+    assert "tok-raw" not in call_row.tool_args
+    assert "***" in call_row.tool_args
+
+
 def test_done_does_not_duplicate_text_flushed_at_step_done():
     repo = FakeRepo()
     _run(
