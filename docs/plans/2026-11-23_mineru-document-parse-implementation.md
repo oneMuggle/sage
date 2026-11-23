@@ -2893,7 +2893,7 @@ git commit -m "feat(document-parse): parse_document 工具与 document_parse bun
 - Produces: `GET /api/v1/mineru/status` → `{configured, enabled, hasApiKey, reachable, serverAuthMode, serverTiers, serverVersion, reason}`（**绝不含 key 明文**）。
 - Produces: `GET /api/v1/chat/attachments/{media_id}/text` 响应新增 `source`（`local|mineru`）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_mineru_routes.py
@@ -2993,12 +2993,12 @@ def test_pdf_upload_enqueues_when_enabled(monkeypatch, tmp_path) -> None:
     assert submitted and submitted[0]["filename"] == "a.pdf"
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_mineru_routes.py backend/tests/unit/test_chat_attachment_dual_phase.py -q`
 Expected: ImportError / 404
 
-- [ ] **Step 3: 写实现**
+- [x] **Step 3: 写实现**
 
 `backend/api/mineru_routes.py`：
 
@@ -3106,14 +3106,14 @@ def _schedule_mineru_enrichment(content: bytes, filename: str) -> None:
 
 > 若有既有测试断言该响应仅含 `{"media_id","text"}`，按新契约补充 `source` 字段断言（属于预期变更）。
 
-- [ ] **Step 4: 跑测试确认通过（含附件回归）**
+- [x] **Step 4: 跑测试确认通过（含附件回归）**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_mineru_routes.py backend/tests/unit/test_chat_attachment_dual_phase.py backend/tests/unit/test_r39_pdf_docx_extract.py backend/tests/unit/test_attachment_pdf.py backend/tests/unit/test_quality_and_local_engine.py -q
 node scripts/architecture-check.mjs
 ```
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add backend/api/mineru_routes.py backend/api/chat_attachment_routes.py backend/main.py backend/tests/unit/test_mineru_routes.py backend/tests/unit/test_chat_attachment_dual_phase.py architecture-baseline.json

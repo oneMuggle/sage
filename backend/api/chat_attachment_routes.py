@@ -36,6 +36,8 @@ from backend.services.attachment_rag import (
     remove_attachment,
     search_attachments,
 )
+from backend.services.document_parse.config import load_mineru_settings
+from backend.services.document_parse.factory import get_mineru_queue
 from backend.services.multimodal.media_store import MEDIA_ROOT, MediaKind, MediaStore
 from backend.wiki.embeddings import EmbeddingConfig
 
@@ -121,6 +123,8 @@ async def upload_chat_attachment(file: UploadFile = File(...)) -> dict:  # noqa:
         metadata={"original_filename": file.filename or "unknown"},
         ext=ext if ext else None,
     )
+    if ext == "pdf":
+        _schedule_mineru_enrichment(content, file.filename or "attachment.pdf")
 
     response: dict = {"media_ref": ref, "api_url": ref.api_url}
     if is_text:
@@ -148,6 +152,21 @@ async def upload_chat_attachment(file: UploadFile = File(...)) -> dict:  # noqa:
     return response
 
 
+def _schedule_mineru_enrichment(content: bytes, filename: str) -> None:
+    """阶段 2：本地文本已返回后，后台提交 MinerU（失败静默）。"""
+    try:
+        settings = load_mineru_settings()
+        if not (
+            settings.enabled
+            and settings.configured
+            and settings.use_in_chat_attachment
+        ):
+            return
+        get_mineru_queue().submit(content=content, filename=filename)
+    except Exception:  # noqa: BLE001 — 双阶段补充不得影响上传响应
+        logger.warning("MinerU 后台解析提交失败", exc_info=True)
+
+
 def load_pdf_figure_manifest(store, media_ref, content):
     """发送侧门面：读取/构建 PDF 图表清单（调用方在线程池执行）。
 
@@ -164,7 +183,7 @@ def load_pdf_figure_manifest(store, media_ref, content):
 
 
 @router.get("/chat/attachments/{media_id}/text")
-async def get_chat_attachment_text(media_id: str) -> dict:
+async def get_chat_attachment_text(media_id: str) -> dict:  # noqa: PLR0911 — 404/400/缓存命中/本地各一返回
     """R37/R39: 读取已上传文档附件的全文（txt 直读、pdf/docx/xlsx/pptx 提取）。
 
     聊天 producer 据此把附件内容注入上下文。非文档/不存在 → 404。
@@ -177,6 +196,17 @@ async def get_chat_attachment_text(media_id: str) -> dict:
     if ref.kind != MediaKind.DOCUMENT:
         return JSONResponse(status_code=400, content={"error": "该附件不是文本文档"})
     ext = (ref.file_path or "").rsplit(".", 1)[-1].lower() if "." in (ref.file_path or "") else "txt"
+    # 阶段 2 已完成的 MinerU 解析优先（缓存按内容哈希寻址）。
+    try:
+        import hashlib
+
+        from backend.services.document_parse.cache import SqliteParseCache
+
+        cached = SqliteParseCache().get(hashlib.sha256(content).hexdigest(), "mineru")
+    except Exception:  # noqa: BLE001 — 缓存不可用回退本地
+        cached = None
+    if cached is not None and cached.text:
+        return {"media_id": media_id, "text": cached.text, "source": "mineru"}
     # 2026-10-13: 需要二进制解析的格式走 _extract_document_text，其余直读 utf-8
     try:
         text = await asyncio.wait_for(
@@ -196,7 +226,7 @@ async def get_chat_attachment_text(media_id: str) -> dict:
             "attachment text extraction failed: ext=%s error_type=%s", ext, type(exc).__name__
         )
         return JSONResponse(status_code=400, content={"error": "附件解析失败"})
-    return {"media_id": media_id, "text": text}
+    return {"media_id": media_id, "text": text, "source": "local"}
 
 
 # ---------- r58: 附件向量索引（接线 services/attachment_rag 库层） ----------

@@ -116,6 +116,7 @@ from backend.api.local_auth import (
 )
 from backend.api.mcp_routes import router as mcp_router
 from backend.api.media_routes import router as media_router
+from backend.api.mineru_routes import router as mineru_router
 from backend.api.model_catalog_routes import build_router as build_model_catalog_router
 from backend.api.ocr_routes import router as ocr_router
 from backend.api.office_generate_routes import router as office_generate_router
@@ -1464,6 +1465,8 @@ app.include_router(office_generate_router, prefix="/api/v1")
 app.include_router(rules_router, prefix="/api/v1")
 # 本地 OCR：/api/v1/ocr/capabilities + /api/v1/ocr/image
 app.include_router(ocr_router, prefix="/api/v1")
+# MinerU 文档解析服务状态：/api/v1/mineru/status（只回 hasApiKey 布尔）
+app.include_router(mineru_router, prefix="/api/v1")
 # Office 隔离式清理 (staging quarantine): plan/run/report/restore 四端点。
 # 有意不注册 purge —— 永久删除仍只保留 CLI 三重门禁（见模块 docstring）。
 app.include_router(office_quarantine_router, prefix="/api/v1")
