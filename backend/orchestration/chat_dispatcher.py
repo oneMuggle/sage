@@ -1757,7 +1757,8 @@ class ChatDispatcher:
                 interrupt_event=self._task_cancel_events.get(
                     state.task_id, self._cancelled
                 ),
-                event_sink=sink,
+                # M1: 经 _event_sink 扇出到状态投影 + transcript 落盘。
+                event_sink=_event_sink,
                 approval_mode=self.approval_mode,
                 session_id=self.session_id,
                 context_repo=self._context_repo,

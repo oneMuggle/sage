@@ -136,9 +136,13 @@ async def test_sink_projects_tool_call_and_result():
     assert call_evt["parent_tool_call_id"] == "call-1"
     assert call_evt["tool_name"] == "read_file"
     assert "read_file" in call_evt["live_step"]
+    assert call_evt["tool_call_id"] == "tc-1"
+    assert "duration_ms" not in call_evt  # 调用开始时尚无耗时
     result_evt = mirror[1]
     assert len(result_evt["preview"]) <= 200
     assert result_evt.get("is_error") is not True  # 仅出错时携带
+    assert result_evt["tool_call_id"] == "tc-1"
+    assert isinstance(result_evt["duration_ms"], int)
 
     assert publisher.types == ["task.step.started", "task.step.completed"]
     started = publisher.events[0]
@@ -146,8 +150,10 @@ async def test_sink_projects_tool_call_and_result():
         "task_id": "t1", "agent_id": "researcher",
         "step_id": "tool-tc-1", "step_name": "read_file",
     }
+    assert started.payload["tool_call_id"] == "tc-1"
     completed = publisher.events[1]
     assert completed.payload["is_error"] is False
+    assert completed.payload["tool_call_id"] == "tc-1"
     assert isinstance(completed.payload["duration_ms"], int)
 
 
@@ -384,6 +390,48 @@ async def test_dispatch_without_publisher_still_mirrors_chat():
         )
     mirrors = [e for e in _drain(queue) if e.get("state") == "subagent_event"]
     assert len(mirrors) == 2
+
+
+class _RecordingTranscript:
+    """假 recorder：只记录收到的事件序列（不落库）。"""
+
+    instances: List[Any] = []
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.kwargs = kwargs
+        self.events: List[AgentEvent] = []
+        _RecordingTranscript.instances.append(self)
+
+    async def __call__(self, evt: AgentEvent) -> None:
+        self.events.append(evt)
+
+
+@pytest.mark.asyncio()
+async def test_dispatch_feeds_transcript_recorder():
+    """dispatch → recorder 与状态 sink 并行收到同一事件流（M4.1 接线回归）。
+
+    M1 曾把裸 ``sink`` 传给 SubagentRunner，recorder 永不收事件、transcript
+    表恒空；本测试锁定 ``_event_sink`` 扇出接线。
+    """
+    queue = asyncio.Queue()
+    dispatcher = _make_dispatcher(queue)
+    fake = _LiveFakeAgent()
+    _RecordingTranscript.instances = []
+    with _patch_live_agent(fake), patch(
+        "backend.orchestration.chat_dispatcher.TaskTranscriptRecorder",
+        _RecordingTranscript,
+    ):
+        await dispatcher.dispatch(
+            [{"task_id": "t1", "agent_id": "researcher", "goal": "调研 X"}]
+        )
+
+    assert len(_RecordingTranscript.instances) == 1
+    recorder = _RecordingTranscript.instances[0]
+    assert recorder.kwargs["run_id"] == "orch-test"
+    assert recorder.kwargs["task_id"] == "t1"
+    states = [evt.state for evt in recorder.events]
+    # 精确序列同时锁定「扇出一次」：双扇出会产生重复状态而仍满足成员断言。
+    assert states == [AgentState.ACTING, AgentState.OBSERVING, AgentState.DONE]
 
 
 def test_set_approval_mode_validates_and_broadcasts():

@@ -133,6 +133,7 @@ class SubagentEventSink:
             iteration=evt.iteration,
             tool_name=tc.name,
             args_summary=args_summary,
+            tool_call_id=tc.id,
             live_step=_live_line(tc.name, args_summary),
         ))
         await self._publish(
@@ -144,6 +145,7 @@ class SubagentEventSink:
                 "step_name": tc.name,
                 "kind": "tool_call",
                 "args_summary": args_summary,
+                "tool_call_id": tc.id,
                 "iteration": evt.iteration,
             },
         )
@@ -165,6 +167,8 @@ class SubagentEventSink:
             tool_name=tool_name,
             preview=preview,
             is_error=tr.is_error,
+            tool_call_id=tr.tool_call_id,
+            duration_ms=duration_ms,
             live_step=_live_line(tool_name or "tool",
                                  preview or ("错误" if tr.is_error else "完成")),
         ))
@@ -178,6 +182,7 @@ class SubagentEventSink:
                 "step_name": tool_name,
                 "preview": (tr.content or "")[:MAX_STEP_PREVIEW_CHARS],
                 "is_error": tr.is_error,
+                "tool_call_id": tr.tool_call_id,
                 "duration_ms": duration_ms,
             },
         )
@@ -310,6 +315,8 @@ class SubagentEventSink:
                 tool_name: Optional[str] = None, args_summary: Optional[str] = None,
                 preview: Optional[str] = None, is_error: bool = False,
                 approved: Optional[bool] = None,
+                tool_call_id: Optional[str] = None,
+                duration_ms: Optional[int] = None,
                 budget_info: Optional[Dict[str, Any]] = None,
                 ) -> Optional[Dict[str, Any]]:
         """构造聊天流 ``subagent_event`` 镜像；预算耗尽返回 None（丢弃）。"""
@@ -338,6 +345,10 @@ class SubagentEventSink:
             event["is_error"] = True
         if approved is not None:
             event["approved"] = approved
+        if tool_call_id is not None:
+            event["tool_call_id"] = tool_call_id
+        if duration_ms is not None:
+            event["duration_ms"] = duration_ms
         if budget_info is not None:
             event["budget_info"] = budget_info
         return event
