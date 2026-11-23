@@ -3,6 +3,7 @@ export * from './types/domainEntityTypes';
 export * from './types/templateAndTaskTypes';
 export * from './types/officeGenerateTypes';
 export * from './types/officeRulesTypes';
+export * from './types/officePdfTypes';
 
 export type OfficeDocType = 'ppt' | 'word' | 'excel' | 'pdf';
 
@@ -144,26 +145,10 @@ export interface OfficeExcelReadResult {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// PDF types (Office parity batch 1, item 1.2)
-// Backend counterpart: PdfPageContent / PdfReadResult / PdfReadRequest /
-// PdfPageSpec / PdfGenerateRequest / PdfGenerateResult in
-// backend/office/models.py:419-481
+// Legacy import + recalc results (Office parity batch 1)
+// Backend counterpart: LegacyImportResult / RecalcResult in
+// backend/office/models.py
 // ──────────────────────────────────────────────────────────────────────
-
-/** One extracted PDF page (backend `PdfPageContent`). */
-export interface OfficePdfPageContent {
-  page_number: number;
-  text: string;
-  tables: string[][][];
-  images: Record<string, unknown>[];
-}
-
-/** Result of POST /api/v1/office/pdf/read (backend `PdfReadResult`). */
-export interface OfficePdfReadResult {
-  summary: OfficeDocumentSummary;
-  pages: OfficePdfPageContent[];
-  metadata: Record<string, unknown>;
-}
 
 /**
  * P1-C (office-p1c): result of POST /api/v1/office/import/convert-legacy
@@ -178,88 +163,11 @@ export interface OfficeLegacyImportResult {
 }
 
 /**
- * P2-D (office-p2d): PDF AcroForm field + read/fill results
- * (backend `PdfFormField` / `PdfFormReadResult` / `PdfFormFillResult`).
- */
-export interface OfficePdfFormField {
-  name: string;
-  type: string;
-  value?: unknown;
-  options?: string[] | null;
-  required: boolean;
-  read_only: boolean;
-}
-
-export interface OfficePdfFormReadResult {
-  file_path: string;
-  fields: OfficePdfFormField[];
-  has_xfa: boolean;
-}
-
-export interface OfficePdfFormFillResult {
-  output_path: string;
-  filename: string;
-  file_size_bytes: number;
-  filled_count: number;
-}
-
-/**
  * P2-C (office-p2c): result of POST /api/v1/office/excel/recalc.
  */
 export interface OfficeRecalcResult {
   ok: boolean;
   error?: string | null;
-}
-
-/**
- * F3 (office-p0): result of POST /api/v1/office/pdf/data — raw-PDF
- * base64 preview for the /office page's 原文预览 toggle (backend
- * `PdfDataResult`). Expected failures (oversize / path escape) come
- * back as `{ok:false,error}` rather than HTTP errors.
- */
-export interface OfficePdfDataResult {
-  ok: boolean;
-  data_url?: string | null;
-  error?: string | null;
-}
-
-/**
- * Request of POST /api/v1/office/pdf/read. Deliberately NOT
- * `OfficeReadRequest` — backend `PdfReadRequest` is `extra="forbid"`
- * and only accepts `workspace_path` + `file_path`.
- */
-export interface OfficePdfReadRequest {
-  workspace_path: string;
-  file_path: string;
-}
-
-/** One page to generate in a PDF (backend `PdfPageSpec`). */
-export interface PdfPageSpec {
-  title?: string | null;
-  paragraphs?: string[];
-  tables?: string[][][];
-}
-
-/** Page size accepted by backend `generate_pdf` (backend/office/pdf.py:187-191). */
-export type PdfPageSize = 'A4' | 'Letter' | 'Legal';
-
-export interface OfficePdfGenerateRequest {
-  /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
-  task_id?: string;
-  workspace_path: string;
-  filename: string;
-  pages: PdfPageSpec[];
-  /** Backend default "A4"; unknown values fall back to A4 server-side. */
-  page_size?: PdfPageSize;
-  orientation?: 'portrait' | 'landscape';
-}
-
-/** Result of POST /api/v1/office/pdf/generate (backend `PdfGenerateResult`). */
-export interface OfficePdfGenerateResult {
-  output_path: string;
-  filename: string;
-  file_size_bytes: number;
-  page_count: number;
 }
 
 export interface OfficeReadRequest {
