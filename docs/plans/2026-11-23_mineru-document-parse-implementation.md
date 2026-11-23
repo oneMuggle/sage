@@ -2330,7 +2330,7 @@ git commit -m "feat(document-parse): 编排服务（质量路由/熔断/缓存�
 - Produces: `MineruBackgroundQueue(service)`：`submit(*, content, filename, tier=None, page_range=None) -> str`（task_key = `sha256:tier`，重复提交同一 key 返回原 key 且不重复入队）、`get_status(task_key) -> str`（`pending|running|completed|failed|unknown`）。
 - Produces: `build_document_parse_service() -> DocumentParseService`、`get_document_parse_service()`、`reset_document_parse_service()`、`get_mineru_queue()`、`reset_mineru_queue()`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_document_parse_queue.py
@@ -2378,12 +2378,12 @@ def test_queue_marks_failed_when_fallback() -> None:
     asyncio.run(scenario())
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_document_parse_queue.py -q`
 Expected: ImportError
 
-- [ ] **Step 3: 写实现**
+- [x] **Step 3: 写实现**
 
 `backend/services/document_parse/queue.py`：
 
@@ -2537,12 +2537,12 @@ def reset_mineru_queue() -> None:
     _queue = None
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_document_parse_queue.py -q`
 Expected: 2 passed
 
-- [ ] **Step 5: ruff + commit**
+- [x] **Step 5: ruff + commit**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m ruff check backend/services/document_parse backend/tests/unit/test_document_parse_queue.py
