@@ -45,7 +45,11 @@
 在 Sage 源码目录中，先激活后端环境，再运行：
 
 ```bash
+<<<<<<< HEAD
 conda activate sage-backend-py38
+=======
+conda activate sage-backend
+>>>>>>> origin/main
 scripts\sage-web.bat
 ```
 
@@ -135,7 +139,11 @@ curl http://127.0.0.1:8765/health
 
 ## 8. 技术信息（高级用户）
 
+<<<<<<< HEAD
 如需了解更多技术细节，请参阅[技术文档](../technical/154-web-fallback-mode.md)。
+=======
+如需了解更多技术细节，请参阅[技术文档](../technical/152-web-fallback-mode.md)。
+>>>>>>> origin/main
 
 **关键环境变量：**
 - `SAGE_WEB_MODE=1` - 启用网页模式

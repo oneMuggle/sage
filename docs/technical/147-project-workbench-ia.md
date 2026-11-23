@@ -2,7 +2,11 @@
 
 **最后更新**: 2026-11-10
 **适用分支**: main + release/win7
+<<<<<<< HEAD
 **关联文档**: [17 前端质量](./17-frontend-quality.md)、[143 项目工作台·规则中心](./143-project-workbench-rules-center.md)、[134 AI 文档工作台](./134-office-ai-workbench.md)、[146 渲染层自愈](./146-backend-ready-renderer-recovery.md)、[用户手册 §46](../user-manual/46-project-workbench.md)
+=======
+**关联文档**: [17 前端质量](./17-frontend-quality.md)、[143 项目工作台·规则中心](./143-project-workbench-rules-center.md)、[134 AI 文档工作台](./134-office-ai-workbench.md)、[用户手册 §46](../user-manual/46-project-workbench.md)
+>>>>>>> origin/main
 
 ---
 
@@ -35,7 +39,11 @@
 | `src/pages/ProjectsOverview.tsx` | `/projects` 页：标题行、工具栏（搜索 / 类型 / 状态 / 排序 / 批量）、列表挂载点 |
 | `src/widgets/sidebar/sections/WorkbenchProjectList.tsx` | 唯一项目列表实现：行渲染、hover 次级操作、选择模式、空态 |
 | `src/widgets/layout/Sidebar.tsx` | `/projects` 路由隐藏内容列「项目」分区（`isProjectsRoute`） |
+<<<<<<< HEAD
 | `src/widgets/sidebar/sections/useProjectSectionData.ts` | 项目/会话数据源；`backend:ready` 事件补刷（启动竞态修复）+ 错误状态透出 |
+=======
+| `src/widgets/sidebar/sections/useProjectSectionData.ts` | 项目/会话数据源；`backend:ready` 事件补刷（启动竞态修复） |
+>>>>>>> origin/main
 | `src/pages/governance/GovernanceShell.tsx` | 治理页壳层：头部（返回 / 名称 / 类型徽章 / 路径 / 截止徽章 / 主 CTA）、下划线 Tab、内容区 |
 | `src/pages/governance/sections/OverviewSection.tsx` | 概览章：状态行 + 下一步 + 里程碑摘要 + 折叠的项目结构 |
 | `src/pages/governance/sections/SettingsSection.tsx` | 设置章：五分区（基本信息 / SAGE.md / AI 初始化 / 类型与版本控制 / 高级） |
@@ -75,7 +83,11 @@
 - 离开选择模式自动清空选择集；
 - 归档走 `projectApi.setProjectStatus(id, 'archived')`，完成后 `refreshKey` 自增触发列表刷新。
 
+<<<<<<< HEAD
 ### 147.4.3 启动竞态修复与错误横幅
+=======
+### 147.4.3 启动竞态修复
+>>>>>>> origin/main
 
 `useProjectSectionData` 原来只在挂载时 `refresh()` 一次；后端未就绪时该请求失败且不再重试，导致侧栏与工作台项目区**永久显示空态**（主区却有数据）。修复方式：
 
@@ -86,8 +98,11 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 
 `api.listen` 不可用（非 Electron 环境）时直接跳过，不影响其他行为。
 
+<<<<<<< HEAD
 `useProjectSectionData` 新增 `error` 状态，`WorkbenchProjectList` 在列表上方渲染可重试的错误横幅（`data-testid="projects-overview-error"`），替代原先只 toast 不留痕迹的行为。
 
+=======
+>>>>>>> origin/main
 ## 147.5 治理页壳层
 
 `GovernanceShell` 由「外层 Card + pill Tab」改为「头部 + 下划线 Tab + 裸内容区」：
@@ -203,8 +218,13 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 | 门禁 | 结果 |
 | --- | --- |
 | `tsc --noEmit` | 通过 |
+<<<<<<< HEAD
 | Vitest 受影响套件 | 28 tests passed（ProjectsOverview + WorkbenchProjectList） |
 | `node scripts/architecture-check.mjs` | 通过（`PlaybookCard.tsx` 行数基线 825 → 853） |
+=======
+| Vitest 全量 | 7162 通过（`ArenaAccounts` 一例并发超时偶发失败，单独复跑 8/8 通过，与本改动无关） |
+| `node scripts/architecture-check.mjs` | 通过（97 基线文件，无新增超限项；`PlaybookCard.tsx` 行数基线 825 → 853） |
+>>>>>>> origin/main
 
 新增/更新的测试文件：
 
@@ -217,12 +237,16 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 | `src/pages/governance/__tests__/KnowledgeSection.test.tsx` | 资料章只渲染入库/列表、语义检索折叠、Git 状态不在本页 |
 | `src/features/project-type/__tests__/ProjectBootstrapPanel.test.tsx` | 默认不自动请求 suggest，手动「分析项目」触发 |
 | `src/features/rules/__tests__/rulesView.test.ts` | `sourceDetail()`（路径/非路径/全局层） |
+<<<<<<< HEAD
 | `src/widgets/sidebar/sections/WorkbenchProjectList.test.tsx` | 错误横幅展示与重试恢复 |
+=======
+>>>>>>> origin/main
 
 ## 147.13 双分支同步
 
 全部为纯前端改动。按里程碑逐个 cherry-pick 到 `release/win7`（**不合并 win7 到 main**）：
 
+<<<<<<< HEAD
 | 提交（main feature 分支） | 内容 | win7 cherry-pick |
 | --- | --- | --- |
 | `30a47676c` | 方案文档 | （跳过，plan 文档） |
@@ -237,6 +261,20 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 | `8c21cc778` | arch baseline 补记 | `8c21cc778`（同 SHA） |
 
 冲突点：`ProjectsOverview.tsx` 与测试取 `--theirs`（feature 侧）；i18n 聚合文件按 win7 行号重应用；plan 文档在 win7 不存在需 `git rm` 后继续。
+=======
+| 提交 | 内容 |
+| --- | --- |
+| `30a47676c` | 方案文档 |
+| `48ddf7536` | M1 `/projects` 单列表 |
+| `645d5be7d` | M2 概览章重组 |
+| `2b6c6bc06` | M3 设置章重组 |
+| `c4de89b4e` | M4 文件章 i18n |
+| `fff7c38f7` | M6 资料章重组 |
+| `56a33d5a4` | M7 规则页文案 |
+| `affff7f5a` | M5 壳层视觉统一 |
+
+预计冲突点：i18n 聚合文件（`zh.ts` / `en.ts`）与 `ProjectsOverview.tsx`，按 win7 分支实际行号重应用。win7 的技术手册编号独立（本次为 §151），用户手册编号与 main 一致（§46）。
+>>>>>>> origin/main
 
 ## 147.14 AI 分析异步化与缓存（2026-11-11）
 
@@ -284,4 +322,7 @@ void api.listen('backend:ready', () => { if (!cancelled) void refresh(); })
 | release/win7 | #3039 | `2ac9da704`（cherry-pick，架构基线冲突手动解） |
 
 win7 侧的 cherry-pick 冲突集中在 `architecture-baseline.json`：保留 win7 的 `project_ai_routes.py: 861` / `project_schemas.py: 829`，仅更新 `project_routes.py` 到当前行数。
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main

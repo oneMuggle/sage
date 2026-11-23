@@ -6,7 +6,11 @@ setlocal
 
 where python >nul 2>&1
 if errorlevel 1 (
+<<<<<<< HEAD
     echo [错误] 未找到 Python，请先激活后端环境（conda activate sage-backend-py38）。
+=======
+    echo [错误] 未找到 Python，请先激活后端环境（conda activate sage-backend）。
+>>>>>>> origin/main
     pause
     exit /b 1
 )

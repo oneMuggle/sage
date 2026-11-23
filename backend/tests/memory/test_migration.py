@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """Tests for the idempotent memory_traceability schema migration (Task 4 step 9).
 
 Pins the contract:
@@ -6,6 +7,12 @@ Pins the contract:
 - Calling ``init_db()`` again on the same DB is a no-op (no exceptions,
   no duplicate columns, no duplicate indexes).
 - The columns are nullable so existing rows remain valid.
+=======
+"""记忆标题列迁移测试（2026-11-17 记忆详情化）。
+
+main 分支无 win7 的 traceability 迁移测试文件；本文件只覆盖本功能：
+存量库缺 ``title`` 列时，``init_db`` 必须幂等补列（ALTER 路径）。
+>>>>>>> origin/main
 """
 
 from __future__ import annotations
@@ -19,6 +26,7 @@ from backend.data.database import Database
 pytestmark = pytest.mark.unit
 
 
+<<<<<<< HEAD
 def test_init_db_creates_traceability_columns(tmp_db_path):
     """Fresh DB: source_turn_id / source_message_id / memory_category exist."""
     db = Database(db_path=tmp_db_path)
@@ -85,6 +93,8 @@ def test_traceability_columns_are_nullable(tmp_db_path):
     assert row[3] is None
 
 
+=======
+>>>>>>> origin/main
 # 旧版建表语句（2026-11-17 记忆详情化之前）：不含 title 列。
 _LEGACY_EPISODIC_DDL = """
 CREATE TABLE memories_episodic (

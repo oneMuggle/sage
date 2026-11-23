@@ -495,7 +495,12 @@ class MemoryManager:
             )
 
         elif resolved == "semantic":
+<<<<<<< HEAD
             meta = metadata or {}
+=======
+            # main 分支无 episodic 分支的 meta 局部变量 —— title 回退用
+            # (metadata or {}) 直接取值，避免 UnboundLocalError。
+>>>>>>> origin/main
             return self.semantic.save(
                 content=content,
                 summary=None,
@@ -505,7 +510,11 @@ class MemoryManager:
                 project_key=project_key,
                 supersedes_id=supersedes_id,
                 agent_id=write_agent_id,
+<<<<<<< HEAD
                 title=title or meta.get("title"),
+=======
+                title=title or (metadata or {}).get("title"),
+>>>>>>> origin/main
             )
 
         else:

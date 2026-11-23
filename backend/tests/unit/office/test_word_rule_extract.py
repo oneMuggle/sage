@@ -74,7 +74,11 @@ def _rules_by_style(pack, kind: str, style: str):
     return None
 
 
+<<<<<<< HEAD
 def _spec_paragraphs() -> List[str]:
+=======
+def _spec_paragraphs() -> list[str]:
+>>>>>>> origin/main
     return [
         "本规范适用于 A4 纸张，页边距上 3.7 厘米、下 3.5 厘米、左 2.8 厘米、右 2.6 厘米。",
         "正文采用仿宋_GB2312 三号字，行距固定值 28 磅，首行缩进 2 字符。",

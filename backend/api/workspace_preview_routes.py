@@ -18,7 +18,10 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+<<<<<<< HEAD
 from backend.compat.win7.pydantic_compat import ConfigDict
+=======
+>>>>>>> origin/main
 from backend.data import archive_reader, artifact_reader, artifact_repo
 from backend.data.database import get_database
 from backend.office.models import _constrained_list

@@ -18,7 +18,11 @@
 
 - PDF 全页高 DPI 视觉通道（`docs/technical/131-attachment-pipeline.md` 已列为后续项）。
 - 图级 bbox 高亮、点击引用跳到预览指定页（列为 M2，见 §5）。
+<<<<<<< HEAD
 - 矢量图（非嵌入位图）的裁切，复杂版式接入 MinerU（§157 部署方案）。
+=======
+- 矢量图（非嵌入位图）的裁切，复杂版式接入 MinerU（§154 部署方案）。
+>>>>>>> origin/main
 
 ## 2. 现状与根因
 
@@ -127,7 +131,11 @@ PDF 附件注入块内追加页标记文本与图清单：
 
 ### 文档
 
+<<<<<<< HEAD
 - [x] `docs/technical/159-pdf-figure-citation.md` + README 索引
+=======
+- [x] `docs/technical/156-pdf-figure-citation.md` + README 索引
+>>>>>>> origin/main
 - [x] `docs/user-manual/52-pdf-figure-citation.md` + README 索引
 - [x] 更新 `docs/technical/131-attachment-pipeline.md` 的「未完成项」
 
@@ -138,7 +146,11 @@ PDF 附件注入块内追加页标记文本与图清单：
 | PR #3090（附件格式统一）未合并，同样修改 `chat_attachment_routes.py` / `legacy_routes.py` | 本分支改动限定在 PDF 分支与注入块；#3090 合并后 rebase，冲突点集中在提取函数 PDF 分支 |
 | win7 / Python 3.8 | 全部使用 `Optional[...]` / `List[...]`，不用 PEP 604；PyMuPDF 已在依赖内 |
 | 图表抽取耗时 | 发送侧线程池执行 + 清单缓存；解析失败 fail-safe 跳过，不阻断聊天 |
+<<<<<<< HEAD
 | 矢量图/复杂版式漏抽 | 文档声明边界；后续接 MinerU（§157）或页渲染兜底 |
+=======
+| 矢量图/复杂版式漏抽 | 文档声明边界；后续接 MinerU（§154）或页渲染兜底 |
+>>>>>>> origin/main
 | Token 成本 | 只注入图清单（文字），不注入图片字节；模型按需引用 URL |
 | 隐私 | 裁图只落本地 `data/media`；仅当模型需看图时才会发往模型端点 |
 

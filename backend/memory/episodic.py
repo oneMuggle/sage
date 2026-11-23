@@ -174,10 +174,13 @@ class EpisodicMemory:
         source_message_id: Optional[str] = None,
         memory_category: Optional[str] = None,
         summary: Optional[str] = None,
+<<<<<<< HEAD
         scope: Optional[str] = None,
         project_key: Optional[str] = None,
         supersedes_id: Optional[str] = None,
         agent_id: Optional[str] = None,
+=======
+>>>>>>> origin/main
         title: Optional[str] = None,
     ) -> str:
         """

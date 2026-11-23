@@ -123,6 +123,7 @@ class TestMemoryAdapterStore:
             memory_type="episodic",
             importance=7,
             tags=["preference", "food"],
+<<<<<<< HEAD
             metadata={
                 "session_id": "session-123",
                 "tags": ["preference", "food"],
@@ -133,6 +134,9 @@ class TestMemoryAdapterStore:
                 # 2026-11-17 记忆详情化：标题随 metadata/kwarg 透传
                 "title": None,
             },
+=======
+            metadata={"session_id": "session-123", "tags": ["preference", "food"], "title": None},
+>>>>>>> origin/main
             session_id="session-123",
             agent_id=None,
             title=None,

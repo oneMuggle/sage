@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+<<<<<<< HEAD
 from typing import List
+=======
+>>>>>>> origin/main
 
 from backend.office.edit import update_pptx
 from backend.office.ppt import read_ppt
@@ -39,7 +42,11 @@ def _make_deck(path: Path, *, images: bool = False) -> Path:
     return path
 
 
+<<<<<<< HEAD
 def _titles(path: Path) -> List[str]:
+=======
+def _titles(path: Path) -> list[str]:
+>>>>>>> origin/main
     result = read_ppt(path)
     return [slide.text_blocks[0] if slide.text_blocks else "" for slide in result.slides]
 

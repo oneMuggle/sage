@@ -487,6 +487,7 @@ class MemoryAdapter:
         # 统一分类（与 MemoryManager 共用模块级 classify_memory_type,消除规则漂移）
         memory_type = classify_memory_type("auto", importance, content)
 
+<<<<<<< HEAD
         # 构建元数据（含 win7 Task 4 / Gap A 可追溯性字段，经 MemoryManager →
         # EpisodicMemory 链写入 source_turn_id / source_message_id / memory_category 列）
         metadata = {
@@ -497,6 +498,11 @@ class MemoryAdapter:
             "memory_category": memory_category,
             "title": title,
         }
+=======
+        # 构建元数据（main 无 win7 的 traceability 字段；
+        # 2026-11-17 记忆详情化：title 随 metadata/memorize 透传）
+        metadata = {"session_id": session_id, "tags": tags or [], "title": title}
+>>>>>>> origin/main
 
         # P3 (Mem0 风格): 写入前冲突消解——NOOP 复用既有记忆 ID,
         # UPDATE 写新行并使旧行失效;返回 None 表示按 ADD 走原路径。

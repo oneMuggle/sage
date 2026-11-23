@@ -790,12 +790,15 @@ class PreferenceLearningTask(BaseEvolutionTask):
                     source="evolution",
                     evidence_session_id=None,
                     dimension=key,
+<<<<<<< HEAD
                 )
             for item in llm_free_text:
                 profile_store.add(
                     content=f"用户偏好{item['category']}: {item['preference']}",
                     category="preference",
                     importance=6,
+=======
+>>>>>>> origin/main
                 )
         except Exception as exc:  # noqa: BLE001 — 偏好写 user_profile 是旁路，不阻断主流程
             logger.warning(f"偏好写入 user_profile 失败（旁路）: {exc}")
@@ -1529,6 +1532,7 @@ class MemoryReflectionTask(BaseEvolutionTask):
     DEFAULT_BACKLOG_BATCH_LIMIT = 80
     #: 与 conflict.NOOP_THRESHOLD 同值：字面近重复判定
     DEDUPE_SIMILARITY = 0.97
+<<<<<<< HEAD
     #: 语义嵌入器可用时的近重复阈值 —— 字面 0.97 太严，
     #: 同义改写（"喜欢简洁" vs "偏好简短"）语义余弦通常 0.92+。
     SEMANTIC_DEDUPE_SIMILARITY = 0.92
@@ -1542,6 +1546,13 @@ class MemoryReflectionTask(BaseEvolutionTask):
     CLUSTER_SIMILARITY = 0.75
     #: 少于 3 条不生成主题摘要 —— 2 条同主题更接近重复，交给去重/MERGE
     MIN_CLUSTER_SIZE = 3
+=======
+    #: 语义嵌入器可用时的近重复阈值（同义改写通常 0.92+）
+    SEMANTIC_DEDUPE_SIMILARITY = 0.92
+    #: 单组送 LLM 的条数上限（控提示词体积）
+    LLM_GROUP_LIMIT = 40
+    LLM_CONTENT_TRUNC = 160
+>>>>>>> origin/main
 
     def __init__(
         self, db=None, memory_manager=None, llm_client=None, config: dict = None
@@ -1724,9 +1735,38 @@ class MemoryReflectionTask(BaseEvolutionTask):
 
     # ---- 启发式：组内近重复去重 ---------------------------------------------
 
+<<<<<<< HEAD
     def _dedupe_similarity_fn(self, rows: List[dict]):
         """返回 ``(相似度函数, 阈值)``：语义可用 0.92，否则字面 0.97。
 
+=======
+    def _resolve_semantic_embedder(self):
+        """解析语义嵌入器：manager 注入优先，其次工厂；不可用返回 None。"""
+        if self.memory_manager is None:
+            return None
+        candidates = []
+        source = getattr(self.memory_manager, "embedder", None)
+        if source is not None:
+            candidates.append(source)
+        try:
+            from backend.memory.embedder_factory import create_embedder
+
+            candidates.append(create_embedder)
+        except Exception as exc:  # noqa: BLE001 — 工厂不可用按无语义处理
+            logger.debug(f"语义嵌入器工厂不可用，去重退化为字面: {exc}")
+        for candidate in candidates:
+            try:
+                embedder = candidate if hasattr(candidate, "encode") else candidate()
+            except Exception:  # noqa: BLE001 — 实例化失败按不可用处理
+                continue
+            if embedder is not None and getattr(embedder, "is_semantic", False):
+                return embedder
+        return None
+
+    def _dedupe_similarity_fn(self, rows: List[dict]):
+        """返回 ``(相似度函数, 阈值)``：语义可用 0.92，否则字面 0.97。
+
+>>>>>>> origin/main
         语义嵌入器存在但编码失败时，阈值随函数一起退回字面 0.97 ——
         避免用 0.92 的字面相似度误合并不同事实。
         """
@@ -1742,7 +1782,13 @@ class MemoryReflectionTask(BaseEvolutionTask):
                 logger.debug(f"反思去重语义编码失败，退化为字面相似度: {exc}")
                 vectors = None
             if vectors and len(vectors) == len(rows):
+<<<<<<< HEAD
                 by_id = {r["id"]: v for r, v in zip(rows, vectors)}
+=======
+                by_id = {
+                    rows[i]["id"]: vectors[i] for i in range(len(rows))
+                }
+>>>>>>> origin/main
                 return (
                     lambda a, b: _cosine_similarity(by_id[a["id"]], by_id[b["id"]]),
                     self.SEMANTIC_DEDUPE_SIMILARITY,
@@ -2241,7 +2287,11 @@ class MemoryReflectionTask(BaseEvolutionTask):
                 f"（recent {stats.get('recent_scanned', 0)} / "
                 f"backlog {stats.get('backlog_scanned', 0)}）, "
                 f"去重 {stats['deduped']}, 合并 {stats['merged']}, "
+<<<<<<< HEAD
                 f"失效 {stats['invalidated']}, 主题摘要 {stats['consolidated']}"
+=======
+                f"失效 {stats['invalidated']}"
+>>>>>>> origin/main
             )
             record_evolution_log(
                 self.db,

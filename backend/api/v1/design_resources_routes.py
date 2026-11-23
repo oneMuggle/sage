@@ -10,9 +10,14 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
+<<<<<<< HEAD
 from pydantic import BaseModel
 
 from backend.compat.win7.pydantic_compat import ConfigDict
+=======
+from pydantic import BaseModel, ConfigDict
+
+>>>>>>> origin/main
 from backend.design import get_design_studio
 from backend.design.errors import (
     DesignError,

@@ -14,9 +14,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Literal, Optional
 
+<<<<<<< HEAD
 from pydantic import BaseModel
 
 from backend.compat.win7.pydantic_compat import ConfigDict
+=======
+from pydantic import BaseModel, ConfigDict
+>>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 

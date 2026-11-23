@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Systems, Not Surfaces — Swiss Grid Deck</title>
+  <style>
+    :root {
+      --ink: #000000;
+      --paper: #ffffff;
+      --mute: #6b6b6b;
+      --accent: #002fa7; /* Klein Blue */
+      --gutter: 80px;
+      --rule: 2px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-snap-type: y mandatory; }
+
+    body {
+      background: var(--ink);
+      color: var(--ink);
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-weight: 200;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+    }
+
+    /* ---------- Slide shell ---------- */
+    .slide {
+      position: relative;
+      width: 100%;
+      min-height: 100vh;
+      padding: var(--gutter);
+      display: grid;
+      grid-template-columns: repeat(16, minmax(0, 1fr));
+      grid-template-rows: auto 1fr;
+      column-gap: var(--gutter);
+      row-gap: 40px;
+      background: var(--paper);
+      scroll-snap-align: start;
+      overflow: hidden;
+    }
+
+    .slide-meta {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      border-bottom: var(--rule) solid var(--ink);
+      padding-bottom: 16px;
+    }
+
+    .label {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      line-height: 1.2;
+    }
+    .label--mute { color: var(--mute); }
+
+    .layout {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(16, minmax(0, 1fr));
+      column-gap: var(--gutter);
+      min-height: 0;
+    }
+
+    /* ---------- Title ---------- */
+    .layout--center {
+      align-content: center;
+      row-gap: 40px;
+    }
+
+    .kicker {
+      grid-column: 1 / span 7;
+      border-top: 12px solid var(--accent);
+      padding-top: 24px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .display {
+      grid-column: 1 / span 13;
+      font-size: clamp(3.5rem, 8vw, 9rem);
+      line-height: 0.92;
+      letter-spacing: -0.045em;
+      font-weight: 800;
+    }
+
+    .deck-sub {
+      grid-column: 1 / span 6;
+      font-size: clamp(1rem, 1.35vw, 1.5rem);
+      font-weight: 200;
+      line-height: 1.4;
+      color: var(--ink);
+    }
+
+    .byline {
+      grid-column: 1 / span 5;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    /* ---------- Data / Chart ---------- */
+    .layout--data {
+      align-content: start;
+      grid-template-rows: auto 1fr auto;
+      row-gap: 48px;
+      padding-top: 48px;
+    }
+
+    .headline {
+      grid-column: 1 / span 10;
+      grid-row: 1;
+      font-size: clamp(2.5rem, 4.6vw, 5rem);
+      line-height: 0.98;
+      letter-spacing: -0.035em;
+      font-weight: 800;
+    }
+
+    .stat {
+      grid-column: 12 / -1;
+      grid-row: 1;
+      align-self: start;
+      border-top: var(--rule) solid var(--ink);
+      padding-top: 16px;
+    }
+    .stat__value {
+      display: block;
+      font-size: clamp(3.5rem, 6vw, 6.5rem);
+      font-weight: 800;
+      line-height: 0.9;
+      letter-spacing: -0.045em;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+    .stat__label {
+      display: block;
+      margin-top: 16px;
+      max-width: 20ch;
+      font-size: 14px;
+      font-weight: 200;
+      line-height: 1.45;
+      color: var(--ink);
+    }
+
+    .chart {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      display: grid;
+      row-gap: 20px;
+      align-self: center;
+    }
+
+    .chart__row {
+      display: grid;
+      grid-template-columns: 3fr 7fr 1fr;
+      align-items: center;
+      column-gap: 32px;
+      border-top: var(--rule) solid var(--ink);
+      padding-top: 16px;
+    }
+    .chart__row:last-child {
+      border-bottom: var(--rule) solid var(--ink);
+      padding-bottom: 16px;
+    }
+    .chart__label {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .chart__track { height: 24px; }
+    .chart__bar {
+      display: block;
+      height: 100%;
+      background: var(--ink);
+    }
+    .chart__value {
+      font-size: 20px;
+      font-weight: 700;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .chart__row--accent .chart__bar { background: var(--accent); }
+    .chart__row--accent .chart__value { color: var(--accent); }
+
+    .source {
+      grid-column: 1 / -1;
+      grid-row: 3;
+      font-size: 12px;
+      font-weight: 200;
+      color: var(--mute);
+    }
+
+    /* ---------- Quote ---------- */
+    .layout--quote { align-content: center; }
+
+    .quote {
+      grid-column: 2 / span 12;
+    }
+    .quote__mark {
+      display: block;
+      font-size: clamp(4rem, 7vw, 8rem);
+      line-height: 0.6;
+      color: var(--accent);
+      font-weight: 800;
+      margin-bottom: 32px;
+    }
+    .quote__text {
+      font-size: clamp(3rem, 6vw, 7rem);
+      line-height: 0.98;
+      letter-spacing: -0.04em;
+      font-weight: 800;
+      text-wrap: balance;
+    }
+    .quote__attribution {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      margin-top: 48px;
+      border-top: var(--rule) solid var(--ink);
+      padding-top: 16px;
+      max-width: max-content;
+    }
+    .quote__name {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .quote__role {
+      font-size: 13px;
+      font-weight: 200;
+      color: var(--mute);
+    }
+
+    /* ---------- Page number ---------- */
+    .slide-number {
+      position: absolute;
+      right: var(--gutter);
+      bottom: 40px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 900px) {
+      :root { --gutter: 20px; }
+      .slide {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        padding: 24px;
+        row-gap: 24px;
+      }
+      .layout {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        row-gap: 24px;
+      }
+      .kicker, .display, .deck-sub, .byline,
+      .headline, .stat, .chart, .source, .quote {
+        grid-column: 1 / -1;
+        grid-row: auto;
+      }
+      .display { font-size: clamp(2.75rem, 14vw, 4.5rem); }
+      .headline { font-size: clamp(2rem, 9vw, 3rem); }
+      .quote__text { font-size: clamp(2rem, 10vw, 3.25rem); }
+      .chart__row { grid-template-columns: 1fr; row-gap: 8px; }
+      .chart__value { text-align: left; }
+      .slide-number { right: 24px; bottom: 16px; }
+    }
+
+    /* ---------- Print ---------- */
+    @media print {
+      html { scroll-snap-type: none; }
+      .slide { min-height: auto; page-break-after: always; }
+      .slide-number { position: static; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+
+    <!-- 01 Title -->
+    <section class="slide slide--title" id="title" aria-label="Title">
+      <header class="slide-meta">
+        <span class="label">Sage Design Studio</span>
+        <span class="label label--mute">Design review · Q4 2026</span>
+      </header>
+      <div class="layout layout--center">
+        <p class="kicker">A grid-first approach</p>
+        <h1 class="display">Systems,<br>not surfaces.</h1>
+        <p class="deck-sub">A working review of the grid, the type, and the rules behind the interface.</p>
+        <p class="byline">For international product teams</p>
+      </div>
+      <span class="slide-number">01 / 03</span>
+    </section>
+
+    <!-- 02 Data / Chart -->
+    <section class="slide slide--data" id="data" aria-label="Regional revenue concentration, FY2026">
+      <header class="slide-meta">
+        <span class="label">02 — Data</span>
+        <span class="label label--mute">Regional revenue mix · FY2026</span>
+      </header>
+      <div class="layout layout--data">
+        <h2 class="headline">Revenue concentration is shifting to APAC</h2>
+        <div class="stat">
+          <span class="stat__value">18%</span>
+          <span class="stat__label">APAC share of new revenue — up 9 points year over year</span>
+        </div>
+        <div class="chart" role="img" aria-label="Revenue share: North America 46%, Europe 27%, Asia-Pacific 18%, Latin America 6%, Middle East and Africa 3%.">
+          <div class="chart__row">
+            <span class="chart__label">North America</span>
+            <span class="chart__track"><span class="chart__bar" style="width:100%"></span></span>
+            <span class="chart__value">46%</span>
+          </div>
+          <div class="chart__row">
+            <span class="chart__label">Europe</span>
+            <span class="chart__track"><span class="chart__bar" style="width:59%"></span></span>
+            <span class="chart__value">27%</span>
+          </div>
+          <div class="chart__row chart__row--accent">
+            <span class="chart__label">Asia-Pacific</span>
+            <span class="chart__track"><span class="chart__bar" style="width:39%"></span></span>
+            <span class="chart__value">18%</span>
+          </div>
+          <div class="chart__row">
+            <span class="chart__label">Latin America</span>
+            <span class="chart__track"><span class="chart__bar" style="width:13%"></span></span>
+            <span class="chart__value">6%</span>
+          </div>
+          <div class="chart__row">
+            <span class="chart__label">MEA</span>
+            <span class="chart__track"><span class="chart__bar" style="width:7%"></span></span>
+            <span class="chart__value">3%</span>
+          </div>
+        </div>
+        <p class="source">Source: internal finance data, FY2026. Percentages rounded.</p>
+      </div>
+      <span class="slide-number">02 / 03</span>
+    </section>
+
+    <!-- 03 Quote -->
+    <section class="slide slide--quote" id="quote" aria-label="Quote">
+      <header class="slide-meta">
+        <span class="label">03 — Quote</span>
+        <span class="label label--mute">Principle</span>
+      </header>
+      <div class="layout layout--quote">
+        <blockquote class="quote">
+          <span class="quote__mark" aria-hidden="true">“</span>
+          <p class="quote__text">Good design is as little design as possible.</p>
+          <footer class="quote__attribution">
+            <span class="quote__name">Dieter Rams</span>
+            <span class="quote__role">Industrial designer</span>
+          </footer>
+        </blockquote>
+      </div>
+      <span class="slide-number">03 / 03</span>
+    </section>
+
+  </main>
+
+  <script>
+    (function () {
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var index = 0;
+
+      function setHash(id) {
+        if (location.hash === '#' + id) return;
+        try {
+          history.replaceState(null, '', '#' + id);
+        } catch (err) {
+          location.hash = id;
+        }
+      }
+
+      function go(n, moveScroll) {
+        index = Math.max(0, Math.min(slides.length - 1, n));
+        if (moveScroll !== false) {
+          slides[index].scrollIntoView({ behavior: 'auto', block: 'start' });
+        }
+        setHash(slides[index].id);
+      }
+
+      document.addEventListener('keydown', function (e) {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        var tag = (e.target && e.target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
+
+        switch (e.key) {
+          case 'ArrowRight':
+          case 'ArrowDown':
+          case 'PageDown':
+          case ' ':
+          case 'Spacebar':
+            e.preventDefault();
+            go(index + 1);
+            break;
+          case 'ArrowLeft':
+          case 'ArrowUp':
+          case 'PageUp':
+            e.preventDefault();
+            go(index - 1);
+            break;
+          case 'Home':
+            e.preventDefault();
+            go(0);
+            break;
+          case 'End':
+            e.preventDefault();
+            go(slides.length - 1);
+            break;
+        }
+      });
+
+      window.addEventListener('hashchange', function () {
+        var i = slides.findIndex(function (s) { return '#' + s.id === location.hash; });
+        if (i > -1 && i !== index) go(i, false);
+      });
+
+      if ('IntersectionObserver' in window) {
+        var observer = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (!entry.isIntersecting) return;
+            index = slides.indexOf(entry.target);
+            setHash(slides[index].id);
+          });
+        }, { threshold: 0.6 });
+        slides.forEach(function (s) { observer.observe(s); });
+      }
+
+      var initial = slides.findIndex(function (s) { return '#' + s.id === location.hash; });
+      if (initial > -1) {
+        index = initial;
+        slides[index].scrollIntoView({ behavior: 'auto', block: 'start' });
+      } else {
+        setHash(slides[0].id);
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -19,7 +19,10 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.api.orch_pause_routes import router as _pause_router
+<<<<<<< HEAD
 from backend.compat.win7.pydantic_compat import field_validator
+=======
+>>>>>>> origin/main
 from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与文档语义保留
     _SQLITE_LOCK,
     make_with_db_lock,

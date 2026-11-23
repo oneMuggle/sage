@@ -203,6 +203,7 @@ def _segment_for_index(text: Optional[str]) -> str:
     return " ".join(w.strip() for w in jieba.cut_for_search(text) if w.strip())
 
 
+<<<<<<< HEAD
 def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     """Add source_turn_id / source_message_id / memory_category columns and
     supporting indexes to ``memories_episodic``.
@@ -233,6 +234,8 @@ def _migrate_memory_traceability(db: sqlite3.Connection) -> None:
     db.commit()
 
 
+=======
+>>>>>>> origin/main
 def warm_jieba() -> None:
     """预热 jieba 词典，避免首次 FTS 写入冷启动 500ms+。
 
@@ -851,6 +854,20 @@ class Database:
             cursor.execute(
                 "ALTER TABLE memories_episodic ADD COLUMN agent_id TEXT"
             )
+<<<<<<< HEAD
+=======
+        # M3-Task 4 / Gap A: 记忆可追溯性三列（来源 turn/message + 分类）。
+        # 与 win7 #2878 同口径；存量行保持 NULL。
+        for _col, _typedef in (
+            ("source_turn_id", "TEXT"),
+            ("source_message_id", "TEXT"),
+            ("memory_category", "TEXT"),
+        ):
+            if _col not in _episodic_columns:
+                cursor.execute(
+                    f"ALTER TABLE memories_episodic ADD COLUMN {_col} {_typedef}"
+                )
+>>>>>>> origin/main
         # 2026-11-17 记忆详情化：结构化标题（写入时确定性生成/LLM 提取/用户手填）。
         # 存量行为 NULL —— 读取路径（_enrich_memory_records）按 content 兜底推导。
         if "title" not in _episodic_columns:

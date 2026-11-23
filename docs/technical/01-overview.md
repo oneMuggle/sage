@@ -2,7 +2,7 @@
 
 > **⚠️ 历史文档说明（2026-09 更新）**：本章写于 2026-05 立项阶段，其中 §1.1 的 Win7 问题陈述与 §1.4 的 Tauri 选型反映的是当时的决策。
 > 2026-06-13 起主线已迁移到 **Electron 21.4.4 + Python 3.11**（Tauri 实现归档于 `archive/src-tauri-2026-06-13-main-migration/`），
-> Win7 支持改由 `release/win7` LTS 分支承担（见 [`technical/31-win7-lts.md`](./technical/31-win7-lts.md)）。
+> Win7 支持改由 `release/win7` LTS 分支承担（见 [`technical/31-win7-lts.md`](./31-win7-lts.md)）。
 > 当前产品定位、能力清单与技术栈以 [README.md](../README.md) 与 [`02-architecture.md`](./02-architecture.md) 为准；本章保留作为需求与指标基线。
 
 ## 1.1 项目背景

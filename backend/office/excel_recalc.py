@@ -24,9 +24,13 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
+<<<<<<< HEAD
 from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict
+=======
+from pydantic import BaseModel, ConfigDict, Field
+>>>>>>> origin/main
 
 from .export_pdf import _EXPORT_LOCK, _locate_soffice
 from .path_safety import resolve_within

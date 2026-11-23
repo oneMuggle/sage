@@ -14,7 +14,11 @@
 4. [记忆系统](./technical/04-memory.md)
 5. [Agent 引擎](./technical/05-agent.md)
 6. [工具系统](./technical/06-tools.md)
+<<<<<<< HEAD
 7. [技能系统](./technical/07-skills.md)
+=======
+7. [技能系统](./technical/24-skills-system.md)
+>>>>>>> origin/main
 8. [进化系统](./technical/08-evolution.md)
 9. [前端设计](./technical/09-frontend.md)
 10. [API 接口](./technical/10-api.md)
@@ -45,7 +49,11 @@ Sage 维护两条独立分支：
 
 | 子目录 | 定位 | 维护规则 |
 |---|---|---|
+<<<<<<< HEAD
 | [`technical/`](./technical/) | 核心技术文档(01-14 基础架构 + 15-158 横切关注点) | 新功能模块加章节,编号顺延 |
+=======
+| [`technical/`](./technical/) | 核心技术文档(01-14 基础架构 + 15-157 横切关注点) | 新功能模块加章节,编号顺延 |
+>>>>>>> origin/main
 | [`user-manual/`](./user-manual/) | 终端用户操作指南 | 用户可见功能完成后加章节 |
 | [`plans/`](./plans/) | **仅进行中的实施计划** | 功能完成后并入技术手册/用户手册并删除 |
 | [`memory/`](./memory/) | 已完成特性的 mini-archive | 仅落档,新功能往 technical/user-manual 不归此 |

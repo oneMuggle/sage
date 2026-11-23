@@ -1,21 +1,253 @@
 {
-  "timestamp": "2026-11-09T13:52:03",
+  "timestamp": "2026-11-23T00:24:55",
   "source": "origin/main",
   "target": "origin/release/win7",
   "branch": "sync/win7-main",
-  "status": "CONFLICT（2 个文件需人工处理）",
+  "status": "CONFLICT（59 个文件需人工处理）",
   "conflicts": [
+    {
+      "path": ".github/dependency-audit-policy.json",
+      "cls": "A"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "cls": "A"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "cls": "A"
+    },
     {
       "path": "architecture-baseline.json",
       "cls": "A"
     },
     {
+      "path": "backend/adapters/out/memory/adapter.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/api/chat_attachment_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/diagnostic_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/office_ai_review_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/orch_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/v1/design_resources_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/v1/design_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/api/workspace_preview_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/data/database.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/design/craft_loader.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/design/design_studio.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/design/lint.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/design/messages_store.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/design/pptx_mapper.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/design/tweaks_store.py",
+      "cls": "A"
+    },
+    {
       "path": "backend/main.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/memory/episodic.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/memory/extractor.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/memory/manager.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/model_catalog/schemas.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/excel_recalc.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/models/_excel.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/models/_shared.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/models/_word_gen.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/pdf_to_word.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/office/word_rule_extract_template.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/orchestration/llm_factory.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/scheduler/evolution.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/integration/test_asr_api.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/integration/test_evolution_run_api.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/memory/test_migration.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/office/test_ppt_edit_ops.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/office/test_render_verify.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/office/test_word_rule_extract.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_agent_step_done.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_browser_account_service.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_chart_embedder.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_memory_adapter.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_r39_pdf_docx_extract.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/base.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/browser_cdp.py",
+      "cls": "A"
+    },
+    {
+      "path": "docs/README.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/plans/2026-11-15_pdf-figure-citation.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/plans/2026-11-17_controlled-browser-use.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/technical/116-local-ocr.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/technical/131-attachment-pipeline.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/technical/147-project-workbench-ia.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/technical/README.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/user-manual/49-web-fallback.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/user-manual/README.md",
+      "cls": "A"
+    },
+    {
+      "path": "scripts/check-bundle-size.mjs",
+      "cls": "A"
+    },
+    {
+      "path": "scripts/check_dependency_audit.py",
+      "cls": "A"
+    },
+    {
+      "path": "scripts/sage-web.bat",
+      "cls": "A"
+    },
+    {
+      "path": "src/features/office/sidebar/OfficeAiSidebarHost.tsx",
+      "cls": "A"
+    },
+    {
+      "path": "src/features/office/sidebar/useAiCapabilities.ts",
       "cls": "A"
     }
   ],
-  "auto_resolved": [],
-  "source_sha": "6c0ab03d",
-  "target_sha": "afb537a5",
-  "commits_behind": 3
+  "auto_resolved": [
+    "electron-builder.yml",
+    "package-lock.json",
+    "package.json"
+  ],
+  "source_sha": "134780f2d",
+  "target_sha": "504c94ff9",
+  "commits_behind": 119
 }
