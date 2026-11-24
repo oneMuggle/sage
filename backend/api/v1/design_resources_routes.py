@@ -7,13 +7,23 @@ the main design router.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from backend.compat.win7.pydantic_compat import ConfigDict, model_validator
+from backend.compat.win7.pydantic_compat import ConfigDict
+
+try:
+    from pydantic import model_validator
+
+    PYDANTIC_V2 = True
+except ImportError:  # pragma: no cover — win7 py38 钉 pydantic 1.10
+    from pydantic import root_validator as model_validator  # type: ignore
+
+    PYDANTIC_V2 = False
+
 from backend.data.database import get_database
 from backend.design import get_design_studio
 from backend.design.errors import (
@@ -47,13 +57,26 @@ class OutlineRequest(BaseModel):
     file_path: Optional[str] = None
     doc_id: Optional[str] = None
 
-    @model_validator(mode="after")
-    def _exactly_one_source(self) -> OutlineRequest:
-        has_path = bool(self.file_path and str(self.file_path).strip())
-        has_id = bool(self.doc_id and str(self.doc_id).strip())
-        if has_path == has_id:
-            raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
-        return self
+    if PYDANTIC_V2:
+
+        @model_validator(mode="after")
+        def _exactly_one_source(self) -> OutlineRequest:
+            has_path = bool(self.file_path and str(self.file_path).strip())
+            has_id = bool(self.doc_id and str(self.doc_id).strip())
+            if has_path == has_id:
+                raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
+            return self
+
+    else:  # pragma: no cover — win7 py38 + pydantic 1.10
+
+        @model_validator
+        @classmethod
+        def _exactly_one_source(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+            has_path = bool(values.get("file_path") and str(values.get("file_path")).strip())
+            has_id = bool(values.get("doc_id") and str(values.get("doc_id")).strip())
+            if has_path == has_id:
+                raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
+            return values
 
 
 class EmbedChartRequest(BaseModel):
@@ -73,13 +96,26 @@ class SourcePreviewRequest(BaseModel):
     file_path: Optional[str] = None
     doc_id: Optional[str] = None
 
-    @model_validator(mode="after")
-    def _exactly_one_source(self) -> SourcePreviewRequest:
-        has_path = bool(self.file_path and str(self.file_path).strip())
-        has_id = bool(self.doc_id and str(self.doc_id).strip())
-        if has_path == has_id:
-            raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
-        return self
+    if PYDANTIC_V2:
+
+        @model_validator(mode="after")
+        def _exactly_one_source(self) -> SourcePreviewRequest:
+            has_path = bool(self.file_path and str(self.file_path).strip())
+            has_id = bool(self.doc_id and str(self.doc_id).strip())
+            if has_path == has_id:
+                raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
+            return self
+
+    else:  # pragma: no cover — win7 py38 + pydantic 1.10
+
+        @model_validator
+        @classmethod
+        def _exactly_one_source(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+            has_path = bool(values.get("file_path") and str(values.get("file_path")).strip())
+            has_id = bool(values.get("doc_id") and str(values.get("doc_id")).strip())
+            if has_path == has_id:
+                raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
+            return values
 
 
 # ---------------------------------------------------------------------------
