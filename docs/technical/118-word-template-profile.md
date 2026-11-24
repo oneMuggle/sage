@@ -74,7 +74,8 @@
 - 富文本（RichText）槽位、图片尺寸/裁剪参数暂不支持；
 - 自定义重复表格行/条件块 schema 暂不支持（docxtpl 循环仍可用）；
 - 书签跨段落暂不支持；
-- 前端表单/模板库 instantiate 工具未接入。
+- 模板库 instantiate 工具未接入（旧 IPC `instantiateTemplate` 仅支持占位符，未复用本端点）；
+- 前端入口（M6e）：文档页「模板填充」→ `WordTemplateFillDialog`，选模板分析槽位 → 填值 → 生成 `<stem>-filled.docx` → 可一键导入文档库预览；对话框内暂不内联预览生成结果。
 
 ## 6. 测试
 

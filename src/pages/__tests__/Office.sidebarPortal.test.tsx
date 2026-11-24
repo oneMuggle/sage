@@ -67,6 +67,7 @@ vi.mock('../../features/office', () => {
     ),
     OfficeDuplicateDialog: () => null,
     OfficeCompareDialog: () => null,
+    WordTemplateFillDialog: () => null,
     OfficeEditPreviewDialog: () => null,
     OfficeSnapshotPanel: () => null,
     GenerateWorkspace: () => <div data-testid="office-generate-workspace" />,
