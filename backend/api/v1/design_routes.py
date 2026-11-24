@@ -24,9 +24,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict
 
 from backend.api.v1.design_shared import map_design_error as _map_design_error
+from backend.api.v1.design_source_models import BindSourceRequest
 from backend.api.v1.design_streaming import (
     sse_event as _sse_event,
     stream_studio_call as _stream_studio_call,
@@ -97,25 +98,6 @@ class ExportRequest(BaseModel):
 
     format: str = "html"
     inline: bool = False
-
-
-class BindSourceRequest(BaseModel):
-    """POST /design/projects/{id}/source body."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    file_path: Optional[str] = None
-    doc_id: Optional[str] = None
-    kind: Optional[str] = None
-    name: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _exactly_one_source(self) -> BindSourceRequest:
-        has_path = bool(self.file_path and str(self.file_path).strip())
-        has_id = bool(self.doc_id and str(self.doc_id).strip())
-        if has_path == has_id:
-            raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
-        return self
 
 
 class TweaksRequest(BaseModel):
