@@ -311,7 +311,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 - [x] 视觉兜底基础：Office/PDF 扫描页 OCR 已有设置开关（`ocr_config.office_enabled`）；复杂版面 VLM 抽页检查仍待后续
 - [x] PDF 通用操作：合并/拆分/旋转/抽页/删页/水印/页码（`backend/office/pdf_ops.py`）
 - [x] PDF 读取补齐：页面图片返回（opt-in、单图 ≤1.5MB/总预算 20MB、`image_count`）+ 真 appearance flatten（旧版 PyMuPDF 回退只读位）
-- [ ] PDF 复杂表格兜底（Docling/TableFormer 路线随可选后端）
+- [x] PDF 复杂表格兜底（Docling/TableFormer 路线随可选后端；M6g）—— `extract_document` auto 模式候选链（docling → markitdown → light）逐条尝试，可选后端转换抛错自动回退到下一候选并在 warnings 记 `extractor_fallback`；`DoclingExtractor` 把 `document.tables` 单独输出为 `table` 块（anchor 含 `source=docling`），让 RAG/compare 能锚定到具体表格索引；`light` 的 PyMuPDF `find_tables` 仅识别有框线表格为已知限制
 - [x] `office_create` 的 pdf 枚举：明确拒绝并引导 `office_generate_pdf`（消除分派漂移）
 - [x] 工具面一致性：`office_delete` / `workspace_search` 覆盖 pdf/csv；Wiki 队列 PDF 路径
 - [x] `POST /office/extract`（统一提取）与 `POST /office/compare`（Word/Excel/PPT/PDF/CSV diff + Markdown 报告）
@@ -403,6 +403,12 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 测试：`test_rule_executor.py` 新增 6 例（xlsx 块分类/锚点、scope 命中与 body 空、500 行截断、pptx 块分类、scope 与锚点、不支持后缀）；`test_rules_routes.py` 新增端点用例（xlsx → 200 + 锚点）
 > - 门禁：ruff / py38 兼容（0 违规）/ silent-exceptions（39/39）/ architecture 棘轮（exit=0）全绿；定向 pytest 47 passed
 
+> **实施记录（2026-11-24，M6g PDF 复杂表格兜底）**
+> - `backend/office/extractors/service.py`：`_select_backend` → `_candidate_backends`（返回有序候选链）；`extract_document` 遍历候选，auto 模式下前一条失败则回退到下一条（`extractor_fallback` warning），最后一条失败归一为 `OfficeParseError`；显式 `backend=` 永不回退
+> - `backend/office/extractors/optional.py::DoclingExtractor.extract()`：新增 `document.tables` 迭代，每表 `export_to_markdown()` 输出为 `ExtractedBlock(type="table", anchor={"table_index": N, "source": "docling"})`；单表失败不阻断整篇
+> - 测试：`test_extractors_m6b.py` 新增 3 例（auto 回退、最后候选失败归一、Docling 结构化表格块）
+> - 门禁：office 全量 1426 passed / 2 skipped；ruff / py38 兼容（0 违规）/ silent-exceptions（39/39）/ architecture 棘轮（exit=0，104 baselined）全绿
+
 ### M7 — 前端一致性与漂移清理（P1，对应 G11/G12）
 
 - [ ] 生成结果内联预览（复用 `DocumentCanvas`），结果卡不再只给「在文档页打开」
@@ -493,6 +499,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 | M6d Excel 图表数值 + PPT 图片渲染 | ✅ | 本轮提交 | 后端 unit 10 + 回归 1385；前端 7 新用例 / 回归 33；门禁绿 |
 | M6e Word 模板 Profile/填充前端入口 | ✅ | 本轮提交 | 前端 6 新用例 / 相关回归 32；tsc/eslint/prettier/architecture 绿 |
 | M6f Excel/PPT 基础规则审校 | ✅ | 本轮提交 | 后端 unit 6 + 端点 1；定向 pytest 47 passed；ruff/py38/silent/architecture 绿 |
+| M6g PDF 复杂表格兜底 | ✅ | 本轮提交 | 后端 unit 3 新增；office 全量 1426 passed；ruff/py38/silent/architecture 绿 |
 | M7 前端接入 | ⏳ | — | 未开始（M6b 前端批次已先行落 A/B/C/D 四项） |
 | M8 大文件/并发/沙箱 | ⏳ | — | 未开始 |
 
