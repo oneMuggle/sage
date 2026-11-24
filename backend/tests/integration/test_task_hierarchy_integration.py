@@ -77,7 +77,7 @@ async def test_hierarchy_flows_to_dispatch_and_persistence(tmp_path, monkeypatch
     assert dispatcher._states["t2"].depth == 1
 
     # 持久化层带层级
-    stored = dispatcher._orch_task_repo.get("t2")
+    stored = dispatcher._orch_task_repo.get("orch-e2e", "t2")
     assert stored is not None
     assert stored.parent_task_id == "t1"
     assert stored.depth == 1
