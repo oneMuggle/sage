@@ -1659,8 +1659,8 @@ class TestDesignRoutes:
         return conn, workspace
 
     async def test_outline_with_doc_id_succeeds(self, studio, tmp_path):
-        from backend.main import app
         from backend.design import office_sources
+        from backend.main import app
 
         conn, workspace = self._make_office_db(tmp_path)
         fake_db = MagicMock()
@@ -1775,8 +1775,8 @@ class TestDesignRoutes:
         assert "missing-id" in resp.json()["detail"]
 
     async def test_office_sources_lists_documents(self, studio, tmp_path):
-        from backend.main import app
         from backend.design import office_sources
+        from backend.main import app
 
         conn, workspace = self._make_office_db(tmp_path)
         fake_db = MagicMock()
@@ -1865,8 +1865,8 @@ class TestDesignRoutes:
         return conn, workspace
 
     async def test_bind_source_with_doc_id(self, studio, tmp_path):
-        from backend.main import app
         from backend.design import office_sources
+        from backend.main import app
 
         conn, workspace = self._make_excel_office_db(tmp_path)
         fake_db = MagicMock()
