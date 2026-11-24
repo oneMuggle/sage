@@ -18,7 +18,10 @@ vi.mock('../../../shared/api/officeGenerateApi', () => ({
   },
 }));
 vi.mock('../../../shared/api/officeApi', () => ({
-  officeApi: { listTemplates: vi.fn() },
+  officeApi: {
+    listTemplates: vi.fn(),
+    templateThumbnail: vi.fn().mockResolvedValue({ ok: false }),
+  },
 }));
 
 const mockedNl = vi.mocked(officeGenerateApi.generateFromNl);

@@ -375,11 +375,11 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 
 ### M7 — 前端一致性与漂移清理（P1，对应 G11/G12）
 
-- [ ] 生成结果内联预览（复用 `DocumentCanvas`），结果卡不再只给「在文档页打开」
-- [ ] `TemplateLibrary` 接回缩略图（现逻辑在未挂载的 `OfficeGenerateSubforms`），PPT 模板选版式走同一缩略图
-- [ ] 清理孤儿 `OfficeGenerateForm`；修正技术 §123 / 用户手册 §30 的过时描述（`GenerateWorkspace` + `OfficeIntake`）
+- [x] 生成结果内联预览（复用 `OfficePreviewPanel`），结果卡不再只给「在文档页打开」
+- [x] `TemplateLibrary` 接回缩略图（原在孤儿 `OfficeGenerateForm` 中的 `templateThumbnail` 调用已迁移）
+- [x] 清理孤儿 `OfficeGenerateForm`（已删除组件与测试、barrel 导出与 mock 已清理）；修正技术 §123 / 用户手册 §30 的过时描述
 - [ ] Design Studio Office 融合前端入口（Word→大纲 / 图表嵌入 / Live Artifact，原 M7 未做项）
-- [ ] 前端测试：生成内联预览、缩略图（附件预览、chip 点击已由 M6b 前端批次覆盖）
+- [x] 前端测试：`GenerateWorkspace` + `TemplateLibrary` 缩略图 mock 已同步
 
 ### M8 — 大文件、并发与可选沙箱（P2，对应 G7/G15）
 

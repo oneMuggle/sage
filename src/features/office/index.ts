@@ -18,7 +18,6 @@ export { OfficeEditPreviewDialog } from './OfficeEditPreviewDialog';
 export { buildUpdateOps } from './OfficeEditPreviewDialog';
 export { OfficeDuplicateDialog } from './OfficeDuplicateDialog';
 export { OfficeCompareDialog } from './OfficeCompareDialog';
-export { OfficeGenerateForm } from './OfficeGenerateForm';
 export { GenerateWorkspace } from './GenerateWorkspace';
 export { RulesWorkspace } from './rules/RulesWorkspace';
 export { TemplateLibrary } from './TemplateLibrary';
@@ -46,7 +45,6 @@ export function auditOfficeFeatureBarrel(): OfficeFeatureBarrelAuditReport {
     'buildUpdateOps',
     'OfficeDuplicateDialog',
     'OfficeCompareDialog',
-    'OfficeGenerateForm',
     'OfficeCapabilityBar',
     'WordPreview',
     'ExcelPreview',

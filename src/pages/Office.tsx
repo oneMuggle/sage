@@ -550,6 +550,12 @@ export function Office() {
         documents={documents}
         onGenerated={refresh}
         onOpenDocument={open}
+        readDocument={async (docId: string) => {
+          const data = await readDocument(docId);
+          const doc = documents.find((d) => d.id === docId);
+          if (!doc) throw new Error('Document not found');
+          return { docType: doc.doc_type, data: data as never } as OfficePreviewData;
+        }}
       />
 
       {/* JournalPanel 从原来的顶层独立面板折叠到 <details> 内，

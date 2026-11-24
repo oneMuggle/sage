@@ -21,6 +21,7 @@ export function TemplateLibrary({ workspacePath, selectedId, onSelect }: Templat
   const { t } = useI18n();
   const [templates, setTemplates] = useState<OfficeTemplateMeta[]>([]);
   const [state, setState] = useState<LoadState>('loading');
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const requestIdRef = useRef(0);
 
   const load = useCallback(async () => {
@@ -45,6 +46,30 @@ export function TemplateLibrary({ workspacePath, selectedId, onSelect }: Templat
       requestIdRef.current += 1;
     };
   }, [load]);
+
+  // M7: template first-page thumbnails. Decorative — failures just leave the
+  // entry without an image, so each request is swallowed independently.
+  useEffect(() => {
+    if (state !== 'ready' || templates.length === 0) return;
+    let cancelled = false;
+    for (const template of templates) {
+      void officeApi
+        .templateThumbnail({
+          workspace_path: workspacePath,
+          ...(template.source === 'builtin'
+            ? { template_id: template.id }
+            : { workspace_template: template.filename }),
+        })
+        .then((res) => {
+          if (cancelled || !res.ok || !res.data_url) return;
+          setThumbnails((prev) => ({ ...prev, [template.id]: res.data_url as string }));
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [state, templates, workspacePath]);
 
   return (
     <div data-testid="office-template-library" className="space-y-2">
@@ -93,6 +118,14 @@ export function TemplateLibrary({ workspacePath, selectedId, onSelect }: Templat
                 }`}
                 onClick={() => onSelect(template)}
               >
+                {thumbnails[template.id] ? (
+                  <img
+                    src={thumbnails[template.id]}
+                    alt=""
+                    data-testid={`office-template-library-thumb-${template.id}`}
+                    className="mb-1.5 h-24 w-full rounded object-cover"
+                  />
+                ) : null}
                 <span className="flex items-center justify-between gap-2">
                   <span className="text-sm text-text">{template.name}</span>
                   <span
