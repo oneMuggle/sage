@@ -21,7 +21,7 @@
 import type { ElectronAPI } from '../types/electron-api';
 
 import { isDemoMode } from './demoFlag';
-import { invokeViaHttp } from './webTransport';
+import { loadWebTransport } from './webTransportLoader';
 
 /** demo 拦截器按需加载 (R2): 仅演示模式才拉取 1800+ 行 demo 数据模块。 */
 let demoInterceptorsPromise: Promise<typeof import('./demoInterceptors')> | null = null;
@@ -60,6 +60,7 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   if (!api) {
     // 网页回退模式（SAGE_WEB_MODE）：纯浏览器没有 preload 桥，改走同源
     // HTTP —— 路由表复用 electron/commands.ts，与主进程 relay 同口径。
+    const { invokeViaHttp } = await loadWebTransport();
     return invokeViaHttp<T>(cmd, args ?? {});
   }
   try {
