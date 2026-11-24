@@ -200,7 +200,7 @@ export function useAiCapabilities(deps: { rootRef: RefObject<HTMLElement> }): Ai
       return;
     }
 
-setPending(true);
+    setPending(true);
     setErrorText(null);
 
     try {

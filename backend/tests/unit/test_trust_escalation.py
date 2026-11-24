@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from typing import Dict
+
 import pytest
 
 from backend.data.approval_decision_repo import ApprovalDecisionRepository
@@ -336,7 +338,7 @@ def test_load_trust_policy_with_real_settings_repo(monkeypatch):
     db.get_connection.return_value = conn
 
     # 模拟存储：set() 写内存 → get() 从内存读（绕过 SQL，但走完整 KEYS 闸门）
-    store: dict[str, str] = {}
+    store: Dict[str, str] = {}
 
     def fake_execute(sql, params=()):
         # 只拦截 SELECT value / SELECT key 两种读取

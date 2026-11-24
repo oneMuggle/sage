@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -41,9 +42,9 @@ class _FakeEntry:
     enabled: bool = True
     editable: str = "full"
     priority: int = 5
-    trigger: str | None = None
-    updated_at: int | None = None
-    origin: str | None = None
+    trigger: Optional[str] = None
+    updated_at: Optional[int] = None
+    origin: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {

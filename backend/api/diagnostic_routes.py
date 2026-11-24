@@ -277,7 +277,7 @@ class BrowserListResponse(BaseModel):
 
 
 def _discover_all_browsers() -> List[DiscoveredBrowser]:
-    """扫描系统中所有可用的 Chromium 系浏览器。"""
+    """扫描系统中所有可用的浏览器（Chromium 系 + Firefox，设置页浏览器选择用）。"""
     import os
     import shutil
     from pathlib import Path
@@ -285,6 +285,7 @@ def _discover_all_browsers() -> List[DiscoveredBrowser]:
     from backend.tools.browser_cdp import (
         _LINUX_CANDIDATES,
         _windows_candidates,
+        _windows_firefox_candidates,
     )
 
     found: List[DiscoveredBrowser] = []
@@ -314,6 +315,8 @@ def _discover_all_browsers() -> List[DiscoveredBrowser]:
                 _add_browser(path_str, "Microsoft Edge")
             else:
                 _add_browser(path_str, "Google Chrome")
+        for candidate in _windows_firefox_candidates():
+            _add_browser(str(candidate), "Mozilla Firefox")
         return found
 
     # Linux
@@ -329,15 +332,23 @@ def _discover_all_browsers() -> List[DiscoveredBrowser]:
                 "microsoft-edge-stable": "Microsoft Edge",
             }.get(name, name)
             _add_browser(path, display_name)
+    firefox_path = shutil.which("firefox")
+    if firefox_path:
+        _add_browser(firefox_path, "Mozilla Firefox")
 
     # macOS
     import platform
 
     if platform.system() == "Darwin":
-        for app in ("Google Chrome", "Microsoft Edge", "Chromium"):
-            candidate = Path("/Applications") / f"{app}.app" / "Contents" / "MacOS" / app
+        for app, exe in (
+            ("Google Chrome", "Google Chrome"),
+            ("Microsoft Edge", "Microsoft Edge"),
+            ("Chromium", "Chromium"),
+            ("Firefox", "firefox"),
+        ):
+            candidate = Path("/Applications") / f"{app}.app" / "Contents" / "MacOS" / exe
             if candidate.is_file():
-                _add_browser(str(candidate), app)
+                _add_browser(str(candidate), "Mozilla Firefox" if app == "Firefox" else app)
 
     return found
 

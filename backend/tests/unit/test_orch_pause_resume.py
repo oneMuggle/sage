@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -37,7 +37,7 @@ class _Queue:
         self.items.append(item)
 
 
-def _make_dispatcher() -> tuple[ChatDispatcher, _Queue]:
+def _make_dispatcher() -> Tuple[ChatDispatcher, _Queue]:
     queue = _Queue()
     d = ChatDispatcher(stream_id="s1", entry_queue=queue, run_id="orch-pause-1")
     return d, queue
