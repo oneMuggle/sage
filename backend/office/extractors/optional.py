@@ -51,7 +51,12 @@ class MarkItDownExtractor:
 
 
 class DoclingExtractor:
-    """IBM Docling adapter (optional, complex PDF/layout oriented)."""
+    """IBM Docling adapter (optional, complex PDF/layout oriented).
+
+    M6g：PDF 复杂表格兜底——Docling 的 ``document.tables`` 能识别无边框/跨页
+    表格，``light`` 的 PyMuPDF ``find_tables`` 只能识别有框线表格。把 Docling
+    结构化表格单独输出为 ``table`` 块，让 RAG/compare 能锚定到具体表格索引。
+    """
 
     name = "docling"
 
@@ -67,10 +72,25 @@ class DoclingExtractor:
         result = self._converter.convert(str(path))
         document = result.document
         markdown = str(document.export_to_markdown() or "")
+        blocks: List[ExtractedBlock] = _paragraph_blocks(markdown)
+        tables = getattr(document, "tables", None) or []
+        for table_index, table in enumerate(tables):
+            try:
+                table_md = str(table.export_to_markdown() or "")
+            except Exception:  # noqa: BLE001 — 单表失败不阻断整篇
+                table_md = ""
+            if table_md.strip():
+                blocks.append(
+                    ExtractedBlock(
+                        type="table",
+                        text=table_md.strip(),
+                        anchor={"table_index": table_index, "source": "docling"},
+                    )
+                )
         return StructuredDocument(
             source_path=path.name,
             format=path.suffix.lower().lstrip("."),
             extractor=self.name,
             markdown=markdown,
-            blocks=_paragraph_blocks(markdown),
+            blocks=blocks,
         )
