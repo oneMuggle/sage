@@ -252,21 +252,19 @@ def test_extract_auto_falls_back_when_optional_backend_raises(tmp_path: Path) ->
         "light": lambda: original_get("light"),
     }
 
-    with (
-        unittest.mock.patch.object(
-            service, "_candidate_backends", return_value=["docling", "light"]
-        ),
-        unittest.mock.patch.object(
-            service, "get_extractor", lambda name: monkeypatched[name]()
-        ),
+    with unittest.mock.patch.object(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        service, "_candidate_backends", return_value=["docling", "light"]
     ):
-        result = extract_document(
-            ExtractRequest(
-                workspace_path=str(tmp_path),
-                file_path=str(source),
-                backend="auto",
+        with unittest.mock.patch.object(
+            service, "get_extractor", lambda name: monkeypatched[name]()
+        ):
+            result = extract_document(
+                ExtractRequest(
+                    workspace_path=str(tmp_path),
+                    file_path=str(source),
+                    backend="auto",
+                )
             )
-        )
 
     assert result.extractor == "light"
     assert any(w["code"] == "extractor_fallback" for w in result.document.warnings)
@@ -296,22 +294,20 @@ def test_extract_auto_last_backend_failure_raises_office_parse_error(
 
     from backend.office.extractors import service
 
-    with (
-        unittest.mock.patch.object(
-            service, "_candidate_backends", return_value=["broken"]
-        ),
-        unittest.mock.patch.object(
-            service, "get_extractor", return_value=_BrokenExtractor()
-        ),
-        pytest.raises(OfficeParseError, match="解析失败"),
+    with unittest.mock.patch.object(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        service, "_candidate_backends", return_value=["broken"]
     ):
-        extract_document(
-            ExtractRequest(
-                workspace_path=str(tmp_path),
-                file_path=str(source),
-                backend="auto",
-            )
-        )
+        with unittest.mock.patch.object(
+            service, "get_extractor", return_value=_BrokenExtractor()
+        ):
+            with pytest.raises(OfficeParseError, match="解析失败"):
+                extract_document(
+                    ExtractRequest(
+                        workspace_path=str(tmp_path),
+                        file_path=str(source),
+                        backend="auto",
+                    )
+                )
 
 
 def test_docling_extracts_structured_table_blocks(tmp_path: Path, monkeypatch) -> None:
