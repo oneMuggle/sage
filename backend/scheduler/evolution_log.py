@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 STATUS_SUCCESS = "success"
 STATUS_FAILED = "failed"
 STATUS_SKIPPED = "skipped"
+#: 任务因没有可用 LLM 端点而跳过（与普通 skipped 区分，指向配置问题）
+STATUS_SKIPPED_NO_LLM = "skipped_no_llm"
 
 # metrics_json 序列化上限：超长指标截断，避免单行日志膨胀到不可读
 _MAX_METRICS_CHARS = 4000

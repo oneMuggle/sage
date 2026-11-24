@@ -87,14 +87,14 @@ function truncate(s: string, max: number): string {
 
 /**
  * 质量条:4px 高彩色进度条 + 两位小数分数。
- * 阈值沿用后端 LOW_QUALITY_THRESHOLD=0.3 与高分阈值 0.6。
+ * 阈值沿用后端 LOW_QUALITY_THRESHOLD=0.4 与高分阈值 0.6。
  * working / session_summary 行不传 score,由调用方判断 typeof 后决定是否渲染。
  */
 function QualityBar({ score }: { score: number }) {
   const clamped = Math.max(0, Math.min(1, score));
   const percent = Math.round(clamped * 100);
-  const colorClass = clamped >= 0.6 ? 'bg-success' : clamped >= 0.3 ? 'bg-warning' : 'bg-error';
-  const label = clamped >= 0.6 ? '高质量' : clamped >= 0.3 ? '中等质量' : '低质量';
+  const colorClass = clamped >= 0.6 ? 'bg-success' : clamped >= 0.4 ? 'bg-warning' : 'bg-error';
+  const label = clamped >= 0.6 ? '高质量' : clamped >= 0.4 ? '中等质量' : '低质量';
   return (
     <div
       className="mt-1.5 flex items-center gap-2"

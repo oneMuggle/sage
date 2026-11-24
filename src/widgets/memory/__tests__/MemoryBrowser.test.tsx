@@ -627,7 +627,7 @@ describe('MemoryBrowser 批量清理（Task 4.3）', () => {
 
     fireEvent.click(screen.getByTestId('memory-quality-candidates-toggle'));
     await waitFor(() => expect(getQualityCandidatesMock).toHaveBeenCalled(), { timeout: 5000 });
-    expect(getQualityCandidatesMock).toHaveBeenCalledWith(50, 0.3);
+    expect(getQualityCandidatesMock).toHaveBeenCalledWith(50, 0.4);
     expect(await screen.findByText(/低质量候选 · 1 条/)).toBeInTheDocument();
     expect(screen.getAllByText('候选内容').length).toBeGreaterThan(0);
     expect(screen.queryAllByText('低质量A').length).toBe(0);
@@ -667,7 +667,9 @@ describe('MemoryBrowser 记忆级反馈（Task 4.5）', () => {
     fireEvent.click(upBtn);
     await waitFor(() => expect(upBtn.getAttribute('aria-pressed')).toBe('true'), { timeout: 5000 });
     fireEvent.click(upBtn);
-    await waitFor(() => expect(submitMemoryFeedbackMock).toHaveBeenCalledTimes(2), { timeout: 5000 });
+    await waitFor(() => expect(submitMemoryFeedbackMock).toHaveBeenCalledTimes(2), {
+      timeout: 5000,
+    });
     expect(submitMemoryFeedbackMock).toHaveBeenLastCalledWith('m1', 'neutral', {
       memoryType: 'episodic',
       reason: undefined,
@@ -679,7 +681,9 @@ describe('MemoryBrowser 记忆级反馈（Task 4.5）', () => {
     renderBrowser();
     const downBtn = await screen.findByTestId('memory-feedback-down-m1', {}, { timeout: 5000 });
     fireEvent.click(downBtn);
-    await waitFor(() => expect(submitMemoryFeedbackMock).toHaveBeenCalledTimes(1), { timeout: 5000 });
+    await waitFor(() => expect(submitMemoryFeedbackMock).toHaveBeenCalledTimes(1), {
+      timeout: 5000,
+    });
     expect(submitMemoryFeedbackMock).toHaveBeenLastCalledWith('m1', 'down', {
       memoryType: 'episodic',
       reason: undefined,
@@ -689,7 +693,9 @@ describe('MemoryBrowser 记忆级反馈（Task 4.5）', () => {
     fireEvent.change(input, { target: { value: '内容过时' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    await waitFor(() => expect(submitMemoryFeedbackMock).toHaveBeenCalledTimes(2), { timeout: 5000 });
+    await waitFor(() => expect(submitMemoryFeedbackMock).toHaveBeenCalledTimes(2), {
+      timeout: 5000,
+    });
     expect(submitMemoryFeedbackMock).toHaveBeenLastCalledWith('m1', 'down', {
       memoryType: 'episodic',
       reason: '内容过时',
