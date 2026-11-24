@@ -378,7 +378,7 @@ class DailySummaryTask(BaseEvolutionTask):
         )
         return processed
 
-    async def _generate_summary(self, messages: List[dict], llm) -> str | None:
+    async def _generate_summary(self, messages: List[dict], llm) -> Optional[str]:
         """
         生成对话摘要（仅 LLM 路；无 LLM 时 run_async 已跳过整轮）。
         """
