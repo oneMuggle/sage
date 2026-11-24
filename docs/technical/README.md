@@ -122,7 +122,7 @@
 | 142 | [Sage 向导专家](./142-sage-guide-specialist.md) | 内置 sage-guide agent（五段人设 + 文档 FTS5 检索 + 配置工具）+ 五步改配置工作流（逐次确认 + trust_escalation）+ 内置 agent 删除保护 + 打包白名单 |
 | 143 | [项目工作台·规则中心](./143-project-workbench-rules-center.md) | 四层适配器（constraint/playbook/doc/global）+ 规则包信封（sage.rules JSON/Markdown/AGENTS.md）+ AI diff 修改 + 导入导出 + 规程库搜索与元数据编辑 |
 | 144 | [Win7 内网救援工具（Rescue Doctor）](./144-win7-rescue-doctor.md) | 不依赖前端的 CLI（体检/端点配置/修复/诊断包/放行清单）+ 启动看门狗（last-run/崩溃 journal/心跳/原生恢复对话框）+ 兼容档位 L0–L3 + 遗留管控软件处置（备份/恢复/审计） |
-| 145 | [记忆质量优化（Phase 1–4）](./145-memory-quality-optimization.md) | 提取门槛升级 + 否定词 NOOP 修复 + 写入冲突消解（ADD/UPDATE/NOOP）+ 已知事实过滤 + 主题簇巩固 + 五维质量评分器 + 质量可视化/批量清理/来源会话追踪/记忆级反馈 |
+| 145 | [记忆质量优化（Phase 1–4）](./145-memory-quality-optimization.md) | 提取门槛升级 + 否定词 NOOP 修复 + 写入冲突消解（ADD/UPDATE/NOOP）+ 已知事实过滤 + 主题簇巩固 + 五维质量评分器 + 质量可视化/批量清理/来源会话追踪/记忆级反馈 + P0 修复 PR-A（枚举串号 / recall 访问计数 / 组长方向与整组保护 / LLM 缺失标记 `skipped_no_llm`） |
 | 146 | [渲染层 BackendNotReadyError 自愈](./146-backend-ready-renderer-recovery.md) | 方案 A 队列之上的渲染层兜底：`backendReadySignal` 单例订阅 `backend:ready` 事件 + `useBackendReadyTick` 驱动 Chat/Sidebar/SessionWorkspaceProvider 启动期失败自动重放；`desktopInvoke` 剥离 IPC 包装前缀；`ProjectsOverview` 错误横幅 + 重试按钮 |
 | 147 | [项目工作台 IA 与交互](./147-project-workbench-ia.md) | `/projects` 单列表重做 + 治理页五章 IA（概览下一步 / 设置去自动 LLM / 资料语义检索折叠 / 文件章 i18n）+ 共享 Radix `Select` 迁移 + 规则页文案收敛 |
 | 148 | [侧边栏任务中心](./148-sidebar-task-center.md) | 六源任务归一（registry / chat / lane / goal / todo / scheduled）+ 侧边栏分区与 `/tasks` 页面 + 闲时目标终态通知队列 + panelRegistry 槽位迁移 |
