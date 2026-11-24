@@ -130,6 +130,7 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "office_check_latex_compliance": ToolCapability.READ,
     "office_extract_rules": ToolCapability.READ,
     "office_batch_audit": ToolCapability.READ,
+    "office_style_from_rulepack": ToolCapability.READ,
     "office_journal_parse_template": ToolCapability.READ,
     "office_journal_validate": ToolCapability.READ,
     # --- Office 写入面（可撤销/可恢复的本地写） ---
@@ -147,6 +148,7 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "office_ooxml": ToolCapability.WRITE,
     "office_revise_word": ToolCapability.WRITE,
     "office_render_audit": ToolCapability.WRITE,
+    "office_apply_word_style": ToolCapability.WRITE,
     "office_refresh_toc": ToolCapability.WRITE,
     "office_compile_latex": ToolCapability.WRITE,
     "office_latexdiff": ToolCapability.WRITE,
@@ -667,6 +669,7 @@ _BOUNDARY_SPECS: Dict[str, Tuple[Tuple[str, Optional[str]], ...]] = {
     "office_fix_word": (("file_path", None),),
     "office_revise_word": (("file_path", None),),
     "office_render_audit": (("file_path", None),),
+    "office_apply_word_style": (("file_path", None),),
     "office_fill_latex_template": (("template_path", None),),
     "office_extract_latex_project": (("zip_path", None),),
 }

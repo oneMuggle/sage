@@ -31,6 +31,8 @@ export interface OfficeDeliveryRef {
   workspacePath: string;
   filePath: string;
   formatSpec: WordFormatSpec | null;
+  /** M2: 生成时选择的样式模板 id；formatSpec 为空时交付抽屉用它解析模板快照跑 lint。 */
+  styleTemplateId?: string | null;
 }
 
 /**

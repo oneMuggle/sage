@@ -6,7 +6,12 @@ import { I18nProvider } from '../../../shared/lib/i18n';
 import { TemplateLibrary } from '../TemplateLibrary';
 
 vi.mock('../../../shared/api/officeApi', () => ({
-  officeApi: { listTemplates: vi.fn() },
+  officeApi: {
+    listTemplates: vi.fn(),
+    // M2: TemplateLibrary 现在内嵌 WordStyleTemplateLibrary 分区。
+    listWordStylePresets: vi.fn(),
+    listWordStyleTemplates: vi.fn(),
+  },
 }));
 
 const mockedListTemplates = vi.mocked(officeApi.listTemplates);
@@ -42,6 +47,14 @@ describe('TemplateLibrary', () => {
   beforeEach(() => {
     mockedListTemplates.mockReset();
     mockedListTemplates.mockResolvedValue({ templates: [BUILTIN, WORKSPACE] });
+    vi.mocked(officeApi.listWordStylePresets).mockReset();
+    vi.mocked(officeApi.listWordStyleTemplates).mockReset();
+    vi.mocked(officeApi.listWordStylePresets).mockResolvedValue({ ok: true, presets: [] });
+    vi.mocked(officeApi.listWordStyleTemplates).mockResolvedValue({
+      ok: true,
+      workspace_path: '/ws',
+      templates: [],
+    });
   });
 
   it('renders builtin and workspace templates with source badges', async () => {

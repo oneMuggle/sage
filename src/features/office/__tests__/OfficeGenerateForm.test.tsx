@@ -23,6 +23,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockListTemplates = vi.fn();
 const mockInstantiate = vi.fn();
+const mockGenerateWord = vi.fn();
+const mockListWordStylePresets = vi.fn();
 const mockOnGenerated = vi.fn();
 // Round C P5: pickTemplate kicks off a silent thumbnail fetch — default
 // to a benign ok:false so existing tests don't need to await anything.
@@ -33,6 +35,8 @@ vi.mock('../../../shared/api/officeApi', () => ({
     listTemplates: (...args: unknown[]) => mockListTemplates(...args),
     instantiateTemplate: (...args: unknown[]) => mockInstantiate(...args),
     templateThumbnail: (...args: unknown[]) => mockTemplateThumbnail(...args),
+    generateWord: (...args: unknown[]) => mockGenerateWord(...args),
+    listWordStylePresets: (...args: unknown[]) => mockListWordStylePresets(...args),
   },
 }));
 
@@ -128,6 +132,12 @@ describe('OfficeGenerateForm — template picker (item 3.2)', () => {
       filled_count: 2,
       unfilled_placeholders: [],
     });
+    mockGenerateWord.mockReset();
+    mockListWordStylePresets.mockReset();
+    mockListWordStylePresets.mockResolvedValue({
+      ok: true,
+      presets: [{ id: 'report', name: '工作报告', description: '' }],
+    });
   });
 
   it('renders builtin and workspace templates with source badges', async () => {
@@ -192,9 +202,9 @@ describe('OfficeGenerateForm — template picker (item 3.2)', () => {
     expect(mockOnGenerated).toHaveBeenCalledTimes(1);
     // Form cleared after success.
     await waitFor(() => {
-      expect(
-        (screen.getByTestId('office-template-input-author') as HTMLInputElement).value,
-      ).toBe('');
+      expect((screen.getByTestId('office-template-input-author') as HTMLInputElement).value).toBe(
+        '',
+      );
     });
   });
 
@@ -226,9 +236,7 @@ describe('OfficeGenerateForm — template picker (item 3.2)', () => {
     fireEvent.click(screen.getByTestId('office-generate-submit'));
 
     await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith(
-        expect.stringContaining('创建失败'),
-      );
+      expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining('创建失败'));
     });
     expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining('模板变量不足: author'));
     expect(mockOnGenerated).not.toHaveBeenCalled();
@@ -383,5 +391,30 @@ describe('OfficeGenerateForm — template mode on excel/ppt tabs (round-3 N2)', 
     expect(summaryBtn.textContent).toBe('已复制');
     fireEvent.click(jsonBtn);
     expect(jsonBtn.textContent).toBe('已复制');
+  });
+
+  it('passes the chosen word style preset through free-form generation', async () => {
+    mockGenerateWord.mockResolvedValue({
+      output_path: '/tmp/ws/my-document.docx',
+      filename: 'my-document.docx',
+      file_size_bytes: 1024,
+    });
+    renderForm();
+
+    fireEvent.click(screen.getByText('WORD'));
+    const select = await screen.findByTestId('office-gen-word-style-preset');
+    await screen.findByRole('option', { name: '工作报告' });
+    fireEvent.change(select, { target: { value: 'report' } });
+    fireEvent.click(screen.getByTestId('office-generate-submit'));
+
+    await waitFor(() => expect(mockGenerateWord).toHaveBeenCalledTimes(1));
+    expect(mockGenerateWord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspace_path: '/tmp/ws',
+        title: 'Document Title',
+        paragraphs: [{ text: 'First paragraph of the document.' }],
+        format_spec_preset: 'report',
+      }),
+    );
   });
 });

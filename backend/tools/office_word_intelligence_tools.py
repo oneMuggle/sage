@@ -7,8 +7,10 @@ paths) via ``_enforce_workspace``; READ tools accept any absolute path
 (对齐 ``read_file``），service 层围栏基座回退到输入父目录。
 
 Risk classes:
-- ``office_audit_word`` / ``office_extract_rules`` / ``office_batch_audit_word``: READ
-- ``office_fix_word`` / ``office_revise_word`` / ``office_render_audit``: WRITE_LOCAL
+- ``office_audit_word`` / ``office_extract_rules`` / ``office_batch_audit_word``
+  / ``office_style_from_rulepack``: READ
+- ``office_fix_word`` / ``office_revise_word`` / ``office_render_audit``
+  / ``office_apply_word_style``: WRITE_LOCAL
 """
 
 from __future__ import annotations
@@ -578,11 +580,201 @@ class OfficeRenderAuditTool(_WordToolBase):
         return ToolResult(success=True, content=result.model_dump())
 
 
+class OfficeStyleFromRulepackTool(_WordToolBase):
+    """Compile a rule pack into a generation-side style profile (READ)."""
+
+    risk: RiskClass = RiskClass.READ
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="office_style_from_rulepack",
+            description=(
+                "把规则包编译为 Word 样式画像（format_spec，含页面/正文/各级标题/"
+                "题注样式），返回可直接用于 office_create 的 format_spec 或 "
+                "office_apply_word_style 的入参；unmapped 列出无法映射的规则。"
+                "rulepack 可内联，否则使用 rulepack_id（缺省 general-quality）。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "rulepack_id": {
+                        "type": "string",
+                        "description": "工作区/内置规则包 id（缺省 general-quality）",
+                    },
+                    "rulepack": {
+                        "type": "object",
+                        "description": "内联规则包（优先于 rulepack_id）",
+                    },
+                },
+            },
+        )
+
+    def execute(
+        self,
+        rulepack_id: Optional[str] = None,
+        rulepack: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> ToolResult:
+        blocked = self._guard()
+        if blocked is not None:
+            return blocked
+        pack, error = self._resolve_pack(rulepack, rulepack_id)
+        if error is not None:
+            return error
+        from backend.office.word_style_profile import format_spec_from_rulepack
+
+        return ToolResult(success=True, content=format_spec_from_rulepack(pack).model_dump())
+
+
+class OfficeApplyWordStyleTool(_WordToolBase):
+    """Apply a style profile (preset / explicit spec) to an existing docx."""
+
+    risk: RiskClass = RiskClass.WRITE_LOCAL
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="office_apply_word_style",
+            description=(
+                "给已有 .docx 套用样式画像（style_template_id / format_spec_preset / "
+                "format_spec，多层深合并链：模板 < 预设 < 显式字段）：只重排样式定义"
+                "（页面/正文/标题），不改写正文。默认写 <stem>-styled.docx 新文件，"
+                "overwrite=true 才原子覆盖原文件；dry_run=true 只返回将变化的样式。"
+                "画像可用 office_style_from_rulepack 从规则包生成；"
+                "style_template_id 来自工作区样式模板库（office_style_templates）。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "工作区内 .docx 绝对路径",
+                    },
+                    "style_template_id": {
+                        "type": "string",
+                        "description": "工作区样式模板 id（与预设/画像深合并，优先级最低）",
+                    },
+                    "format_spec_preset": {
+                        "type": "string",
+                        "description": (
+                            "命名预设 id（如 report / gb9704-gongwen / academic-thesis）"
+                        ),
+                    },
+                    "format_spec": {
+                        "type": "object",
+                        "description": "显式样式画像（与预设深合并，显式字段优先）",
+                    },
+                    "clear_direct_formatting": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "清除 run 级直接字体格式（保留加粗/斜体）",
+                    },
+                    "dry_run": {"type": "boolean", "default": False},
+                    "overwrite": {"type": "boolean", "default": False},
+                    "output_filename": {"type": "string"},
+                },
+                "required": ["file_path"],
+            },
+        )
+
+    def execute(  # noqa: PLR0911 — 逐项参数校验早退
+        self,
+        file_path: Optional[str] = None,
+        style_template_id: Optional[str] = None,
+        format_spec_preset: Optional[str] = None,
+        format_spec: Optional[Dict[str, Any]] = None,
+        clear_direct_formatting: bool = False,
+        dry_run: bool = False,
+        overwrite: bool = False,
+        output_filename: Optional[str] = None,
+        **kwargs: Any,
+    ) -> ToolResult:
+        blocked = self._guard()
+        if blocked is not None:
+            return blocked
+        target, error = self._resolve_target(file_path)
+        if error is not None:
+            return error
+        from pydantic import ValidationError
+
+        from backend.office.errors import OfficeError
+        from backend.office.models import WordFormatSpec
+        from backend.office.word_style_apply import apply_style_to_document
+        from backend.office.word_style_presets import merge_template_with_spec
+
+        spec_obj: Optional[WordFormatSpec] = None
+        if format_spec is not None:
+            if not isinstance(format_spec, dict):
+                return ToolResult(success=False, error="format_spec_invalid")
+            try:
+                spec_obj = WordFormatSpec(**format_spec)
+            except ValidationError as exc:
+                return ToolResult(success=False, error=f"format_spec_invalid: {exc}")
+
+        template_spec: Optional[WordFormatSpec] = None
+        if style_template_id:
+            workspace_root = _workspace_root(self._policy)
+            if not workspace_root:
+                return ToolResult(
+                    success=False,
+                    error="style_template_id 需要绑定工作区（tool context 无 workspace_root）",
+                )
+            from backend.data.database import get_database
+            from backend.office.style_template_store import get_style_template
+
+            row = get_style_template(
+                get_database().get_connection(),
+                str(style_template_id),
+                workspace_path=workspace_root,
+            )
+            if row is None:
+                return ToolResult(
+                    success=False,
+                    error=f"style_template_not_found: {style_template_id}",
+                )
+            try:
+                template_spec = WordFormatSpec(**row["format_spec"])
+            except ValidationError as exc:
+                return ToolResult(
+                    success=False,
+                    error=f"style_spec_invalid: 样式模板画像无效: {exc}",
+                )
+
+        try:
+            spec = merge_template_with_spec(
+                template_spec, format_spec_preset, spec_obj
+            )
+        except OfficeError as exc:
+            return ToolResult(success=False, error=f"style_spec_invalid: {exc}")
+        if spec is None:
+            return ToolResult(
+                success=False,
+                error=(
+                    "style_spec_required: 需要 style_template_id、"
+                    "format_spec_preset 或 format_spec 至少一项"
+                ),
+            )
+        try:
+            result = apply_style_to_document(
+                target,
+                spec,
+                workspace_path=_workspace_root(self._policy),
+                clear_direct_formatting=bool(clear_direct_formatting),
+                dry_run=bool(dry_run),
+                overwrite=bool(overwrite),
+                output_filename=output_filename,
+            )
+        except OfficeError as exc:
+            return ToolResult(success=False, error=f"style_apply_failed: {exc}")
+        return ToolResult(success=True, content=result)
+
+
 __all__ = [
+    "OfficeApplyWordStyleTool",
     "OfficeAuditWordTool",
     "OfficeBatchAuditTool",
     "OfficeExtractRulesTool",
     "OfficeFixWordTool",
     "OfficeRenderAuditTool",
     "OfficeReviseWordTool",
+    "OfficeStyleFromRulepackTool",
 ]

@@ -12,11 +12,29 @@ except ImportError:  # pragma: no cover — release/win7 runs v1
     from pydantic import validator as field_validator  # type: ignore
 
 
+class WordRunSpec(BaseModel):
+    """A single inline run inside a paragraph (M2 markdown upgrade).
+
+    bold/italic map to the ``Strong``/``Emphasis`` named character styles
+    (direct formatting when a reference template lacks them); ``link`` maps
+    to a real ``w:hyperlink`` relationship plus the ``Hyperlink`` character
+    style. Only http/https/mailto targets become links at render time.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=10000)
+    bold: Optional[bool] = None
+    italic: Optional[bool] = None
+    link: Optional[str] = Field(default=None, max_length=2000)
+
+
 class WordParagraphSpec(BaseModel):
     """One paragraph in a generated Word document.
 
     Round 20：heading 扩展到 h4/h5，并收紧为 Literal（非法层级在
     模型层拒绝，而非生成期静默跳过）。
+    M2：新增 ``runs``（行内标记 → 命名字符样式）与 ``style="quote"``。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -24,11 +42,13 @@ class WordParagraphSpec(BaseModel):
     heading: Optional[Literal["h1", "h2", "h3", "h4", "h5"]] = Field(
         default=None, description="'h1' | 'h2' | 'h3' | 'h4' | 'h5' or None"
     )
-    style: Optional[Literal["bullet", "numbered"]] = Field(
+    style: Optional[Literal["bullet", "numbered", "quote"]] = Field(
         default=None,
-        description="'bullet' 或 'numbered' 列表样式（与 heading 二选一）",
+        description="'bullet' / 'numbered' 列表样式或 'quote' 引用块（与 heading 互斥）",
     )
     text: str = Field(min_length=1, max_length=10000)
+    #: 行内 runs（bold/italic/link → 命名字符样式）。为空时沿用 text 单次写入。
+    runs: _constrained_list(WordRunSpec, max_length=200) = Field(default_factory=list)
     # 批次 2.3 样式分级（round a）：作用于该段落全部 runs 的可选样式。
     font_size: Optional[float] = Field(default=None, gt=0, le=400, description="磅值，如 12 / 14.5")
     bold: Optional[bool] = None
