@@ -1388,7 +1388,9 @@ def test_web_fetch_files_mode_merges_rendered_candidates(monkeypatch):
         }
 
     monkeypatch.setattr(web_render, "render_page", fake_render)
-    monkeypatch.setattr(WebFetchTool, "_probe_file_url", lambda self, url, policy: None)
+    monkeypatch.setattr(
+        WebFetchTool, "_probe_file_url", lambda self, url, policy, cred=None: None
+    )
     with respx.mock(base_url="https://example.com") as mock:
         mock.get("/spa").mock(
             return_value=Response(200, text=shell, headers={"content-type": "text/html"})
