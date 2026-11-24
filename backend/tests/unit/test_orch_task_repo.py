@@ -61,7 +61,7 @@ def test_upsert_state_roundtrips_hierarchy_fields(repo):
         depth=1,
     )
 
-    row = repo.get("child")
+    row = repo.get("orch-1", "child")
     assert row is not None
     assert row.parent_task_id == "root"
     assert row.depth == 1
@@ -77,7 +77,7 @@ def test_upsert_state_defaults_hierarchy_fields(repo):
         status="queued",
     )
 
-    row = repo.get("root")
+    row = repo.get("orch-1", "root")
     assert row is not None
     assert row.parent_task_id is None
     assert row.depth == 0
@@ -97,7 +97,7 @@ def test_upsert_state_insert_and_get(repo):
         scratch_dir="/tmp/x",
         started_at=100,
     )
-    row = repo.get("t1")
+    row = repo.get("orch-1", "t1")
     assert row is not None
     assert row.task_id == "t1"
     assert row.run_id == "orch-1"
@@ -122,7 +122,7 @@ def test_upsert_state_updates_on_conflict(repo):
         task_id="t1", run_id="orch-1", agent_id="primary",
         goal="g", status="done", retry_count=2, finished_at=999,
     )
-    row = repo.get("t1")
+    row = repo.get("orch-1", "t1")
     assert row.status == "done"
     assert row.retry_count == 2
     assert row.finished_at == 999
@@ -141,8 +141,8 @@ def test_list_by_run_orders_by_task_id_asc(repo):
 
 
 def test_get_missing_returns_none(repo):
-    """不存在的 task_id → None。"""
-    assert repo.get("nope") is None
+    """不存在的 (run_id, task_id) → None。"""
+    assert repo.get("orch-1", "nope") is None
 
 
 def test_blocked_by_roundtrip_json(repo):
@@ -152,14 +152,14 @@ def test_blocked_by_roundtrip_json(repo):
         task_id="t1", run_id="orch-1", agent_id="primary",
         goal="g", status="queued", blocked_by=["a", "b", "c"],
     )
-    row = repo.get("t1")
+    row = repo.get("orch-1", "t1")
     assert row.blocked_by == ["a", "b", "c"]
 
 
 def test_orch_tasks_schema_has_no_cost_usd_column(tmp_path, monkeypatch):
-    """M4.3b: orch_tasks 刻意**不存**金额 —— task_id 是主键且计划编号跨
-    run 复用，同会话第二个 run 会覆盖第一个 run 的行（金额会串 run）。
-    金额以 usage_events 为唯一真相源（按 run_id 聚合）。"""
+    """M4.3b: orch_tasks 刻意**不存**金额 —— 金额以 usage_events 为唯一
+    真相源（按 run_id 聚合）；任务行即使已按 run 隔离（复合主键），金额
+    仍留在账本层，避免计费口径在两张表间漂移。"""
     db_path = tmp_path / "test.db"
     monkeypatch.setenv("SAGE_DB_PATH", str(db_path))
     monkeypatch.setattr(db_mod, "_db", None)
@@ -171,3 +171,48 @@ def test_orch_tasks_schema_has_no_cost_usd_column(tmp_path, monkeypatch):
         for row in db.get_connection().execute("PRAGMA table_info(orch_tasks)")
     }
     assert "cost_usd" not in columns
+
+
+def test_schema_primary_key_is_composite(tmp_path, monkeypatch):
+    """2026-11-24: orch_tasks 主键必须是 (run_id, task_id) 复合主键。"""
+    db_path = tmp_path / "test.db"
+    monkeypatch.setenv("SAGE_DB_PATH", str(db_path))
+    monkeypatch.setattr(db_mod, "_db", None)
+    db = db_mod.get_database()
+    db.init_db()
+
+    rows = db.get_connection().execute("PRAGMA table_info(orch_tasks)").fetchall()
+    pk_columns = {row["name"] for row in rows if row["pk"] > 0}
+    assert pk_columns == {"run_id", "task_id"}
+
+
+def test_same_task_id_in_two_runs_stored_independently(repo):
+    """计划编号 t1..tN 跨 run 复用 —— 第二个 run 的 upsert 不得覆盖第一个
+    run 的行，两个 run 的历史任务行都保留。"""
+    _upsert_run("orch-1")
+    _upsert_run("orch-other")
+    repo.upsert_state(
+        task_id="t1", run_id="orch-1", agent_id="primary",
+        goal="first run", status="done", finished_at=999,
+    )
+    repo.upsert_state(
+        task_id="t1", run_id="orch-other", agent_id="primary",
+        goal="second run", status="running",
+    )
+
+    first = repo.get("orch-1", "t1")
+    second = repo.get("orch-other", "t1")
+    assert first is not None
+    assert second is not None
+    assert first.goal == "first run"
+    assert first.status == "done"
+    assert first.finished_at == 999
+    assert second.goal == "second run"
+    assert second.status == "running"
+    assert [row.task_id for row in repo.list_by_run("orch-1")] == ["t1"]
+    assert [row.task_id for row in repo.list_by_run("orch-other")] == ["t1"]
+
+    # steer 审计计数同样按 run 隔离
+    assert repo.bump_revision_for_steer("orch-1", "t1") is True
+    assert repo.get("orch-1", "t1").revision == 1
+    assert repo.get("orch-other", "t1").revision == 0
