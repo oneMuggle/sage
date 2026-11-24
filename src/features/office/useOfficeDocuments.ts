@@ -396,7 +396,13 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     async (docType: OfficeDocType, managedPath: string): Promise<OfficeReadResult> => {
       if (!workspacePath) throw new Error('No workspace selected');
       if (docType === 'ppt') {
-        return officeApi.readPpt({ workspace_path: workspacePath, file_path: managedPath });
+        return officeApi.readPpt({
+          workspace_path: workspacePath,
+          file_path: managedPath,
+          // M6d: readDocument 的消费方全是预览面板；图片受后端预算约束。
+          include_images: true,
+          embed_image_data: true,
+        });
       }
       if (docType === 'word') {
         return officeApi.readWord({ workspace_path: workspacePath, file_path: managedPath });

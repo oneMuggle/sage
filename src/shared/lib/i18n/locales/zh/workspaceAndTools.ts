@@ -240,6 +240,7 @@ export const zhWorkspaceAndTools = {
   'office.preview.loadMorePages': '加载更多（还有 {n} 页）',
   'office.preview.loadingMore': '加载中…',
   'office.preview.charts': '图表',
+  'office.preview.chartTruncated': '（数据点已截断）',
   'office.preview.layout': '版式',
   'office.preview.placeholders': '占位符',
   'office.preview.conditionalFormats': '条件格式',

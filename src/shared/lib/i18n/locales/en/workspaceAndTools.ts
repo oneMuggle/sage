@@ -248,6 +248,7 @@ export const enWorkspaceAndTools = {
   'office.preview.loadMorePages': 'Load more ({n} more pages)',
   'office.preview.loadingMore': 'Loading…',
   'office.preview.charts': 'Charts',
+  'office.preview.chartTruncated': '(data points truncated)',
   'office.preview.layout': 'Layout',
   'office.preview.placeholders': 'Placeholders',
   'office.preview.conditionalFormats': 'Conditional formats',
