@@ -28,6 +28,18 @@ vi.mock('../../../shared/api/desktopInvoke', () => ({
 vi.mock('../../../shared/api/desktopEvent', () => ({
   listen: (...args: unknown[]) => listenMock(...args),
 }));
+// 发送前 useChat 会经 getEffective 查 catalog（backendRequest 漏斗）。网页回退
+// 模式让 backendRequest 在无 bridge 时走异步 HTTP 动态 import，会拖慢到 2 个
+// 微任务 flush 之后才注册 stream 回调，使下方 capturedCb 断言失败。此测试只关心
+// 流式累积/门控，与 transport 解耦 —— 与其他两个 transport shim 一样桩化成快速
+// 失败（等价于桌面端无 bridge 时立即抛错的行为）。
+vi.mock('../../../shared/api/backendRequest', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../shared/api/backendRequest')>();
+  return {
+    ...actual,
+    backendRequest: vi.fn().mockRejectedValue(new actual.BackendNotAvailableError()),
+  };
+});
 
 const VALID_SESSION_ID = '11111111-2222-3333-4444-555555555555';
 
