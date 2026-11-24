@@ -62,6 +62,9 @@ async function readOfficeFile(
     const data: OfficePptReadResult = await officeApi.readPpt({
       workspace_path: workspacePath,
       file_path: filePath,
+      // M6d: 预览需要像素才能渲染图片网格（后端有单图/全文档预算上限）。
+      include_images: true,
+      embed_image_data: true,
     });
     return { docType: 'ppt', data };
   }
@@ -210,8 +213,6 @@ export function evaluateDocumentPreviewAudit(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function exportDocumentPreviewAuditJson(
-  input: DocumentPreviewAuditInput,
-): string {
+export function exportDocumentPreviewAuditJson(input: DocumentPreviewAuditInput): string {
   return JSON.stringify(evaluateDocumentPreviewAudit(input));
 }
