@@ -1,6 +1,7 @@
 import type { BackendRequest } from '../types/electron-api';
 
 import { isDemoMode } from './demoFlag';
+import { loadWebTransport } from './webTransportLoader';
 
 export class BackendNotAvailableError extends Error {
   readonly code = 'BACKEND_NOT_AVAILABLE';
@@ -34,7 +35,16 @@ export async function backendRequest<T>(request: BackendRequest): Promise<T> {
     }
   }
   const bridge = typeof window !== 'undefined' ? window.electronAPI?.backendRequest : undefined;
-  if (!bridge) throw new BackendNotAvailableError();
+  if (!bridge) {
+    // 网页回退模式（SAGE_WEB_MODE）：纯浏览器没有 preload 桥，同源 fetch
+    // 直连后端（token 由 ?token= 注入 localStorage）。无 window（SSR/测试）
+    // 时保持 fail-closed。
+    if (typeof window !== 'undefined') {
+      const { backendRequestViaHttp } = await loadWebTransport();
+      return backendRequestViaHttp<T>(request);
+    }
+    throw new BackendNotAvailableError();
+  }
   return bridge<T>(request);
 }
 

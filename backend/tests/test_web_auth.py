@@ -70,6 +70,13 @@ def test_static_paths_public_in_web_mode(web_mode):
     assert web_mode.is_public_path("/") is True
     assert web_mode.is_public_path("/assets/index-abc.js") is True
     assert web_mode.is_public_path("/favicon.ico") is True
+    # 2026-11-24: 整个 SPA 产物（根目录静态文件 + SPA 路由）都要公开，
+    # 不只是 /assets/* —— /sage.svg（Logo/favicon）曾在网页模式返回 401。
+    assert web_mode.is_public_path("/sage.svg") is True
+    assert web_mode.is_public_path("/pet.html") is True
+    assert web_mode.is_public_path("/chat") is True
+    # API 仍然需要 token。
+    assert web_mode.is_public_path("/api/v1/sessions") is False
 
 
 def test_static_paths_not_public_in_desktop_mode(monkeypatch):

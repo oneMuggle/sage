@@ -1,11 +1,9 @@
 import { getProviderDefinition } from '../../entities/endpoint/providerRegistry';
-import {
-  DEMO_ENDPOINT_MODELS,
-  type DiscoveredModel,
-} from '../../entities/setting/types';
+import { DEMO_ENDPOINT_MODELS, type DiscoveredModel } from '../../entities/setting/types';
 import type { EndpointProtocol } from '../../entities/setting/types';
 import { backendRequest } from '../../shared/api/backendRequest';
 import { isDemoMode } from '../../shared/api/demoFlag';
+import { isBrowserRuntime } from '../../shared/api/webAuth';
 import { inferCapabilities, isEmbeddingModelId } from '../../shared/lib/modelCapabilities';
 
 interface OpenAIModelInfo {
@@ -52,9 +50,18 @@ export interface ProbeResult {
  * 所有浏览器到 LLM 的请求统一走本机后端代理,避免 CORS。
  * 见 ``docs/technical/21-llm-proxy.md`` 与 ``backend/api/llm_proxy_routes.py``。
  * 可通过 ``VITE_LLM_PROXY_BASE`` 覆盖,默认 ``http://localhost:8765/api/v1/llm``。
+ *
+ * 网页回退模式 (SAGE_WEB_MODE) 下,后端与页面同源(同一端口),必须用相对路径;
+ * 绝对地址会打到其它端口/主机,触发跨域预检失败。Electron 桌面端保持绝对路径,
+ * 与现有行为与 ``manage-endpoints/__tests__/api.test.ts`` 期望一致。
  */
-const LLM_PROXY_BASE: string =
+const LLM_PROXY_BASE_ABSOLUTE: string =
   (import.meta.env.VITE_LLM_PROXY_BASE as string | undefined) ?? 'http://localhost:8765/api/v1/llm';
+
+function llmProxyBase(): string {
+  if (isBrowserRuntime()) return '/api/v1/llm';
+  return LLM_PROXY_BASE_ABSOLUTE;
+}
 
 /** 构造代理请求头:Authorization + X-LLM-Provider-Url。 */
 function proxyHeaders(providerUrl: string, apiKey: string): HeadersInit {
@@ -90,10 +97,17 @@ function _parseUpstreamError(err: unknown): string {
   //    ``Backend request failed: 401 {"detail":{...}}``, 用非贪婪 JSON 切片拿到 detail。
   const jsonMatch = raw.match(/\{\s*"detail"\s*:[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
   let detailType: string | undefined;
+  let detailString: string | undefined;
   if (jsonMatch) {
     try {
-      const parsed = JSON.parse(jsonMatch[0]) as { detail?: { type?: string; message?: string } };
-      detailType = parsed.detail?.type;
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        detail?: { type?: string; message?: string } | string;
+      };
+      if (typeof parsed.detail === 'string') {
+        detailString = parsed.detail;
+      } else if (parsed.detail && typeof parsed.detail === 'object') {
+        detailType = parsed.detail.type;
+      }
     } catch {
       // JSON 损坏时静默降级 — 走 status 分支
     }
@@ -134,6 +148,13 @@ function _parseUpstreamError(err: unknown): string {
     }
     return `上游返回 ${status}：请检查 endpoint 配置`;
   }
+  // 4.5 本地 401 —— 与上游 401 区分。浏览器传输层 header 合并错误会把本地能力
+  // 放到 Authorization（被上游 API Key 覆盖），触发 LocalAuthMiddleware 以 401
+  // 拒绝，body 形如 ``{"detail":"本地授权凭据无效或缺失"}``（detail 是字符串
+  // 而非 envelope）。这里识别它并给出可操作的提示, 避免被误报为"上游 API Key 无效"。
+  if (status === 401 && detailString && detailString.includes('本地授权凭据')) {
+    return '本地授权凭据无效：请刷新页面（或重启 Sage 重新获取 token）';
+  }
   // 5. 已知 status 但无 detail.type (非 envelope 路径, 例如裸 fetch 失败或测试 mock)
   if (status !== undefined) {
     if (status === 401) return '上游返回 401：API Key 无效或已过期';
@@ -149,14 +170,14 @@ function _parseUpstreamError(err: unknown): string {
 /**
  * Fetch available models from an OpenAI-compatible endpoint.
  *
- * 实际打到本机后端代理 ``${LLM_PROXY_BASE}/v1/models``;
+ * 实际打到本机后端代理 ``<llmProxyBase()>/v1/models``;
  * 真实上游地址通过 ``X-LLM-Provider-Url`` 头传入,后端用 ``httpx`` 透传。
  * 这样浏览器永远只跟同源后端对话,绕开 CORS。
  */
 export async function fetchModels(baseUrl: string, apiKey: string): Promise<DiscoveredModel[]> {
   if (isDemoMode()) return DEMO_ENDPOINT_MODELS.map((model) => ({ ...model }));
   const response = await backendRequest<OpenAIModelsResponse>({
-    path: `${LLM_PROXY_BASE}/v1/models`,
+    path: `${llmProxyBase()}/v1/models`,
     method: 'GET',
     headers: proxyHeaders(baseUrl, apiKey),
   });
@@ -208,7 +229,7 @@ async function testChatCompletion(
 ): Promise<{ success: boolean; message: string }> {
   try {
     const response = await backendRequest<{ choices?: unknown[] }>({
-      path: `${LLM_PROXY_BASE}/v1/chat/completions`,
+      path: `${llmProxyBase()}/v1/chat/completions`,
       method: 'POST',
       headers: proxyHeaders(baseUrl, apiKey),
       body: {
