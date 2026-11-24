@@ -67,7 +67,6 @@ vi.mock('../../features/office', () => ({
   OfficeIntake: ({ children }: { children?: ReactNode }) => (
     <div data-testid="office-intake">{children}</div>
   ),
-  OfficeGenerateForm: () => <div data-testid="office-generate-form" />,
   OfficePreviewPanel: () => <div data-testid="office-preview-panel" />,
   useOfficeDocuments: () => ({
     documents: [],
