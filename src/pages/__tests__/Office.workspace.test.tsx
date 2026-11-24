@@ -34,15 +34,13 @@ vi.mock('../../shared/api/workspaceApi', () => ({
     setPreference: vi.fn().mockResolvedValue({ path: '/tmp', stored: true }),
     forgetPreference: vi.fn().mockResolvedValue({ cleared: true }),
     getDefault: vi.fn().mockResolvedValue({ path: null, source: 'scratch', isFallback: true }),
-    getHealth: vi
-      .fn()
-      .mockResolvedValue({
-        path: '/tmp',
-        health: 'healthy',
-        detail: null,
-        writable: true,
-        isUsable: true,
-      }),
+    getHealth: vi.fn().mockResolvedValue({
+      path: '/tmp',
+      health: 'healthy',
+      detail: null,
+      writable: true,
+      isUsable: true,
+    }),
   },
 }));
 
@@ -65,6 +63,7 @@ vi.mock('../../features/office', () => ({
   OfficeDocumentList: () => <div data-testid="office-document-list" />,
   OfficeDuplicateDialog: () => null,
   OfficeCompareDialog: () => null,
+  WordTemplateFillDialog: () => null,
   OfficeIntake: ({ children }: { children?: ReactNode }) => (
     <div data-testid="office-intake">{children}</div>
   ),

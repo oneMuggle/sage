@@ -318,7 +318,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 - [x] 工作台对比入口（前端；后端已就绪）—— 文档库「对比」按钮 + `OfficeCompareDialog`（左右各选一份 → 行级 diff 汇总 + Markdown 报告）
 - [x] 聊天附件 docx/xlsx/pptx 富预览（附件链路复用 `WordPreview`/`ExcelPreview`/`PptPreview`）；Excel 图表 / 条件格式 / 数据验证、PPT 版式 / 占位符 / 图表在结构化预览中渲染；`@` Office chip 点击右栏预览（跨工作区 chip 不劫持点击）
 - [x] PPT 图片在结构化预览中渲染（`read_ppt` opt-in 提取内嵌图片 + 字节预算；前端图片网格 + 省略计数）
-- [ ] Word 模板 Profile/填充前端入口
+- [x] Word 模板 Profile/填充前端入口（M6e）—— 文档库「模板填充」按钮 + `WordTemplateFillDialog`（分析槽位 → 填值 → 生成 `<stem>-filled.docx` → 导入文档库预览）
 - [ ] Excel/PPT 基础规则审校（范围/锚点/只读），AI 语义审校视成本评估
 
 > **实施记录（2026-11-21，M6a PDF 页面操作）**
@@ -381,6 +381,18 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 预览路径开启 embed：`DocumentPreview`、`useOfficeDocuments.readByType`、`artifact_reader._structured_or_none`（结构化预览数据源）；普通读取默认关闭
 > - 测试：后端新增 unit 10（`test_ppt_images_m6d.py` / `test_excel_chart_values_m6d.py`），端点既有 3 例改用 `OfficePptReadRequest`；Office/artifact 回归 1385 passed / 2 skipped；前端新增 2 文件 7 用例，相关回归 33 passed
 > - 门禁：ruff / py38 兼容 / silent-exceptions / architecture 棘轮（baseline 更新 office_routes 861、excel 1246，新增 useOfficeDocuments 801、types 822）/ tsc / eslint / prettier 全绿
+
+> **实施记录（2026-11-24，M6e Word 模板 Profile/填充前端入口）**
+> - 前端契约：`src/shared/api/types/officeWordTemplateTypes.ts` + `src/shared/api/officeWordTemplateApi.ts`（`POST /api/v1/office/word/template/profile` / `…/profile/fill`）
+> - 入口：`WordTemplateFillDialog.tsx` + `src/pages/Office.tsx` 文档库工具栏「模板填充」按钮（无工作区绑定禁用）
+> - 模板来源双通道：受管 Word 文档（`office/<doc_type>/<id>/<filename>`）+ `<workspace>/office/templates/*.docx`；同一工作区相对 posix 路径喂给后端
+> - 交互：选模板即分析槽位（content_control/bookmark/placeholder/jinja + image），kind 徽章 + 必填标记 + `current_value` 提示；文本槽入 `data`、图片槽入 `images`；本地必填门禁；输出名默认 `<stem>-filled.docx` 可编辑
+> - 结果面板：`filled_count` / `unfilled_slots` / `residual_placeholders` / `jinja_rendered` / `images_rendered` / warnings；「导入文档库并预览」经 `readDroppedMulti` 走既有导入链路
+> - 竞态防护：analyze/fill 各一个 requestId ref（沿用 `OfficeCompareDialog` 模式）；失败分支在对话框内显示
+> - i18n：zh/en 各 +28 key；feature barrel 审计符号 18 → 19
+> - 测试：新增 `WordTemplateFillDialog.test.tsx`（6 例：空态 / 相对路径分析 / 工作区模板过滤 / data+images 分流与 onFilled / 必填门禁 / 分析+填充错误）；三个 Office 页面测试补 stub 导出；相关 32 用例绿
+> - 门禁：tsc / eslint / prettier（源码）/ architecture 棘轮（`types.ts` 条目 822 → 823，仅 +1 export 行）全绿
+> - 限制：不支持在对话框内预览生成结果（M7 内联预览项）；富文本/图片尺寸参数后端暂不支持
 
 ### M7 — 前端一致性与漂移清理（P1，对应 G11/G12）
 
@@ -470,6 +482,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 | M6c PDF 图片读取 + 真 flatten | ✅ | 本轮提交 | 80 PDF 相关测试（安全返工后）；architecture 棘轮绿 |
 | M6b 前端批次（对比入口 / 读侧 extras / chip 预览） | ✅ 前端 | `45adac67c` | main PR #3232 + win7 PR #3233；前端 100 文件 / 547 用例 |
 | M6d Excel 图表数值 + PPT 图片渲染 | ✅ | 本轮提交 | 后端 unit 10 + 回归 1385；前端 7 新用例 / 回归 33；门禁绿 |
+| M6e Word 模板 Profile/填充前端入口 | ✅ | 本轮提交 | 前端 6 新用例 / 相关回归 32；tsc/eslint/prettier/architecture 绿 |
 | M7 前端接入 | ⏳ | — | 未开始（M6b 前端批次已先行落 A/B/C/D 四项） |
 | M8 大文件/并发/沙箱 | ⏳ | — | 未开始 |
 

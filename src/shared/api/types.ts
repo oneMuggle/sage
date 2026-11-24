@@ -5,6 +5,7 @@ export * from './types/officeGenerateTypes';
 export * from './types/officeRulesTypes';
 export * from './types/officePdfTypes';
 export * from './types/officeCompareTypes';
+export * from './types/officeWordTemplateTypes';
 
 export type OfficeDocType = 'ppt' | 'word' | 'excel' | 'pdf';
 
