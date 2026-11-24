@@ -186,6 +186,32 @@ def test_resolve_rejects_missing_file_on_disk(conn, workspace):
     assert exc_info.value.reason == "file_missing"
 
 
+def test_resolve_rejects_doc_from_other_workspace(conn, workspace, tmp_path):
+    """A doc whose workspace_path differs from the default is invisible."""
+    other_ws = tmp_path / "other_workspace"
+    other_ws.mkdir()
+    other_dir = other_ws / "office" / "word" / "d-foreign"
+    other_dir.mkdir(parents=True)
+    (other_dir / "foreign.docx").write_bytes(b"x")
+    conn.execute(
+        """
+        INSERT INTO office_documents
+            (id, workspace_path, doc_type, original_filename,
+             generated_filename, status, created_at, updated_at,
+             metadata, derived_from, archived_at, active_spec_id)
+        VALUES (?, ?, 'word', 'foreign.docx', 'foreign.docx',
+                'parsed', 1000, 1000, '{"file_size_bytes": 1}',
+                NULL, NULL, NULL)
+        """,
+        ("d-foreign", str(other_ws)),
+    )
+    conn.commit()
+
+    with pytest.raises(OfficeSourceNotFoundError) as exc_info:
+        resolve_office_source_path(conn, "d-foreign")
+    assert exc_info.value.reason == "outside_default_workspace"
+
+
 def test_resolve_source_input_exactly_one(conn, workspace):
     _insert(conn, workspace, "d-ok", doc_type="word")
 

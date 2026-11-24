@@ -113,6 +113,10 @@ def resolve_office_source_path(conn: sqlite3.Connection, doc_id: str) -> Path:
         raise OfficeSourceNotFoundError(doc_id, reason="not_found")
     if summary.doc_type not in ALLOWED_SOURCE_DOC_TYPES:
         raise OfficeSourceNotFoundError(doc_id, reason="unsupported_type")
+    if getattr(summary, "workspace_path", None) != str(_default_workspace_path()):
+        raise OfficeSourceNotFoundError(
+            doc_id, reason="outside_default_workspace",
+        )
 
     path = document_path(summary)
     if not path.is_file():
