@@ -1,7 +1,7 @@
-# 162. MinerU 文档解析子系统
+# 165. MinerU 文档解析子系统
 
 > 适用范围：Sage 客户端侧的 MinerU 文档解析适配层（可插拔解析引擎、质量路由、后台队列、聊天双阶段附件）。
-> 服务端部署（模型搬运、systemd、GPU 多卡）见 [154. MinerU 内网独立部署](./154-mineru-deployment.md)，本文不重复。
+> 服务端部署（模型搬运、systemd、GPU 多卡）见 [157. MinerU 内网独立部署](./157-mineru-deployment.md)，本文不重复。
 
 ---
 
@@ -447,4 +447,4 @@ CREATE TABLE IF NOT EXISTS document_parse_cache (
 | 密钥加密 | `backend/data/settings_repo.py`（`wrap/unwrap_mineru_service_json`） |
 | 前端设置卡片 | `src/pages/settings/`（MinerU 卡片）+ `src/entities/setting/settingsRegistry.ts` |
 
-服务端部署、模型搬运、systemd 与 GPU 多卡见 [154. MinerU 内网独立部署](./154-mineru-deployment.md)。
+服务端部署、模型搬运、systemd 与 GPU 多卡见 [157. MinerU 内网独立部署](./157-mineru-deployment.md)。
