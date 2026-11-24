@@ -537,13 +537,13 @@ async def test_persist_task_state_records_usage_and_duration(tmp_path, monkeypat
     from backend.data.orch_task_repo import OrchTaskRepository
 
     repo = OrchTaskRepository()
-    t1 = repo.get("t1")
+    t1 = repo.get("orch-rt24-1", "t1")
     assert t1 is not None
     assert t1.status == "done"
     assert t1.used_tokens == 4321
     assert t1.duration_ms is not None
     assert t1.duration_ms >= 0
-    t2 = repo.get("t2")
+    t2 = repo.get("orch-rt24-1", "t2")
     assert t2 is not None
     assert t2.used_tokens == 0  # 无用量任务如实写 0
     assert t2.duration_ms is not None
@@ -772,7 +772,7 @@ async def test_persist_task_state_records_retry_of(tmp_path, monkeypatch):
     from backend.data.orch_task_repo import OrchTaskRepository
 
     repo = OrchTaskRepository()
-    t1 = repo.get("t1")
+    t1 = repo.get("orch-rt26-1", "t1")
     assert t1 is not None
     assert t1.retry_of == "t0"
 
