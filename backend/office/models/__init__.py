@@ -63,6 +63,7 @@ from ._shared import (
     OfficeDocumentListResponse,
     OfficeDocumentMetadata,
     OfficeDocumentSummary,
+    OfficePptReadRequest,
     OfficePptReadResult,
     OfficeReadRequest,
     OfficeSnapshotInfo,
@@ -146,6 +147,7 @@ __all__ = [
     "ImageSourceSpec",
     "PptSlideContent",
     "OfficePptReadResult",
+    "OfficePptReadRequest",
     "_constrained_list",
     "field_validator",
     # Word read

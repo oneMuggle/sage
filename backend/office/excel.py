@@ -402,7 +402,150 @@ def _build_xlsx_summary(
     )
 
 
-def _extract_sheet_charts(worksheet: Any) -> List[Dict[str, Any]]:
+#: M6d：结构化预览迷你图每系列最多取的点数（超出置 truncated）。
+MAX_CHART_POINTS = 50
+#: M6d：单次图表引用最多物化的单元格数。引用是用户可控文本
+#: （``'Sheet1'!$A$1:$A$1048576``），无上限时几 KB 的文件也能让
+#: ``iter_rows`` 物化百万行；这里在读取前按行优先裁剪。
+MAX_CHART_REF_CELLS = 500
+
+
+def _parse_reference(formula: Any) -> Optional[Tuple[str, int, int, int, int]]:
+    """Parse ``'Sheet 1'!$A$1:$C$5`` → (sheet, min_col, min_row, max_col, max_row).
+
+    Returns ``None`` when the formula isn't a single-range sheet reference
+    (multi-area unions, defined names, etc.) — callers degrade to empty.
+    """
+    if not isinstance(formula, str) or "!" not in formula:
+        return None
+    sheet_part, range_part = formula.rsplit("!", 1)
+    sheet = sheet_part.strip()
+    if len(sheet) >= 2 and sheet.startswith("'") and sheet.endswith("'"):
+        sheet = sheet[1:-1].replace("''", "'")
+    if not sheet:
+        return None
+    from openpyxl.utils.cell import range_boundaries
+
+    try:
+        min_col, min_row, max_col, max_row = range_boundaries(
+            range_part.strip().replace("$", "")
+        )
+    except (TypeError, ValueError):
+        return None
+    if None in (min_col, min_row, max_col, max_row):
+        return None
+    return sheet, min_col, min_row, max_col, max_row
+
+
+def _resolve_reference(workbook: Any, formula: Any) -> List[Any]:
+    """Read the cell values behind a chart series reference ([] on failure)."""
+    parsed = _parse_reference(formula)
+    if parsed is None:
+        return []
+    sheet_name, min_col, min_row, max_col, max_row = parsed
+    try:
+        worksheet = workbook[sheet_name]
+    except (KeyError, TypeError):
+        return []
+    # 用户可控引用可能是整列/整行（$A$1:$A$1048576）——先按行优先裁剪到
+    # MAX_CHART_REF_CELLS 个单元格，再交给 iter_rows 物化。
+    col_count = max_col - min_col + 1
+    if col_count > MAX_CHART_REF_CELLS:
+        max_col = min_col + MAX_CHART_REF_CELLS - 1
+        max_row = min_row
+    elif col_count > 0 and (max_row - min_row + 1) * col_count > MAX_CHART_REF_CELLS:
+        max_row = min_row + max(1, MAX_CHART_REF_CELLS // col_count) - 1
+    values: List[Any] = []
+    try:
+        # data_only=True 工作簿 → 取缓存计算值；公式文本引用可能返回 None。
+        for row in worksheet.iter_rows(
+            min_row=min_row,
+            max_row=max_row,
+            min_col=min_col,
+            max_col=max_col,
+            values_only=True,
+        ):
+            values.extend(row)
+    except (AttributeError, TypeError, ValueError):
+        return []
+    return values
+
+
+def _chart_ref_values(workbook: Any, ref: Any, *, numeric: bool) -> List[Any]:
+    """Values behind one series ``val``/``cat`` reference.
+
+    ``series.val``/``series.cat`` are ``NumDataSource``/``AxDataSource``
+    wrappers — unwrap to the concrete ``numRef``/``strRef``/``*Lit`` first.
+
+    Formula references resolve against the workbook; a dangling formula
+    (missing sheet/range) yields ``[]`` rather than stale cached values —
+    previewing outdated numbers is worse than showing none.  Literal data
+    (``NumData``/``StrData``) and cache-only refs read their stored points.
+    """
+    if ref is None:
+        return []
+    for wrapper_attr in ("numRef", "strRef", "numLit", "strLit"):
+        inner = getattr(ref, wrapper_attr, None)
+        if inner is not None:
+            ref = inner
+            break
+    formula = getattr(ref, "f", None)
+    if formula:
+        return _resolve_reference(workbook, formula)
+    points = getattr(ref, "pt", None)
+    if points is None:
+        cache = getattr(ref, "numCache" if numeric else "strCache", None)
+        if cache is None:
+            # 纯缓存的数值类别常落在 numCache（如 `[1, 2, 3]` 轴），对
+            # numeric=False 也回退检查一次，避免类别整列为空。
+            cache = getattr(ref, "strCache" if numeric else "numCache", None)
+        points = getattr(cache, "pt", None) if cache is not None else None
+    if not points:
+        return []
+    return [getattr(point, "v", None) for point in points]
+
+
+def _chart_series_values(workbook: Any, series: Any) -> List[float]:
+    """Numeric values of one chart series (bool/None/文本 跳过)."""
+    raw = _chart_ref_values(workbook, getattr(series, "val", None), numeric=True)
+    values: List[float] = []
+    for value in raw:
+        if isinstance(value, bool) or value is None:
+            continue
+        if isinstance(value, (int, float)):  # noqa: UP038 — py38 isinstance
+            values.append(float(value))
+    return values
+
+
+def _chart_categories(workbook: Any, series_list: List[Any]) -> List[str]:
+    """Category labels — first series that has any (None → 空串保对齐)."""
+    for series in series_list:
+        raw = _chart_ref_values(workbook, getattr(series, "cat", None), numeric=False)
+        if raw:
+            return ["" if value is None else str(value) for value in raw]
+    return []
+
+
+def _series_title_text(workbook: Any, series: Any) -> Optional[str]:
+    """Series name: tx.strRef formula → strRef cache → literal tx.v."""
+    tx = getattr(series, "tx", None)
+    if tx is None:
+        return None
+    literal = getattr(tx, "v", None)
+    if literal:
+        return str(literal)
+    str_ref = getattr(tx, "strRef", None)
+    if str_ref is None:
+        return None
+    formula = getattr(str_ref, "f", None)
+    if formula:
+        resolved = _resolve_reference(workbook, formula)
+        if resolved and resolved[0] is not None:
+            return str(resolved[0])
+    return None
+
+
+def _extract_sheet_charts(worksheet: Any, workbook: Any = None) -> List[Dict[str, Any]]:
     charts: List[Dict[str, Any]] = []
     for chart in getattr(worksheet, "_charts", []) or []:
         title = None
@@ -412,12 +555,35 @@ def _extract_sheet_charts(worksheet: Any) -> List[Dict[str, Any]]:
                 title = str(title_object)
         except (AttributeError, KeyError, TypeError, ValueError):
             title = None
-        series = getattr(chart, "series", None)
+        series = getattr(chart, "series", None) or []
+        categories: List[str] = []
+        series_items: List[Dict[str, Any]] = []
+        truncated = False
+        try:
+            categories = _chart_categories(workbook, series)
+            for item in series:
+                values = _chart_series_values(workbook, item)
+                if len(values) > MAX_CHART_POINTS:
+                    values = values[:MAX_CHART_POINTS]
+                    truncated = True
+                series_items.append(
+                    {"name": _series_title_text(workbook, item), "values": values}
+                )
+            if len(categories) > MAX_CHART_POINTS:
+                categories = categories[:MAX_CHART_POINTS]
+                truncated = True
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            # 图表数据提取是增强信息：失败时保留骨架而不是杀掉整次读取。
+            logger.debug("chart data extraction failed: %s", exc)
+            categories, series_items, truncated = [], [], False
         charts.append(
             {
                 "type": type(chart).__name__,
-                "series": len(series) if series else 0,
+                "series": len(series),
                 "title": title,
+                "categories": categories,
+                "series_items": series_items,
+                "truncated": truncated,
             }
         )
     return charts
@@ -550,7 +716,7 @@ def read_xlsx(
                 if sheet_cache_missing:
                     any_cache_missing = True
         extras = {
-            "charts": _extract_sheet_charts(ws),
+            "charts": _extract_sheet_charts(ws, wb),
             "conditional_formats": _extract_conditional_formats(ws),
             "data_validations": _extract_data_validations(ws),
         }

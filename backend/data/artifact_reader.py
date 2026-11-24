@@ -425,7 +425,10 @@ def _structured_or_none(kind: str, path: Path):
             return read_xlsx(path).model_dump(mode="json")
         from backend.office.ppt import read_ppt
 
-        return read_ppt(path).model_dump(mode="json")
+        # M6d: 结构化预览需要像素才能渲染图片网格。预算由 read_ppt 内部
+        # 兜住（每页 3 张 / 单图 1.5MB / 全文档 15MB 原始字节，超出计入
+        # images_omitted），这里开启不会让任意 PPT 无界膨胀。
+        return read_ppt(path, include_images=True, embed_image_data=True).model_dump(mode="json")
     except Exception:  # noqa: BLE001 — structured 尽力而为
         return None
 

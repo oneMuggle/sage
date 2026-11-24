@@ -62,6 +62,25 @@ export interface OfficePptSlideContent {
   placeholders?: OfficePptPlaceholder[];
   /** M2: 原生图表（类别/系列，后端每系列截断到 50 点）。 */
   charts?: OfficePptChart[];
+  /**
+   * M6d: 页内嵌图片。仅 include_images=true 时后端才枚举（否则为空表且
+   * images_omitted=0）；embed_image_data=true 时每项带 data_url。
+   * Backend: PptSlideContent.images in backend/office/models/_shared.py.
+   */
+  images?: OfficePptImage[];
+  /** M6d: 检测到但因每页上限/字节预算未返回的图片数。 */
+  images_omitted?: number;
+}
+
+/** One PPT embedded picture (backend _extract_slide_images). */
+export interface OfficePptImage {
+  name: string;
+  content_type: string;
+  width_px: number;
+  height_px: number;
+  bytes: number;
+  /** data:<content_type>;base64,… — only when embed_image_data=true. */
+  data_url?: string;
 }
 
 /** One PPT placeholder (backend backend/office/ppt.py _extract_placeholders). */
@@ -168,11 +187,17 @@ export interface OfficeExcelSheetContent {
   data_validations?: OfficeExcelDataValidation[];
 }
 
-/** One native Excel chart on a sheet (type/series count/title only). */
+/** One native Excel chart on a sheet (backend _extract_sheet_charts). */
 export interface OfficeExcelChart {
   type: string;
   series: number;
   title: string | null;
+  /** M6d: 类别轴（取第一个有值 series；缺失处为 null）。 */
+  categories?: (string | null)[];
+  /** M6d: 各系列名称与数值（每系列截断到 50 点）。 */
+  series_items?: { name: string | null; values: number[] }[];
+  /** M6d: 是否有系列/类别被截断。 */
+  truncated?: boolean;
 }
 
 /** One conditional-formatting range with its rules. */
@@ -231,6 +256,17 @@ export interface OfficeReadRequest {
    * echo `original_filename` into the resulting OfficeDocumentSummary.
    */
   original_filename?: string;
+}
+
+/**
+ * M6d: PPT 读请求 = 通用读请求 + 内嵌图片开关（与 PdfReadRequest 契约对齐）。
+ * include_images 控制是否枚举、embed_image_data 控制是否附带像素，默认关闭，
+ * 普通读取不膨胀。Backend: OfficePptReadRequest in models/_shared.py.
+ */
+export interface OfficePptReadRequest extends OfficeReadRequest {
+  include_images?: boolean;
+  max_images_per_slide?: number;
+  embed_image_data?: boolean;
 }
 
 // ──────────────────────────────────────────────────────────────────────

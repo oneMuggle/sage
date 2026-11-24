@@ -22,11 +22,12 @@ These omissions are intentional per plan §1.3 "non-goals".
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .errors import OfficeFileNotFoundError, OfficeGenerateError, OfficeParseError, OfficePathError
 from .models import (
@@ -42,6 +43,14 @@ from .progress import report_current
 from .storage import validate_workspace
 
 logger = logging.getLogger(__name__)
+
+# ── M6d：内嵌图片预算 ────────────────────────────────────────────────
+#: 单图原始字节上限（base64 编码后约为原始字节 ×4/3 → ~1.5MB data_url）。
+PPT_IMAGE_MAX_RAW_BYTES = 1_125_000
+#: 单次读取全部图片的原始字节总预算（≈20MB base64），直接约束响应体积。
+PPT_IMAGE_TOTAL_RAW_BUDGET = 15_000_000
+#: 单文档枚举图片的次数上限（病理文件里 Picture 形状可以成千上万）。
+PPT_IMAGE_MAX_INSPECTIONS = 500
 
 
 # Phase 3.5：python-pptx(~200ms) 只在真正读写 .pptx 时才用得上；启动路径
@@ -121,6 +130,77 @@ def _count_images(slide) -> int:
 
     MSO_SHAPE_TYPE = load_attr("pptx.enum.shapes", "MSO_SHAPE_TYPE", globals())
     return sum(1 for shape in slide.shapes if shape.shape_type == MSO_SHAPE_TYPE.PICTURE)
+
+
+def _image_pixel_size(image: Any) -> Tuple[int, int]:
+    """Image dimensions in px (python-pptx ``Image.size``); (0, 0) on failure."""
+    size = getattr(image, "size", None)
+    try:
+        return max(0, int(size[0])), max(0, int(size[1]))
+    except (TypeError, IndexError, ValueError):
+        return 0, 0
+
+
+def _extract_slide_images(
+    slide: Any,
+    *,
+    max_images: int,
+    embed_image_data: bool,
+    budget: Dict[str, int],
+) -> Tuple[List[Dict[str, Any]], int]:
+    """Enumerate one slide's embedded pictures (bounded).
+
+    ``budget`` is shared across slides — ``remaining`` counts raw bytes left
+    for pixel embedding, ``inspected`` caps total shape inspection. 返回
+    ``(images, omitted)``；超出每页上限 / 预算的 Picture 计入 ``omitted``，
+    链接图（无内嵌 blob）直接跳过、不算遗漏（它不是「被裁掉」）。
+    """
+    from backend.core.lazy import load_attr
+
+    MSO_SHAPE_TYPE = load_attr("pptx.enum.shapes", "MSO_SHAPE_TYPE", globals())
+
+    shapes = list(slide.shapes)
+    images: List[Dict[str, Any]] = []
+    omitted = 0
+    for shape_idx, shape in enumerate(shapes):
+        if getattr(shape, "shape_type", None) != MSO_SHAPE_TYPE.PICTURE:
+            continue
+        if budget["inspected"] >= PPT_IMAGE_MAX_INSPECTIONS:
+            # 病理文件里 Picture 形状可以成千上万 —— 到达巡检上限后，
+            # 只数剩余图片数，不再触碰它们的内容。
+            omitted += sum(
+                1
+                for rest in shapes[shape_idx:]
+                if getattr(rest, "shape_type", None) == MSO_SHAPE_TYPE.PICTURE
+            )
+            break
+        budget["inspected"] += 1
+        if len(images) >= max_images:
+            omitted += 1
+            continue
+        try:
+            image = shape.image
+            blob = image.blob
+        except (AttributeError, KeyError, TypeError, ValueError):
+            # 链接图没有内嵌 blob —— 内容不在文件里，无所谓「截掉」。
+            continue
+        width_px, height_px = _image_pixel_size(image)
+        entry: Dict[str, Any] = {
+            "name": str(getattr(shape, "name", "") or ""),
+            "content_type": str(getattr(image, "content_type", "") or ""),
+            "width_px": width_px,
+            "height_px": height_px,
+            "bytes": len(blob),
+        }
+        if embed_image_data:
+            if len(blob) > PPT_IMAGE_MAX_RAW_BYTES or len(blob) > budget["remaining"]:
+                omitted += 1
+                continue
+            budget["remaining"] -= len(blob)
+            encoded = base64.b64encode(blob).decode("ascii")
+            entry["data_url"] = f"data:{entry['content_type']};base64,{encoded}"
+        images.append(entry)
+    return images, omitted
 
 
 def _extract_notes(slide) -> Optional[str]:
@@ -280,6 +360,9 @@ def read_ppt(
     workspace_path: str = "",
     generated_filename: Optional[str] = None,
     original_filename: Optional[str] = None,
+    include_images: bool = False,
+    max_images_per_slide: int = 3,
+    embed_image_data: bool = False,
 ) -> OfficePptReadResult:
     """Read a .pptx file and return its structured content.
 
@@ -289,6 +372,9 @@ def read_ppt(
         workspace_path: Required by storage layer; pass empty string for read-only tests.
         generated_filename: Filename as stored in workspace/office/<id>/.
         original_filename: User's uploaded filename (None when generated from scratch).
+        include_images: M6d —— 枚举幻灯片内嵌图片（默认关闭，列表保持为空）。
+        max_images_per_slide: 每页最多返回的图片数（超出计入 images_omitted）。
+        embed_image_data: 是否附带像素 base64 data_url（受单图/全文档预算约束）。
 
     Returns:
         OfficePptReadResult with summary + slides array.
@@ -316,7 +402,21 @@ def read_ppt(
 
     doc_id = document_id or file_path.stem
     slides: List[PptSlideContent] = []
+    # 图片预算跨页共享：remaining=像素总预算，inspected=形状巡检次数上限。
+    image_budget: Dict[str, int] = {
+        "remaining": PPT_IMAGE_TOTAL_RAW_BUDGET,
+        "inspected": 0,
+    }
     for idx, slide in enumerate(prs.slides):
+        images: List[Dict[str, Any]] = []
+        images_omitted = 0
+        if include_images:
+            images, images_omitted = _extract_slide_images(
+                slide,
+                max_images=max_images_per_slide,
+                embed_image_data=embed_image_data,
+                budget=image_budget,
+            )
         slides.append(
             PptSlideContent(
                 index=idx,
@@ -328,6 +428,8 @@ def read_ppt(
                 layout=_extract_layout_name(slide),
                 placeholders=_extract_placeholders(slide),
                 charts=_extract_charts(slide),
+                images=images,
+                images_omitted=images_omitted,
             )
         )
 
