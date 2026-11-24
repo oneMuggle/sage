@@ -79,6 +79,30 @@ def test_gb18030_txt_success_with_fallback(tmp_path, monkeypatch) -> None:
     assert resp.status_code == 200, resp.json()
 
 
+def test_gbk_txt_text_roundtrip_after_upload(tmp_path, monkeypatch) -> None:
+    """B: GBK 上传后回读全文端点必须拿到中文(上传/回读同一解码口径)"""
+    client = _client(tmp_path, monkeypatch)
+    resp = client.post(
+        "/api/v1/chat/attachments",
+        files={
+            "file": ("greeting.txt", io.BytesIO("你好世界".encode("gbk")), "text/plain")
+        },
+    )
+    assert resp.status_code == 200, resp.json()
+    mid = resp.json()["media_ref"]["id"]
+    got = client.get(f"/api/v1/chat/attachments/{mid}/text")
+    assert got.status_code == 200, got.json()
+    assert "你好世界" in got.json().get("text", "")
+
+
+def test_shared_extractor_decodes_gbk_text() -> None:
+    """B: 上传/回读/发送侧共用 attachment_extract 的同一解码口径"""
+    from backend.services.attachment_extract import extract_attachment_text
+
+    assert extract_attachment_text("你好世界".encode("gbk"), "txt") == "你好世界"
+    assert extract_attachment_text("你好世界".encode("gb18030"), "txt") == "你好世界"
+
+
 def test_makefile_success(tmp_path, monkeypatch) -> None:
     """C: 无点文件名 Makefile 在白名单内, 成功上传"""
     client = _client(tmp_path, monkeypatch)

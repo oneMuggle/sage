@@ -30,6 +30,7 @@ from backend.services.attachment_extract import (
     MAX_OFFICE_ZIP_MEMBERS,  # noqa: F401 — 兼容性 re-export
     _extract_document_text,  # noqa: F401 — 兼容性 re-export
     _guard_office_zip_budget,  # noqa: F401 — 兼容性 re-export
+    decode_text_content,
     extract_attachment_text,
     extract_attachment_text_async,  # noqa: F401 — 兼容性 re-export
 )
@@ -108,16 +109,6 @@ class AttachmentErrorCode(str, Enum):
 NO_EXT_FILENAMES: FrozenSet[str] = frozenset({"makefile", "dockerfile"})
 
 
-def _decode_text_content(content: bytes) -> Optional[str]:
-    """UTF-8 → GBK → GB18030 回退解码；仍失败返回 None。"""
-    for encoding in ("utf-8", "gbk", "gb18030"):
-        try:
-            return content.decode(encoding)
-        except (UnicodeDecodeError, LookupError):
-            continue
-    return None
-
-
 @router.post("/chat/attachments", response_model=None)
 async def upload_chat_attachment(file: UploadFile = File(...)) -> Union[Dict[str, Any], JSONResponse]:  # noqa: PLR0911, PLR0915 — 每条早退对应一种明确的上传错误
     """上传聊天附件（音频/文本文档），存储到 data/media/ 并返回 MediaRef。
@@ -173,7 +164,7 @@ async def upload_chat_attachment(file: UploadFile = File(...)) -> Union[Dict[str
     # 全部在校验之后、save 之前 —— 失败路径不留磁盘痕迹（无孤儿文件）。
     text_content: Optional[str] = None
     if is_text:
-        text_content = _decode_text_content(content)
+        text_content = decode_text_content(content)
         if text_content is None:
             return JSONResponse(
                 status_code=422,
