@@ -36,7 +36,8 @@ def app_deps():
 
     Also seeds default FK parent rows (``run-1`` / ``t1``) in the temp DB so
     that ``orch_context_messages`` INSERTs succeed (database.py DDL declares
-    ``REFERENCES orch_runs(run_id)`` and ``REFERENCES orch_tasks(task_id)``).
+    ``REFERENCES orch_runs(run_id)`` and a composite
+    ``FOREIGN KEY (run_id, task_id) REFERENCES orch_tasks(run_id, task_id)``).
     """
     from backend.data.database import get_database
 
@@ -128,7 +129,7 @@ def test_steer_returns_202_and_persists_context(app_deps) -> None:
     assert msg.created_by == "agent-007"
 
     # DB audit revision bumped (independent of SnapshotStore memory revision)
-    db_task = task_repo.get("t1")
+    db_task = task_repo.get("run-1", "t1")
     assert db_task is not None
     assert db_task.revision == 1  # first steer → revision = 1
 
