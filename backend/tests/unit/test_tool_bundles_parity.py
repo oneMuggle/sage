@@ -129,6 +129,7 @@ _EXPECTED_ONLINE = [
     "speech_to_text",
     "generate_image",
     "ocr_image",
+    "parse_document",
     "read_sage_config",
     "update_sage_config",
     "diagnose_sage_config",
@@ -272,6 +273,7 @@ _EXPECTED_BUNDLE_NAMES = (
     "browser",
     "skill_save",
     "multimodal",
+    "document_parse",
     "sage_config",
     "schedule",
     "mcp",
@@ -300,6 +302,7 @@ _FOCUS_BUNDLES = (
     "checkpoint",
     "symbol_search",
     "skill_save",
+    "document_parse",
     "sage_config",
     "schedule",
     "mcp",
@@ -412,7 +415,7 @@ def test_standard_online_matches_golden_snapshot() -> None:
     registry = _install_via_facade()
 
     assert registry.list_names() == _EXPECTED_ONLINE
-    assert len(registry.list_names()) == len(set(registry.list_names())) == 122
+    assert len(registry.list_names()) == len(set(registry.list_names())) == 123
 
 
 def test_standard_risks_and_schemas_align_with_golden_snapshot() -> None:
@@ -436,7 +439,7 @@ def test_network_gating_counts_and_differences() -> None:
     intranet = _install_via_facade(NetworkMode.INTRANET).list_names()
     offline = _install_via_facade(NetworkMode.OFFLINE).list_names()
 
-    assert (len(online), len(intranet), len(offline)) == (122, 121, 117)
+    assert (len(online), len(intranet), len(offline)) == (123, 122, 118)
     assert set(online) - set(intranet) == {"web_search"}
     assert set(intranet) - set(offline) == {
         "web_fetch",
@@ -486,7 +489,7 @@ def test_bundle_selection_for_standard_focus_headless_and_dev() -> None:
     assert tuple(b.name for b in select_bundle_objects(_harness("focus"))) == _FOCUS_BUNDLES
 
     headless = tuple(b.name for b in select_bundle_objects(_harness("headless")))
-    assert len(headless) == 32
+    assert len(headless) == 33
     assert "ask_user" not in headless
     assert [name for name in _EXPECTED_BUNDLE_NAMES if name in set(headless)] == list(headless)
 
@@ -506,7 +509,7 @@ def test_focus_install_excludes_heavy_tool_surfaces() -> None:
     registry = _install_bundles(_harness("focus"))
     names = registry.list_names()
 
-    assert len(names) == 60
+    assert len(names) == 61
     assert not any(name.startswith("office_") for name in names)
     assert not any(name.startswith("browser_") for name in names)
     assert not any(name.startswith("design_") for name in names)
@@ -519,7 +522,7 @@ def test_headless_install_excludes_ask_user_only() -> None:
     registry = _install_bundles(_harness("headless"))
     names = registry.list_names()
 
-    assert len(names) == 121
+    assert len(names) == 122
     assert "ask_user_question" not in names
     assert set(_EXPECTED_ONLINE) - set(names) == {"ask_user_question"}
     _assert_subsequence(names)
@@ -556,7 +559,7 @@ def test_register_all_tools_reads_project_harness(tmp_path: Path) -> None:
 
     registry = _install_via_facade()
 
-    assert len(registry.list_names()) == 121
+    assert len(registry.list_names()) == 122
     assert "ask_user_question" not in registry.list_names()
 
 

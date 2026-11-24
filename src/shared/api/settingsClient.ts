@@ -53,6 +53,8 @@ export type PreferenceKey =
   | 'skills_dir'
   // 本地 OCR：引擎/语言/优先策略（JSON blob）
   | 'ocr_config'
+  // MinerU 文档解析：服务地址/密钥/升级策略（JSON blob；apiKey 后端加密）
+  | 'mineru_service'
   // 思考展示档位（detail / trace / result）——与后端 SettingsRepository.KEYS 对齐
   | 'chat_display_mode';
 
