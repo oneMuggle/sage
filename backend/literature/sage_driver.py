@@ -22,6 +22,7 @@ class SageToolDriver:
         self._call = call
         self._url = ""
         self._title = ""
+        self._browser_ready = False
 
     @staticmethod
     def _as_dict(value: Any) -> Dict[str, Any]:
@@ -46,7 +47,24 @@ class SageToolDriver:
         meta = self._as_dict(data.get("browser_meta") or {})
         self._url = str(data.get("url") or meta.get("url") or url)
         self._title = str(data.get("title") or meta.get("title") or "")
+        self._browser_ready = True
         return self._url
+
+    def fetch_text(self, url: str) -> Optional[str]:
+        """快速通道：用 ``web_fetch`` 取正文（自带 cookie 域名自动推断）。
+
+        登录墙 / 反爬 / 工具不可用时返回 ``None``，调用方回落到浏览器通道。
+        """
+        try:
+            data = self._as_dict(self._tool("web_fetch", url=url, mode="text"))
+        except Exception:  # noqa: BLE001 — 快路径任何失败都应回落到浏览器
+            return None
+        text = str(data.get("content") or "").strip()
+        if not text:
+            return None
+        self._url = str(data.get("url") or url)
+        self._title = str(data.get("title") or "")
+        return text
 
     def snapshot(self) -> str:
         data = self._as_dict(
@@ -57,13 +75,27 @@ class SageToolDriver:
         self._title = str(data.get("title") or meta.get("title") or self._title)
         return json.dumps(data, ensure_ascii=False)
 
+    def _ensure_browser(self) -> None:
+        """交互前确保浏览器已有页面。
+
+        快路径（``fetch_text``）只走 HTTP，浏览器此时没有页面；
+        若后续要点 DOM 元素（如 PDF 下载入口），先补一次导航。
+        """
+        if self._browser_ready or not self._url:
+            return
+        self._tool("browser_navigate", url=self._url)
+        self._browser_ready = True
+
     def click(self, target: str) -> None:
+        self._ensure_browser()
         self._tool("browser_interact", action="click", selector=target)
 
     def click_text(self, text: str) -> None:
+        self._ensure_browser()
         self._tool("browser_interact", action="click", text=text)
 
     def type_text(self, selector: str, text: str, clear: bool = True) -> bool:
+        self._ensure_browser()
         try:
             self._tool(
                 "browser_interact",
@@ -77,6 +109,7 @@ class SageToolDriver:
             return False
 
     def press_key(self, key: str) -> None:
+        self._ensure_browser()
         self._tool("browser_interact", action="press", key=key)
 
     def sleep(self, seconds: float) -> None:
