@@ -427,6 +427,16 @@ Response: { reply: string }
 - `check_mode = "ai"` 的规则需要 LLM 客户端，未配置时端点返回 `503`；
 - 返回值 `{findings, error_count, warning_count, info_count}`，每条 finding 带 `rule_id` / `rule_name` / `severity` / `message` / `location` / `suggestion`。
 
+支持格式（M6f）：`.docx` / `.xlsx` / `.pptx`，其他后缀直接报解析错误。`extract_blocks` 按后缀分派，块分类与锚点如下：
+
+| 格式 | `heading` | `body` | `table` |
+|---|---|---|---|
+| .docx | 标题样式段落 | 正文段落 | 表格（`表格 N`） |
+| .xlsx | 工作表名 | — | 每个非空行（`工作表「X」第 N 行`） |
+| .pptx | 标题**占位符** | 其余文本段（`幻灯片 N 正文`） | 表格（`幻灯片 N 表格 K`） |
+
+`.xlsx` 用 openpyxl `read_only=True, data_only=True` 流式读取；`.pptx` 只认版式标题占位符，普通文本框归入正文（避免与正文重复审计）。展平层设防爆上限（sheets ≤100、每表 ≤500 行、每行 ≤50 单元格、单块 ≤2000 字符、slides ≤200），超限部分不进入审校；`caption` 范围在 xlsx/pptx 上无匹配。
+
 审校是**只读**的：它不写文档、不产生修订痕迹，也不登记快照。写入路径仍然只有「AI 审校 → 应用到文档」。
 
 AI 规则最多分析前 400 个文本块，且累计命中达到 200 条即停止继续调用模型（避免长文档放大调用次数）。
