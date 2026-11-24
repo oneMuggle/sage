@@ -735,7 +735,7 @@ class MemoryPruningTask(BaseEvolutionTask):
         quality_deleted = self._prune_low_quality(prunable_rows, leaders)
         total_deleted += quality_deleted
 
-        # 6. 质量分清理（软失效）：质量分低 **且** 90 天以上未被访问。
+        # 6. 质量分清理（软失效）：质量分低 **且** 长期未访问。
         #    与上面三条硬删除规则不重叠 —— 它们按固定门槛扫，这里按
         #    "写得差 + 从未有用过 + 已经放了很久" 综合判定。
         quality_pruned = await self._prune_low_quality_memories(leaders)
@@ -788,9 +788,9 @@ class MemoryPruningTask(BaseEvolutionTask):
         往往是低频但高价值的）。
 
         Args:
-            leaders: 近重复分组（记忆 id → 组长 id）。组内仅剩一条有效
-                记忆时，那条是内容的唯一存世副本，跳过它 —— 否则整组
-                近重复会被抹平，重复内容就此丢失。
+            leaders: 近重复分组（记忆 id → 组长 id）。组长是各组内容的
+                唯一代表，跳过它 —— 否则整组近重复会被抹平，重复内容
+                就此丢失。
 
         Returns:
             本次软失效的记忆条数。
@@ -815,10 +815,16 @@ class MemoryPruningTask(BaseEvolutionTask):
 
         scorer = MemoryQualityScorer(corpus=rows)
         now_ms = int(time.time() * 1000)
+        # 组长受保护。判定靠"有没有别的记忆映射到它" —— 独条映射到自己，
+        # 不算组长（否则独条永不被软失效，这条规则就形同虚设）。
+        group_leaders = {
+            leader for member, leader in (leaders or {}).items() if member != leader
+        }
         sole_valid = self._sole_valid_group_members(leaders or {})
         pruned = 0
         for row in rows:
-            if row.get("id") in sole_valid:
+            memory_id = row.get("id")
+            if memory_id in group_leaders or memory_id in sole_valid:
                 continue
             if "environment" in (row.get("tags") or ""):
                 continue

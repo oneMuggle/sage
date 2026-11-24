@@ -304,6 +304,40 @@ class TestMemoryPruningLog:
         assert leader_id not in {log["memory_id"] for log in quality_logs}
         assert deleted == 2
 
+    async def test_quality_prune_never_wipes_whole_duplicate_group(
+        self, setup_test_db
+    ):
+        """近重复组必须留下至少一条 —— 不能整组消失。
+
+        质量合并有单次上限（``_PRUNE_QUALITY_DELETE_MAX``），超出后副本没
+        删完。此时若组长也走"低质量软失效"被废掉，整组内容就从检索里
+        消失 —— 组的大小成了决定内容生死的因素，而非内容本身的质量：
+        三份一样的低质记忆会留下组长一份，一百二十份却一条不剩。
+        """
+        db = setup_test_db
+        # 120 天 → recency = 0.5^(120/60) = 0.25
+        # quality = 0.25*1.0 + 0.25*0.3 + 0.20*0.25 + 0 + 0 = 0.375 < 0.4 ✓
+        old = _now_ms() - 120 * MS_PER_DAY
+        same_content = "这是一条低质但重要性偏高的记忆内容，专门用来测试近重复"
+        # 条数超过质量合并的单次上限（100），确保副本没被删完
+        ids = [
+            _insert_episodic(
+                db,
+                content=same_content,
+                importance=3,
+                access_count=0,
+                created_at=old,
+            )
+            for _ in range(120)
+        ]
+
+        await MemoryPruningTask(db=db).run_async()
+
+        remaining_valid = [
+            mid for mid in ids if _fetch_episodic(db, mid)["is_valid"] == 1
+        ]
+        assert remaining_valid, "整组近重复被清空，内容从检索中消失"
+
 class TestEvolutionLogBestEffort:
     """日志写入失败只 warning，不能让进化任务失败"""
 
