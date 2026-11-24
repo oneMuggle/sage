@@ -115,8 +115,8 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
     try:
         db.init_db()  # v1-v18 自动注册（runner.py 模块级）
         versions = applied_versions(db.get_connection())
-        # v1 基线 + v2-v20 迁移（v18 归一化历史秒级时间戳；v19 浏览器动作审计；
-        # v20 usage_events.run_id 归因回填）
+        # v1 基线 + v2-v21 迁移（v18 归一化历史秒级时间戳；v19 浏览器动作审计；
+        # v20 usage_events.run_id 归因回填；v21 orch_tasks 复合主键重建）
         assert versions == {
             1,
             2,
@@ -138,6 +138,7 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
             18,
             19,
             20,
+            21,
         }
         # schema_version 表已建（账本就绪）
     finally:
@@ -415,6 +416,131 @@ def test_v20_backfills_usage_run_id() -> None:
                 "run_id"
             ]
             is None
+        )
+    finally:
+        conn.close()
+
+
+def test_v21_rebuilds_orch_tasks_with_composite_pk() -> None:
+    """v21：旧单列主键 orch_tasks 重建为 (run_id, task_id) 复合主键，
+    数据按列名交集保留；orch_context_messages 单列外键同步重建为复合
+    外键；二次执行幂等（不重建）。"""
+    import sqlite3
+
+    from backend.data.migrations.runner import MIGRATIONS, _v21_orch_tasks_composite_pk
+
+    assert (21, "orch_tasks_composite_pk") in [
+        (v, name) for v, name, _fn in MIGRATIONS
+    ]
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    try:
+        # 旧库形态：task_id 单列主键 + ctx 单列外键（与 v20 时代 DDL 一致）。
+        conn.execute("CREATE TABLE orch_runs (run_id TEXT PRIMARY KEY)")
+        conn.execute(
+            "CREATE TABLE orch_tasks ("
+            " task_id TEXT PRIMARY KEY,"
+            " run_id TEXT NOT NULL REFERENCES orch_runs(run_id),"
+            " agent_id TEXT NOT NULL, goal TEXT NOT NULL,"
+            " status TEXT NOT NULL DEFAULT 'queued',"
+            " retry_count INTEGER NOT NULL DEFAULT 0,"
+            " revision INTEGER NOT NULL DEFAULT 0, error TEXT,"
+            " output_preview TEXT, blocked_by TEXT, scratch_dir TEXT,"
+            " started_at INTEGER, finished_at INTEGER, used_tokens INTEGER,"
+            " duration_ms INTEGER, parent_task_id TEXT NULL,"
+            " depth INTEGER NOT NULL DEFAULT 0, retry_of TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE orch_context_messages ("
+            " context_id TEXT PRIMARY KEY,"
+            " run_id TEXT NOT NULL REFERENCES orch_runs(run_id),"
+            " task_id TEXT NOT NULL REFERENCES orch_tasks(task_id),"
+            " source TEXT NOT NULL, message_type TEXT NOT NULL,"
+            " content_redacted TEXT NOT NULL,"
+            " apply_mode TEXT NOT NULL DEFAULT 'next_boundary',"
+            " expected_task_revision INTEGER, created_at INTEGER NOT NULL,"
+            " created_by TEXT, applied_at INTEGER, applied_step_id TEXT,"
+            " status TEXT NOT NULL DEFAULT 'pending')"
+        )
+        conn.execute("CREATE INDEX idx_orch_tasks_run ON orch_tasks(run_id)")
+        conn.executemany(
+            "INSERT INTO orch_runs (run_id) VALUES (?)", [("run-a",), ("run-b",)]
+        )
+        conn.execute(
+            "INSERT INTO orch_tasks (task_id, run_id, agent_id, goal, status,"
+            " revision, depth) VALUES ('t1', 'run-a', 'a', 'first', 'done', 2, 1)"
+        )
+        conn.execute(
+            "INSERT INTO orch_tasks (task_id, run_id, agent_id, goal, status)"
+            " VALUES ('t2', 'run-b', 'b', 'second', 'running')"
+        )
+        conn.execute(
+            "INSERT INTO orch_context_messages (context_id, run_id, task_id,"
+            " source, message_type, content_redacted, created_at)"
+            " VALUES ('ctx-1', 'run-a', 't1', 'user', 'constraint', 'x', 1000)"
+        )
+        conn.commit()
+
+        _v21_orch_tasks_composite_pk(conn)
+
+        # 历史数据保留（含 revision / depth 等非核心列）
+        rows = conn.execute(
+            "SELECT run_id, task_id, goal, status, revision, depth"
+            " FROM orch_tasks ORDER BY run_id, task_id"
+        ).fetchall()
+        assert [(r["run_id"], r["task_id"], r["goal"]) for r in rows] == [
+            ("run-a", "t1", "first"),
+            ("run-b", "t2", "second"),
+        ]
+        assert rows[0]["revision"] == 2
+        assert rows[0]["depth"] == 1
+
+        # 主键已复合：同名 task_id 可跨 run 并存
+        pk = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(orch_tasks)")
+            if row["pk"] > 0
+        }
+        assert pk == {"run_id", "task_id"}
+        conn.execute(
+            "INSERT INTO orch_tasks (task_id, run_id, agent_id, goal, status)"
+            " VALUES ('t1', 'run-b', 'b', 'second t1', 'queued')"
+        )
+
+        # ctx 外键已重建为复合 (run_id, task_id)：同一外键分组含两列
+        fks = conn.execute(
+            "PRAGMA foreign_key_list(orch_context_messages)"
+        ).fetchall()
+        task_fk_rows = [fk for fk in fks if fk["table"] == "orch_tasks"]
+        fk_groups: dict = {}
+        for fk in task_fk_rows:
+            fk_groups.setdefault(fk["id"], set()).add(fk["from"])
+        assert {frozenset(cols) for cols in fk_groups.values()} == {
+            frozenset({"run_id", "task_id"})
+        }
+        assert conn.execute(
+            "SELECT context_id FROM orch_context_messages"
+        ).fetchone()["context_id"] == "ctx-1"
+
+        # 索引重建
+        indexes = {
+            row["name"]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
+        }
+        assert {
+            "idx_orch_tasks_run",
+            "idx_orch_tasks_status",
+            "idx_orch_context_task_status",
+            "idx_orch_context_run",
+        } <= indexes
+
+        # 幂等重跑：已复合 → 完整 no-op，数据不丢不重
+        _v21_orch_tasks_composite_pk(conn)
+        assert conn.execute("SELECT COUNT(*) FROM orch_tasks").fetchone()[0] == 3
+        assert (
+            conn.execute("SELECT COUNT(*) FROM orch_context_messages").fetchone()[0]
+            == 1
         )
     finally:
         conn.close()

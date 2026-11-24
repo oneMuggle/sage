@@ -32,9 +32,10 @@ class OrchTask:
     # RT24 (round32): 任务级用量/时长 —— 终态落库（dispatcher 写入）。
     used_tokens: Optional[int] = None
     duration_ms: Optional[int] = None
-    # M4.3b (2026-11-23): 金额不在本表 —— task_id 是主键且跨 run 复用，
-    # 同会话的第二个 run 会覆盖第一个 run 的行；金额以 usage_events 为
-    # 唯一真相源（backend/data/usage_cost_repo.py 按 run_id 聚合）。
+    # M4.3b (2026-11-23): 金额不在本表 —— 以 usage_events 为唯一真相源
+    # （backend/data/usage_cost_repo.py 按 run_id 聚合）。2026-11-24 起主键
+    # 改为 (run_id, task_id) 后跨 run 行已隔离，金额仍留在账本层，避免与
+    # 计费口径（含未定价模型）在两张表间漂移。
     parent_task_id: Optional[str] = None
     depth: int = 0
     # RT26 (round49): 重派来源任务 ID —— 历史任务树"重派"徽章。
@@ -78,7 +79,7 @@ class OrchTaskRepository:
                 parent_task_id, depth, retry_of
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(task_id) DO UPDATE SET
+            ON CONFLICT(run_id, task_id) DO UPDATE SET
                 status=excluded.status,
                 retry_count=excluded.retry_count,
                 error=excluded.error,
@@ -116,10 +117,13 @@ class OrchTaskRepository:
         )
         conn.commit()
 
-    def get(self, task_id: str) -> Optional[OrchTask]:
+    def get(self, run_id: str, task_id: str) -> Optional[OrchTask]:
         conn = self.db.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM orch_tasks WHERE task_id = ?", (task_id,))
+        cursor.execute(
+            "SELECT * FROM orch_tasks WHERE run_id = ? AND task_id = ?",
+            (run_id, task_id),
+        )
         row = cursor.fetchone()
         return self._row_to_task(row) if row else None
 
@@ -179,7 +183,7 @@ class OrchTaskRepository:
 
     # ------------------------------------------------------------------ CAS
 
-    def bump_revision_for_steer(self, task_id: str) -> bool:
+    def bump_revision_for_steer(self, run_id: str, task_id: str) -> bool:
         """Bump ``revision`` unconditionally after a successful steer INSERT.
 
         This makes the DB ``revision`` column an observable audit trail of
@@ -193,8 +197,9 @@ class OrchTaskRepository:
         """
         conn = self.db.get_connection()
         cursor = conn.execute(
-            "UPDATE orch_tasks SET revision = revision + 1 WHERE task_id = ?",
-            (task_id,),
+            "UPDATE orch_tasks SET revision = revision + 1"
+            " WHERE run_id = ? AND task_id = ?",
+            (run_id, task_id),
         )
         conn.commit()
         return cursor.rowcount > 0
