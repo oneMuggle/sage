@@ -284,6 +284,8 @@ interface AttachedFile {
 | 后端单测 | `backend/tests/unit/test_media_store.py` | sidecar 读写往返、扩展名参数化（含 .pptx）、删除清理 |
 | 后端单测 | `backend/tests/unit/test_r39_pdf_docx_extract.py` | pdf/docx/xlsx/pptx 上传与读取、统一分发表、zip 解压预算 |
 | 后端单测 | `backend/tests/unit/test_chat_attachment_text.py` | 真实 MediaStore 上传 → 读取链路（csv/py/json/ts/html/sql） |
+| 后端单测 | `backend/tests/unit/test_chat_attachment_errors.py` | 上传错误码状态码 / GBK+GB18030 上传与回读 / 无点白名单 / 孤儿计数（见 §11.6） |
+| 主进程单测 | `electron/__tests__/mediaIpc.test.ts` | 上传失败时 reject 抛后端真实文案（见 §11.6） |
 | 前端单测 | `src/features/send-message/__tests__/attachmentsProcessed.test.ts` | `attachments_processed` 事件消费 |
 | 前端单测 | `src/widgets/chat/__tests__/Message.clientMeta.test.tsx` | 气泡状态 chip 渲染 |
 | 前端单测 | `src/shared/lib/hooks/__tests__/useFileUpload.test.ts` | 预检各分支 + 状态流转 |
@@ -297,7 +299,131 @@ interface AttachedFile {
 - 类型注解用 `Optional[dict]` 而非 `dict | None` —— 3.8 不支持 PEP 604 联合类型语法；
 - `datetime.now(timezone.utc)` 保留 `# noqa: UP017`（`UTC` 常量是 3.11+）。
 
-## 11. 未完成项（后续 PR）
+## 11. 上传错误透传与编码兼容（2026-11-24）
+
+### 11.1 三层错误丢失链
+
+上传失败时用户曾只看到 **"上传响应缺少 media_ref.id"** —— 面板开发者视角的技术黑话，
+真实原因（编码不支持 / 类型不支持 / 解析失败）在三层各自被丢弃：
+
+| 层 | 原行为 | 修复后 |
+| --- | --- | --- |
+| 后端 `upload_chat_attachment` | 所有失败分支都用 **HTTP 200** 承载 `{"error": ...}` | 用 `JSONResponse(status_code=4xx/5xx, {"error_code", "error"})` |
+| 主进程 `electron/mediaIpc.ts` | 只看 `!resp.ok`，200 即视为成功，`{error}` 原样回传 | 无论状态码都先解析 JSON；`json.error` 为字符串即抛 `Error(json.error)` |
+| 前端 `useFileUpload.startEagerUpload` | 拿不到 `media_ref.id` 就抛固定文案，**丢弃后端 `error`** | catch 里用 `err.message` 作为 `reason`；`media_ref.id` 缺失仅作最后兜底 |
+
+主进程保留**向后兼容分支**：后端若仍返回 HTTP 200 + `{error}`，同样判定为失败并抛真实文案。
+
+### 11.2 错误码与 HTTP 状态码映射
+
+```python
+class AttachmentErrorCode(str, Enum):
+    UNSUPPORTED_TYPE = "unsupported_type"          # 类型/扩展名不在白名单
+    UNSUPPORTED_ENCODING = "unsupported_encoding"  # 文本编码无法解码
+    TOO_LARGE = "too_large"                        # > 25MB
+    PARSE_FAILED = "parse_failed"                  # PDF/DOCX 解析抛异常
+    PARSE_TIMEOUT = "parse_timeout"                # 解析超时
+```
+
+| 错误码 | HTTP | 典型触发 |
+| --- | --- | --- |
+| `unsupported_type` | 415 | `.exe` / 无点 `LICENSE` |
+| `too_large` | 413 | > 25 MB |
+| `unsupported_encoding` | 422 | 三种编码都解不出 |
+| `parse_failed` | 422 | 损坏 PDF / 格式不符 |
+| `parse_timeout` | 504 | 解析超 30s 墙钟 |
+
+错误响应体统一为 `{"error_code": "...", "error": "可读中文文案"}`；
+`error` 是面向用户的中文，解析器异常细节只以 `error_type` 记进服务端日志，不外泄。
+
+路由声明 `response_model=None` —— 返回体是 `dict | JSONResponse` 联合类型时，
+FastAPI 需要显式跳过响应模型推导，否则 `JSONResponse` 会被序列化校验拦下。
+
+### 11.3 编码回退链（UTF-8 → GBK → GB18030）
+
+Windows 中文环境保存的 txt 常见 GBK 编码，旧实现用严格 `content.decode("utf-8")`，
+GBK 文件要么上传失败、要么上传成功却读不回全文。
+
+解码口径统一收敛到 `backend/services/attachment_extract.py` 的 `decode_text_content()`，
+**上传侧（校验）、回读侧（取全文）、发送侧（注入上下文）三处共用**：
+
+```python
+TEXT_DECODE_FALLBACKS = ("utf-8", "gbk", "gb18030")
+
+def decode_text_content(content: bytes) -> Optional[str]:
+    for encoding in TEXT_DECODE_FALLBACKS:
+        try:
+            return content.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return None
+```
+
+三种编码都失败才报 `unsupported_encoding`（422）。`extract_attachment_text()`
+在全部失败时抛 `UnicodeDecodeError`，保持发送侧 `not_utf8` 状态契约不变。
+
+> **口径分裂是实测抓到的**：M6 集成验证时发现 GBK 文件上传返回 200，但
+> `GET /chat/attachments/{id}/text` 返回 `{"error": "附件不是有效的 UTF-8 文本"}`
+> —— 上传侧已用回退链、回读侧仍是严格 UTF-8。修复前先写了两条 RED 测试
+> （`test_gbk_txt_text_roundtrip_after_upload` / `test_shared_extractor_decodes_gbk_text`），
+> 再把回退链下沉到共享提取器。
+
+不引入 `charset-normalizer` 等新依赖；GBK / GB18030 覆盖中文 Windows 绝大部分场景。
+
+### 11.4 无点文件名白名单
+
+前端 `name.split('.').pop()` 对无点文件得到整个名字，后端 `"." in filename` 得到空扩展名
+—— 两端口径漂移，`Makefile` 因此被拒。
+
+后端 `backend/api/chat_attachment_routes.py`：
+
+```python
+#: 无扩展名但允许上传的文件名（小写精确匹配）。
+#: 前端 CHAT_NO_EXT_FILENAMES 必须与本常量同口径。
+NO_EXT_FILENAMES: FrozenSet[str] = frozenset({"makefile", "dockerfile"})
+```
+
+无点文件命中白名单时，用文件名本身当**伪扩展名**参与后续判定，
+最终落盘扩展名也是 `.makefile` / `.dockerfile`。
+
+前端 `src/shared/lib/chatAttachmentFormats.ts`：
+
+```typescript
+export const CHAT_NO_EXT_FILENAMES = new Set(['makefile', 'dockerfile']);
+```
+
+`preflightAttachment` 显式分流：有点文件按扩展名匹配，无点文件查无点白名单；
+两者都不命中才报 `unsupported`。
+
+### 11.5 孤儿文件治理
+
+旧实现 `store.save()` 先于编码校验执行 —— GBK txt 校验失败后磁盘已落
+`.txt` + `.meta.json` 两个文件，而前端拿不到 id，这些文件成了永远无人回收的孤儿。
+
+修复：**全部校验前移，`store.save()` 放在最后一步**。
+
+```
+1. 解析文件名与扩展名（含无点白名单）
+2. 校验扩展名 + content-type → 415
+3. 读内容 + 校验大小 → 413
+4. 文本：解码（UTF-8→GBK→GB18030）失败 → 422
+   文档：解析（线程池 + 30s 墙钟）失败/超时 → 422 / 504
+5. 全部通过 → store.save()
+6. _schedule_mineru_enrichment（依赖已存盘，故放在 save 之后）
+```
+
+M6 实测：7 个文件上传（5 成功 + 2 失败），磁盘文件数 `before=12 → after=22`，
+增量恰好 `+10 = 5 × (内容 + meta)` —— **失败路径落盘 0 个文件**。
+
+### 11.6 测试矩阵
+
+| 层次 | 文件 | 覆盖 |
+| --- | --- | --- |
+| 后端单测 | `backend/tests/unit/test_chat_attachment_errors.py` | 各错误码状态码 / GBK+GB18030 上传与回读 / 无点白名单 / 孤儿计数 / 损坏 PDF |
+| 后端单测 | `backend/tests/unit/test_chat_attachment_text.py` | 旧 HTTP 200 断言同步到新状态码契约（422 / 415 + `error_code`） |
+| 主进程单测 | `electron/__tests__/mediaIpc.test.ts` | 后端返回 4xx + `{error, error_code}` 时 reject 抛真实文案；200 + `{error}` 的兼容分支 |
+
+## 12. 未完成项（后续 PR）
 
 | 项 | 内容 |
 | --- | --- |
