@@ -5,6 +5,8 @@
  * Electron 产物直连本机后端。所有接口只返回脱敏字段，不含凭据值。
  */
 
+import { getWebAuthHeaders } from './webTransport';
+
 export interface SiteSession {
   domain: string;
   display_name: string;
@@ -54,10 +56,14 @@ export async function requestJson<T>(path: string, init?: RequestInit): Promise<
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
     return bridge<T>({ method, path, body });
   }
-  // 浏览器 dev：Vite 代理同源转发
+  // 浏览器：Vite 代理（dev）或网页模式同源直连（token 由 ?token= 注入）
   const response = await fetch(webAccessApiUrl(path), {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...getWebAuthHeaders(),
+      ...(init?.headers ?? {}),
+    },
   });
   const payload = (await response.json().catch(() => ({}))) as T & {
     error?: string;

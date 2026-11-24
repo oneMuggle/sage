@@ -11,6 +11,7 @@
  */
 
 import type { RunEvent } from './orchEvents';
+import { getWebAuthHeaders } from './webTransport';
 
 const MAX_EVENT_LINE_BYTES = 256 * 1024;
 const MAX_BUFFER_BYTES = 512 * 1024;
@@ -88,7 +89,8 @@ export async function* subscribeOrchEvents(
 
   // Electron IPC relay path
   if (typeof window !== 'undefined' && window.electronAPI?.listen) {
-    const eventName = afterSeq > 0 ? `orch-events-${runId}-seq-${afterSeq}` : `orch-events-${runId}`;
+    const eventName =
+      afterSeq > 0 ? `orch-events-${runId}-seq-${afterSeq}` : `orch-events-${runId}`;
     const eventQueue: RunEvent[] = [];
     let resolveNext: (() => void) | null = null;
     let done = false;
@@ -104,16 +106,13 @@ export async function* subscribeOrchEvents(
       }
     };
 
-    const unsubscribe = await window.electronAPI.listen(
-      eventName,
-      (rawEvent: unknown) => {
-        const parsed = parseOrchEventFromIpc(rawEvent);
-        if (parsed) {
-          eventQueue.push(parsed);
-          wakeup();
-        }
-      },
-    );
+    const unsubscribe = await window.electronAPI.listen(eventName, (rawEvent: unknown) => {
+      const parsed = parseOrchEventFromIpc(rawEvent);
+      if (parsed) {
+        eventQueue.push(parsed);
+        wakeup();
+      }
+    });
     const unsubscribeError = await window.electronAPI
       .listen(`${eventName}-error`, (rawEvent: unknown) => {
         const msg =
@@ -173,7 +172,7 @@ async function* subscribeOrchEventsDirect(
   try {
     response = await fetch(url, {
       method: 'GET',
-      headers: { Accept: 'application/x-ndjson' },
+      headers: { Accept: 'application/x-ndjson', ...getWebAuthHeaders() },
       signal,
     });
   } catch (err) {
