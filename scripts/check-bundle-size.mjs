@@ -48,6 +48,16 @@
 // 2253KB，超 2.2MB（2252.8KB）预算约 0.2KB。按棘轮协议上调至
 // 2.25MB（保留 ~50KB 余量），不在本 PR 做前端代码分割。
 //
+// 2026-11-24 棘轮上调：Word 样式模板 M2（#3258/#3265）、Design Studio Office
+// 融合前端入口（#3276/#3280）、记忆系统 P0 PR-A（#3275/#3277）三个批次叠加
+// 逼近体积边界。实测：CI 实测 dist/assets 12283–12290KB，已越过或贴着
+// 12MB（12288KB）边界；主 chunk 达 2280–2281KB，距 2.25MB（2304KB）上限
+// 只剩 23KB。CI runner 构建产物比本机大约 21KB（本地 12269KB vs CI
+// 12290KB），故按 CI 实测口径定预算，并留出本批次叠加后的余量：
+//   - dist/assets 总体积   12MB   → 13MB
+//   - 最大单个 .js chunk   2.25MB → 2.4MB
+// 按棘轮协议仅上调，不下调。
+//
 // 用法：npm run build 之后执行 `node scripts/check-bundle-size.mjs`。
 // 退出码：0 = 全部预算内；1 = 超限或 dist 不存在。
 // 若为有意的功能增长导致超限，更新本文件 BUDGETS 并在 PR 说明依据
@@ -58,8 +68,8 @@ import { join } from 'node:path';
 const ASSETS = 'dist/assets';
 
 const BUDGETS = [
-  { name: 'dist/assets 总体积', max: 12 * 1024 * 1024 },
-  { name: '最大单个 .js chunk', max: 2.25 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
+  { name: 'dist/assets 总体积', max: 13 * 1024 * 1024 },
+  { name: '最大单个 .js chunk', max: 2.4 * 1024 * 1024, filter: (f) => f.endsWith('.js') },
 ];
 
 if (!readdirSync('.').includes('dist')) {
