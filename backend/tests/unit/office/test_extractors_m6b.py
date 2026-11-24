@@ -227,3 +227,131 @@ def test_compare_rejects_outside_workspace(tmp_path: Path) -> None:
                 right_path=str(outside),
             )
         )
+
+
+def test_extract_auto_falls_back_when_optional_backend_raises(tmp_path: Path) -> None:
+    """docling 装好了但转换抛错 → 回退到 light，warnings 带 extractor_fallback。"""
+    source = _docx(tmp_path / "doc.docx")
+
+    class _BrokenDocling:
+        name = "docling"
+
+        def supports(self, suffix: str) -> bool:
+            return True
+
+        def extract(self, path):
+            raise RuntimeError("docling crashed")
+
+    import unittest.mock
+
+    from backend.office.extractors import service
+
+    original_get = service.get_extractor
+    monkeypatched = {
+        "docling": lambda: _BrokenDocling(),
+        "light": lambda: original_get("light"),
+    }
+
+    with (
+        unittest.mock.patch.object(
+            service, "_candidate_backends", return_value=["docling", "light"]
+        ),
+        unittest.mock.patch.object(
+            service, "get_extractor", lambda name: monkeypatched[name]()
+        ),
+    ):
+        result = extract_document(
+            ExtractRequest(
+                workspace_path=str(tmp_path),
+                file_path=str(source),
+                backend="auto",
+            )
+        )
+
+    assert result.extractor == "light"
+    assert any(w["code"] == "extractor_fallback" for w in result.document.warnings)
+    assert "docling" in next(
+        w["message"]
+        for w in result.document.warnings
+        if w["code"] == "extractor_fallback"
+    )
+
+
+def test_extract_auto_last_backend_failure_raises_office_parse_error(
+    tmp_path: Path,
+) -> None:
+    """候选链最后一条也失败 → 归一为 OfficeParseError（不是裸 RuntimeError）。"""
+    source = _docx(tmp_path / "doc.docx")
+
+    class _BrokenExtractor:
+        name = "broken"
+
+        def supports(self, suffix: str) -> bool:
+            return True
+
+        def extract(self, path):
+            raise RuntimeError("boom")
+
+    import unittest.mock
+
+    from backend.office.extractors import service
+
+    with (
+        unittest.mock.patch.object(
+            service, "_candidate_backends", return_value=["broken"]
+        ),
+        unittest.mock.patch.object(
+            service, "get_extractor", return_value=_BrokenExtractor()
+        ),
+        pytest.raises(OfficeParseError, match="解析失败"),
+    ):
+        extract_document(
+            ExtractRequest(
+                workspace_path=str(tmp_path),
+                file_path=str(source),
+                backend="auto",
+            )
+        )
+
+
+def test_docling_extracts_structured_table_blocks(tmp_path: Path, monkeypatch) -> None:
+    """DoclingExtractor 把 document.tables 单独输出为 table 块（anchor 含 source=docling）。"""
+
+    class _FakeTable:
+        def export_to_markdown(self) -> str:
+            return "| h1 | h2 |\n|---|---|\n| a | b |"
+
+    class _FakeDocument:
+        tables = [_FakeTable(), _FakeTable()]
+
+        def export_to_markdown(self) -> str:
+            return "some paragraph\n\nanother paragraph"
+
+    class _FakeResult:
+        document = _FakeDocument()
+
+    class _FakeConverter:
+        def convert(self, path: str) -> _FakeResult:
+            return _FakeResult()
+
+    import sys
+    import types
+
+    fake_docling = types.ModuleType("docling")
+    fake_converter_mod = types.ModuleType("docling.document_converter")
+    fake_converter_mod.DocumentConverter = _FakeConverter
+    fake_docling.document_converter = fake_converter_mod
+    monkeypatch.setitem(sys.modules, "docling", fake_docling)
+    monkeypatch.setitem(sys.modules, "docling.document_converter", fake_converter_mod)
+
+    from backend.office.extractors.optional import DoclingExtractor
+
+    extractor = DoclingExtractor()
+    result = extractor.extract(tmp_path / "doc.pdf")
+
+    table_blocks = [block for block in result.blocks if block.type == "table"]
+    assert len(table_blocks) == 2
+    assert table_blocks[0].text.startswith("| h1 | h2 |")
+    assert table_blocks[0].anchor["source"] == "docling"
+    assert table_blocks[1].anchor["table_index"] == 1
+    assert result.markdown == "some paragraph\n\nanother paragraph"
