@@ -28,6 +28,14 @@ vi.mock('../../../shared/api/desktopInvoke', () => ({
 vi.mock('../../../shared/api/desktopEvent', () => ({
   listen: (...args: unknown[]) => listenMock(...args),
 }));
+// 发送前 useChat 经 getEffective 查 catalog（走 backendRequest 漏斗）。网页回退
+// 让 backendRequest 在无 bridge 时走异步 HTTP 动态 import，原本 2-tick 快速
+// 失败变成 200ms+ 模块加载，capturedCb 断言失败。与 desktopInvoke/desktopEvent
+// 对齐桩化成快速失败，保持 transport 解耦。
+vi.mock('../../../shared/api/backendRequest', async (importOriginal) => {
+  const a = await importOriginal<typeof import('../../../shared/api/backendRequest')>();
+  return { ...a, backendRequest: vi.fn().mockRejectedValue(new a.BackendNotAvailableError()) };
+});
 
 const VALID_SESSION_ID = '11111111-2222-3333-4444-555555555555';
 

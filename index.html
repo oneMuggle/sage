@@ -10,7 +10,7 @@
     <title>Sage - 记忆型 AI 助手</title>
     <!-- Pre-paint theme script: prevent theme flash (U1 from OpenWorker) -->
     <script>
-      (function() {
+      (function () {
         try {
           var mode = localStorage.getItem('sage-theme');
           var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -24,9 +24,84 @@
         }
       })();
     </script>
+    <!-- Web fallback bootstrap: persist ?token= capability before the SPA loads.
+         Plain ES5 on purpose — must run in any browser the launcher opens, and
+         before the module bundle (which may not parse at all on old browsers).
+         backend.cli.web hands the token over this way; every API call reads it
+         from localStorage['sage_auth_token']. -->
+    <script>
+      (function () {
+        try {
+          var href = window.location.href;
+          var hashIndex = href.indexOf('#');
+          var hash = hashIndex >= 0 ? href.slice(hashIndex) : '';
+          var beforeHash = hash ? href.slice(0, hashIndex) : href;
+          var queryIndex = beforeHash.indexOf('?');
+          if (queryIndex < 0) return;
+          var parts = beforeHash.slice(queryIndex + 1).split('&');
+          var kept = [];
+          var token = null;
+          for (var i = 0; i < parts.length; i++) {
+            var part = parts[i];
+            if (part.indexOf('token=') === 0) {
+              try {
+                token = decodeURIComponent(part.slice(6));
+              } catch (e) {
+                token = part.slice(6);
+              }
+            } else if (part) {
+              kept.push(part);
+            }
+          }
+          if (!token) return;
+          try {
+            localStorage.setItem('sage_auth_token', token);
+          } catch (e) {
+            // Storage unavailable — requests will 401, the app surfaces it.
+          }
+          var next =
+            beforeHash.slice(0, queryIndex) + (kept.length ? '?' + kept.join('&') : '') + hash;
+          try {
+            window.history.replaceState(null, '', next);
+          } catch (e) {
+            // Older browsers may reject file:// replaceState — harmless.
+          }
+        } catch (e) {
+          // Never let the bootstrap break page load.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Old-browser guard: Windows 7 ships IE, which ignores `<script type=module>`
+         entirely and leaves an empty #root — previously an unrecoverable white
+         page. Plain ES5 so the message itself still renders there. -->
+    <script>
+      (function () {
+        setTimeout(function () {
+          try {
+            var root = document.getElementById('root');
+            if (!root || root.childElementCount > 0) return;
+            root.innerHTML =
+              '<div style="max-width:560px;margin:12vh auto;padding:0 24px;font-family:' +
+              'system-ui,Segoe UI,Microsoft YaHei,sans-serif;color:#333;line-height:1.7">' +
+              '<h2 style="font-size:20px;margin:0 0 12px">当前浏览器无法加载 Sage</h2>' +
+              '<p style="margin:0 0 12px">网页模式需要以下任一浏览器：</p>' +
+              '<ul style="margin:0 0 12px;padding-left:22px">' +
+              '<li>Google Chrome 109 及以上</li>' +
+              '<li>Mozilla Firefox ESR 102 及以上</li>' +
+              '<li>Microsoft Edge 109 及以上</li>' +
+              '</ul>' +
+              '<p style="margin:0;color:#666">Windows 7 自带的 Internet Explorer 不受支持，' +
+              '请安装上述任一浏览器后，重新打开「Sage 网页模式」。</p>' +
+              '</div>';
+          } catch (e) {
+            // Nothing else to do — leave the page as-is.
+          }
+        }, 8000);
+      })();
+    </script>
   </body>
 </html>

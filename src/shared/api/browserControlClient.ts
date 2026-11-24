@@ -7,6 +7,7 @@
  */
 
 import { webAccessApiUrl } from './webAccessClient';
+import { getWebAuthHeaders } from './webAuth';
 
 export type BrowserControlState = 'agent' | 'paused' | 'user_takeover';
 
@@ -72,10 +73,14 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
     return bridge<T>({ method, path, body });
   }
-  // 浏览器 dev：Vite 代理同源转发
+  // 浏览器：Vite 代理（dev）或网页模式同源直连（token 由 ?token= 注入）
   const response = await fetch(webAccessApiUrl(path), {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...getWebAuthHeaders(),
+      ...(init?.headers ?? {}),
+    },
   });
   const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
   if (!response.ok) {

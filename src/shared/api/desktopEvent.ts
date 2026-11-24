@@ -12,6 +12,8 @@
  */
 import type { ElectronAPI, UnlistenFn } from '../types/electron-api';
 
+import { loadWebTransport } from './webTransportLoader';
+
 export type { UnlistenFn };
 
 export async function listen<T>(
@@ -22,19 +24,16 @@ export async function listen<T>(
   const api: ElectronAPI | undefined =
     typeof window !== 'undefined' ? window.electronAPI : undefined;
   if (!api) {
-    throw new Error(
-      'electronAPI not available — preload script not loaded. ' +
-        'If running outside Electron (e.g. plain browser), this is expected.',
-    );
+    // 网页回退模式：后端 NDJSON 流（chat-stream-* / shell-stream-*）直接
+    // 由浏览器订阅；主进程才有的应用生命周期事件静默 no-op。
+    const { listenViaHttp } = await loadWebTransport();
+    return listenViaHttp<T>(event, handler);
   }
   // Unwrap electronAPI's (payload) → wrap back to Tauri-compatible ({ payload })
   return api.listen<T>(event, (payload) => handler({ payload }), options);
 }
 
-export function formatDesktopEventSummary(
-  event: string,
-  options?: { streamId?: string },
-): string {
+export function formatDesktopEventSummary(event: string, options?: { streamId?: string }): string {
   /* v8 ignore start */
   const safeEvent = event.trim() || 'unknown';
   const streamLabel = options?.streamId || 'none';
@@ -44,10 +43,7 @@ export function formatDesktopEventSummary(
   return `desktop-event: ${safeEvent} · stream=${streamLabel} · ${stateLabel}`;
 }
 
-export function formatDesktopEventJson(
-  event: string,
-  options?: { streamId?: string },
-): string {
+export function formatDesktopEventJson(event: string, options?: { streamId?: string }): string {
   /* v8 ignore start */
   const safeEvent = event.trim() || 'unknown';
   const hasElectronListen = Boolean(typeof window !== 'undefined' && window.electronAPI?.listen);
