@@ -14,6 +14,7 @@ import type {
   DesignArtifactSummary,
   DesignProject,
   DesignSourceBinding,
+  DesignSourceInput,
   DesignSystem,
   DesignTemplate,
   EmbedChartResult,
@@ -69,7 +70,7 @@ interface DesignState {
   updateTweaksLocal: (patch: Partial<ProjectTweaks>) => void;
   persistTweaks: (projectId: string) => Promise<void>;
   applyTweaksPreset: (projectId: string, tweaks: ProjectTweaks) => Promise<void>;
-  bindSource: (projectId: string, filePath: string) => Promise<void>;
+  bindSource: (projectId: string, source: DesignSourceInput) => Promise<void>;
   unbindSource: (projectId: string) => Promise<void>;
   refreshWithSource: (projectId: string) => Promise<void>;
   embedChart: (projectId: string, chart: ChartSpec) => Promise<EmbedChartResult | null>;
@@ -302,9 +303,9 @@ export const useDesignStore = create<DesignState>((set) => ({
     }
   },
 
-  async bindSource(projectId: string, filePath: string) {
+  async bindSource(projectId: string, source: DesignSourceInput) {
     try {
-      const binding = await api.bindSource(projectId, filePath);
+      const binding = await api.bindSource(projectId, source);
       set({ sourceBinding: binding });
     } catch (error) {
       set({ errorProject: getErrorMessage(error) });

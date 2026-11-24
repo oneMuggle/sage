@@ -1,14 +1,22 @@
 /**
  * DesignResourcesPanel — 素材：数据源绑定 + 图表嵌入。
  */
-import { Database, FileSpreadsheet, Loader2, RefreshCw, Unlink } from 'lucide-react';
+import { Database, FileSpreadsheet, Library, Loader2, RefreshCw, Unlink } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { previewSource } from '../../entities/design/designApi';
 import { useDesignStore } from '../../entities/design/designStore';
-import type { ChartSpec, ChartType, SourcePreview } from '../../entities/design/types';
+import type {
+  ChartSpec,
+  ChartType,
+  DesignSourceInput,
+  OfficeSourceRef,
+  SourcePreview,
+} from '../../entities/design/types';
 import { useI18n } from '../../shared/lib/i18n';
+
+import { DesignOfficeSourcePicker } from './DesignOfficeSourcePicker';
 
 const CHART_TYPES: ChartType[] = ['bar', 'line', 'hbar', 'pie'];
 const SOURCE_EXTS = ['xlsx', 'csv', 'json'];
@@ -48,10 +56,29 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
   ]);
   const [embedding, setEmbedding] = useState(false);
   const [preview, setPreview] = useState<SourcePreview | null>(null);
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [pendingSource, setPendingSource] = useState<DesignSourceInput | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [officePickerOpen, setOfficePickerOpen] = useState(false);
 
   const canPickFile = typeof window !== 'undefined' && Boolean(window.electronAPI?.selectFile);
+
+  const loadPreview = async (source: DesignSourceInput) => {
+    setPendingSource(source);
+    setPreviewLoading(true);
+    try {
+      setPreview(await previewSource(source));
+    } catch (err) {
+      toast.error(
+        t('design.resources.previewFailed').replace(
+          '{error}',
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+      setPendingSource(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const handleBind = async () => {
     const picker = window.electronAPI?.selectFile;
@@ -61,28 +88,19 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
       filters: [{ name: 'Data', extensions: SOURCE_EXTS }],
     });
     if (!path) return;
-    setPreviewPath(path);
-    setPreviewLoading(true);
-    try {
-      setPreview(await previewSource(path));
-    } catch (err) {
-      toast.error(
-        t('design.resources.previewFailed').replace(
-          '{error}',
-          err instanceof Error ? err.message : String(err),
-        ),
-      );
-      setPreviewPath(null);
-    } finally {
-      setPreviewLoading(false);
-    }
+    await loadPreview({ file_path: path });
+  };
+
+  const handlePickFromLibrary = async (source: OfficeSourceRef) => {
+    setOfficePickerOpen(false);
+    await loadPreview({ doc_id: source.doc_id });
   };
 
   const handleConfirmBind = async () => {
-    if (!previewPath) return;
-    await bindSource(projectId, previewPath);
+    if (!pendingSource) return;
+    await bindSource(projectId, pendingSource);
     setPreview(null);
-    setPreviewPath(null);
+    setPendingSource(null);
   };
 
   const updateSeries = (index: number, patch: Partial<{ name: string; values: string }>) => {
@@ -175,6 +193,22 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
             )}
             {t('design.resources.bind')}
           </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={previewLoading}
+            onClick={() => setOfficePickerOpen((prev) => !prev)}
+          >
+            <Library className="h-3 w-3" />
+            {t('design.resources.bindFromLibrary')}
+          </button>
+          {officePickerOpen && (
+            <DesignOfficeSourcePicker
+              docType="excel"
+              onSelect={(source) => void handlePickFromLibrary(source)}
+              onClose={() => setOfficePickerOpen(false)}
+            />
+          )}
 
           {preview && (
             <div className="space-y-1.5 rounded-md border border-border p-2">
@@ -208,7 +242,7 @@ export function DesignResourcesPanel({ projectId }: DesignResourcesPanelProps) {
                   className="rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
                   onClick={() => {
                     setPreview(null);
-                    setPreviewPath(null);
+                    setPendingSource(null);
                   }}
                 >
                   {t('design.resources.cancelPreview')}

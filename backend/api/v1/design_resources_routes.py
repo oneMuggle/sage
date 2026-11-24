@@ -7,12 +7,14 @@ the main design router.
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from backend.compat.win7.pydantic_compat import ConfigDict
+from backend.compat.win7.pydantic_compat import ConfigDict, model_validator
+from backend.data.database import get_database
 from backend.design import get_design_studio
 from backend.design.errors import (
     DesignError,
@@ -20,6 +22,11 @@ from backend.design.errors import (
     DesignSystemNotFoundError,
     DesignTemplateKindMismatchError,
     DesignTemplateNotFoundError,
+)
+from backend.design.office_sources import (
+    OfficeSourceNotFoundError,
+    list_office_sources,
+    resolve_source_input,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,7 +44,16 @@ class OutlineRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    file_path: str
+    file_path: Optional[str] = None
+    doc_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> OutlineRequest:
+        has_path = bool(self.file_path and str(self.file_path).strip())
+        has_id = bool(self.doc_id and str(self.doc_id).strip())
+        if has_path == has_id:
+            raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
+        return self
 
 
 class EmbedChartRequest(BaseModel):
@@ -54,7 +70,16 @@ class SourcePreviewRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    file_path: str
+    file_path: Optional[str] = None
+    doc_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> SourcePreviewRequest:
+        has_path = bool(self.file_path and str(self.file_path).strip())
+        has_id = bool(self.doc_id and str(self.doc_id).strip())
+        if has_path == has_id:
+            raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -101,15 +126,23 @@ async def extract_outline(req: OutlineRequest):
     create composer can feed it into the project brief without a second
     LLM round-trip.
     """
-    from pathlib import Path
 
     from backend.design.outline_extractor import OutlineExtractor
 
-    path = Path(req.file_path)
-    if not path.exists():
+    try:
+        conn = get_database().get_connection()
+        path = resolve_source_input(conn, req.file_path, req.doc_id)
+    except OfficeSourceNotFoundError as exc:
         return JSONResponse(
             status_code=404,
-            content={"detail": f"File not found: {req.file_path}"},
+            content={"detail": f"Office document not found: {exc.doc_id}"},
+        )
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+    if not path.is_file():
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"File not found: {path}"},
         )
     if path.suffix.lower() not in (".docx",):
         return JSONResponse(
@@ -126,7 +159,7 @@ async def extract_outline(req: OutlineRequest):
         result = OutlineExtractor().extract(path)
         return result.model_dump()
     except Exception as exc:
-        logger.exception("Outline extraction failed for %s", req.file_path)
+        logger.exception("Outline extraction failed for %s", path)
         return JSONResponse(
             status_code=500,
             content={"detail": f"Outline extraction failed: {exc}"},
@@ -145,13 +178,21 @@ async def preview_source(req: SourcePreviewRequest):  # noqa: PLR0911
     Lets the UI show columns and row counts before the user commits to a
     data-source binding (avoids a wasted refresh on the wrong file).
     """
-    from pathlib import Path
 
-    path = Path(req.file_path)
-    if not path.exists():
+    try:
+        conn = get_database().get_connection()
+        path = resolve_source_input(conn, req.file_path, req.doc_id)
+    except OfficeSourceNotFoundError as exc:
         return JSONResponse(
             status_code=404,
-            content={"detail": f"File not found: {req.file_path}"},
+            content={"detail": f"Office document not found: {exc.doc_id}"},
+        )
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+    if not path.is_file():
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"File not found: {path}"},
         )
 
     ext = path.suffix.lower()
@@ -234,11 +275,39 @@ async def preview_source(req: SourcePreviewRequest):  # noqa: PLR0911
             },
         )
     except Exception as exc:
-        logger.exception("Source preview failed for %s", req.file_path)
+        logger.exception("Source preview failed for %s", path)
         return JSONResponse(
             status_code=500,
             content={"detail": f"Source preview failed: {exc}"},
         )
+
+
+# ---------------------------------------------------------------------------
+# GET /design/office-sources — list Office docs available as design sources
+# ---------------------------------------------------------------------------
+
+
+@router.get("/office-sources")
+async def get_office_sources(doc_type: Optional[str] = None):
+    """List Office documents that can be referenced as design sources.
+
+    Frontend uses this to populate the "从文档库选择" picker in the
+    create composer (Word → outline) and resources panel (Excel → data
+    source). Restricted to ``word`` / ``excel`` doc_types; other values
+    yield an empty list.
+    """
+    if doc_type is not None and doc_type not in ("word", "excel"):
+        return {"items": []}
+    try:
+        conn = get_database().get_connection()
+        items = list_office_sources(conn, doc_type=doc_type)
+    except Exception as exc:
+        logger.exception("Listing office sources failed")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Listing office sources failed: {exc}"},
+        )
+    return {"items": [item.model_dump() for item in items]}
 
 
 # ---------------------------------------------------------------------------

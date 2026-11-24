@@ -71,6 +71,7 @@ export const zhDesign = {
   'design.version.restored': '已恢复为新版本',
 
   'design.composer.importOutline': '从 Word 导入大纲',
+  'design.composer.pickFromLibrary': '从文档库选 Word',
   'design.composer.outlineLoaded': '已导入大纲（{count} 段）',
   'design.composer.outlineFailed': '导入大纲失败：{error}',
   'design.composer.quickBrief': '快速简报',
@@ -128,6 +129,15 @@ export const zhDesign = {
   'design.resources.removeSeries': '删除系列',
   'design.resources.embed': '嵌入图表',
   'design.resources.embedded': '已嵌入为 v{version}',
+  'design.resources.bindFromLibrary': '从文档库选择',
+
+  // 文档库素材选择器
+  'design.officePicker.title': '从文档库选择',
+  'design.officePicker.loading': '正在加载文档库…',
+  'design.officePicker.empty': '文档库里还没有可用的文档',
+  'design.officePicker.failed': '加载文档库失败：{error}',
+  'design.officePicker.refresh': '刷新文档库',
+  'design.officePicker.close': '关闭',
 
   // 微调
   'design.tweaks.title': '微调',

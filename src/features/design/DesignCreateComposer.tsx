@@ -4,16 +4,17 @@
  * 用户只需选一个意图 chip（可选）并写 brief，设计系统 / 模板 / 项目名
  * 由服务端默认值补齐；「高级选项」里才暴露完整选择。
  */
-import { ArrowLeft, ChevronDown, FileText, Loader2, Sparkles, Wand2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, FileText, Library, Loader2, Sparkles, Wand2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { extractOutline } from '../../entities/design/designApi';
 import { useDesignStore } from '../../entities/design/designStore';
-import type { ProjectKind } from '../../entities/design/types';
+import type { DesignSourceInput, OfficeSourceRef, ProjectKind } from '../../entities/design/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { HtmlPreviewHost } from '../../widgets/chat/preview/HtmlPreviewHost';
 
+import { DesignOfficeSourcePicker } from './DesignOfficeSourcePicker';
 import { applyTokensCss } from './designTweaks';
 
 interface DesignCreateComposerProps {
@@ -80,6 +81,7 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
   const [advanced, setAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [importingOutline, setImportingOutline] = useState(false);
+  const [officePickerOpen, setOfficePickerOpen] = useState(false);
   const [quickBriefOpen, setQuickBriefOpen] = useState(false);
   const [quickAudience, setQuickAudience] = useState<QuickAudience>('general');
   const [quickLength, setQuickLength] = useState<QuickLength>('medium');
@@ -88,17 +90,10 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
 
   const canPickFile = typeof window !== 'undefined' && Boolean(window.electronAPI?.selectFile);
 
-  const handleImportOutline = async () => {
-    const picker = window.electronAPI?.selectFile;
-    if (!picker) return;
-    const path = await picker({
-      title: t('design.composer.importOutline'),
-      filters: [{ name: 'Word', extensions: ['docx'] }],
-    });
-    if (!path) return;
+  const loadOutline = async (source: DesignSourceInput) => {
     setImportingOutline(true);
     try {
-      const outline = await extractOutline(path);
+      const outline = await extractOutline(source);
       setBrief((prev) => (prev.trim() ? `${prev}\n\n${outline.outline_md}` : outline.outline_md));
       toast.success(
         t('design.composer.outlineLoaded').replace('{count}', String(outline.slide_count)),
@@ -113,6 +108,22 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
     } finally {
       setImportingOutline(false);
     }
+  };
+
+  const handleImportOutline = async () => {
+    const picker = window.electronAPI?.selectFile;
+    if (!picker) return;
+    const path = await picker({
+      title: t('design.composer.importOutline'),
+      filters: [{ name: 'Word', extensions: ['docx'] }],
+    });
+    if (!path) return;
+    await loadOutline({ file_path: path });
+  };
+
+  const handlePickFromLibrary = async (source: OfficeSourceRef) => {
+    setOfficePickerOpen(false);
+    await loadOutline({ doc_id: source.doc_id });
   };
 
   const availablePresets = useMemo(
@@ -254,8 +265,24 @@ export function DesignCreateComposer({ onCancel, onCreated }: DesignCreateCompos
                 )}
                 {t('design.composer.importOutline')}
               </button>
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-ui-xs hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={importingOutline}
+                onClick={() => setOfficePickerOpen((prev) => !prev)}
+              >
+                <Library className="h-3 w-3" />
+                {t('design.composer.pickFromLibrary')}
+              </button>
             </div>
           </div>
+          {officePickerOpen && (
+            <DesignOfficeSourcePicker
+              docType="word"
+              onSelect={(source) => void handlePickFromLibrary(source)}
+              onClose={() => setOfficePickerOpen(false)}
+            />
+          )}
           <textarea
             id="design-brief"
             value={brief}
