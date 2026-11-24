@@ -1,0 +1,27 @@
+[Unit]
+Description=MinerU Document Parsing API (offline bundle)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=__HOME__
+# 显式 HOME：模型目录按启动用户主目录计算（~/.mineru/models）
+Environment=HOME=__HOME__
+# env 文件由 systemd（root）读取后注入服务环境；文件本身保持 600 root，服务用户无需读权限
+EnvironmentFile=/etc/mineru/mineru.env
+# 必须经包装脚本启动：--api-key 只能在命令行传入（无环境变量回退），
+# 直接把 mineru-kit 写进 ExecStart 会静默变成匿名服务。
+ExecStart=/etc/mineru/mineru-start.sh
+Restart=always
+RestartSec=10
+# vLLM 冷启动较慢，给足启动容忍
+TimeoutStartSec=300
+LimitNOFILE=65535
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

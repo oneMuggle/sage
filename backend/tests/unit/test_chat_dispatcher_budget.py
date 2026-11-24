@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Optional
 
 import pytest
 
@@ -238,8 +239,8 @@ def _seed_task_usage(
     task_id: str,
     total_tokens: int,
     created_at_ms: int,
-    cost: float | None = None,
-    run_id: str | None = None,
+    cost: Optional[float] = None,
+    run_id: Optional[str] = None,
 ) -> None:
     """插带 task_id 归因的 usage_events 行（模拟子任务执行期间的 LLM 用量）。
 

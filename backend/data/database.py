@@ -2772,6 +2772,23 @@ class Database:
             "ON browser_accounts(domain)"
         )
 
+        # ── 文档解析结果缓存（按内容哈希 + 引擎去重）────────────────
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS document_parse_cache (
+              content_hash TEXT NOT NULL,
+              engine TEXT NOT NULL,
+              tier TEXT,
+              markdown TEXT,
+              structured_json TEXT,
+              images_dir TEXT,
+              meta_json TEXT,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY (content_hash, engine)
+            )
+            """
+        )
+
         conn.commit()
 
         # C3 (DSH 对标 R9): schema 版本化迁移 —— 幂等应用所有未执行迁移。

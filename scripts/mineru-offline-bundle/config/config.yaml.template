@@ -1,0 +1,10 @@
+# MinerU 内网离线配置（由 install.sh 从模板生成，请勿手工改模板占位符）
+# 关键：source 必须为 local，否则启动时会联网探测 HuggingFace / ModelScope，
+# 内网环境会先卡到超时再回退。
+model:
+  source: local
+  # 模型根目录（由 install.sh 替换为实际路径，如 /var/lib/mineru/.mineru/models）
+  base_dir: __MINERU_MODEL_DIR__
+  small_backend: __SMALL_BACKEND__
+  vlm:
+    engine: __VLM_ENGINE__

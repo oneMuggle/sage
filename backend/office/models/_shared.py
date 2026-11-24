@@ -137,6 +137,12 @@ class PptSlideContent(BaseModel):
     layout: Optional[str] = None
     placeholders: List[Dict[str, Any]] = Field(default_factory=list)
     charts: List[Dict[str, Any]] = Field(default_factory=list)
+    # M6d: 内嵌图片。include_images=False 时**不枚举**（列表为空且
+    # images_omitted=0）；True 时每项含 name/content_type/width_px/
+    # height_px/bytes，embed_image_data=True 时额外带 data_url。
+    images: List[Dict[str, Any]] = Field(default_factory=list)
+    # M6d: 检测到但未返回的图片数（每页上限 / 单图预算 / 全文档预算）。
+    images_omitted: int = Field(default=0, ge=0)
 
 
 class WordMetadataSpec(BaseModel):
@@ -193,6 +199,24 @@ class OfficeReadRequest(BaseModel):
             "User's original filename (before managed import). When None the "
             "summary's original_filename column stays NULL."
         ),
+    )
+
+
+class OfficePptReadRequest(OfficeReadRequest):
+    """POST /api/v1/office/ppt/read —— 通用读请求 + 内嵌图片开关。
+
+    M6d：与 PdfReadRequest 的契约对齐 —— ``include_images`` 控制是否枚举，
+    ``embed_image_data`` 控制是否附带像素（默认关闭，避免普通读取膨胀）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    include_images: bool = Field(
+        default=False, description="是否枚举幻灯片内嵌图片（元数据）"
+    )
+    max_images_per_slide: int = Field(default=3, ge=0, le=10)
+    embed_image_data: bool = Field(
+        default=False, description="是否把图片像素（base64 data_url）一并返回"
     )
 
 

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# MinerU api-server 启动包装（anonymous 模式）
+#
+# 由 install.sh 渲染安装到 /etc/mineru/mineru-start.sh（0755，无密钥）。
+# 匿名模式不传 --api-key，服务端不做鉴权；必须靠内网防火墙限制访问范围。
+set -euo pipefail
+
+exec __PREFIX__/.venv/bin/mineru-kit api-server \
+    --host 0.0.0.0 --port __PORT__ --tier __TIER__

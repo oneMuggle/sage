@@ -9,6 +9,8 @@ import type {
 } from '../../shared/api/types';
 import { renderInlineMarks } from '../../shared/lib/InlineMarks';
 import { useI18n } from '../../shared/lib/i18n';
+
+import { hasChartPoints, MiniChart } from './MiniChart';
 // ──────────────────────────────────────────────────────────────────────
 // Render caps (item 2.6): keep the DOM bounded for huge documents. The
 // note under each capped block tells the user how much was hidden.
@@ -148,7 +150,7 @@ export function PptPreview({ data }: { data: OfficePptReadResult }) {
               <div className="text-xs text-muted mb-1">
                 {t('office.preview.charts')} ({slide.charts.length})
               </div>
-              <ul className="text-xs text-text-secondary space-y-0.5">
+              <ul className="text-xs text-text-secondary space-y-1">
                 {slide.charts.map((chart, i) => {
                   const seriesNames = chart.series
                     .map((s) => s.name)
@@ -159,10 +161,39 @@ export function PptPreview({ data }: { data: OfficePptReadResult }) {
                       <span className="font-medium">{chart.type}</span>
                       {seriesNames && ` · ${seriesNames}`}
                       {chart.truncated && ' …'}
+                      {/* M6d: 系列数值 → 迷你柱状图（无值只剩文字清单） */}
+                      {hasChartPoints(chart.series) && (
+                        <MiniChart categories={chart.categories} series={chart.series} />
+                      )}
                     </li>
                   );
                 })}
               </ul>
+            </div>
+          )}
+          {/* M6d: 页内嵌图片网格（复用 Word 预览的缩略样式与省略提示）。
+              images 非空但无 data_url 时（未开 embed）只显示省略计数。 */}
+          {((slide.images?.length ?? 0) > 0 || (slide.images_omitted ?? 0) > 0) && (
+            <div className="mt-2" data-testid="office-ppt-images">
+              <div className="text-xs text-muted mb-1.5">{t('office.preview.imagesTitle')}</div>
+              <div className="flex flex-wrap gap-2">
+                {(slide.images ?? [])
+                  .filter((img) => img.data_url)
+                  .map((img, i) => (
+                    <img
+                      key={i}
+                      src={img.data_url}
+                      alt={img.name || `image ${i + 1}`}
+                      loading="lazy"
+                      className="h-24 w-auto max-w-[12rem] object-contain rounded border border-border bg-white"
+                    />
+                  ))}
+              </div>
+              {(slide.images_omitted ?? 0) > 0 && (
+                <p className="text-xs text-muted mt-1">
+                  {t('office.preview.imagesOmitted').replace('{n}', String(slide.images_omitted))}
+                </p>
+              )}
             </div>
           )}
           {(slide.table_count > 0 || slide.image_count > 0) && (
@@ -531,12 +562,17 @@ function ExcelSheetTable({ sheet }: { sheet: OfficeExcelSheetContent }) {
           <div className="text-xs text-muted mb-1">
             {t('office.preview.charts')} ({sheet.charts.length})
           </div>
-          <ul className="space-y-0.5 text-xs text-text-secondary">
+          <ul className="space-y-1 text-xs text-text-secondary">
             {sheet.charts.map((chart, i) => (
               <li key={i}>
                 <span className="font-medium">{chart.type}</span>
                 {chart.title ? ` · ${chart.title}` : ''}
                 {` · series: ${chart.series}`}
+                {chart.truncated && ` ${t('office.preview.chartTruncated')}`}
+                {/* M6d: series_items 有值 → 迷你柱状图；否则保留文字清单。 */}
+                {chart.series_items && hasChartPoints(chart.series_items) && (
+                  <MiniChart categories={chart.categories ?? []} series={chart.series_items} />
+                )}
               </li>
             ))}
           </ul>

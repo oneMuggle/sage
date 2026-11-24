@@ -8,10 +8,9 @@ r58: 附件向量索引三端点（index / search / delete）接线 r57 库层�
 from __future__ import annotations
 
 import asyncio
-import io
 import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 from fastapi import APIRouter, File, UploadFile
@@ -20,6 +19,19 @@ from pydantic import BaseModel, Field
 
 # _constrained_list：win7 双版本安全范式（pydantic v1 只认 min_items）。
 from backend.office.models import _constrained_list
+
+# 文档提取已下沉到 services 层（聊天附件路由与文档解析子系统共用同一份
+# 分发表）。以下 re-export 保持既有调用方（legacy_routes / 单测）不受影响。
+from backend.services.attachment_extract import (
+    EXTRACTABLE_DOC_EXTENSIONS,  # noqa: F401 — 兼容性 re-export
+    MAX_ATTACHMENT_PARSE_SECONDS,  # noqa: F401 — 兼容性 re-export
+    MAX_OFFICE_UNCOMPRESSED_BYTES,  # noqa: F401 — 兼容性 re-export
+    MAX_OFFICE_ZIP_MEMBERS,  # noqa: F401 — 兼容性 re-export
+    _extract_document_text,  # noqa: F401 — 兼容性 re-export
+    _guard_office_zip_budget,  # noqa: F401 — 兼容性 re-export
+    extract_attachment_text,
+    extract_attachment_text_async,  # noqa: F401 — 兼容性 re-export
+)
 from backend.services.attachment_rag import (
     AttachmentRagError,
     attachment_vector_store_path,
@@ -27,6 +39,8 @@ from backend.services.attachment_rag import (
     remove_attachment,
     search_attachments,
 )
+from backend.services.document_parse.config import load_mineru_settings
+from backend.services.document_parse.factory import get_mineru_queue
 from backend.services.multimodal.media_store import MEDIA_ROOT, MediaKind, MediaStore
 from backend.wiki.embeddings import EmbeddingConfig
 
@@ -34,20 +48,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
-
-# Phase 3.5：openpyxl(~460ms) + pymupdf(~300ms) + python-docx(~90ms) 只在真的
-# 上传 pdf/docx/xlsx/pptx 附件时才用得上；绝大多数启动路径（会话列表 / 聊天）根本不碰
-# 附件解析，这三个包留在模块顶层就是纯启动税 → 改为按需惰性导入。
-def __getattr__(name: str) -> Any:
-    from backend.core.lazy import load_attr, load_module
-
-    if name == "openpyxl":
-        return load_module("openpyxl", "openpyxl", globals())
-    if name == "pymupdf":
-        return load_module("pymupdf", "pymupdf", globals())
-    if name == "_Docx":
-        return load_attr("docx", "Document", globals(), alias="_Docx")
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/wav", "audio/ogg", "audio/webm", "audio/mp4", "audio/x-m4a"}
 ALLOWED_AUDIO_EXTENSIONS = {"mp3", "wav", "ogg", "webm", "m4a", "flac"}
@@ -77,26 +77,16 @@ ALLOWED_TEXT_EXTENSIONS = {
     # 日志
     "log",
 }
-# R39 第二切片: pdf/docx/xlsx 提取文本注入（复用 office 模块既有依赖 pymupdf /
-# python-docx / openpyxl，零新增依赖）
-# 2026-10-13: 新增 xlsx（openpyxl 已在 Office 模块中安装）
-# 2026-11-15: 新增 pptx（python-pptx 已随 Office 模块安装）
-EXTRACTABLE_DOC_EXTENSIONS = frozenset({"pdf", "docx", "xlsx", "pptx"})
-#: 上传白名单与发送侧提取分发表必须同口径 —— 两者共用同一常量。
+# R39 第二切片: pdf/docx/xlsx/pptx 提取文本注入 —— 白名单与发送侧提取分发表
+# 必须同口径，两者共用 services.attachment_extract 的同一常量。
 ALLOWED_DOC_EXTENSIONS = EXTRACTABLE_DOC_EXTENSIONS
 MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024  # 25 MB
-#: 单次附件解析墙钟上限 —— 同步解析放到线程池后，用 wait_for 防止请求挂死。
-MAX_ATTACHMENT_PARSE_SECONDS = 30.0
-#: docx/xlsx/pptx 是 zip 容器，解析前限制条目数与解压后总大小（zip bomb 防护）。
-MAX_OFFICE_ZIP_MEMBERS = 10_000
-MAX_OFFICE_UNCOMPRESSED_BYTES = 100 * 1024 * 1024  # 100 MB
 #: 扩展名只允许小写字母数字，防止拼进 MediaStore 文件名时带入路径/glob 字符。
 _ATTACHMENT_EXT_RE = re.compile(r"^[a-z0-9]{1,16}$")
 #: 文本附件注入上下文的字符上限（R37 切片口径）
 MAX_TEXT_INJECT_CHARS = 100_000
 #: r58: 索引文本上限（与注入上限独立——全文索引比注入更能吃嵌入 payload）
 MAX_INDEX_TEXT_CHARS = 400_000
-CH_NL = "\n"
 
 #: r58: 附件向量库统一位置（<data>/rag/attachments.json）
 ATTACHMENT_VECTOR_STORE = attachment_vector_store_path(MEDIA_ROOT.parent)
@@ -136,6 +126,8 @@ async def upload_chat_attachment(file: UploadFile = File(...)) -> dict:  # noqa:
         metadata={"original_filename": file.filename or "unknown"},
         ext=ext if ext else None,
     )
+    if ext == "pdf":
+        _schedule_mineru_enrichment(content, file.filename or "attachment.pdf")
 
     response: dict = {"media_ref": ref, "api_url": ref.api_url}
     if is_text:
@@ -163,71 +155,19 @@ async def upload_chat_attachment(file: UploadFile = File(...)) -> dict:  # noqa:
     return response
 
 
-def extract_attachment_text(content: bytes, ext: str) -> str:
-    """按扩展名把附件字节转成可注入聊天的文本。
-
-    二进制文档走对应解析器；其余按 UTF-8 文本解码。发送侧
-    （legacy_routes）在线程池中调用本函数，避免再维护第二份分支。
-    """
-    normalized = ext.lstrip(".").lower()
-    if normalized in EXTRACTABLE_DOC_EXTENSIONS:
-        return _extract_document_text(content, normalized)
-    return content.decode("utf-8")
-
-
-async def extract_attachment_text_async(content: bytes, ext: str) -> str:
-    """发送侧专用：在线程池执行提取，并施加 30s 墙钟上限。
-
-    `wait_for` 超时只截断 await，不会强杀底层线程；线程生命周期由
-    zip 预算（成员数/大小）和 25MB 上传上限共同约束。
-    """
-    return await asyncio.wait_for(
-        asyncio.get_running_loop().run_in_executor(
-            None, extract_attachment_text, content, ext
-        ),
-        timeout=MAX_ATTACHMENT_PARSE_SECONDS,
-    )
-
-
-def _extract_document_text(content: bytes, ext: str) -> str:
-    """R39: pdf/docx/xlsx/pptx 提取纯文本（零新增依赖，复用 office 模块库）。
-
-    2026-11-15: PDF 改为逐页抽取并保留 ``--- page N ---`` 页标记（模型可标注
-    页码），纯图页走 office OCR 兜底（SAGE_OCR 门控）。
-    """
-    from backend.core.lazy import load_attr, load_module
-
-    ext = ext.lstrip(".").lower()
-    if ext in ("docx", "xlsx", "pptx"):
-        _guard_office_zip_budget(content)
-    if ext == "pdf":
-        from backend.services.attachment_pdf import extract_pdf_pages, render_page_marked_text
-
-        return render_page_marked_text(extract_pdf_pages(content))
-    if ext == "docx":
-        _Docx = load_attr("docx", "Document", globals(), alias="_Docx")
-        doc = _Docx(io.BytesIO(content))
-        return CH_NL.join(para.text for para in doc.paragraphs if para.text.strip())
-    if ext == "xlsx":
-        openpyxl = load_module("openpyxl", "openpyxl", globals())
-        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-        try:
-            sheets_text = []
-            for sheet_name in wb.sheetnames:
-                ws = wb[sheet_name]
-                rows = []
-                for row in ws.iter_rows(values_only=True):
-                    cells = [str(c) if c is not None else "" for c in row]
-                    if any(cells):
-                        rows.append("\t".join(cells))
-                if rows:
-                    sheets_text.append(f"[{sheet_name}]" + CH_NL + CH_NL.join(rows))
-            return CH_NL.join(sheets_text) if sheets_text else "(empty workbook)"
-        finally:
-            wb.close()
-    if ext == "pptx":
-        return _extract_pptx_text(content)
-    raise ValueError(f"unsupported document extension: {ext}")
+def _schedule_mineru_enrichment(content: bytes, filename: str) -> None:
+    """阶段 2：本地文本已返回后，后台提交 MinerU（失败静默）。"""
+    try:
+        settings = load_mineru_settings()
+        if not (
+            settings.enabled
+            and settings.configured
+            and settings.use_in_chat_attachment
+        ):
+            return
+        get_mineru_queue().submit(content=content, filename=filename)
+    except Exception:  # noqa: BLE001 — 双阶段补充不得影响上传响应
+        logger.warning("MinerU 后台解析提交失败", exc_info=True)
 
 
 def load_pdf_figure_manifest(store, media_ref, content):
@@ -245,87 +185,8 @@ def load_pdf_figure_manifest(store, media_ref, content):
         return []
 
 
-def _extract_pptx_text(content: bytes) -> str:
-    """PPTX → 文本：逐页标题 / 正文段落 / 表格单元格 / 备注。
-
-    首版不递归组合形状（GroupShape）、图表与 SmartArt 内的文本。
-    """
-    from backend.core.lazy import load_attr
-
-    Presentation = load_attr("pptx", "Presentation", globals())
-    prs = Presentation(io.BytesIO(content))
-    lines: List[str] = []
-    for index, slide in enumerate(prs.slides, start=1):
-        title = ""
-        try:
-            title_shape = slide.shapes.title
-            if title_shape is not None and title_shape.has_text_frame:
-                title = title_shape.text_frame.text.strip()
-        except (AttributeError, KeyError):
-            title = ""
-        lines.append(f"[第{index}页]" + (f" {title}" if title else ""))
-        for shape in slide.shapes:
-            if getattr(shape, "has_text_frame", False):
-                # 标题占位符的第一段已在页头输出；python-pptx 每次迭代
-                # 都会新建 Shape 代理，不能用 id() 判断同一对象。
-                try:
-                    is_title_shape = bool(
-                        shape.is_placeholder and shape.placeholder_format.idx == 0
-                    )
-                except (AttributeError, KeyError):
-                    is_title_shape = False
-                if is_title_shape and title:
-                    continue  # 整块标题已并入页头，避免多段标题重复
-                for para in shape.text_frame.paragraphs:
-                    text = para.text.strip()
-                    if text:
-                        lines.append(text)
-            elif getattr(shape, "has_table", False):
-                for row in shape.table.rows:
-                    cells = [cell.text.strip() for cell in row.cells]
-                    if any(cells):
-                        lines.append("\t".join(cells))
-        # python-pptx 的 notes_slide getter 在缺少备注页时会新建一个 part；
-        # 先看 has_notes_slide，避免对纯文本 deck 逐页产生内存副作用。
-        notes = ""
-        if getattr(slide, "has_notes_slide", False):
-            try:
-                notes_frame = slide.notes_slide.notes_text_frame
-                notes = notes_frame.text.strip() if notes_frame is not None else ""
-            except (AttributeError, KeyError, ValueError):
-                notes = ""
-        if notes:
-            lines.append(f"[备注] {notes}")
-    return CH_NL.join(lines)
-
-
-def _guard_office_zip_budget(content: bytes) -> None:
-    """拒绝解压后过大或条目过多的 Office 文件（zip bomb 防护）。
-
-    与 backend/wiki/extract.py 的加固版同口径：先限制中央目录条目数，
-    再逐条校验 file_size 非负且不超过总预算，最后校验聚合值。
-    只看中央目录声明的大小，不实际解压。
-    """
-    import zipfile
-
-    with zipfile.ZipFile(io.BytesIO(content)) as archive:
-        members = archive.infolist()
-        if len(members) > MAX_OFFICE_ZIP_MEMBERS:
-            raise ValueError(f"文档条目过多: {len(members)}（上限 {MAX_OFFICE_ZIP_MEMBERS}）")
-        total = 0
-        for info in members:
-            size = info.file_size
-            if size < 0 or size > MAX_OFFICE_UNCOMPRESSED_BYTES:
-                raise ValueError(f"文档成员大小非法: {size} bytes")
-            total += size
-            if total > MAX_OFFICE_UNCOMPRESSED_BYTES:
-                raise ValueError(
-                    f"文档解压后过大: {total} bytes（上限 {MAX_OFFICE_UNCOMPRESSED_BYTES}）"
-                )
-
-
 @router.get("/chat/attachments/{media_id}/text")
-async def get_chat_attachment_text(media_id: str) -> dict:
+async def get_chat_attachment_text(media_id: str) -> dict:  # noqa: PLR0911 — 404/400/缓存命中/本地各一返回
     """R37/R39: 读取已上传文档附件的全文（txt 直读、pdf/docx/xlsx/pptx 提取）。
 
     聊天 producer 据此把附件内容注入上下文。非文档/不存在 → 404。
@@ -338,6 +199,17 @@ async def get_chat_attachment_text(media_id: str) -> dict:
     if ref.kind != MediaKind.DOCUMENT:
         return JSONResponse(status_code=400, content={"error": "该附件不是文本文档"})
     ext = (ref.file_path or "").rsplit(".", 1)[-1].lower() if "." in (ref.file_path or "") else "txt"
+    # 阶段 2 已完成的 MinerU 解析优先（缓存按内容哈希寻址）。
+    try:
+        import hashlib
+
+        from backend.services.document_parse.cache import SqliteParseCache
+
+        cached = SqliteParseCache().get(hashlib.sha256(content).hexdigest(), "mineru")
+    except Exception:  # noqa: BLE001 — 缓存不可用回退本地
+        cached = None
+    if cached is not None and cached.text:
+        return {"media_id": media_id, "text": cached.text, "source": "mineru"}
     # 2026-10-13: 需要二进制解析的格式走 _extract_document_text，其余直读 utf-8
     try:
         text = await asyncio.wait_for(
@@ -357,7 +229,7 @@ async def get_chat_attachment_text(media_id: str) -> dict:
             "attachment text extraction failed: ext=%s error_type=%s", ext, type(exc).__name__
         )
         return JSONResponse(status_code=400, content={"error": "附件解析失败"})
-    return {"media_id": media_id, "text": text}
+    return {"media_id": media_id, "text": text, "source": "local"}
 
 
 # ---------- r58: 附件向量索引（接线 services/attachment_rag 库层） ----------
