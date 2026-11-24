@@ -15,9 +15,9 @@ import type {
 import { useI18n } from '../../shared/lib/i18n';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
 
+import { OfficePreviewPanel, type OfficePreviewData } from './OfficePreviewPanel';
 import { TemplateLibrary } from './TemplateLibrary';
 import { officeDocumentPath } from './officeDocumentPath';
-import { OfficePreviewPanel, type OfficePreviewData } from './OfficePreviewPanel';
 import { pollOfficeProgress } from './officeProgress';
 
 const TASK_ID = 'office:generate';
