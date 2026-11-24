@@ -1666,20 +1666,16 @@ class TestDesignRoutes:
         fake_db = MagicMock()
         fake_db.get_connection.return_value = conn
 
-        with (
-            patch(
-                "backend.api.v1.design_resources_routes.get_design_studio",
-                return_value=studio,
-            ),
-            patch(
-                "backend.api.v1.design_resources_routes.get_database",
-                return_value=fake_db,
-            ),
-            patch.object(
-                office_sources.DefaultWorkspaceResolver,
-                "default_workspace_path",
-                lambda self: str(workspace),
-            ),
+        with patch(
+            "backend.api.v1.design_resources_routes.get_design_studio",
+            return_value=studio,
+        ), patch(
+            "backend.api.v1.design_resources_routes.get_database",
+            return_value=fake_db,
+        ), patch.object(
+            office_sources.DefaultWorkspaceResolver,
+            "default_workspace_path",
+            lambda self: str(workspace),
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(
@@ -1753,15 +1749,12 @@ class TestDesignRoutes:
         fake_db = MagicMock()
         fake_db.get_connection.return_value = conn
 
-        with (
-            patch(
-                "backend.api.v1.design_resources_routes.get_design_studio",
-                return_value=studio,
-            ),
-            patch(
-                "backend.api.v1.design_resources_routes.get_database",
-                return_value=fake_db,
-            ),
+        with patch(
+            "backend.api.v1.design_resources_routes.get_design_studio",
+            return_value=studio,
+        ), patch(
+            "backend.api.v1.design_resources_routes.get_database",
+            return_value=fake_db,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(
@@ -1782,20 +1775,16 @@ class TestDesignRoutes:
         fake_db = MagicMock()
         fake_db.get_connection.return_value = conn
 
-        with (
-            patch(
-                "backend.api.v1.design_resources_routes.get_design_studio",
-                return_value=studio,
-            ),
-            patch(
-                "backend.api.v1.design_resources_routes.get_database",
-                return_value=fake_db,
-            ),
-            patch.object(
-                office_sources.DefaultWorkspaceResolver,
-                "default_workspace_path",
-                lambda self: str(workspace),
-            ),
+        with patch(
+            "backend.api.v1.design_resources_routes.get_design_studio",
+            return_value=studio,
+        ), patch(
+            "backend.api.v1.design_resources_routes.get_database",
+            return_value=fake_db,
+        ), patch.object(
+            office_sources.DefaultWorkspaceResolver,
+            "default_workspace_path",
+            lambda self: str(workspace),
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(
@@ -1872,20 +1861,16 @@ class TestDesignRoutes:
         fake_db = MagicMock()
         fake_db.get_connection.return_value = conn
 
-        with (
-            patch(
-                "backend.api.v1.design_routes.get_design_studio",
-                return_value=studio,
-            ),
-            patch(
-                "backend.api.v1.design_routes.get_database",
-                return_value=fake_db,
-            ),
-            patch.object(
-                office_sources.DefaultWorkspaceResolver,
-                "default_workspace_path",
-                lambda self: str(workspace),
-            ),
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ), patch(
+            "backend.api.v1.design_routes.get_database",
+            return_value=fake_db,
+        ), patch.object(
+            office_sources.DefaultWorkspaceResolver,
+            "default_workspace_path",
+            lambda self: str(workspace),
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(
