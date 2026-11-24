@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
-from typing import Any, List
+from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -39,19 +39,40 @@ MAX_ATTACHMENT_PARSE_SECONDS = 30.0
 #: docx/xlsx/pptx 是 zip 容器，解析前限制条目数与解压后总大小（zip bomb 防护）。
 MAX_OFFICE_ZIP_MEMBERS = 10_000
 MAX_OFFICE_UNCOMPRESSED_BYTES = 100 * 1024 * 1024  # 100 MB
+#: 文本附件解码回退链 —— UTF-8 优先, 兼容 Windows 中文 GBK / GB18030。
+TEXT_DECODE_FALLBACKS = ("utf-8", "gbk", "gb18030")
 CH_NL = "\n"
+
+
+def decode_text_content(content: bytes) -> Optional[str]:
+    """按 UTF-8 → GBK → GB18030 顺序解码文本附件；全部失败返回 None。
+
+    上传侧(校验)、回读侧(取全文)、发送侧(注入上下文)共用此口径 ——
+    否则会出现"GBK 文件能上传但读不回全文"的分裂。
+    """
+    for encoding in TEXT_DECODE_FALLBACKS:
+        try:
+            return content.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return None
 
 
 def extract_attachment_text(content: bytes, ext: str) -> str:
     """按扩展名把附件字节转成可注入聊天的文本。
 
-    二进制文档走对应解析器；其余按 UTF-8 文本解码。发送侧
+    二进制文档走对应解析器；其余按 UTF-8/GBK/GB18030 回退解码。发送侧
     （legacy_routes）在线程池中调用本函数，避免再维护第二份分支。
     """
     normalized = ext.lstrip(".").lower()
     if normalized in EXTRACTABLE_DOC_EXTENSIONS:
         return _extract_document_text(content, normalized)
-    return content.decode("utf-8")
+    text = decode_text_content(content)
+    if text is None:
+        raise UnicodeDecodeError(
+            "utf-8", content, 0, len(content), "文本编码无法识别"
+        )
+    return text
 
 
 async def extract_attachment_text_async(content: bytes, ext: str) -> str:
