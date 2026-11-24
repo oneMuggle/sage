@@ -67,23 +67,29 @@ describe('mediaIpc — media:upload-attachment', () => {
 
   it('returns media_ref on success (HTTP 200)', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockResponse({
-        media_ref: { id: 'abc123' },
-        api_url: '/api/v1/media/abc123',
-        text: 'file content',
-      }, 200) as unknown as import('node-fetch').Response,
+      mockResponse(
+        {
+          media_ref: { id: 'abc123' },
+          api_url: '/api/v1/media/abc123',
+          text: 'file content',
+        },
+        200,
+      ) as unknown as import('node-fetch').Response,
     );
 
-    const result = await handler({}, makePayload()) as { media_ref: { id: string } };
+    const result = (await handler({}, makePayload())) as { media_ref: { id: string } };
     expect(result.media_ref.id).toBe('abc123');
   });
 
   it('throws error with backend message on HTTP 415 (unsupported_type)', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockResponse({
-        error_code: 'unsupported_type',
-        error: '不支持的文件类型: exe',
-      }, 415) as unknown as import('node-fetch').Response,
+      mockResponse(
+        {
+          error_code: 'unsupported_type',
+          error: '不支持的文件类型: exe',
+        },
+        415,
+      ) as unknown as import('node-fetch').Response,
     );
 
     await expect(handler({}, makePayload())).rejects.toThrow('不支持的文件类型: exe');
@@ -91,10 +97,13 @@ describe('mediaIpc — media:upload-attachment', () => {
 
   it('throws error with backend message on HTTP 413 (too_large)', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockResponse({
-        error_code: 'too_large',
-        error: '文件过大 (30000000 bytes)，上限 25MB',
-      }, 413) as unknown as import('node-fetch').Response,
+      mockResponse(
+        {
+          error_code: 'too_large',
+          error: '文件过大 (30000000 bytes)，上限 25MB',
+        },
+        413,
+      ) as unknown as import('node-fetch').Response,
     );
 
     await expect(handler({}, makePayload())).rejects.toThrow('文件过大');
@@ -102,10 +111,13 @@ describe('mediaIpc — media:upload-attachment', () => {
 
   it('throws error with backend message on HTTP 422 (unsupported_encoding)', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockResponse({
-        error_code: 'unsupported_encoding',
-        error: '文本文件编码无法识别（支持 UTF-8 / GBK / GB18030）',
-      }, 422) as unknown as import('node-fetch').Response,
+      mockResponse(
+        {
+          error_code: 'unsupported_encoding',
+          error: '文本文件编码无法识别（支持 UTF-8 / GBK / GB18030）',
+        },
+        422,
+      ) as unknown as import('node-fetch').Response,
     );
 
     await expect(handler({}, makePayload())).rejects.toThrow('文本文件编码无法识别');
@@ -113,10 +125,13 @@ describe('mediaIpc — media:upload-attachment', () => {
 
   it('throws error with backend message on HTTP 422 (parse_failed)', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockResponse({
-        error_code: 'parse_failed',
-        error: '文档解析失败（格式损坏或内容过大）',
-      }, 422) as unknown as import('node-fetch').Response,
+      mockResponse(
+        {
+          error_code: 'parse_failed',
+          error: '文档解析失败（格式损坏或内容过大）',
+        },
+        422,
+      ) as unknown as import('node-fetch').Response,
     );
 
     await expect(handler({}, makePayload())).rejects.toThrow('文档解析失败');
@@ -124,10 +139,13 @@ describe('mediaIpc — media:upload-attachment', () => {
 
   it('throws error with backend message on HTTP 504 (parse_timeout)', async () => {
     mockFetch.mockResolvedValueOnce(
-      mockResponse({
-        error_code: 'parse_timeout',
-        error: '文档解析超时（文件可能过大或结构异常）',
-      }, 504) as unknown as import('node-fetch').Response,
+      mockResponse(
+        {
+          error_code: 'parse_timeout',
+          error: '文档解析超时（文件可能过大或结构异常）',
+        },
+        504,
+      ) as unknown as import('node-fetch').Response,
     );
 
     await expect(handler({}, makePayload())).rejects.toThrow('文档解析超时');
@@ -144,9 +162,12 @@ describe('mediaIpc — media:upload-attachment', () => {
   it('throws error with backend message even on HTTP 200 if json.error present (backward compat)', async () => {
     // Backward compatibility: if backend still returns 200 + {error}, treat as failure
     mockFetch.mockResolvedValueOnce(
-      mockResponse({
-        error: '未知错误（旧格式）',
-      }, 200) as unknown as import('node-fetch').Response,
+      mockResponse(
+        {
+          error: '未知错误（旧格式）',
+        },
+        200,
+      ) as unknown as import('node-fetch').Response,
     );
 
     await expect(handler({}, makePayload())).rejects.toThrow('未知错误（旧格式）');
