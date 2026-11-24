@@ -111,12 +111,14 @@ def _num(value: Any) -> float:
 def _rank_key(row: Dict[str, Any]) -> Tuple[float, float, float, str]:
     """记忆的"优劣序" —— 逐项比较，越靠前越该保留。
 
+    数值项取负 —— 排序是升序的，只有取负才能让"更重要 / 更常被访问 /
+    更新鲜"的排在前面，否则组长会选中最差的那条副本。
     最后拿 id 兜底，保证同组里恰好一条排第一。
     """
     return (
-        _num(row.get("importance")),
-        _num(row.get("access_count")),
-        _num(row.get("created_at")),
+        -_num(row.get("importance")),
+        -_num(row.get("access_count")),
+        -_num(row.get("created_at")),
         str(row.get("id") or ""),
     )
 
