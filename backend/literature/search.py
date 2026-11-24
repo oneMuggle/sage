@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Protocol
+from typing import Any, List, Optional, Protocol
 
 from .guidance import render_search_guidance
 from .models import SiteProfile, render_search_url
@@ -22,6 +22,22 @@ class BrowserDriver(Protocol):
     def current_url(self) -> str: ...
     def current_title(self) -> str: ...
     def wait_download(self, timeout_s: float = 60) -> Optional[str]: ...
+
+
+def _fast_fetch_text(driver: Any, url: str) -> Optional[str]:
+    """快路径：驱动支持 ``fetch_text``（web_fetch 通道）时优先用它取正文。
+
+    驱动不支持、登录墙、反爬或工具异常一律返回 ``None``，由调用方回落到浏览器。
+    """
+    fetcher = getattr(driver, "fetch_text", None)
+    if fetcher is None:
+        return None
+    try:
+        text = fetcher(url)
+    except Exception:  # noqa: BLE001 — 快路径失败不应中断检索
+        return None
+    text = str(text or "").strip()
+    return text or None
 
 
 @dataclass(frozen=True)
@@ -66,6 +82,18 @@ def search_with_profile(
         )
 
     url = render_search_url(profile, query, limit=limit)
+    fast_text = _fast_fetch_text(driver, url)
+    if fast_text:
+        page_url = driver.current_url() or url
+        page_title = driver.current_title()
+        guidance = render_search_guidance(
+            profile,
+            query,
+            limit=limit,
+            page_url=page_url,
+            page_title=page_title,
+        )
+        return SearchObservation(url, page_url, page_title, guidance, fast_text)
     page_url = driver.navigate(url, wait_for=wait_for)
     snapshot = driver.snapshot()
     guidance = render_search_guidance(

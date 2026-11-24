@@ -8,6 +8,7 @@ import { TemplateLibrary } from '../TemplateLibrary';
 vi.mock('../../../shared/api/officeApi', () => ({
   officeApi: {
     listTemplates: vi.fn(),
+    templateThumbnail: vi.fn().mockResolvedValue({ ok: false }),
     // M2: TemplateLibrary 现在内嵌 WordStyleTemplateLibrary 分区。
     listWordStylePresets: vi.fn(),
     listWordStyleTemplates: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('../../../shared/api/officeApi', () => ({
 }));
 
 const mockedListTemplates = vi.mocked(officeApi.listTemplates);
+const mockedThumbnail = vi.mocked(officeApi.templateThumbnail);
 
 const BUILTIN = {
   id: 'weekly_report',
@@ -46,6 +48,7 @@ function renderLibrary(onSelect = vi.fn()) {
 describe('TemplateLibrary', () => {
   beforeEach(() => {
     mockedListTemplates.mockReset();
+    mockedThumbnail.mockReset().mockResolvedValue({ ok: false });
     mockedListTemplates.mockResolvedValue({ templates: [BUILTIN, WORKSPACE] });
     vi.mocked(officeApi.listWordStylePresets).mockReset();
     vi.mocked(officeApi.listWordStyleTemplates).mockReset();

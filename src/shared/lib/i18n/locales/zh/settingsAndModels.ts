@@ -527,6 +527,7 @@ export const zhSettingsAndModels = {
   'office.generate.workspace.resultTitle': '生成结果',
   'office.generate.workspace.resultEmpty': '尚未生成文档',
   'office.generate.workspace.open': '在文档页打开',
+  'office.generate.workspace.previewLoading': '加载预览中…',
   'office.generate.workspace.missingInstruction': '请填写生成要求',
   'office.generate.workspace.missingTemplate': '请选择模板',
   'office.generate.workspace.missingSource': '请选择源文档',

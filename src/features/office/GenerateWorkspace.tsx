@@ -15,6 +15,7 @@ import type {
 import { useI18n } from '../../shared/lib/i18n';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
 
+import { OfficePreviewPanel, type OfficePreviewData } from './OfficePreviewPanel';
 import { TemplateLibrary } from './TemplateLibrary';
 import { officeDocumentPath } from './officeDocumentPath';
 import { pollOfficeProgress } from './officeProgress';
@@ -37,6 +38,8 @@ export interface GenerateWorkspaceProps {
   documents: OfficeDocumentSummary[];
   onGenerated?: () => void | Promise<void>;
   onOpenDocument?: (docId: string) => void | Promise<void>;
+  /** M7: load preview data for inline display after generation. */
+  readDocument?: (docId: string) => Promise<OfficePreviewData>;
 }
 
 const inputClass = 'w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text';
@@ -46,6 +49,7 @@ export function GenerateWorkspace({
   documents,
   onGenerated,
   onOpenDocument,
+  readDocument,
 }: GenerateWorkspaceProps) {
   const { t } = useI18n();
   const registerTask = useTaskCenterStore((s) => s.registerTask);
@@ -64,6 +68,8 @@ export function GenerateWorkspace({
   const [styleTemplates, setStyleTemplates] = useState<WordStyleTemplate[]>([]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<OfficeGenerateResult | null>(null);
+  const [preview, setPreview] = useState<OfficePreviewData | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // 版式选项是可选增强：加载失败（离线/demo 未覆盖）时静默降级为「不指定」。
   useEffect(() => {
@@ -254,6 +260,16 @@ export function GenerateWorkspace({
       // Parent refresh failures must not be reported as a generation failure.
       void Promise.resolve()
         .then(() => onGenerated?.())
+        .then(() => {
+          // M7: load inline preview after document list refreshes.
+          if (readDocument && res.summary.id) {
+            setPreviewLoading(true);
+            readDocument(res.summary.id)
+              .then(setPreview)
+              .catch(() => setPreview(null))
+              .finally(() => setPreviewLoading(false));
+          }
+        })
         .catch(() => undefined);
       if (isWordGeneration()) {
         openWordDelivery(res);
@@ -471,22 +487,35 @@ export function GenerateWorkspace({
           {t('office.generate.workspace.resultTitle')}
         </h3>
         {result ? (
-          <div className="space-y-1 text-sm">
-            <p
-              className="font-medium text-text"
-              data-testid="office-generate-workspace-result-filename"
-            >
-              {result.filename}
-            </p>
-            <p className="text-xs tabular-nums text-muted">{result.file_size_bytes} B</p>
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              data-testid="office-generate-workspace-result-open"
-              onClick={() => void onOpenDocument?.(result.summary.id)}
-            >
-              {t('office.generate.workspace.open')}
-            </button>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <p
+                className="font-medium text-text"
+                data-testid="office-generate-workspace-result-filename"
+              >
+                {result.filename}
+              </p>
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline"
+                data-testid="office-generate-workspace-result-open"
+                onClick={() => void onOpenDocument?.(result.summary.id)}
+              >
+                {t('office.generate.workspace.open')}
+              </button>
+            </div>
+            {previewLoading ? (
+              <p
+                className="text-xs text-muted"
+                data-testid="office-generate-workspace-preview-loading"
+              >
+                {t('office.generate.workspace.previewLoading')}
+              </p>
+            ) : preview ? (
+              <div data-testid="office-generate-workspace-preview">
+                <OfficePreviewPanel preview={preview} workspacePath={workspacePath} />
+              </div>
+            ) : null}
           </div>
         ) : (
           <p className="text-xs text-muted" data-testid="office-generate-workspace-result-empty">
