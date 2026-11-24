@@ -122,8 +122,10 @@ def test_upload_non_utf8_rejected(client):
         "/chat/attachments",
         files={"file": ("bad.txt", b"\xff\xfe\x00bad", "text/plain")},
     )
-    assert res.status_code == 200
-    assert "不是有效的 UTF-8" in res.json().get("error", "")
+    assert res.status_code == 422
+    body = res.json()
+    assert body.get("error_code") == "unsupported_encoding"
+    assert "编码无法识别" in body.get("error", "")
 
 
 @_no_multipart
@@ -132,8 +134,10 @@ def test_upload_unsupported_type_still_rejected(client):
         "/chat/attachments",
         files={"file": ("evil.exe", b"MZ", "application/octet-stream")},
     )
-    assert res.status_code == 200
-    assert "不支持的文件类型" in res.json().get("error", "")
+    assert res.status_code == 415
+    body = res.json()
+    assert body.get("error_code") == "unsupported_type"
+    assert "不支持的文件类型" in body.get("error", "")
 
 
 def test_get_text_endpoint_roundtrip(client):
