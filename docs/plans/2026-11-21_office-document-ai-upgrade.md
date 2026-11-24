@@ -319,7 +319,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 - [x] 聊天附件 docx/xlsx/pptx 富预览（附件链路复用 `WordPreview`/`ExcelPreview`/`PptPreview`）；Excel 图表 / 条件格式 / 数据验证、PPT 版式 / 占位符 / 图表在结构化预览中渲染；`@` Office chip 点击右栏预览（跨工作区 chip 不劫持点击）
 - [x] PPT 图片在结构化预览中渲染（`read_ppt` opt-in 提取内嵌图片 + 字节预算；前端图片网格 + 省略计数）
 - [x] Word 模板 Profile/填充前端入口（M6e）—— 文档库「模板填充」按钮 + `WordTemplateFillDialog`（分析槽位 → 填值 → 生成 `<stem>-filled.docx` → 导入文档库预览）
-- [ ] Excel/PPT 基础规则审校（范围/锚点/只读），AI 语义审校视成本评估
+- [x] Excel/PPT 基础规则审校（范围/锚点/只读；M6f）—— `extract_blocks` 按扩展名分派 .docx/.xlsx/.pptx：xlsx 工作表名 → heading、非空行 → table（锚点「工作表「X」第 N 行」）；pptx 标题占位符 → heading、正文 → body、表格 → table（锚点「幻灯片 N …」）；AI 语义审校随既有规则引擎生效（成本由 400 块/200 命中上限约束）
 
 > **实施记录（2026-11-21，M6a PDF 页面操作）**
 > - 新增：`backend/office/pdf_ops.py`（merge/split/rotate/extract/delete/watermark/page-numbers，工作区围栏 + 原子写）
@@ -393,6 +393,15 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 测试：新增 `WordTemplateFillDialog.test.tsx`（6 例：空态 / 相对路径分析 / 工作区模板过滤 / data+images 分流与 onFilled / 必填门禁 / 分析+填充错误）；三个 Office 页面测试补 stub 导出；相关 32 用例绿
 > - 门禁：tsc / eslint / prettier（源码）/ architecture 棘轮（`types.ts` 条目 822 → 823，仅 +1 export 行）全绿
 > - 限制：不支持在对话框内预览生成结果（M7 内联预览项）；富文本/图片尺寸参数后端暂不支持
+
+> **实施记录（2026-11-24，M6f Excel/PPT 基础规则审校）**
+> - `backend/office/rule_executor.py::extract_blocks` 按后缀分派：`.docx` 走原文档画像；`.xlsx` 走 openpyxl `read_only=True, data_only=True`；`.pptx` 走 python-pptx；其他后缀抛 `OfficeParseError("规则审校仅支持 .docx / .xlsx / .pptx 文档")`
+> - xlsx 范围映射：工作表名 → `heading`（锚点「工作表「<名>」」）；每个非空行 → `table`（文本 ` | ` 连接非空单元格，锚点「工作表「<名>」第 <行> 行」，行号为工作表 1 基实际行号；全空行跳过）
+> - pptx 范围映射：仅**标题占位符** → `heading`（普通文本框不冒充标题，避免 preview 的「首个文本框兜底」导致重复块）；非标题文本段 → 单块 `body`；每张表 → `table`（锚点「幻灯片 <n> 标题/正文/表格 <k>」）
+> - 只读与防爆上限：sheets ≤100、每表 ≤500 行、每行 ≤50 单元格、单元格 ≤500 字符、单块 ≤2000 字符、slides ≤200、单表 ≤200 单元格；`caption` scope 在 xlsx/pptx 上无匹配（保留 docx 题注语义）
+> - AI 规则无新增代码路径：沿用 40 块/批、400 块喂入上限、200 findings 上限，成本可控
+> - 测试：`test_rule_executor.py` 新增 6 例（xlsx 块分类/锚点、scope 命中与 body 空、500 行截断、pptx 块分类、scope 与锚点、不支持后缀）；`test_rules_routes.py` 新增端点用例（xlsx → 200 + 锚点）
+> - 门禁：ruff / py38 兼容（0 违规）/ silent-exceptions（39/39）/ architecture 棘轮（exit=0）全绿；定向 pytest 47 passed
 
 ### M7 — 前端一致性与漂移清理（P1，对应 G11/G12）
 
@@ -483,6 +492,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 | M6b 前端批次（对比入口 / 读侧 extras / chip 预览） | ✅ 前端 | `45adac67c` | main PR #3232 + win7 PR #3233；前端 100 文件 / 547 用例 |
 | M6d Excel 图表数值 + PPT 图片渲染 | ✅ | 本轮提交 | 后端 unit 10 + 回归 1385；前端 7 新用例 / 回归 33；门禁绿 |
 | M6e Word 模板 Profile/填充前端入口 | ✅ | 本轮提交 | 前端 6 新用例 / 相关回归 32；tsc/eslint/prettier/architecture 绿 |
+| M6f Excel/PPT 基础规则审校 | ✅ | 本轮提交 | 后端 unit 6 + 端点 1；定向 pytest 47 passed；ruff/py38/silent/architecture 绿 |
 | M7 前端接入 | ⏳ | — | 未开始（M6b 前端批次已先行落 A/B/C/D 四项） |
 | M8 大文件/并发/沙箱 | ⏳ | — | 未开始 |
 
