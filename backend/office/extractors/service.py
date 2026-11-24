@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Literal
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -61,7 +61,15 @@ def _rel(path: Path, root: Path) -> str:
         return path.name
 
 
-def _select_backend(requested: str, suffix: str) -> str:
+def _candidate_backends(requested: str, suffix: str) -> List[str]:
+    """Backend candidates in try-order; explicit requests yield exactly one.
+
+    ``auto`` walks ``_AUTO_ORDER``: an installed optional backend that fails
+    at extraction time falls through to the next candidate (eventually
+    ``light``), so one broken optional dependency cannot fail the whole
+    extraction. Explicit requests never fall back — the caller asked for that
+    specific backend.
+    """
     if requested != "auto":
         if requested not in list_extractors():
             raise OfficeParseError(f"extractor_unknown: {requested}")
@@ -69,17 +77,20 @@ def _select_backend(requested: str, suffix: str) -> str:
             raise OfficeParseError(
                 f"extractor_unavailable: {requested}（未安装对应可选依赖）"
             )
-        return requested
+        return [requested]
+    candidates: List[str] = []
     for name in _AUTO_ORDER:
-        if not extractor_available(name):
+        if name in candidates or not extractor_available(name):
             continue
         try:
             extractor = get_extractor(name)
         except Exception:  # noqa: BLE001 — 探测后实例化失败按不可用处理
             continue
         if extractor.supports(suffix):
-            return name
-    raise OfficeParseError(f"extractor_unavailable: 没有支持 {suffix} 的解析后端")
+            candidates.append(name)
+    if not candidates:
+        raise OfficeParseError(f"extractor_unavailable: 没有支持 {suffix} 的解析后端")
+    return candidates
 
 
 def extract_document(request: ExtractRequest) -> ExtractResult:
@@ -96,20 +107,44 @@ def extract_document(request: ExtractRequest) -> ExtractResult:
             source.stat().st_size, MAX_EXTRACT_BYTES, file_path=source
         )
 
-    backend = _select_backend(request.backend, suffix)
-    extractor = get_extractor(backend)
-    if not extractor.supports(suffix):
-        raise OfficeParseError(
-            f"extractor_unsupported: {backend} 不支持 {suffix}"
-        )
-    try:
-        document = extractor.extract(source)
-    except OfficeParseError:
-        raise
-    except Exception as exc:  # noqa: BLE001 — 解析失败统一映射
-        raise OfficeParseError(f"解析失败: {exc}", file_path=source) from exc
+    backends = _candidate_backends(request.backend, suffix)
+    document: Optional[StructuredDocument] = None
+    fallback_warnings: List[Dict[str, str]] = []
+    used_backend = backends[0]
+    for position, name in enumerate(backends):
+        extractor = get_extractor(name)
+        if not extractor.supports(suffix):
+            raise OfficeParseError(
+                f"extractor_unsupported: {name} 不支持 {suffix}"
+            )
+        try:
+            document = extractor.extract(source)
+        except Exception as exc:  # noqa: BLE001 — 显式后端归一映射；auto 回退下一候选
+            if position == len(backends) - 1:
+                if isinstance(exc, OfficeParseError):
+                    raise
+                raise OfficeParseError(f"解析失败: {exc}", file_path=source) from exc
+            next_name = backends[position + 1]
+            fallback_warnings.append(
+                {
+                    "code": "extractor_fallback",
+                    "message": f"{name} 解析失败（{exc}），已回退到 {next_name}",
+                }
+            )
+            logger.warning(
+                "extractor %s failed on %s: %s; falling back to %s",
+                name,
+                source,
+                exc,
+                next_name,
+            )
+            continue
+        used_backend = name
+        break
+    if document is None:
+        raise OfficeParseError("解析失败: 无可用解析后端", file_path=source)
 
-    warnings: List[Dict[str, str]] = list(document.warnings)
+    warnings: List[Dict[str, str]] = fallback_warnings + list(document.warnings)
     markdown = document.markdown
     if len(markdown) > request.max_chars:
         markdown = markdown[: request.max_chars]
@@ -126,4 +161,4 @@ def extract_document(request: ExtractRequest) -> ExtractResult:
             "warnings": warnings,
         }
     )
-    return ExtractResult(ok=True, extractor=backend, document=document)
+    return ExtractResult(ok=True, extractor=used_backend, document=document)
