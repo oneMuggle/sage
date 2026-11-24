@@ -225,8 +225,27 @@ const DEMO_PDF_READ: OfficePdfReadResult = {
 // 用量统计 / 会话摘要 / 定时任务 / 技能执行输出
 // ─────────────────────────────────────────────────────────────────────────
 
-
 let demoOfficeDocs: OfficeDocumentSummary[] = [...DEMO_OFFICE_DOCS];
+
+// M2 样式模板 demo 状态：工作区模板列表 + 规则包转换用的示例画像。
+const DEMO_STYLE_SPEC: Record<string, unknown> = {
+  body: { font_family: '宋体', font_size_pt: 12, line_spacing: 1.5 },
+  heading1: { font_family: '黑体', font_size_pt: 16 },
+};
+
+interface DemoStyleTemplate {
+  id: string;
+  workspace_path: string;
+  name: string;
+  format_spec: Record<string, unknown>;
+  source_kind: 'preset' | 'rulepack' | 'manual';
+  source_ref: string | null;
+  is_default: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+let demoStyleTemplates: DemoStyleTemplate[] = [];
 
 const DEMO_OFFICE_TEMPLATES: OfficeTemplateMeta[] = [
   {
@@ -281,404 +300,531 @@ const DEMO_OFFICE_TEMPLATES: OfficeTemplateMeta[] = [
 // Preferences KV (get_preference / set_preference): 后端不在, 用内存 Map 顶替。
 // current_session_id 特判返回演示文献调研会话, 首屏直接落到聊天页。
 
-export function createDemoOfficeAndSystemHandlers(): Record<string, (args: Record<string, unknown>) => unknown> {
+export function createDemoOfficeAndSystemHandlers(): Record<
+  string,
+  (args: Record<string, unknown>) => unknown
+> {
   return {
-  office_list_documents: () => ({ documents: [...demoOfficeDocs], total: demoOfficeDocs.length }),
+    office_list_documents: () => ({ documents: [...demoOfficeDocs], total: demoOfficeDocs.length }),
 
-  // Phase 1 Item A: duplicate grouping is advisory. Demo mode returns an
-  // empty result so the badge never appears; the E2E list-refresh path
-  // still must not throw, otherwise `setDocuments([])` clears the list.
-  office_list_duplicate_groups: () => ({ groups: [], total: 0 }),
+    // Phase 1 Item A: duplicate grouping is advisory. Demo mode returns an
+    // empty result so the badge never appears; the E2E list-refresh path
+    // still must not throw, otherwise `setDocuments([])` clears the list.
+    office_list_duplicate_groups: () => ({ groups: [], total: 0 }),
 
-  office_delete_document: (args) => {
-    const docId = asStr(args.docId) || asStr(args.id);
-    demoOfficeDocs = demoOfficeDocs.filter((d) => d.id !== docId);
-    const result: OfficeDeleteResponse = { id: docId, deleted: true };
-    return result;
-  },
+    office_delete_document: (args) => {
+      const docId = asStr(args.docId) || asStr(args.id);
+      demoOfficeDocs = demoOfficeDocs.filter((d) => d.id !== docId);
+      const result: OfficeDeleteResponse = { id: docId, deleted: true };
+      return result;
+    },
 
-  office_word_read: () => DEMO_WORD_READ,
-  office_excel_read: () => DEMO_EXCEL_READ,
-  office_ppt_read: () => DEMO_PPT_READ,
-  office_pdf_read: () => DEMO_PDF_READ,
-  // F3 (office-p0): demo 模式没有真实 PDF 字节可 base64 化 —— 显式
-  // ok:false 让"原文预览"开关走失败回落，而不是未知通道报错。
-  office_pdf_data: () => ({ ok: false, data_url: null, error: '演示模式不支持原文预览' }),
+    office_word_read: () => DEMO_WORD_READ,
+    office_excel_read: () => DEMO_EXCEL_READ,
+    office_ppt_read: () => DEMO_PPT_READ,
+    office_pdf_read: () => DEMO_PDF_READ,
+    // F3 (office-p0): demo 模式没有真实 PDF 字节可 base64 化 —— 显式
+    // ok:false 让"原文预览"开关走失败回落，而不是未知通道报错。
+    office_pdf_data: () => ({ ok: false, data_url: null, error: '演示模式不支持原文预览' }),
 
-  // Round-3 N1: PDF 生成演示路径（生成表单 e2e 的正向用例依赖）
-  office_pdf_generate: (args) => {
-    const workspacePath =
-      asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
-    const filename = asStr(args.filename) || '文档.pdf';
-    const doc: OfficeDocumentSummary = {
-      id: demoUUID(),
-      workspace_path: workspacePath,
-      doc_type: 'pdf',
-      original_filename: null,
-      generated_filename: filename,
-      status: 'generated',
-      created_at: NOW_S,
-      updated_at: NOW_S,
-      metadata: { page_count: 2, file_size_bytes: 88320 },
-      derived_from: null,
-      archived_at: null,
-    };
-    demoOfficeDocs = [doc, ...demoOfficeDocs];
-    return {
-      output_path: `${workspacePath}/${filename}`,
-      filename,
-      file_size_bytes: 88320,
-      page_count: 2,
-    };
-  },
+    // Round-3 N1: PDF 生成演示路径（生成表单 e2e 的正向用例依赖）
+    office_pdf_generate: (args) => {
+      const workspacePath =
+        asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
+      const filename = asStr(args.filename) || '文档.pdf';
+      const doc: OfficeDocumentSummary = {
+        id: demoUUID(),
+        workspace_path: workspacePath,
+        doc_type: 'pdf',
+        original_filename: null,
+        generated_filename: filename,
+        status: 'generated',
+        created_at: NOW_S,
+        updated_at: NOW_S,
+        metadata: { page_count: 2, file_size_bytes: 88320 },
+        derived_from: null,
+        archived_at: null,
+      };
+      demoOfficeDocs = [doc, ...demoOfficeDocs];
+      return {
+        output_path: `${workspacePath}/${filename}`,
+        filename,
+        file_size_bytes: 88320,
+        page_count: 2,
+      };
+    },
 
-  // Office parity batch 1 (item 1.7): archive / restore + snapshots.
-  office_archive_document: (args) => {
-    const docId = asStr(args.docId) || asStr(args.id);
-    const doc = demoOfficeDocs.find((d) => d.id === docId);
-    const archivedAt = doc?.archived_at ?? NOW_S * 1000;
-    if (doc) doc.archived_at = archivedAt;
-    return { ok: true, summary: doc ?? null };
-  },
+    // Office parity batch 1 (item 1.7): archive / restore + snapshots.
+    office_archive_document: (args) => {
+      const docId = asStr(args.docId) || asStr(args.id);
+      const doc = demoOfficeDocs.find((d) => d.id === docId);
+      const archivedAt = doc?.archived_at ?? NOW_S * 1000;
+      if (doc) doc.archived_at = archivedAt;
+      return { ok: true, summary: doc ?? null };
+    },
 
-  office_restore_document: (args) => {
-    const docId = asStr(args.docId) || asStr(args.id);
-    const doc = demoOfficeDocs.find((d) => d.id === docId);
-    if (doc) doc.archived_at = null;
-    return { ok: true, summary: doc ?? null };
-  },
+    office_restore_document: (args) => {
+      const docId = asStr(args.docId) || asStr(args.id);
+      const doc = demoOfficeDocs.find((d) => d.id === docId);
+      if (doc) doc.archived_at = null;
+      return { ok: true, summary: doc ?? null };
+    },
 
-  office_list_snapshots: () => ({
-    snapshots: [
-      {
-        snapshot_id: `${(NOW_S - 7200) * 1000}-文献对比表-23篇核心文献.xlsx`,
-        size_bytes: 85504,
-        created_at: (NOW_S - 7200) * 1000,
-      },
-      {
-        snapshot_id: `${(NOW_S - 3600) * 1000}-文献对比表-23篇核心文献.xlsx`,
-        size_bytes: 86528,
-        created_at: (NOW_S - 3600) * 1000,
-      },
-    ],
-  }),
-
-  office_restore_snapshot: (args) => {
-    const docId = asStr(args.docId);
-    const doc = demoOfficeDocs.find((d) => d.id === docId);
-    if (doc) doc.updated_at = NOW_S * 1000;
-    return { ok: true, summary: doc ?? null };
-  },
-
-  office_word_generate: (args) => {
-    const workspacePath =
-      asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
-    const filename = asStr(args.filename) || '文档.docx';
-    const doc: OfficeDocumentSummary = {
-      id: demoUUID(),
-      workspace_path: workspacePath,
-      doc_type: 'word',
-      original_filename: null,
-      generated_filename: filename,
-      status: 'generated',
-      created_at: NOW_S,
-      updated_at: NOW_S,
-      metadata: { paragraph_count: 12, table_count: 1, file_size_bytes: 24576 },
-      derived_from: null,
-      archived_at: null,
-    };
-    demoOfficeDocs = [doc, ...demoOfficeDocs];
-    return { output_path: `${workspacePath}/${filename}`, filename, file_size_bytes: 24576 };
-  },
-
-  office_excel_generate: (args) => {
-    const workspacePath =
-      asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
-    const filename = asStr(args.filename) || '数据表.xlsx';
-    const doc: OfficeDocumentSummary = {
-      id: demoUUID(),
-      workspace_path: workspacePath,
-      doc_type: 'excel',
-      original_filename: null,
-      generated_filename: filename,
-      status: 'generated',
-      created_at: NOW_S,
-      updated_at: NOW_S,
-      metadata: { sheet_count: 1, file_size_bytes: 18432 },
-      derived_from: null,
-      archived_at: null,
-    };
-    demoOfficeDocs = [doc, ...demoOfficeDocs];
-    return { output_path: `${workspacePath}/${filename}`, filename, file_size_bytes: 18432 };
-  },
-
-  office_ppt_generate: (args) => {
-    const workspacePath =
-      asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
-    const filename = asStr(args.filename) || '幻灯片.pptx';
-    const doc: OfficeDocumentSummary = {
-      id: demoUUID(),
-      workspace_path: workspacePath,
-      doc_type: 'ppt',
-      original_filename: null,
-      generated_filename: filename,
-      status: 'generated',
-      created_at: NOW_S,
-      updated_at: NOW_S,
-      metadata: { page_count: 4, file_size_bytes: 1048576 },
-      derived_from: null,
-      archived_at: null,
-    };
-    demoOfficeDocs = [doc, ...demoOfficeDocs];
-    return { output_path: `${workspacePath}/${filename}`, filename, file_size_bytes: 1048576 };
-  },
-
-  // Office parity batch 2 (items 2.5 / 2.7): update preview (dry-run) +
-  // PDF export. Preview turns each composed op into one generic change
-  // entry (the real backend diffs against a temp copy — demo just echoes
-  // a plausible shape so the dialog state machine is exercisable).
-  office_update_preview: (args) => {
-    const ops = Array.isArray(args.ops) ? (args.ops as OfficeUpdateOp[]) : [];
-    const changes = ops.slice(0, 200).map((raw) => {
-      const op = typeof raw?.op === 'string' ? raw.op : 'unknown';
-      if (op === 'replace_text') {
-        return {
-          op,
-          target: asStr(raw.find),
-          before: asStr(raw.find),
-          after: asStr(raw.replace),
-        };
-      }
-      if (op === 'set_cells') {
-        const sheet = asStr(raw.sheet) || 'Sheet1';
-        const cells = Array.isArray(raw.cells) ? raw.cells : [];
-        const first = cells[0] as Record<string, unknown> | undefined;
-        return {
-          op,
-          target: first ? `${sheet}!${asStr(first.addr)}` : sheet,
-          after: first ? asStr(first.value) : '',
-        };
-      }
-      if (op === 'set_slide_title') {
-        return {
-          op,
-          target: `slide[${asNum(raw.index, 0)}]`,
-          after: asStr(raw.title),
-        };
-      }
-      return { op, summary: `${op}` };
-    });
-    const result: OfficeUpdatePreviewResult = {
-      ok: true,
-      changes,
-      truncated: ops.length > 200,
-      error: null,
-      // F1: the demo stub carries the version stamp too, so the dialog's
-      // preview → apply revision handshake is exercisable without a backend.
-      source_revision: `sha256:demo-${asStr(args.docId) || 'doc'}`,
-      ops_hash: `ops:demo-${ops.length}`,
-      preview_id: `pv_demo_${ops.length}`,
-    };
-    return result;
-  },
-
-  office_export_pdf: (args) => {
-    const filePath = asStr(args.filePath) || asStr(args.file_path) || 'document.docx';
-    const outputPath = filePath.replace(/\.(docx|xlsx|pptx)$/i, '.pdf');
-    const result: OfficeExportPdfResult = {
-      ok: true,
-      method: 'libreoffice',
-      output_path: outputPath,
-      error: null,
-    };
-    return result;
-  },
-
-  // Office parity round 2 (R1): 页内应用编辑 —— 回读 preview 的 ops 真正
-  // 写入 demo 文档行 (status → edited, updated_at 刷新), 并按后端契约回
-  // {ok, summary, self_check}。self_check.summary 模拟后端自检回读的
-  // 计数形状。未知 doc 在 demo 里不抛 404 (与 archive/restore 桩一致)。
-  office_doc_update: (args) => {
-    const docId = asStr(args.docId);
-    const doc = demoOfficeDocs.find((d) => d.id === docId);
-    const ops = Array.isArray(args.ops) ? (args.ops as OfficeUpdateOp[]) : [];
-    if (doc) {
-      doc.status = 'edited';
-      doc.updated_at = NOW_S * 1000;
-    }
-    const result: OfficeDocUpdateResponse = {
-      ok: true,
-      summary: doc ?? demoOfficeDocs[0],
-      self_check: {
-        ok: true,
-        summary: { ops_applied: ops.length, re_read: true },
-        error: null,
-      },
-      previous_revision: asStr(args.expectedRevision) || null,
-      revision: `sha256:demo-${docId || 'doc'}-${ops.length}`,
-      idempotent_replay: false,
-    };
-    return result;
-  },
-
-  // F1/F2: content revision probe (GET /office/doc/{id}/revision). The demo
-  // derives a stable pseudo-hash from the row so the preview cache key
-  // changes exactly when the demo document does.
-  office_doc_revision: (args) => {
-    const docId = asStr(args.docId);
-    const doc = demoOfficeDocs.find((d) => d.id === docId);
-    return {
-      doc_id: docId,
-      revision: `sha256:demo-${docId}-${doc?.updated_at ?? 0}`,
-      size_bytes: doc?.metadata?.file_size_bytes ?? 0,
-      mtime_ms: doc?.updated_at ?? 0,
-    };
-  },
-
-  // Office parity batch 3 (item 3.2): 模板库 — 列表返回内置模板 (round-3
-  // N2 起覆盖 word/excel/ppt); instantiate 走 office_*_generate 同款入库桩
-  // (新文档出现在文档列表, doc_type 按扩展名推断), 并按 fill-template 结果
-  // 形状回填 filled_count / unfilled_placeholders。
-  office_list_templates: (): OfficeTemplateListResponse => ({
-    templates: DEMO_OFFICE_TEMPLATES,
-  }),
-
-  office_templates_instantiate: (args) => {
-    const workspacePath =
-      asStr(args.workspacePath) || asStr(args.workspace_path) || DEMO_WORKSPACE_PATH;
-    const filename = asStr(args.filename) || '模板文档.docx';
-    const data = (args.data as Record<string, string>) ?? {};
-    // Round-3 N2: the backend picks the filler by the template's
-    // doc_type — the demo stub infers it from the output extension.
-    const docType: OfficeDocumentSummary['doc_type'] = filename.toLowerCase().endsWith('.xlsx')
-      ? 'excel'
-      : filename.toLowerCase().endsWith('.pptx')
-        ? 'ppt'
-        : 'word';
-    const metadata: OfficeDocumentSummary['metadata'] =
-      docType === 'excel'
-        ? { sheet_count: 1, file_size_bytes: 12000 }
-        : docType === 'ppt'
-          ? { page_count: 1, file_size_bytes: 30000 }
-          : { paragraph_count: 8, table_count: 0, file_size_bytes: 21504 };
-    const doc: OfficeDocumentSummary = {
-      id: demoUUID(),
-      workspace_path: workspacePath,
-      doc_type: docType,
-      original_filename: null,
-      generated_filename: filename,
-      status: 'generated',
-      created_at: NOW_S,
-      updated_at: NOW_S,
-      metadata,
-      derived_from: null,
-      archived_at: null,
-    };
-    demoOfficeDocs = [doc, ...demoOfficeDocs];
-    const filledCount = Object.values(data).filter((v) => String(v).trim() !== '').length;
-    const result: OfficeTemplateInstantiateResult = {
-      output_path: `${workspacePath}/${filename}`,
-      filename,
-      file_size_bytes: metadata.file_size_bytes,
-      filled_count: filledCount,
-      unfilled_placeholders: [],
-    };
-    return result;
-  },
-
-  // ── 进化 / 学习 ──
-  trigger_learn: () => {
-    const response: LearnResponse = { status: 'queued', message: '已加入后台审阅队列' };
-    return response;
-  },
-
-  get_evolution_logs: (args) => {
-    const offset = Math.max(0, asNum(args.offset, 0));
-    const limit = Math.min(100, Math.max(1, asNum(args.limit, 20)));
-    return DEMO_EVOLUTION_LOGS.slice(offset, offset + limit);
-  },
-
-  // ── MCP ──
-  mcp_status: () => {
-    const report: McpStatusReport = {
-      generated_at: NOW_S,
-      all_ready: true,
-      degraded: false,
-      failed_required: false,
-      servers: [
+    office_list_snapshots: () => ({
+      snapshots: [
         {
-          name: 'filesystem',
-          state: 'ready',
-          tool_count: 6,
-          last_error: null,
-          since: NOW_S - 3600,
-          required: false,
+          snapshot_id: `${(NOW_S - 7200) * 1000}-文献对比表-23篇核心文献.xlsx`,
+          size_bytes: 85504,
+          created_at: (NOW_S - 7200) * 1000,
+        },
+        {
+          snapshot_id: `${(NOW_S - 3600) * 1000}-文献对比表-23篇核心文献.xlsx`,
+          size_bytes: 86528,
+          created_at: (NOW_S - 3600) * 1000,
         },
       ],
-    };
-    return report;
-  },
+    }),
 
-  mcp_servers: () => {
-    const config: McpServerConfig = {
-      name: 'filesystem',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-filesystem', DEMO_WORKSPACE_PATH],
-      env: {},
-      enabled: true,
-      required: false,
-      timeout_seconds: 30,
-      builtin: false,
-    };
-    return { servers: [config] };
-  },
+    office_restore_snapshot: (args) => {
+      const docId = asStr(args.docId);
+      const doc = demoOfficeDocs.find((d) => d.id === docId);
+      if (doc) doc.updated_at = NOW_S * 1000;
+      return { ok: true, summary: doc ?? null };
+    },
 
-  mcp_server_add: (args) => {
-    const config: McpServerConfig = {
-      name: asStr(args.name),
-      command: asStr(args.command),
-      args: Array.isArray(args.args)
-        ? (args.args.filter((a) => typeof a === 'string') as string[])
-        : [],
-      env: {},
-      enabled: true,
-      required: args.required === true,
-      timeout_seconds: 30,
-      builtin: false,
-    };
-    return config;
-  },
+    office_word_generate: (args) => {
+      const workspacePath =
+        asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
+      const filename = asStr(args.filename) || '文档.docx';
+      const doc: OfficeDocumentSummary = {
+        id: demoUUID(),
+        workspace_path: workspacePath,
+        doc_type: 'word',
+        original_filename: null,
+        generated_filename: filename,
+        status: 'generated',
+        created_at: NOW_S,
+        updated_at: NOW_S,
+        metadata: { paragraph_count: 12, table_count: 1, file_size_bytes: 24576 },
+        derived_from: null,
+        archived_at: null,
+      };
+      demoOfficeDocs = [doc, ...demoOfficeDocs];
+      return { output_path: `${workspacePath}/${filename}`, filename, file_size_bytes: 24576 };
+    },
 
-  mcp_server_update: (args) => {
-    const config: McpServerConfig = {
-      name: asStr(args.name),
-      command: asStr(args.command),
-      args: Array.isArray(args.args)
-        ? (args.args.filter((a) => typeof a === 'string') as string[])
-        : [],
-      env: {},
-      enabled: args.enabled !== false,
-      required: args.required === true,
-      timeout_seconds: 30,
-      builtin: false,
-    };
-    return config;
-  },
+    // M2 样式模板：demo 模式用内存列表顶替工作区模板库。
+    office_word_style_presets: () => ({
+      ok: true,
+      presets: [
+        {
+          id: 'default',
+          name: '默认版式',
+          description: '沿用生成器历史默认（宋体/Times New Roman、默认页边距）。',
+        },
+        {
+          id: 'report',
+          name: '通用报告',
+          description: 'A4 报告：正文宋体 12pt、1.5 倍行距；各级标题黑体。',
+        },
+        {
+          id: 'gb9704-gongwen',
+          name: '党政机关公文（GB/T 9704）',
+          description: '正文仿宋 16pt、行距 28pt；标题黑体；公文式页边距。',
+        },
+        {
+          id: 'academic-thesis',
+          name: '学术论文（通用）',
+          description: '学位/期刊论文通用版式：正文宋体 12pt、1.5 倍行距。',
+        },
+      ],
+    }),
 
-  mcp_server_delete: () => ({ ok: true }),
+    office_word_style_from_rulepack: (args) => {
+      const rulepackId = asStr(args.rulepack_id) || asStr(args.rulepackId) || 'general-quality';
+      return {
+        ok: true,
+        rulepack_id: rulepackId,
+        format_spec: DEMO_STYLE_SPEC,
+        applied_rule_ids: ['body-font', 'heading-font'],
+        unmapped: [],
+        warnings: [],
+      };
+    },
 
-  // ── 主题 ──
-  theme_list: () => [],
-  theme_get: () => null,
-  theme_save: (args) => ({ id: demoUUID(), ...args }),
-  theme_delete: () => ({ ok: true }),
+    office_word_style_apply: (args) => {
+      const dryRun = Boolean(args.dry_run ?? args.dryRun);
+      const filePath = asStr(args.file_path) || asStr(args.filePath) || '演示文档.docx';
+      const stem = filePath.replace(/\.docx$/i, '');
+      const stylesChanged = [
+        { style: 'Normal', field: 'font_size', before: null, after: 12 },
+        { style: 'Heading 1', field: 'font_family', before: null, after: '黑体' },
+      ];
+      return {
+        ok: true,
+        dry_run: dryRun,
+        saved: !dryRun,
+        output_path: dryRun ? null : `${stem}-styled.docx`,
+        styles_changed: stylesChanged,
+        direct_runs_cleared: 0,
+        warnings: [],
+      };
+    },
 
-  // ── 流控制 ──
-  interrupt_agent: () => ({ ok: true }),
-  questions_answer: () => ({ ok: true }),
-  permissions_answer: () => ({ ok: true }),
-};
+    office_word_style_templates: (args) => {
+      const workspacePath =
+        asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
+      return {
+        ok: true,
+        workspace_path: workspacePath,
+        templates: demoStyleTemplates.filter((t) => t.workspace_path === workspacePath),
+      };
+    },
 
+    office_word_style_template_save: (args) => {
+      const workspacePath =
+        asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
+      const now = NOW_S * 1000;
+      const presetId = asStr(args.format_spec_preset) || asStr(args.formatSpecPreset);
+      const rulepackId = asStr(args.rulepack_id) || asStr(args.rulepackId);
+      const template: DemoStyleTemplate = {
+        id: demoUUID(),
+        workspace_path: workspacePath,
+        name: asStr(args.name) || '未命名样式',
+        format_spec: (args.format_spec ?? args.formatSpec ?? DEMO_STYLE_SPEC) as Record<
+          string,
+          unknown
+        >,
+        source_kind: rulepackId ? 'rulepack' : presetId ? 'preset' : 'manual',
+        source_ref:
+          asStr(args.source_ref) || asStr(args.sourceRef) || rulepackId || presetId || null,
+        is_default: Boolean(args.is_default ?? args.isDefault),
+        created_at: now,
+        updated_at: now,
+      };
+      if (template.is_default) {
+        demoStyleTemplates = demoStyleTemplates.map((t) =>
+          t.workspace_path === workspacePath ? { ...t, is_default: false } : t,
+        );
+      }
+      demoStyleTemplates = [template, ...demoStyleTemplates];
+      return { ok: true, template };
+    },
+
+    office_word_style_template_activate: (args) => {
+      const templateId = asStr(args.template_id) || asStr(args.templateId);
+      demoStyleTemplates = demoStyleTemplates.map((t) => ({
+        ...t,
+        is_default: t.id === templateId,
+      }));
+      const template = demoStyleTemplates.find((t) => t.id === templateId);
+      return { ok: true, template: template ?? null };
+    },
+
+    office_word_style_template_clear_default: (args) => {
+      const workspacePath =
+        asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
+      demoStyleTemplates = demoStyleTemplates.map((t) =>
+        t.workspace_path === workspacePath ? { ...t, is_default: false } : t,
+      );
+      return { ok: true, workspace_path: workspacePath };
+    },
+
+    office_word_style_template_delete: (args) => {
+      const templateId = asStr(args.template_id) || asStr(args.templateId);
+      const workspacePath =
+        asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
+      demoStyleTemplates = demoStyleTemplates.filter((t) => t.id !== templateId);
+      return { ok: true, template_id: templateId, workspace_path: workspacePath };
+    },
+
+    office_excel_generate: (args) => {
+      const workspacePath =
+        asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
+      const filename = asStr(args.filename) || '数据表.xlsx';
+      const doc: OfficeDocumentSummary = {
+        id: demoUUID(),
+        workspace_path: workspacePath,
+        doc_type: 'excel',
+        original_filename: null,
+        generated_filename: filename,
+        status: 'generated',
+        created_at: NOW_S,
+        updated_at: NOW_S,
+        metadata: { sheet_count: 1, file_size_bytes: 18432 },
+        derived_from: null,
+        archived_at: null,
+      };
+      demoOfficeDocs = [doc, ...demoOfficeDocs];
+      return { output_path: `${workspacePath}/${filename}`, filename, file_size_bytes: 18432 };
+    },
+
+    office_ppt_generate: (args) => {
+      const workspacePath =
+        asStr(args.workspace_path) || asStr(args.workspacePath) || DEMO_WORKSPACE_PATH;
+      const filename = asStr(args.filename) || '幻灯片.pptx';
+      const doc: OfficeDocumentSummary = {
+        id: demoUUID(),
+        workspace_path: workspacePath,
+        doc_type: 'ppt',
+        original_filename: null,
+        generated_filename: filename,
+        status: 'generated',
+        created_at: NOW_S,
+        updated_at: NOW_S,
+        metadata: { page_count: 4, file_size_bytes: 1048576 },
+        derived_from: null,
+        archived_at: null,
+      };
+      demoOfficeDocs = [doc, ...demoOfficeDocs];
+      return { output_path: `${workspacePath}/${filename}`, filename, file_size_bytes: 1048576 };
+    },
+
+    // Office parity batch 2 (items 2.5 / 2.7): update preview (dry-run) +
+    // PDF export. Preview turns each composed op into one generic change
+    // entry (the real backend diffs against a temp copy — demo just echoes
+    // a plausible shape so the dialog state machine is exercisable).
+    office_update_preview: (args) => {
+      const ops = Array.isArray(args.ops) ? (args.ops as OfficeUpdateOp[]) : [];
+      const changes = ops.slice(0, 200).map((raw) => {
+        const op = typeof raw?.op === 'string' ? raw.op : 'unknown';
+        if (op === 'replace_text') {
+          return {
+            op,
+            target: asStr(raw.find),
+            before: asStr(raw.find),
+            after: asStr(raw.replace),
+          };
+        }
+        if (op === 'set_cells') {
+          const sheet = asStr(raw.sheet) || 'Sheet1';
+          const cells = Array.isArray(raw.cells) ? raw.cells : [];
+          const first = cells[0] as Record<string, unknown> | undefined;
+          return {
+            op,
+            target: first ? `${sheet}!${asStr(first.addr)}` : sheet,
+            after: first ? asStr(first.value) : '',
+          };
+        }
+        if (op === 'set_slide_title') {
+          return {
+            op,
+            target: `slide[${asNum(raw.index, 0)}]`,
+            after: asStr(raw.title),
+          };
+        }
+        return { op, summary: `${op}` };
+      });
+      const result: OfficeUpdatePreviewResult = {
+        ok: true,
+        changes,
+        truncated: ops.length > 200,
+        error: null,
+        // F1: the demo stub carries the version stamp too, so the dialog's
+        // preview → apply revision handshake is exercisable without a backend.
+        source_revision: `sha256:demo-${asStr(args.docId) || 'doc'}`,
+        ops_hash: `ops:demo-${ops.length}`,
+        preview_id: `pv_demo_${ops.length}`,
+      };
+      return result;
+    },
+
+    office_export_pdf: (args) => {
+      const filePath = asStr(args.filePath) || asStr(args.file_path) || 'document.docx';
+      const outputPath = filePath.replace(/\.(docx|xlsx|pptx)$/i, '.pdf');
+      const result: OfficeExportPdfResult = {
+        ok: true,
+        method: 'libreoffice',
+        output_path: outputPath,
+        error: null,
+      };
+      return result;
+    },
+
+    // Office parity round 2 (R1): 页内应用编辑 —— 回读 preview 的 ops 真正
+    // 写入 demo 文档行 (status → edited, updated_at 刷新), 并按后端契约回
+    // {ok, summary, self_check}。self_check.summary 模拟后端自检回读的
+    // 计数形状。未知 doc 在 demo 里不抛 404 (与 archive/restore 桩一致)。
+    office_doc_update: (args) => {
+      const docId = asStr(args.docId);
+      const doc = demoOfficeDocs.find((d) => d.id === docId);
+      const ops = Array.isArray(args.ops) ? (args.ops as OfficeUpdateOp[]) : [];
+      if (doc) {
+        doc.status = 'edited';
+        doc.updated_at = NOW_S * 1000;
+      }
+      const result: OfficeDocUpdateResponse = {
+        ok: true,
+        summary: doc ?? demoOfficeDocs[0],
+        self_check: {
+          ok: true,
+          summary: { ops_applied: ops.length, re_read: true },
+          error: null,
+        },
+        previous_revision: asStr(args.expectedRevision) || null,
+        revision: `sha256:demo-${docId || 'doc'}-${ops.length}`,
+        idempotent_replay: false,
+      };
+      return result;
+    },
+
+    // F1/F2: content revision probe (GET /office/doc/{id}/revision). The demo
+    // derives a stable pseudo-hash from the row so the preview cache key
+    // changes exactly when the demo document does.
+    office_doc_revision: (args) => {
+      const docId = asStr(args.docId);
+      const doc = demoOfficeDocs.find((d) => d.id === docId);
+      return {
+        doc_id: docId,
+        revision: `sha256:demo-${docId}-${doc?.updated_at ?? 0}`,
+        size_bytes: doc?.metadata?.file_size_bytes ?? 0,
+        mtime_ms: doc?.updated_at ?? 0,
+      };
+    },
+
+    // Office parity batch 3 (item 3.2): 模板库 — 列表返回内置模板 (round-3
+    // N2 起覆盖 word/excel/ppt); instantiate 走 office_*_generate 同款入库桩
+    // (新文档出现在文档列表, doc_type 按扩展名推断), 并按 fill-template 结果
+    // 形状回填 filled_count / unfilled_placeholders。
+    office_list_templates: (): OfficeTemplateListResponse => ({
+      templates: DEMO_OFFICE_TEMPLATES,
+    }),
+
+    office_templates_instantiate: (args) => {
+      const workspacePath =
+        asStr(args.workspacePath) || asStr(args.workspace_path) || DEMO_WORKSPACE_PATH;
+      const filename = asStr(args.filename) || '模板文档.docx';
+      const data = (args.data as Record<string, string>) ?? {};
+      // Round-3 N2: the backend picks the filler by the template's
+      // doc_type — the demo stub infers it from the output extension.
+      const docType: OfficeDocumentSummary['doc_type'] = filename.toLowerCase().endsWith('.xlsx')
+        ? 'excel'
+        : filename.toLowerCase().endsWith('.pptx')
+          ? 'ppt'
+          : 'word';
+      const metadata: OfficeDocumentSummary['metadata'] =
+        docType === 'excel'
+          ? { sheet_count: 1, file_size_bytes: 12000 }
+          : docType === 'ppt'
+            ? { page_count: 1, file_size_bytes: 30000 }
+            : { paragraph_count: 8, table_count: 0, file_size_bytes: 21504 };
+      const doc: OfficeDocumentSummary = {
+        id: demoUUID(),
+        workspace_path: workspacePath,
+        doc_type: docType,
+        original_filename: null,
+        generated_filename: filename,
+        status: 'generated',
+        created_at: NOW_S,
+        updated_at: NOW_S,
+        metadata,
+        derived_from: null,
+        archived_at: null,
+      };
+      demoOfficeDocs = [doc, ...demoOfficeDocs];
+      const filledCount = Object.values(data).filter((v) => String(v).trim() !== '').length;
+      const result: OfficeTemplateInstantiateResult = {
+        output_path: `${workspacePath}/${filename}`,
+        filename,
+        file_size_bytes: metadata.file_size_bytes,
+        filled_count: filledCount,
+        unfilled_placeholders: [],
+      };
+      return result;
+    },
+
+    // ── 进化 / 学习 ──
+    trigger_learn: () => {
+      const response: LearnResponse = { status: 'queued', message: '已加入后台审阅队列' };
+      return response;
+    },
+
+    get_evolution_logs: (args) => {
+      const offset = Math.max(0, asNum(args.offset, 0));
+      const limit = Math.min(100, Math.max(1, asNum(args.limit, 20)));
+      return DEMO_EVOLUTION_LOGS.slice(offset, offset + limit);
+    },
+
+    // ── MCP ──
+    mcp_status: () => {
+      const report: McpStatusReport = {
+        generated_at: NOW_S,
+        all_ready: true,
+        degraded: false,
+        failed_required: false,
+        servers: [
+          {
+            name: 'filesystem',
+            state: 'ready',
+            tool_count: 6,
+            last_error: null,
+            since: NOW_S - 3600,
+            required: false,
+          },
+        ],
+      };
+      return report;
+    },
+
+    mcp_servers: () => {
+      const config: McpServerConfig = {
+        name: 'filesystem',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', DEMO_WORKSPACE_PATH],
+        env: {},
+        enabled: true,
+        required: false,
+        timeout_seconds: 30,
+        builtin: false,
+      };
+      return { servers: [config] };
+    },
+
+    mcp_server_add: (args) => {
+      const config: McpServerConfig = {
+        name: asStr(args.name),
+        command: asStr(args.command),
+        args: Array.isArray(args.args)
+          ? (args.args.filter((a) => typeof a === 'string') as string[])
+          : [],
+        env: {},
+        enabled: true,
+        required: args.required === true,
+        timeout_seconds: 30,
+        builtin: false,
+      };
+      return config;
+    },
+
+    mcp_server_update: (args) => {
+      const config: McpServerConfig = {
+        name: asStr(args.name),
+        command: asStr(args.command),
+        args: Array.isArray(args.args)
+          ? (args.args.filter((a) => typeof a === 'string') as string[])
+          : [],
+        env: {},
+        enabled: args.enabled !== false,
+        required: args.required === true,
+        timeout_seconds: 30,
+        builtin: false,
+      };
+      return config;
+    },
+
+    mcp_server_delete: () => ({ ok: true }),
+
+    // ── 主题 ──
+    theme_list: () => [],
+    theme_get: () => null,
+    theme_save: (args) => ({ id: demoUUID(), ...args }),
+    theme_delete: () => ({ ok: true }),
+
+    // ── 流控制 ──
+    interrupt_agent: () => ({ ok: true }),
+    questions_answer: () => ({ ok: true }),
+    permissions_answer: () => ({ ok: true }),
+  };
 }
 
 export function auditDemoOfficeAndSystemHandlersGovernance(

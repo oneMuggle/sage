@@ -50,6 +50,7 @@ from backend.office.models import (
     OfficeDocumentSummary,
     PdfGenerateResult,
     TemplateLibraryEntry,
+    WordFormatSpec,
     WordTemplateFillResult,
     _constrained_list,
 )
@@ -60,6 +61,7 @@ from backend.office.progress import track
 from backend.office.storage import validate_workspace
 from backend.office.template_library import instantiate_template, list_templates
 from backend.office.word import generate_docx
+from backend.office.word_style_presets import merge_template_with_spec
 
 # Pydantic v1 trees (release/win7) keep the routing stack behind a lazy
 # re-import; on main (v2) this resolves eagerly as before. The module-level
@@ -103,6 +105,10 @@ class NlGenerateRequest(BaseModel):
     instruction: str = Field(..., min_length=1)
     doc_type: str = Field(..., pattern="^(word|ppt|excel|pdf)$")
     reference_paths: Optional[List[str]] = None
+    # M2 版式：仅对 doc_type=word 生效。合并链 模板 < 预设（显式字段优先），
+    # 与 POST /office/word/generate 的 format_spec_preset 语义一致。
+    format_spec_preset: Optional[str] = Field(default=None, max_length=80)
+    style_template_id: Optional[str] = Field(default=None, max_length=80)
 
 
 class NlGenerateResponse(BaseModel):
@@ -176,11 +182,45 @@ async def _complete_or_llm_error(client: Any, prompt: str) -> str:
         raise OfficeLLMError("LLM 调用失败，请稍后重试") from exc
 
 
-def _generate_document(spec: dict, doc_type: OfficeDocType, workspace: Path, filename: str) -> Path:
+def _resolve_word_format_spec(
+    req: NlGenerateRequest, doc_type: OfficeDocType, workspace: Path
+) -> Optional[WordFormatSpec]:
+    """NL 生成路径的版式解析（仅 word）：模板 < 预设（显式字段优先）。"""
+    if doc_type is not OfficeDocType.WORD:
+        return None
+    template_spec: Optional[WordFormatSpec] = None
+    if req.style_template_id:
+        from backend.office.style_template_store import get_style_template
+
+        row = get_style_template(
+            _db().get_connection(),
+            req.style_template_id,
+            workspace_path=str(workspace),
+        )
+        if row is None:
+            raise OfficeParseError(f"样式模板不存在: {req.style_template_id}")
+        template_spec = WordFormatSpec(**row["format_spec"])
+    return merge_template_with_spec(template_spec, req.format_spec_preset, None)
+
+
+def _generate_document(
+    spec: dict,
+    doc_type: OfficeDocType,
+    workspace: Path,
+    filename: str,
+    format_spec: Optional[WordFormatSpec] = None,
+) -> Path:
     """Map the parsed LLM spec onto the matching deterministic generator."""
     workspace_str = str(workspace)
     if doc_type is OfficeDocType.WORD:
-        return generate_docx(to_word_request(spec, workspace_path=workspace_str, filename=filename))
+        return generate_docx(
+            to_word_request(
+                spec,
+                workspace_path=workspace_str,
+                filename=filename,
+                format_spec=format_spec,
+            )
+        )
     if doc_type is OfficeDocType.PPT:
         return generate_ppt(to_ppt_request(spec, workspace_path=workspace_str, filename=filename))
     if doc_type is OfficeDocType.EXCEL:
@@ -201,6 +241,8 @@ async def generate_nl_endpoint(req: NlGenerateRequest) -> NlGenerateResponse:
     workspace = validate_workspace(Path(req.workspace_path))
     doc_type = OfficeDocType(req.doc_type)
     reference_texts = _collect_reference_texts(workspace, req.reference_paths)
+    # 版式解析放在 LLM 调用前：未知模板/预设直接 422，不浪费一次 LLM 请求。
+    word_format_spec = _resolve_word_format_spec(req, doc_type, workspace)
 
     prompt = build_nl_prompt(
         instruction=req.instruction,
@@ -227,7 +269,9 @@ async def generate_nl_endpoint(req: NlGenerateRequest) -> NlGenerateResponse:
         filename = validate_supported_filename(
             f"{_safe_filename_stem(spec.get('title'))}.{extension}", doc_type
         )
-        output_path = _generate_document(spec, doc_type, workspace, filename)
+        output_path = _generate_document(
+            spec, doc_type, workspace, filename, word_format_spec
+        )
 
         prog.report("登记文档", 90)
         summary = persist_generated_document(

@@ -132,3 +132,62 @@ def test_apply_rejects_non_docx(tmp_path: Path) -> None:
     bogus.write_text("not a docx", encoding="utf-8")
     with pytest.raises(OfficeGenerateError):
         apply_style_to_document(bogus, _spec("report"))
+
+
+# ── merge_template_with_spec（M2 样式模板三层合并）─────────────────────
+
+
+def test_merge_template_delegates_when_no_template() -> None:
+    from backend.office.word_style_presets import merge_template_with_spec
+
+    preset_only = merge_template_with_spec(None, "report", None)
+    assert preset_only == resolve_effective_format_spec("report", None)
+    assert merge_template_with_spec(None, None, None) is None
+
+
+def test_merge_template_preset_overrides_template_explicit_fields() -> None:
+    from backend.office.models import WordFormatSpec
+    from backend.office.word_style_presets import merge_template_with_spec
+
+    template = WordFormatSpec(
+        body={"font_family": "微软雅黑", "font_size_pt": 14},
+        table_text={"font_size_pt": 9},
+    )
+    merged = merge_template_with_spec(template, "report", None)
+    assert merged is not None
+    # 预设显式字段覆盖
+    assert merged.body.font_family == "宋体"
+    assert merged.body.font_size_pt == 12
+    # 预设未触达的模板字段保留
+    assert merged.table_text.font_size_pt == 9
+
+
+def test_merge_template_preset_defaults_do_not_clobber_template_switches() -> None:
+    """预设模型构造时补齐 numbering=False；不得把模板显式开启的开关关掉."""
+    from backend.office.models import WordFormatSpec
+    from backend.office.word_style_presets import merge_template_with_spec
+
+    template = WordFormatSpec(numbering=True)
+    merged = merge_template_with_spec(template, "report", None)
+    assert merged is not None
+    assert merged.numbering is True
+
+
+def test_merge_template_explicit_spec_wins_last() -> None:
+    from backend.office.models import WordFormatSpec
+    from backend.office.word_style_presets import merge_template_with_spec
+
+    template = WordFormatSpec(body={"font_family": "微软雅黑", "font_size_pt": 14})
+    explicit = WordFormatSpec(body={"font_size_pt": 16})
+    merged = merge_template_with_spec(template, "report", explicit)
+    assert merged is not None
+    assert merged.body.font_size_pt == 16
+    assert merged.body.font_family == "宋体"  # report 预设显式字段
+
+
+def test_merge_template_unknown_preset_raises() -> None:
+    from backend.office.models import WordFormatSpec
+    from backend.office.word_style_presets import merge_template_with_spec
+
+    with pytest.raises(OfficeGenerateError):
+        merge_template_with_spec(WordFormatSpec(), "no-such-preset", None)

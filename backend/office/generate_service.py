@@ -10,6 +10,7 @@ from backend.office.models import (
     OfficePptGenerateRequest,
     OfficeWordGenerateRequest,
     PdfGenerateRequest,
+    WordFormatSpec,
 )
 
 # ruff: noqa: UP006, UP007, UP035
@@ -82,7 +83,11 @@ def parse_llm_spec(text: str, doc_type: str) -> Dict[str, Any]:
 
 
 def to_word_request(
-    spec: Dict[str, Any], *, workspace_path: str, filename: str
+    spec: Dict[str, Any],
+    *,
+    workspace_path: str,
+    filename: str,
+    format_spec: Optional[WordFormatSpec] = None,
 ) -> OfficeWordGenerateRequest:
     return OfficeWordGenerateRequest(
         workspace_path=workspace_path,
@@ -91,6 +96,7 @@ def to_word_request(
         paragraphs=spec.get("paragraphs") or [],
         tables=spec.get("tables") or [],
         images=spec.get("images") or [],
+        format_spec=format_spec,
     )
 
 

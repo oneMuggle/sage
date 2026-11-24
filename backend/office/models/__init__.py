@@ -113,6 +113,7 @@ from ._word_gen import (
     WordParagraphSpec,
     WordRepairRequest,
     WordRepairResult,
+    WordRunSpec,
     WordSectionBreakSpec,
     WordTableSpec,
     WordTableTextStyleSpec,
@@ -161,6 +162,7 @@ __all__ = [
     "OfficeWordReadResult",
     # Word gen
     "WordParagraphSpec",
+    "WordRunSpec",
     "ReferenceType",
     "ReferenceSpec",
     "BibliographySpec",

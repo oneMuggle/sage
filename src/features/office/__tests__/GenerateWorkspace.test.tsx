@@ -6,6 +6,7 @@ import { officeApi } from '../../../shared/api/officeApi';
 import { officeGenerateApi } from '../../../shared/api/officeGenerateApi';
 import type { OfficeDocumentSummary, OfficeGenerateResult } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
+import { useTaskCenterStore } from '../../task-center/taskCenterStore';
 import { GenerateWorkspace } from '../GenerateWorkspace';
 
 vi.mock('../officeProgress', () => ({ pollOfficeProgress: () => () => {} }));
@@ -18,7 +19,11 @@ vi.mock('../../../shared/api/officeGenerateApi', () => ({
   },
 }));
 vi.mock('../../../shared/api/officeApi', () => ({
-  officeApi: { listTemplates: vi.fn() },
+  officeApi: {
+    listTemplates: vi.fn(),
+    listWordStylePresets: vi.fn(),
+    listWordStyleTemplates: vi.fn(),
+  },
 }));
 
 const mockedNl = vi.mocked(officeGenerateApi.generateFromNl);
@@ -57,6 +62,20 @@ const TEMPLATE = {
   source: 'builtin' as const,
 };
 
+const STYLE_PRESET = { id: 'report', name: '工作报告', description: '' };
+
+const STYLE_TEMPLATE = {
+  id: 'tpl-1',
+  workspace_path: '/ws',
+  name: '公文版式',
+  format_spec: {},
+  source_kind: 'preset' as const,
+  source_ref: 'report',
+  is_default: true,
+  created_at: 0,
+  updated_at: 0,
+};
+
 function renderWorkspace() {
   const onGenerated = vi.fn();
   const onOpenDocument = vi.fn();
@@ -75,12 +94,24 @@ function renderWorkspace() {
 
 describe('GenerateWorkspace', () => {
   beforeEach(() => {
+    useTaskCenterStore.setState({ tasks: {}, delivery: null, shellStream: null });
     mockedNl.mockReset();
     mockedChat.mockReset();
     mockedIterate.mockReset();
     mockedListTemplates.mockReset();
     mockedToastError.mockReset();
     mockedListTemplates.mockResolvedValue({ templates: [TEMPLATE] });
+    vi.mocked(officeApi.listWordStylePresets).mockReset();
+    vi.mocked(officeApi.listWordStyleTemplates).mockReset();
+    vi.mocked(officeApi.listWordStylePresets).mockResolvedValue({
+      ok: true,
+      presets: [STYLE_PRESET],
+    });
+    vi.mocked(officeApi.listWordStyleTemplates).mockResolvedValue({
+      ok: true,
+      workspace_path: '/ws',
+      templates: [STYLE_TEMPLATE],
+    });
   });
 
   it('renders four mode tabs and switches panels', () => {
@@ -177,6 +208,115 @@ describe('GenerateWorkspace', () => {
       source_path: '/ws/office/word/d1/report.docx',
       instruction: '更正式',
     });
+  });
+
+  it('lists style presets and preselects the workspace default template for word', async () => {
+    renderWorkspace();
+
+    const select = await screen.findByTestId('office-generate-workspace-style');
+    await waitFor(() => expect(select).toHaveValue('template:tpl-1'));
+    expect(await screen.findByRole('option', { name: /工作报告/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /公文版式/ })).toBeInTheDocument();
+    expect(officeApi.listWordStyleTemplates).toHaveBeenCalledWith('/ws');
+  });
+
+  it('passes the chosen style preset for word generation', async () => {
+    mockedNl.mockResolvedValue(RESULT);
+    renderWorkspace();
+
+    const select = await screen.findByTestId('office-generate-workspace-style');
+    await screen.findByRole('option', { name: /工作报告/ });
+    fireEvent.change(select, { target: { value: 'preset:report' } });
+    fireEvent.change(screen.getByTestId('office-generate-workspace-instruction'), {
+      target: { value: '写一份报告' },
+    });
+    fireEvent.click(screen.getByTestId('office-generate-workspace-submit'));
+
+    await waitFor(() => expect(mockedNl).toHaveBeenCalledTimes(1));
+    expect(mockedNl).toHaveBeenCalledWith({
+      task_id: expect.any(String),
+      workspace_path: '/ws',
+      instruction: '写一份报告',
+      doc_type: 'word',
+      format_spec_preset: 'report',
+    });
+  });
+
+  it('forwards the preselected default style template when untouched', async () => {
+    mockedNl.mockResolvedValue(RESULT);
+    renderWorkspace();
+
+    const select = await screen.findByTestId('office-generate-workspace-style');
+    await waitFor(() => expect(select).toHaveValue('template:tpl-1'));
+    fireEvent.change(screen.getByTestId('office-generate-workspace-instruction'), {
+      target: { value: '写一份通知' },
+    });
+    fireEvent.click(screen.getByTestId('office-generate-workspace-submit'));
+
+    await waitFor(() => expect(mockedNl).toHaveBeenCalledTimes(1));
+    expect(mockedNl).toHaveBeenCalledWith({
+      task_id: expect.any(String),
+      workspace_path: '/ws',
+      instruction: '写一份通知',
+      doc_type: 'word',
+      style_template_id: 'tpl-1',
+    });
+  });
+
+  it('moves word generations into the delivery drawer with the style template id (M2 D5)', async () => {
+    mockedNl.mockResolvedValue(RESULT);
+    renderWorkspace();
+
+    const select = await screen.findByTestId('office-generate-workspace-style');
+    await waitFor(() => expect(select).toHaveValue('template:tpl-1'));
+    fireEvent.change(screen.getByTestId('office-generate-workspace-instruction'), {
+      target: { value: '写一份通知' },
+    });
+    fireEvent.click(screen.getByTestId('office-generate-workspace-submit'));
+
+    await waitFor(() =>
+      expect(useTaskCenterStore.getState().tasks['office:generate']?.status).toBe(
+        'awaiting_approval',
+      ),
+    );
+    const state = useTaskCenterStore.getState();
+    expect(state.tasks['office:generate'].deliveryRef).toEqual({
+      workspacePath: '/ws',
+      filePath: RESULT.output_path,
+      formatSpec: null,
+      styleTemplateId: 'tpl-1',
+    });
+    expect(state.delivery).toEqual({ kind: 'office', entryId: 'office:generate' });
+  });
+
+  it('keeps non-word generations out of the delivery drawer (M2 D5)', async () => {
+    mockedNl.mockResolvedValue(RESULT);
+    renderWorkspace();
+
+    await screen.findByTestId('office-generate-workspace-style');
+    fireEvent.change(screen.getByTestId('office-generate-workspace-doc-type'), {
+      target: { value: 'ppt' },
+    });
+    fireEvent.change(screen.getByTestId('office-generate-workspace-instruction'), {
+      target: { value: '做一份 PPT' },
+    });
+    fireEvent.click(screen.getByTestId('office-generate-workspace-submit'));
+
+    await waitFor(() => expect(mockedNl).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(useTaskCenterStore.getState().tasks['office:generate']).toBeUndefined(),
+    );
+    expect(useTaskCenterStore.getState().delivery).toBeNull();
+  });
+
+  it('hides the style dropdown for non-word document types', async () => {
+    renderWorkspace();
+
+    expect(await screen.findByTestId('office-generate-workspace-style')).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('office-generate-workspace-doc-type'), {
+      target: { value: 'excel' },
+    });
+    expect(screen.queryByTestId('office-generate-workspace-style')).not.toBeInTheDocument();
   });
 
   it('warns and skips the call when the instruction is empty', () => {

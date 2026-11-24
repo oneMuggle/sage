@@ -193,6 +193,53 @@ def _merge_models(base: BaseModel, override: BaseModel) -> BaseModel:
     return type(base)(**data)
 
 
+def _deep_merge_dicts(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """dict 递归合并；``override`` 中 None 不覆盖，空 dict 也不覆盖。"""
+    merged = dict(base)
+    for key, value in override.items():
+        if value is None:
+            continue
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def merge_template_with_spec(
+    template_spec: Optional[WordFormatSpec],
+    preset_id: Optional[str],
+    explicit_spec: Optional[WordFormatSpec],
+) -> Optional[WordFormatSpec]:
+    """模板快照 < 命名预设 < 显式画像 的三层深合并（M2 样式模板库）。
+
+    - 无模板：退回 ``resolve_effective_format_spec`` 既有语义；
+    - 有模板时，预设只以 ``exclude_unset`` 的显式字段参与合并——预设模型
+      构造时会补齐 ``numbering=False`` 等生成期开关默认值，直接整模型合并
+      会把模板里显式开启的开关反向关掉；
+    - 显式画像最后合并，非 None 字段优先（与生成接口一致）。
+
+    未知预设照旧抛 ``OfficeGenerateError``（请求级错误，不静默降级）。
+    """
+    if template_spec is None:
+        return resolve_effective_format_spec(preset_id, explicit_spec)
+    merged: WordFormatSpec = template_spec
+    if preset_id is not None:
+        entry = _PRESETS.get(preset_id)
+        if entry is None:
+            available = ", ".join(sorted(_PRESETS))
+            raise OfficeGenerateError(
+                f"unknown_style_preset: {preset_id!r}（可用：{available}）"
+            )
+        partial = entry[2].model_dump(exclude_unset=True)
+        merged = WordFormatSpec(
+            **_deep_merge_dicts(merged.model_dump(), partial)
+        )
+    if explicit_spec is not None:
+        merged = _merge_models(merged, explicit_spec)
+    return merged
+
+
 def resolve_effective_format_spec(
     preset_id: Optional[str], spec: Optional[WordFormatSpec]
 ) -> Optional[WordFormatSpec]:
@@ -220,5 +267,6 @@ def resolve_effective_format_spec(
 __all__ = [
     "get_style_preset",
     "list_style_presets",
+    "merge_template_with_spec",
     "resolve_effective_format_spec",
 ]
