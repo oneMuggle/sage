@@ -497,6 +497,7 @@ class SemanticMemory:
         session_id: Optional[str] = None,
         agent_id: Optional[str] = None,
         include_private: bool = True,
+        track_access: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         获取最近的语义记忆
@@ -506,6 +507,9 @@ class SemanticMemory:
             session_id: 可选，按会话 ID 筛选
             agent_id: M3 当前专家（私有 ∪ 共享）；None 不限制
             include_private: 策略收窄——False 时仅返回共享行
+            track_access: 保留参数以与 EpisodicMemory.get_recent 对齐。
+                ``memories_semantic`` 表没有 access_count / accessed_at 列，
+                故当前不产生效果。
 
         Returns:
             记忆列表
@@ -544,14 +548,17 @@ class SemanticMemory:
 
         return results
 
-    def get_all(self) -> List[Dict[str, Any]]:
+    def get_all(self, limit: int = 10000) -> List[Dict[str, Any]]:
         """
         获取所有语义记忆
+
+        Args:
+            limit: 返回数量上限（按创建时间倒序取最新的 limit 条）
 
         Returns:
             所有记忆列表
         """
-        return self.get_recent(limit=10000)
+        return self.get_recent(limit=limit)
 
     def exists_by_content(self, content: str) -> bool:
         """R21-B: 导入去重 —— 精确匹配 content 的语义记忆是否已存在。"""

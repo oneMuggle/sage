@@ -60,6 +60,15 @@ describe('EvolutionPanel 状态显示', () => {
     expect(screen.getByText('跳过')).toBeTruthy();
   });
 
+  it('把 skipped_no_llm 渲染成「跳过（无 LLM）」而非原始字符串', async () => {
+    invokeMock.mockResolvedValue([makeLog({ id: 'evo-nl', status: 'skipped_no_llm' })]);
+
+    render(<EvolutionPanel />);
+
+    expect(await screen.findByText('跳过（无 LLM）')).toBeTruthy();
+    expect(screen.queryByText('skipped_no_llm')).toBeNull();
+  });
+
   it('未知状态回落到原始值，不吞掉信息', async () => {
     invokeMock.mockResolvedValue([makeLog({ status: 'running' })]);
 

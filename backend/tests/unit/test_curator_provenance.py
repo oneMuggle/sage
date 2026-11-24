@@ -71,6 +71,15 @@ class TestConsolidationTask:
         task = SkillConsolidationTask(db=tmp_db)
         assert await task.run_async() == 0
 
+        # 同时写一条 skipped_no_llm 进化日志，前端统一展示
+        log_row = tmp_db.get_connection().execute(
+            "SELECT status, evolution_type FROM evolution_log"
+            " WHERE evolution_type = 'skill_consolidation'"
+            " ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        assert log_row is not None
+        assert log_row["status"] == "skipped_no_llm"
+
     @pytest.mark.asyncio()
     async def test_pinned_passed_to_scan(self, tmp_db, monkeypatch):
         """pinned 名单透传给 scan（archive 建议剔除用）"""

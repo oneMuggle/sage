@@ -1,5 +1,11 @@
 // ==================== Memory 类型定义 ====================
 
+/**
+ * 低质量阈值 —— 与后端 quality_scorer.LOW_QUALITY_THRESHOLD 保持一致。
+ * 质量分低于此值且长期未访问的记忆进入"低质量候选"列表。
+ */
+export const QUALITY_LOW_THRESHOLD = 0.4;
+
 /** 对标 S2: 一次记忆写入（台账条目），用于聊天内联"记住了"提示 */
 export interface MemoryWriteRecord {
   seq: number;
@@ -99,7 +105,7 @@ export interface Memory {
   agent_id?: string;
   /**
    * Task 4.4 质量评分 (0-1)。
-   * - episodic / semantic 行: 后端用 MemoryQualityScorer 算出,≥0.6 高分 / 0.3-0.6 中 / <0.3 低质量。
+   * - episodic / semantic 行: 后端用 MemoryQualityScorer 算出,≥0.6 高分 / 0.4-0.6 中 / <0.4 低质量。
    * - working / session_summary 行: 无 importance/recency 语义, 为 null。
    */
   quality_score?: number | null;
