@@ -23,6 +23,7 @@
     "backend/main.py": 1748,
     "backend/mcp/pool.py": 967,
     "backend/memory/episodic.py": 937,
+    "backend/memory/semantic.py": 805,
     "backend/memory/manager.py": 1437,
     "backend/office/edit.py": 1768,
     "backend/office/excel.py": 1096,
