@@ -202,6 +202,12 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "generate_image": ToolCapability.WRITE,
     "speech_to_text": ToolCapability.READ,
     "ocr_image": ToolCapability.READ,
+    # --- 文档解析 ---
+    # parse_document 归 WRITE：读本地文档本身无写副作用，但 engine=auto/
+    # mineru 时会把文档内容上传到内网 MinerU（出网副作用）—— 与 http_download
+    # 同口径。更严的门禁由类上的 RiskClass.EXTERNAL 声明承担（EXTERNAL 工具
+    # 不吃会话记忆豁免，保持逐次审批）。
+    "parse_document": ToolCapability.WRITE,
     # --- 编排 / 会话内状态 ---
     # todo_write 归 READ：仅维护 agent 会话内的内部草稿状态（内存桶），
     # 对用户数据零副作用——与 claw-code 将 TodoWrite 视为非敏感工具一致。

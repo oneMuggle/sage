@@ -24,6 +24,7 @@ from backend.domain.tool_names import (
     MEMORY_TOOLS,
     MULTIMODAL_TOOLS,
     OFFICE_TOOLS,
+    PARSE_TOOLS,
     PATCH_TOOLS,
     RUNTIME_EXEC_TOOLS,
     RUNTIME_PROBE_TOOLS,
@@ -162,6 +163,11 @@ _PRIMARY_SEED_TOOLS = (
     # 图像生成三件套。全部 EXTERNAL（调用外部 API），primary 作为 coordinator
     # 可直接调用以满足用户的多模态需求（语音播报、图片生成等）。
     *MULTIMODAL_TOOLS,
+    # 2026-11-23 MinerU 适配 M8: 文档解析工具 parse_document —— 本地提取
+    # 优先, 质量不达标(或显式 engine=mineru)时升级到内网 MinerU。类上声明
+    # RiskClass.EXTERNAL(可能把文档内容上传到 MinerU 服务端), 由风险闸口
+    # 逐次审批; primary 作为 coordinator 可直接调用, 子代理白名单严禁纳入。
+    *PARSE_TOOLS,
     # D2 (2026-09-09): plan_write 退役移除 —— 无消费者半成品（存储无读取方、
     # 无 SSE、无 UI），与 todo_write + 编排计划三套重复；继续暴露只会误导
     # LLM 把计划写进无处可去的地方。
