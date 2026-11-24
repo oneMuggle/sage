@@ -500,7 +500,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 | M6e Word 模板 Profile/填充前端入口 | ✅ | 本轮提交 | 前端 6 新用例 / 相关回归 32；tsc/eslint/prettier/architecture 绿 |
 | M6f Excel/PPT 基础规则审校 | ✅ | 本轮提交 | 后端 unit 6 + 端点 1；定向 pytest 47 passed；ruff/py38/silent/architecture 绿 |
 | M6g PDF 复杂表格兜底 | ✅ | 本轮提交 | 后端 unit 3 新增；office 全量 1426 passed；ruff/py38/silent/architecture 绿 |
-| M7 前端接入 | ⏳ | — | 未开始（M6b 前端批次已先行落 A/B/C/D 四项） |
+| M7 前端接入 | ✅ 前端（4/5） | main `ec52a11a6` / win7 `4a9006847` | main PR #3269 + win7 PR #3270；CI 全绿（Frontend TS / Backend py38 / architecture / count-lines） |
 | M8 大文件/并发/沙箱 | ⏳ | — | 未开始 |
 
 **环境说明**：本机无 LibreOffice / Word COM，渲染与重算通过注入导出器与降级路径测试；真实转换需在带转换器的机器上做验收。
