@@ -287,6 +287,9 @@ class TestDomainPurity:
             "contextvars",
             "asyncio",
             "time",
+            # M8 document_parse: ParseRequest.content_hash() 用 sha256 计算
+            # 内容指纹 —— 纯值计算标准库, 无 I/O 无框架依赖, 同 uuid/datetime 口径
+            "hashlib",
         }
         # 允许 domain 内部互相 import
         allowed_internal = "backend.domain"

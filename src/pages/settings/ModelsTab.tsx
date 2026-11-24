@@ -31,6 +31,7 @@ import { useI18n } from '../../shared/lib/i18n';
 
 import { ArenaAccountsToggle } from './ArenaAccountsToggle';
 import { LocalOcrCard } from './LocalOcrCard';
+import { MineruServiceCard } from './MineruServiceCard';
 import type { EndpointsTabProps } from './components';
 import { SettingRow } from './components';
 
@@ -204,6 +205,9 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
 
       {/* 本地 OCR：无视觉模型时的图片文字兜底（引擎状态/语言/优先策略） */}
       <LocalOcrCard />
+
+      {/* MinerU：内网高保真文档解析（可选；本地质量低时升级） */}
+      <MineruServiceCard />
 
       {/* R31c: 低频参数收进「高级」折叠；设置搜索命中其内部锚点时，由
           Settings 的跳转 effect 先展开闭合祖先再滚动。 */}

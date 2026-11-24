@@ -714,4 +714,16 @@ export const enSettingsUi = {
   'updates.advanced.telemetry.desc': 'Send update-related telemetry data',
   'updates.advanced.telemetry.label': 'Enable update telemetry',
   'updates.advanced.title': 'Advanced update settings',
+  'settings.mineru.title': 'MinerU document parsing',
+  'settings.mineru.desc':
+    'Intranet MinerU server; low-quality local text is upgraded (the document is uploaded to that server)',
+  'settings.mineru.reachable': 'Server reachable (auth mode: {mode})',
+  'settings.mineru.unreachable': 'Server unreachable ({reason})',
+  'settings.mineru.auth_required': 'Server requires an API key: enter one and save',
+  'settings.mineru.base_url': 'Server URL',
+  'settings.mineru.api_key': 'API key (optional)',
+  'settings.mineru.api_key_placeholder': 'Leave empty when the server has auth disabled',
+  'settings.mineru.enabled': 'Enabled',
+  'settings.mineru.chat_attachment': 'Upgrade chat attachments in background',
+  'settings.mineru.save': 'Save',
 } as const;

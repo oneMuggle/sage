@@ -394,6 +394,12 @@ def _install_multimodal(ctx: ToolInstallContext) -> None:
     ctx.registry.register(OcrImageTool(policy=policy))
 
 
+def _install_document_parse(ctx: ToolInstallContext) -> None:
+    from backend.tools.parse_document_tool import ParseDocumentTool
+
+    ctx.registry.register(ParseDocumentTool(policy=ctx.policy))
+
+
 def _install_sage_config(ctx: ToolInstallContext) -> None:
     # read_sage_config 为 READ，update_sage_config 为 WRITE_LOCAL，
     # diagnose_sage_config 为 READ（P119 Config Advisor Phase 2.2）。
@@ -497,6 +503,7 @@ BUNDLES: Tuple[ToolBundle, ...] = (
     ToolBundle("browser", _install_browser),
     ToolBundle("skill_save", _install_skill_save),
     ToolBundle("multimodal", _install_multimodal),
+    ToolBundle("document_parse", _install_document_parse),
     ToolBundle("sage_config", _install_sage_config),
     ToolBundle("schedule", _install_schedule),
     ToolBundle("mcp", _install_mcp, critical=False),

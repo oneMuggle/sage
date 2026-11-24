@@ -203,6 +203,12 @@ MULTIMODAL_TOOLS = (
     "ocr_image",
 )
 
+# 文档解析工具（2026-11-23 MinerU 适配 M8）：``parse_document`` 是可插拔
+# 解析引擎的 LLM 入口 —— 本地提取优先，质量不达标（或显式指定 mineru）
+# 时才升级到内网 MinerU。类上声明 RiskClass.EXTERNAL（可能把文档内容上传
+# 到 MinerU 服务端），requires_tool_context=True。
+PARSE_TOOLS = ("parse_document",)
+
 # 循环内编排：子代理委派 / 任务清单 / 结构化输出 / 用户提问
 ORCH_TOOLS = ("agent", "todo_write", "structured_output", "ask_user_question")
 
@@ -289,6 +295,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(BROWSER_TOOLS)
         | set(SKILL_TOOLS)
         | set(MULTIMODAL_TOOLS)
+        | set(PARSE_TOOLS)
         | set(ORCH_TOOLS)
         | set(SANDBOX_TOOLS)
         | set(CONFIG_TOOLS)

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# MinerU api-server 启动包装（bearer 模式）
+#
+# 由 install.sh 渲染安装到 /etc/mineru/mineru-start.sh（0755，无密钥）。
+# 存在的唯一原因：mineru-kit api-server 的 --api-key 没有环境变量回退，
+# 只在 unit 里配 EnvironmentFile 是不会开启鉴权的（服务端仍为匿名）。
+# 本脚本把 systemd 注入的 MINERU_API_KEY 展开成 --api-key 参数。
+set -euo pipefail
+
+if [ -z "${MINERU_API_KEY:-}" ]; then
+    echo "mineru-start: MINERU_API_KEY 未注入；检查 /etc/mineru/mineru.env 与 unit 的 EnvironmentFile" >&2
+    exit 1
+fi
+
+exec __PREFIX__/.venv/bin/mineru-kit api-server \
+    --host 0.0.0.0 --port __PORT__ --tier __TIER__ \
+    --api-key "$MINERU_API_KEY"
