@@ -40,6 +40,7 @@ import type {
   OfficePdfFormReadResult,
   OfficePdfReadResult,
   OfficePptGenerateRequest,
+  OfficePptReadRequest,
   OfficePptReadResult,
   OfficeReadRequest,
   OfficeRecalcResult,
@@ -57,6 +58,14 @@ import type {
   OfficeWordLintResult,
   WordRepairRequest,
   WordRepairResult,
+  WordStyleApplyRequest,
+  WordStyleApplyResult,
+  WordStyleFromRulepackRequest,
+  WordStylePresetListResult,
+  WordStyleProfileConversion,
+  WordStyleTemplateDetailResult,
+  WordStyleTemplateListResult,
+  WordStyleTemplateSaveRequest,
   OfficeWordReadResult,
 } from './types';
 import { handleApiError, withRetry } from './utils';
@@ -70,12 +79,16 @@ export const officeApi = {
    * No retry — a parse failure should surface immediately so the caller
    * can discard the staged import via `discardOfficeImport`.
    */
-  async readPpt(req: OfficeReadRequest): Promise<OfficePptReadResult> {
+  async readPpt(req: OfficePptReadRequest): Promise<OfficePptReadResult> {
     try {
       return await invoke<OfficePptReadResult>('office_ppt_read', {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
         maxSizeBytes: req.max_size_bytes,
+        // M6d: 未传的开关保持 undefined，JSON 序列化时丢弃 → 后端默认关闭。
+        includeImages: req.include_images,
+        maxImagesPerSlide: req.max_images_per_slide,
+        embedImageData: req.embed_image_data,
       });
     } catch (error) {
       throw handleApiError(error);
@@ -476,6 +489,19 @@ export const officeApi = {
         title: req.title,
         paragraphs: req.paragraphs,
         tables: req.tables,
+        ...(req.images !== undefined ? { images: req.images } : {}),
+        ...(req.font_family !== undefined ? { fontFamily: req.font_family } : {}),
+        ...(req.ascii_font !== undefined ? { asciiFont: req.ascii_font } : {}),
+        ...(req.format_spec !== undefined ? { formatSpec: req.format_spec } : {}),
+        ...(req.format_spec_preset !== undefined
+          ? { formatSpecPreset: req.format_spec_preset }
+          : {}),
+        ...(req.template_docx_path !== undefined
+          ? { templateDocxPath: req.template_docx_path }
+          : {}),
+        ...(req.references !== undefined ? { references: req.references } : {}),
+        ...(req.citation_style !== undefined ? { citationStyle: req.citation_style } : {}),
+        ...(req.metadata !== undefined ? { metadata: req.metadata } : {}),
         task_id: req.task_id,
       });
     } catch (error) {
@@ -544,6 +570,143 @@ export const officeApi = {
         overwrite: req.overwrite ?? false,
         ...(req.max_size_bytes !== undefined ? { maxSizeBytes: req.max_size_bytes } : {}),
       });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * M2 样式模板：列出内置命名版式预设（id/name/description）。
+   * 只读列表，无副作用。
+   */
+  async listWordStylePresets(): Promise<WordStylePresetListResult> {
+    try {
+      return await invoke<WordStylePresetListResult>('office_word_style_presets', {});
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * M2：把规则包/规范书编译为生成侧样式画像（READ，无副作用）。
+   * 内联 rulepack 优先；否则按 rulepackId 从工作区加载（缺省默认规则包）。
+   * route 用 rawBody（嵌套 rule params 是用户数据）——args 直接用 snake_case。
+   */
+  async styleFromRulepack(req: WordStyleFromRulepackRequest): Promise<WordStyleProfileConversion> {
+    try {
+      return await invoke<WordStyleProfileConversion>('office_word_style_from_rulepack', {
+        ...(req.workspace_path !== undefined ? { workspace_path: req.workspace_path } : {}),
+        ...(req.rulepack_id !== undefined ? { rulepack_id: req.rulepack_id } : {}),
+        ...(req.rulepack !== undefined ? { rulepack: req.rulepack } : {}),
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * M2：给已有 .docx 套用样式画像（默认输出 <stem>-styled.docx）。
+   * 合并链：styleTemplateId < formatSpecPreset < formatSpec。
+   * 写文件有副作用 —— 沿用本文件惯例不加 withRetry。
+   */
+  async applyWordStyle(req: WordStyleApplyRequest): Promise<WordStyleApplyResult> {
+    try {
+      return await invoke<WordStyleApplyResult>('office_word_style_apply', {
+        ...(req.workspace_path !== undefined ? { workspacePath: req.workspace_path } : {}),
+        filePath: req.file_path,
+        ...(req.style_template_id !== undefined ? { styleTemplateId: req.style_template_id } : {}),
+        ...(req.format_spec_preset !== undefined
+          ? { formatSpecPreset: req.format_spec_preset }
+          : {}),
+        ...(req.format_spec !== undefined ? { formatSpec: req.format_spec } : {}),
+        ...(req.clear_direct_formatting !== undefined
+          ? { clearDirectFormatting: req.clear_direct_formatting }
+          : {}),
+        ...(req.overwrite !== undefined ? { overwrite: req.overwrite } : {}),
+        ...(req.output_filename !== undefined ? { outputFilename: req.output_filename } : {}),
+        ...(req.dry_run !== undefined ? { dryRun: req.dry_run } : {}),
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** M2：列出工作区样式模板（默认模板置顶；无工作区返回空列表）。 */
+  async listWordStyleTemplates(workspacePath?: string): Promise<WordStyleTemplateListResult> {
+    try {
+      return await invoke<WordStyleTemplateListResult>('office_word_style_templates', {
+        ...(workspacePath !== undefined ? { workspacePath } : {}),
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * M2：保存工作区样式模板。来源三选一（rulepack / preset+spec / 纯 spec），
+   * 存的是转换后的画像快照——规则包后续修改不会静默改写已保存模板。
+   * route 用 rawBody —— args 直接用 snake_case。
+   */
+  async saveWordStyleTemplate(
+    req: WordStyleTemplateSaveRequest,
+  ): Promise<WordStyleTemplateDetailResult> {
+    try {
+      return await invoke<WordStyleTemplateDetailResult>('office_word_style_template_save', {
+        workspace_path: req.workspace_path,
+        name: req.name,
+        ...(req.rulepack_id !== undefined ? { rulepack_id: req.rulepack_id } : {}),
+        ...(req.rulepack !== undefined ? { rulepack: req.rulepack } : {}),
+        ...(req.format_spec_preset !== undefined
+          ? { format_spec_preset: req.format_spec_preset }
+          : {}),
+        ...(req.format_spec !== undefined ? { format_spec: req.format_spec } : {}),
+        ...(req.source_ref !== undefined ? { source_ref: req.source_ref } : {}),
+        ...(req.is_default !== undefined ? { is_default: req.is_default } : {}),
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** M2：把工作区样式模板设为默认（默认唯一）。 */
+  async activateWordStyleTemplate(
+    templateId: string,
+    workspacePath: string,
+  ): Promise<WordStyleTemplateDetailResult> {
+    try {
+      return await invoke<WordStyleTemplateDetailResult>('office_word_style_template_activate', {
+        templateId,
+        workspacePath,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** M2：清除工作区默认样式模板（无默认时为 no-op）。 */
+  async clearDefaultWordStyleTemplate(
+    workspacePath: string,
+  ): Promise<{ ok: boolean; workspace_path: string }> {
+    try {
+      return await invoke<{ ok: boolean; workspace_path: string }>(
+        'office_word_style_template_clear_default',
+        { workspacePath },
+      );
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** M2：删除工作区样式模板（跨工作区/不存在 → 错误）。 */
+  async deleteWordStyleTemplate(
+    templateId: string,
+    workspacePath: string,
+  ): Promise<{ ok: boolean; template_id: string; workspace_path: string }> {
+    try {
+      return await invoke<{ ok: boolean; template_id: string; workspace_path: string }>(
+        'office_word_style_template_delete',
+        { templateId, workspacePath },
+      );
     } catch (error) {
       throw handleApiError(error);
     }
@@ -783,4 +946,8 @@ export const officeApi = {
   },
 };
 
-export { auditOfficeApiGovernance, formatOfficeWordLintJson, formatOfficeWordLintSummary } from './officeApiFormatters';
+export {
+  auditOfficeApiGovernance,
+  formatOfficeWordLintJson,
+  formatOfficeWordLintSummary,
+} from './officeApiFormatters';

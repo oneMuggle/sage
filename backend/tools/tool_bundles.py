@@ -115,12 +115,14 @@ from .office_toc_refresh_tool import OfficeRefreshTocTool
 from .office_tool import OfficeListTool, OfficeReadTool
 from .office_update_tool import OfficeUpdateTool
 from .office_word_intelligence_tools import (
+    OfficeApplyWordStyleTool,
     OfficeAuditWordTool,
     OfficeBatchAuditTool,
     OfficeExtractRulesTool,
     OfficeFixWordTool,
     OfficeRenderAuditTool,
     OfficeReviseWordTool,
+    OfficeStyleFromRulepackTool,
 )
 from .patch_tool import ApplyPatchTool
 from .project_diagnose import ProjectDiagnoseTool
@@ -263,6 +265,9 @@ def _install_office_quality(ctx: ToolInstallContext) -> None:
     ctx.registry.register(OfficeReviseWordTool(policy=policy))
     ctx.registry.register(OfficeBatchAuditTool(policy=policy))
     ctx.registry.register(OfficeRenderAuditTool(policy=policy))
+    # 2026-11-23 M2: 规则包 → 样式画像（READ）/ 已有文档套用样式（WRITE_LOCAL）。
+    ctx.registry.register(OfficeStyleFromRulepackTool(policy=policy))
+    ctx.registry.register(OfficeApplyWordStyleTool(policy=policy))
     ctx.registry.register(OfficeReadLatexTool(policy=policy))
     ctx.registry.register(OfficeAnalyzeLatexTemplateTool(policy=policy))
     ctx.registry.register(OfficeFillLatexTemplateTool(policy=policy))

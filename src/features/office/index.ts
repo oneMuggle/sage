@@ -18,6 +18,7 @@ export { OfficeEditPreviewDialog } from './OfficeEditPreviewDialog';
 export { buildUpdateOps } from './OfficeEditPreviewDialog';
 export { OfficeDuplicateDialog } from './OfficeDuplicateDialog';
 export { OfficeCompareDialog } from './OfficeCompareDialog';
+export { WordTemplateFillDialog } from './WordTemplateFillDialog';
 export { GenerateWorkspace } from './GenerateWorkspace';
 export { RulesWorkspace } from './rules/RulesWorkspace';
 export { TemplateLibrary } from './TemplateLibrary';
@@ -45,6 +46,7 @@ export function auditOfficeFeatureBarrel(): OfficeFeatureBarrelAuditReport {
     'buildUpdateOps',
     'OfficeDuplicateDialog',
     'OfficeCompareDialog',
+    'WordTemplateFillDialog',
     'OfficeCapabilityBar',
     'WordPreview',
     'ExcelPreview',
@@ -58,7 +60,7 @@ export function auditOfficeFeatureBarrel(): OfficeFeatureBarrelAuditReport {
     module: 'src/features/office/index.ts',
     exportedSymbols,
     symbolCount: exportedSymbols.length,
-    exportedAt: '2026-11-07',
+    exportedAt: '2026-11-24',
   };
 }
 

@@ -76,7 +76,10 @@ function seedEntry() {
   });
 }
 
-function renderDrawer(formatSpec: WordFormatSpec | null = SPEC) {
+function renderDrawer(
+  formatSpec: WordFormatSpec | null = SPEC,
+  styleTemplateId: string | null = null,
+) {
   return render(
     <MemoryRouter initialEntries={['/chat']}>
       <I18nProvider>
@@ -85,6 +88,7 @@ function renderDrawer(formatSpec: WordFormatSpec | null = SPEC) {
           workspacePath="/ws"
           filePath="/ws/report.docx"
           formatSpec={formatSpec}
+          styleTemplateId={styleTemplateId}
           open
           onClose={() => {}}
         />
@@ -157,6 +161,70 @@ describe('OfficeDeliveryDrawer (A4b)', () => {
     // Preview still loads; decisions still available.
     await waitFor(() => expect(screen.getByText('hello delivery')).toBeTruthy());
     expect(screen.getByTestId('decision-zone')).toBeTruthy();
+  });
+
+  it('resolves the selected style template snapshot before linting (M2 D5)', async () => {
+    const SNAPSHOT: WordFormatSpec = { numbering: false };
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'office_word_read') return makeReadResult();
+      if (cmd === 'office_word_style_templates') {
+        return {
+          ok: true,
+          workspace_path: '/ws',
+          templates: [
+            {
+              id: 'tpl-1',
+              workspace_path: '/ws',
+              name: '公文版式',
+              format_spec: SNAPSHOT,
+              source_kind: 'preset',
+              source_ref: 'report',
+              is_default: true,
+              created_at: 0,
+              updated_at: 0,
+            },
+          ],
+        };
+      }
+      if (cmd === 'office_word_lint') return makeLint();
+      return null;
+    });
+    renderDrawer(null, 'tpl-1');
+
+    await waitFor(() => expect(screen.getByTestId('lint-result')).toBeTruthy());
+    expect(invokeMock).toHaveBeenCalledWith('office_word_style_templates', {
+      workspacePath: '/ws',
+    });
+    expect(invokeMock).toHaveBeenCalledWith('office_word_lint', {
+      workspacePath: '/ws',
+      filePath: '/ws/report.docx',
+      formatSpec: SNAPSHOT,
+    });
+  });
+
+  it('skips lint when the referenced style template no longer exists (M2 D5)', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'office_word_read') return makeReadResult();
+      if (cmd === 'office_word_style_templates') {
+        return { ok: true, workspace_path: '/ws', templates: [] };
+      }
+      return null;
+    });
+    renderDrawer(null, 'tpl-gone');
+
+    await waitFor(() => expect(screen.getByTestId('lint-skipped')).toBeTruthy());
+    expect(invokeMock).not.toHaveBeenCalledWith('office_word_lint', expect.objectContaining({}));
+  });
+
+  it('template lookup failure surfaces the lint error with retry (M2 D5)', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'office_word_read') return makeReadResult();
+      if (cmd === 'office_word_style_templates') throw new Error('503 offline');
+      return null;
+    });
+    renderDrawer(null, 'tpl-1');
+
+    await waitFor(() => expect(screen.getByTestId('lint-retry')).toBeTruthy());
   });
 
   it('lint failure shows retry; retry re-invokes the channel', async () => {

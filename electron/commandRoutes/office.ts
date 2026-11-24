@@ -92,6 +92,78 @@ export const officeRoutes: Record<string, CommandRoute> = {
   // 在 UI 上不存在（只报问题不给修法）。
   office_word_repair: { method: 'POST', path: () => '/api/v1/office/word/repair' },
 
+  // M2 (2026-11-24): Word 样式模板 / 版式预设。
+  // GET/DELETE query strings 手工序列化；from-rulepack 与模板保存用 rawBody，
+  // 保持嵌套规则 `params` 用户数据原样（与 rulepack audit/fix 同理）。
+  office_word_style_presets: {
+    method: 'GET',
+    path: () => '/api/v1/office/word/style-presets',
+  },
+  office_word_style_from_rulepack: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/style/from-rulepack',
+    rawBody: true,
+    body: (a) => ({
+      ...((a.workspacePath ?? a.workspace_path) !== undefined
+        ? { workspace_path: a.workspacePath ?? a.workspace_path }
+        : {}),
+      ...((a.rulepackId ?? a.rulepack_id) ? { rulepack_id: a.rulepackId ?? a.rulepack_id } : {}),
+      ...(a.rulepack ? { rulepack: a.rulepack } : {}),
+    }),
+  },
+  // 合并链 styleTemplateId < formatSpecPreset < formatSpec；body 走默认
+  // camel→snake 翻译（format_spec 字段本身已是 snake_case，翻译即恒等）。
+  office_word_style_apply: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/style/apply',
+  },
+  office_word_style_templates: {
+    method: 'GET',
+    path: (a) => {
+      const ws = a.workspacePath ?? a.workspace_path;
+      return `/api/v1/office/word/style-templates${ws ? `?workspace_path=${encodeURIComponent(String(ws))}` : ''}`;
+    },
+  },
+  office_word_style_template_save: {
+    method: 'POST',
+    path: () => '/api/v1/office/word/style-templates',
+    rawBody: true,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+      name: a.name,
+      ...((a.rulepackId ?? a.rulepack_id) ? { rulepack_id: a.rulepackId ?? a.rulepack_id } : {}),
+      ...(a.rulepack ? { rulepack: a.rulepack } : {}),
+      ...((a.formatSpecPreset ?? a.format_spec_preset)
+        ? { format_spec_preset: a.formatSpecPreset ?? a.format_spec_preset }
+        : {}),
+      ...((a.formatSpec ?? a.format_spec) ? { format_spec: a.formatSpec ?? a.format_spec } : {}),
+      ...((a.sourceRef ?? a.source_ref) ? { source_ref: a.sourceRef ?? a.source_ref } : {}),
+      is_default: Boolean(a.isDefault ?? a.is_default),
+    }),
+  },
+  office_word_style_template_activate: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/office/word/style-templates/${encodeURIComponent(String(a.templateId ?? a.template_id))}/activate`,
+    body: (a) => ({
+      workspace_path: a.workspacePath ?? a.workspace_path,
+    }),
+  },
+  office_word_style_template_clear_default: {
+    method: 'DELETE',
+    path: (a) => {
+      const ws = a.workspacePath ?? a.workspace_path;
+      return `/api/v1/office/word/style-templates/default?workspace_path=${encodeURIComponent(String(ws))}`;
+    },
+  },
+  office_word_style_template_delete: {
+    method: 'DELETE',
+    path: (a) => {
+      const ws = a.workspacePath ?? a.workspace_path;
+      return `/api/v1/office/word/style-templates/${encodeURIComponent(String(a.templateId ?? a.template_id))}?workspace_path=${encodeURIComponent(String(ws))}`;
+    },
+  },
+
   // M2c (2026-11-01): Word rule-pack audit/fix surface.
   // GET query strings are not auto-translated by the bridge — serialize workspacePath here.
   // The audit/fix POST bodies use rawBody because nested rule `params` keys are user data and

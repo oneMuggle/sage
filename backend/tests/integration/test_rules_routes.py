@@ -60,6 +60,17 @@ def _write_text_docx(path: Path, text: str) -> None:
     document.save(str(path))
 
 
+def _write_xlsx(path: Path) -> None:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "汇总"
+    sheet.append(["名称", "状态"])
+    sheet.append(["方案A", "待定"])
+    workbook.save(str(path))
+
+
 def test_group_crud_roundtrip(client: TestClient) -> None:
     created = client.post("/api/v1/rules/groups", json=GROUP)
     assert created.status_code == 201
@@ -234,6 +245,26 @@ def test_audit_runs_regex_rules(client: TestClient, tmp_path: Path) -> None:
     assert body["warning_count"] == 1
     assert body["findings"][0]["rule_id"] == rule["id"]
     assert body["findings"][0]["location"] == "第 1 段"
+
+
+def test_audit_supports_xlsx_documents(client: TestClient, tmp_path: Path) -> None:
+    group = client.post("/api/v1/rules/groups", json=GROUP).json()
+    rule = client.post(
+        f"/api/v1/rules/groups/{group['id']}/rules", json={**RULE, "scope": "table"}
+    ).json()
+    _write_xlsx(tmp_path / "sheet.xlsx")
+    response = client.post(
+        "/api/v1/rules/audit",
+        json={
+            "workspace_path": str(tmp_path),
+            "file_path": str(tmp_path / "sheet.xlsx"),
+            "rule_ids": [rule["id"]],
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["warning_count"] == 1
+    assert body["findings"][0]["location"] == "工作表「汇总」第 2 行"
 
 
 def test_audit_ai_rule_without_llm_returns_503(

@@ -538,3 +538,57 @@ M4 第 3 条验收线"run 汇总成本与后端账一致"；M3.3 亦把成本估
 | `orch_tasks` 主键是 task_id → 跨 run 覆盖 | 金额不入该表（13.2.1）；旧 run 任务行缺失列为后续项 |
 | 未知定价模型使金额低估 | UI 用 `≈` 前缀；后端无已定价行时返回 NULL 而非 0 |
 | 子代理用量与 conductor 用量同 session | 只归因 dispatcher 子任务上下文；口径写入文档与代码注释 |
+
+## 15. M4.3b 遗留：`orch_tasks` 复合主键 `(run_id, task_id)` 迁移（2026-11-24）
+
+### 15.1 背景与目标
+
+§14.2.1 记录的已知限制：`orch_tasks` 主键是 `task_id`，计划编号 t1..tN 跨 run 复用，
+`ON CONFLICT(task_id) DO UPDATE` 会让同一会话第二个 run 的同名任务覆盖第一个 run 的行
+→ 历史 run 回看时旧 run 的任务行缺失（`list_by_run` 查不到），该 run 的任务级金额无处展示
+（run 级金额仍可从 `usage_events` 聚合）。
+
+目标：主键改为 `(run_id, task_id)`，同名任务在不同 run 各存一行；旧库自动重建升级。
+
+### 15.2 技术方案
+
+1. **Schema（`backend/data/database.py`）**：新库直接建复合主键（`PRIMARY KEY (run_id, task_id)`）；
+   `orch_context_messages` 的外键从列级 `task_id REFERENCES orch_tasks(task_id)` 改为表级
+   `FOREIGN KEY (run_id, task_id) REFERENCES orch_tasks(run_id, task_id)` ——
+   `PRAGMA foreign_keys=ON` 下父键任务列不再唯一，旧单列 FK 会报 foreign key mismatch。
+2. **迁移 v21（新增 `backend/data/migrations/v21_orch_tasks_composite_pk.py`）**：
+   - 检测 `PRAGMA table_info(orch_tasks)` 的 pk 列集合：已是 `{run_id, task_id}` → 跳过（新库）；
+   - 旧库按 SQLite 表重建流程：先 `conn.commit()`，`PRAGMA foreign_keys=OFF` → 建新表 →
+     按列名交集复制 → DROP 旧表 → RENAME → 重建索引（`idx_orch_tasks_run/status`）；
+   - `orch_context_messages` 同法重建（复合 FK），仅当其 DDL 仍引用 `orch_tasks(task_id)` 时执行；
+   - 收尾 `PRAGMA foreign_keys=ON` + `PRAGMA foreign_key_check` 校验；
+   - 防御：缺核心列（task_id/run_id/agent_id/goal/status）的精简 fixture 库跳过重建；
+     迁移只作用于现存行 —— 历史已被覆盖的旧 run 任务行无法恢复（数据早已丢失）。
+3. **仓储（`backend/data/orch_task_repo.py`）**：`ON CONFLICT(run_id, task_id) DO UPDATE`；
+   `get(run_id, task_id)`；`bump_revision_for_steer(run_id, task_id)`（审计计数同样按 run 隔离）。
+4. **调用点（`backend/api/orch_run_control.py`）**：steer 审计 bump 传 `run_id`（handler 内已有）。
+5. **前端/API**：无需改动 —— `_run_detail` 经 `list_by_run(run_id)` 自然取到各 run 自己的任务行，
+   `usage_cost_repo` 已按 `(run_id, task_id)` 聚合金额。
+
+### 15.3 实施步骤
+
+- [x] 15-1 `database.py` 新 schema（orch_tasks 复合 PK + orch_context_messages 复合 FK）
+- [x] 15-2 v21 迁移（重建两表 + 索引 + 外键校验 + 精简 fixture 防御）
+- [x] 15-3 仓储与调用点（conflict target / get / bump 签名）
+- [x] 15-4 测试（跨 run 隔离、旧结构升级、数据保全、复合 FK 可用）
+- [x] 15-5 门禁与双分支同步（ruff / py38 兼容 / lint-imports / silent-exceptions / 棘轮）
+  - main：#3253（`30762cad5`）已合并，lint-imports 1 kept / 0 broken，CI 全绿。
+  - release/win7：#3257（`73d367bf3`）cherry-pick 同步，py38 定向 79 测试通过，CI 全绿；
+    win7 的 `Backend (Python 3.8, Win7 LTS)` job 不运行 lint-imports（该步骤仅在 main/develop
+    的 `backend` job），且 `chat_service → tools.skill_tool` 的 layers 违规在 win7 基线原生存在，
+    与本迁移无关，属既有漂移。
+
+### 15.4 风险与依赖
+
+| 风险 | 缓解 |
+| --- | --- |
+| SQLite 无法直接改主键 | 表重建；迁移框架保证只执行一次（schema_version 账本） |
+| `PRAGMA foreign_keys` 在事务内无效 | 重建前先 commit，OFF 后开新事务，收尾重新 ON 并 `foreign_key_check` |
+| 旧单列 FK 失效 | 同步重建 `orch_context_messages` 为复合 FK |
+| 精简 fixture 库缺列 | 核心列不全时跳过重建（生产库由 init_db 防御 ALTER 保证列齐全） |
+| 历史数据已丢 | 只保全现存行；被覆盖的旧 run 任务行不可恢复，文档与迁移注释注明 |

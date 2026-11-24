@@ -63,6 +63,7 @@ from ._shared import (
     OfficeDocumentListResponse,
     OfficeDocumentMetadata,
     OfficeDocumentSummary,
+    OfficePptReadRequest,
     OfficePptReadResult,
     OfficeReadRequest,
     OfficeSnapshotInfo,
@@ -112,6 +113,7 @@ from ._word_gen import (
     WordParagraphSpec,
     WordRepairRequest,
     WordRepairResult,
+    WordRunSpec,
     WordSectionBreakSpec,
     WordTableSpec,
     WordTableTextStyleSpec,
@@ -146,6 +148,7 @@ __all__ = [
     "ImageSourceSpec",
     "PptSlideContent",
     "OfficePptReadResult",
+    "OfficePptReadRequest",
     "_constrained_list",
     "field_validator",
     # Word read
@@ -159,6 +162,7 @@ __all__ = [
     "OfficeWordReadResult",
     # Word gen
     "WordParagraphSpec",
+    "WordRunSpec",
     "ReferenceType",
     "ReferenceSpec",
     "BibliographySpec",

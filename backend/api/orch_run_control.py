@@ -402,7 +402,7 @@ async def steer_task(  # noqa: PLR0911 — many early-return validation paths
         # 两者不应被视为同一值。
         if _task_repo is not None:
             try:
-                _task_repo.bump_revision_for_steer(task_id)
+                _task_repo.bump_revision_for_steer(run_id, task_id)
             except Exception:  # noqa: BLE001 — 审计失败不应阻断 steer 成功路径
                 logger.exception("steer: failed to bump DB audit revision for task %s", task_id)
 

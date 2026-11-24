@@ -41,6 +41,7 @@ import {
   OfficeDuplicateDialog,
   OfficeEditPreviewDialog,
   OfficeSnapshotPanel,
+  WordTemplateFillDialog,
   useOfficeDocuments,
   type OfficeListView,
   type OfficeMultiImportResult,
@@ -184,6 +185,8 @@ export function Office() {
 
   // M6b: 跨文档对比 dialog（仅未归档文档可参与）
   const [isCompareOpen, setIsCompareOpen] = useState(false);
+  // M6e: Word 模板 profile/填充 dialog（模板来自文档库或 office/templates）
+  const [isWordTemplateOpen, setIsWordTemplateOpen] = useState(false);
   const comparableDocuments = documents.filter((doc) => doc.archived_at == null);
   // 导入进行中：文档库工具栏的上传按钮据此禁用，避免重复打开文件选择器。
   const [importing, setImporting] = useState(false);
@@ -311,6 +314,11 @@ export function Office() {
     }
   };
 
+  // M6e: 模板填充产物落在模板同目录，导入文档库后统一入库并预览。
+  const handleWordTemplateFilled = async (absolutePath: string) => {
+    await handleReadDroppedMulti([absolutePath]);
+  };
+
   const handleSaveAs = async (docId: string) => {
     try {
       const savedPath = await saveAs(docId);
@@ -428,6 +436,15 @@ export function Office() {
           {t('office.section.library')} ({documents.length})
         </h2>
         <div className="ml-auto flex gap-2">
+          <button
+            type="button"
+            onClick={() => setIsWordTemplateOpen(true)}
+            disabled={!workspacePath}
+            data-testid="office-word-template-open"
+            className="px-3 py-1.5 rounded text-sm border border-border text-text-secondary hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {t('office.wordTemplate.button')}
+          </button>
           <button
             type="button"
             onClick={() => setIsCompareOpen(true)}
@@ -665,6 +682,14 @@ export function Office() {
         onClose={() => setIsCompareOpen(false)}
         workspacePath={workspacePath}
         documents={comparableDocuments}
+      />
+
+      <WordTemplateFillDialog
+        isOpen={isWordTemplateOpen}
+        onClose={() => setIsWordTemplateOpen(false)}
+        workspacePath={workspacePath}
+        documents={comparableDocuments}
+        onFilled={handleWordTemplateFilled}
       />
 
       <WorkspaceBindModal

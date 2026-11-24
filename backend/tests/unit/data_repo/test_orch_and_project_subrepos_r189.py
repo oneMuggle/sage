@@ -154,7 +154,7 @@ class TestOrchRunAndTaskRepository:
             depth=1,
             parent_task_id="t-root",
         )
-        t = repo.get("t-1")
+        t = repo.get("orch-run-1", "t-1")
         assert t is not None
         assert t.status == "queued"
         assert t.blocked_by == ["t-0"]
@@ -163,9 +163,9 @@ class TestOrchRunAndTaskRepository:
         assert t.parent_task_id == "t-root"
 
         # Bump revision for steer and verify upsert_state does not reset revision
-        assert repo.bump_revision_for_steer("t-1") is True
-        assert repo.bump_revision_for_steer("t-1") is True
-        assert repo.bump_revision_for_steer("non-existent") is False
+        assert repo.bump_revision_for_steer("orch-run-1", "t-1") is True
+        assert repo.bump_revision_for_steer("orch-run-1", "t-1") is True
+        assert repo.bump_revision_for_steer("orch-run-1", "non-existent") is False
 
         repo.upsert_state(
             task_id="t-1",
@@ -177,7 +177,7 @@ class TestOrchRunAndTaskRepository:
             duration_ms=1200,
             output_preview="Done",
         )
-        updated = repo.get("t-1")
+        updated = repo.get("orch-run-1", "t-1")
         assert updated is not None
         assert updated.status == "done"
         assert updated.revision == 2

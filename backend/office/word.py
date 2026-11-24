@@ -1160,6 +1160,124 @@ def _apply_paragraph_run_style(para, spec) -> int:
     return len(para.runs)
 
 
+def _has_style_type(doc: Document, name: str, style_type) -> bool:
+    """参考文档可能缺内置样式；缺失时返回 False 供回退。"""
+    try:
+        return doc.styles[name].type == style_type
+    except KeyError:
+        return False
+
+
+def _ensure_hyperlink_style(doc: Document) -> bool:
+    """确保 ``Hyperlink`` 字符样式存在（python-docx 默认模板没有）。"""
+    from docx.enum.style import WD_STYLE_TYPE
+
+    if _has_style_type(doc, "Hyperlink", WD_STYLE_TYPE.CHARACTER):
+        return True
+    from docx.shared import RGBColor
+
+    try:
+        style = doc.styles.add_style("Hyperlink", WD_STYLE_TYPE.CHARACTER)
+    except (ValueError, KeyError):
+        return False
+    style.font.underline = True
+    style.font.color.rgb = RGBColor(0x05, 0x63, 0xC1)
+    return True
+
+
+#: 只有这三种 scheme 生成真实超链接；其余（javascript:/data: 等）按纯文本落盘。
+_LINK_SCHEMES = ("http://", "https://", "mailto:")
+
+
+def _is_safe_link(url: str) -> bool:
+    return str(url).strip().lower().startswith(_LINK_SCHEMES)
+
+
+def _add_hyperlink(
+    doc: Document,
+    paragraph,
+    url: str,
+    text: str,
+    bold: Optional[bool] = None,
+    italic: Optional[bool] = None,
+) -> None:
+    """写入 ``w:hyperlink``（外部关系 + Hyperlink 字符样式）。"""
+    from docx.opc.constants import RELATIONSHIP_TYPE
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    r_id = paragraph.part.relate_to(url, RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
+    hyperlink = OxmlElement("w:hyperlink")
+    hyperlink.set(qn("r:id"), r_id)
+    run_el = OxmlElement("w:r")
+    r_pr = OxmlElement("w:rPr")
+    if _ensure_hyperlink_style(doc):
+        r_style = OxmlElement("w:rStyle")
+        r_style.set(qn("w:val"), "Hyperlink")
+        r_pr.append(r_style)
+    if bold:
+        r_pr.append(OxmlElement("w:b"))
+    if italic:
+        r_pr.append(OxmlElement("w:i"))
+    run_el.append(r_pr)
+    text_el = OxmlElement("w:t")
+    text_el.text = text
+    text_el.set(qn("xml:space"), "preserve")
+    run_el.append(text_el)
+    hyperlink.append(run_el)
+    paragraph._p.append(hyperlink)
+
+
+def _write_inline_runs(doc: Document, paragraph, runs_spec: List[Any]) -> None:
+    """按 WordRunSpec 列表逐 run 写入（M2 markdown 升级）。
+
+    bold→``Strong``、italic→``Emphasis``（模板缺该字符样式时回退直接格式）；
+    link→真实超链接（非安全 scheme 按纯文本）。
+    """
+    from docx.enum.style import WD_STYLE_TYPE
+
+    for spec in runs_spec:
+        link = getattr(spec, "link", None)
+        if link and _is_safe_link(link):
+            _add_hyperlink(
+                doc,
+                paragraph,
+                link,
+                spec.text,
+                bold=getattr(spec, "bold", None),
+                italic=getattr(spec, "italic", None),
+            )
+            continue
+        run = paragraph.add_run(spec.text)
+        bold = bool(getattr(spec, "bold", None))
+        italic = bool(getattr(spec, "italic", None))
+        if bold and _has_style_type(doc, "Strong", WD_STYLE_TYPE.CHARACTER):
+            run.style = "Strong"
+            if italic:
+                run.font.italic = True
+        elif bold:
+            run.font.bold = True
+            if italic:
+                run.font.italic = True
+        elif italic and _has_style_type(doc, "Emphasis", WD_STYLE_TYPE.CHARACTER):
+            run.style = "Emphasis"
+        elif italic:
+            run.font.italic = True
+
+
+def _runs_paragraph_style(doc: Document, style: Optional[str]) -> Optional[str]:
+    """runs 段落（及 quote）的段落样式名；模板缺样式时回退 None。"""
+    from docx.enum.style import WD_STYLE_TYPE
+
+    if style == "bullet":
+        return "List Bullet"
+    if style == "numbered":
+        return "List Number"
+    if style == "quote":
+        return "Quote" if _has_style_type(doc, "Quote", WD_STYLE_TYPE.PARAGRAPH) else None
+    return None
+
+
 def _partition_images(images: List[Any], n_paragraphs: int) -> Tuple[List[Any], List[Any]]:
     """把插图分为（行内, 文末）两组（Round 8）。
 
@@ -1684,12 +1802,21 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
                         + text
                     )
                 created = doc.add_heading(text, level=level)
+            elif para.runs:
+                # M2：行内 runs（bold/italic/link → 命名字符样式）
+                created = doc.add_paragraph(style=_runs_paragraph_style(doc, para.style))
+                _write_inline_runs(doc, created, para.runs)
             elif para.style == "bullet":
                 # ★ 新增：bullet 列表
                 created = doc.add_paragraph(para.text, style="List Bullet")
             elif para.style == "numbered":
                 # ★ 新增：numbered 列表
                 created = doc.add_paragraph(para.text, style="List Number")
+            elif para.style == "quote":
+                # M2：引用块 → 内置 Quote 样式（模板缺样式时回退默认段落）
+                created = doc.add_paragraph(
+                    para.text, style=_runs_paragraph_style(doc, "quote")
+                )
             else:
                 created = doc.add_paragraph(para.text)
             # 批次 2.3：可选段落级样式（无样式字段时零改动）

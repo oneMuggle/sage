@@ -1467,6 +1467,32 @@ class Database:
             "ON office_spec_documents(workspace_path, is_default)"
         )
 
+        # M2 (2026-11-23): Word 样式模板库 — 每行是一份可复用的生成侧样式
+        # 画像快照（WordFormatSpec JSON）。规则包后续修改不会静默改写已保存
+        # 模板；source_kind ∈ preset/rulepack/manual + source_ref 保留溯源。
+        # Additive + idempotent, 同 office_spec_documents 迁移模式.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS office_style_templates (
+                id TEXT PRIMARY KEY,
+                workspace_path TEXT NOT NULL,
+                name TEXT NOT NULL,
+                format_spec TEXT NOT NULL,
+                source_kind TEXT NOT NULL DEFAULT 'manual',
+                source_ref TEXT,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_office_style_tpl_workspace "
+            "ON office_style_templates(workspace_path)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_office_style_tpl_default "
+            "ON office_style_templates(workspace_path, is_default)"
+        )
+
         # M2.5: 文档 → 规范书绑定列（可空，NULL = 跟随工作区默认）.
         # 幂等迁移，复用 derived_from/archived_at 的 PRAGMA 模式.
         cursor.execute("PRAGMA table_info(office_documents)")
@@ -2288,10 +2314,14 @@ class Database:
             cursor.execute(
                 "ALTER TABLE orch_runs ADD COLUMN confirmed_at INTEGER"
             )
+        # 2026-11-24（M4.3b 遗留）: 主键改为复合 (run_id, task_id) —— 计划编号
+        # t1..tN 跨 run 复用，单列主键下同会话第二个 run 的同名任务会覆盖第一个
+        # run 的行（历史 run 回看任务行缺失）。旧库由迁移 v21 重建升级。
+        # 新库直接建全列（与旧库防御 ALTER 收敛后的列集一致）。
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS orch_tasks (
-                task_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
                 run_id TEXT NOT NULL REFERENCES orch_runs(run_id),
                 agent_id TEXT NOT NULL,
                 goal TEXT NOT NULL,
@@ -2303,7 +2333,13 @@ class Database:
                 blocked_by TEXT,
                 scratch_dir TEXT,
                 started_at INTEGER,
-                finished_at INTEGER
+                finished_at INTEGER,
+                used_tokens INTEGER,
+                duration_ms INTEGER,
+                parent_task_id TEXT NULL,
+                depth INTEGER NOT NULL DEFAULT 0,
+                retry_of TEXT,
+                PRIMARY KEY (run_id, task_id)
             )
             """
         )
@@ -2343,9 +2379,10 @@ class Database:
         # 必须位于 orch_tasks 表创建之后（旧库先建表/补列再 ALTER）。
         if "retry_of" not in _task_cols:
             cursor.execute("ALTER TABLE orch_tasks ADD COLUMN retry_of TEXT")
-        # M4.3b (2026-11-23): 金额不入 orch_tasks —— 该表主键是 task_id，
-        # 计划编号跨 run 复用会互相覆盖；金额以 usage_events 为唯一真相源
-        # （backend/data/usage_cost_repo.py 按 run_id 聚合）。
+        # M4.3b (2026-11-23): 金额不入 orch_tasks —— 金额以 usage_events 为
+        # 唯一真相源（backend/data/usage_cost_repo.py 按 run_id 聚合）。
+        # 2026-11-24 起主键为 (run_id, task_id)，跨 run 行冲突已消除；金额仍
+        # 留在账本层，避免与计费口径（含未定价模型）在两张表间漂移。
 
         # Subagent 实时可观测性 schema (run-events@1.0)。全部 DDL 幂等，兼容旧库。
         cursor.execute(
@@ -2402,12 +2439,15 @@ class Database:
         # C3 (2026-09-09): orch_steps 死表退役 —— 表/repo 曾建好但生产路径
         # 零写入，step 事实已由 orch_events 的 task.step.* payload 承载（可
         # after_seq 回放）。存量库中的残留表不主动 DROP（无害，随库保留）。
+        # 2026-11-24: 外键改为表级复合 (run_id, task_id) —— 父表主键已复合，
+        # 单列 REFERENCES orch_tasks(task_id) 在 foreign_keys=ON 下会报
+        # "foreign key mismatch"。旧库由迁移 v21 同步重建。
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS orch_context_messages (
                 context_id TEXT PRIMARY KEY,
                 run_id TEXT NOT NULL REFERENCES orch_runs(run_id),
-                task_id TEXT NOT NULL REFERENCES orch_tasks(task_id),
+                task_id TEXT NOT NULL,
                 source TEXT NOT NULL CHECK (source IN ('user', 'parent_agent', 'system')),
                 message_type TEXT NOT NULL CHECK (message_type IN ('constraint', 'clarification', 'additional_context', 'correction', 'priority_update', 'reference')),
                 content_redacted TEXT NOT NULL,
@@ -2417,7 +2457,8 @@ class Database:
                 created_by TEXT,
                 applied_at INTEGER,
                 applied_step_id TEXT,
-                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'delivered', 'acknowledged', 'rejected'))
+                status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'delivered', 'acknowledged', 'rejected')),
+                FOREIGN KEY (run_id, task_id) REFERENCES orch_tasks(run_id, task_id)
             )
             """
         )

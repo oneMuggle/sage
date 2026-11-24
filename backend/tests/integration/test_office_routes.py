@@ -35,7 +35,11 @@ from backend.api.office_word_template_profile_routes import (
     fill_word_template_profile_endpoint,
 )
 from backend.data.database import get_database
-from backend.office.models import OfficeDocType, OfficeReadRequest
+from backend.office.models import (
+    OfficeDocType,
+    OfficePptReadRequest,
+    OfficeReadRequest,
+)
 from backend.office.path_safety import managed_document_path
 from backend.office.storage import generate_document_dir, list_documents as list_documents_storage
 
@@ -93,7 +97,7 @@ def test_read_ppt_persists_summary_row(workspace: Path) -> None:
     expected_doc_id = managed_file.parent.name  # managed directory UUID
 
     result = read_ppt_endpoint(
-        OfficeReadRequest(
+        OfficePptReadRequest(
             workspace_path=str(workspace),
             file_path=str(managed_file),
             original_filename="upload.pptx",
@@ -169,7 +173,7 @@ def test_list_documents_canonicalizes_workspace_path(workspace: Path) -> None:
     # Seed a row using the canonical path (set up by read_ppt_endpoint).
     managed_file = _seed_managed_pptx(workspace)
     read_ppt_endpoint(
-        OfficeReadRequest(
+        OfficePptReadRequest(
             workspace_path=str(workspace),
             file_path=str(managed_file),
         )
@@ -187,7 +191,7 @@ def test_save_document_writes_archived_at_null_for_fresh_read(workspace: Path) -
     """Fresh read summaries have archived_at NULL so list_documents returns them."""
     managed_file = _seed_managed_pptx(workspace)
     read_ppt_endpoint(
-        OfficeReadRequest(
+        OfficePptReadRequest(
             workspace_path=str(workspace),
             file_path=str(managed_file),
         )

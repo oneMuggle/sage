@@ -311,15 +311,15 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 - [x] 视觉兜底基础：Office/PDF 扫描页 OCR 已有设置开关（`ocr_config.office_enabled`）；复杂版面 VLM 抽页检查仍待后续
 - [x] PDF 通用操作：合并/拆分/旋转/抽页/删页/水印/页码（`backend/office/pdf_ops.py`）
 - [x] PDF 读取补齐：页面图片返回（opt-in、单图 ≤1.5MB/总预算 20MB、`image_count`）+ 真 appearance flatten（旧版 PyMuPDF 回退只读位）
-- [ ] PDF 复杂表格兜底（Docling/TableFormer 路线随可选后端）
+- [x] PDF 复杂表格兜底（Docling/TableFormer 路线随可选后端；M6g）—— `extract_document` auto 模式候选链（docling → markitdown → light）逐条尝试，可选后端转换抛错自动回退到下一候选并在 warnings 记 `extractor_fallback`；`DoclingExtractor` 把 `document.tables` 单独输出为 `table` 块（anchor 含 `source=docling`），让 RAG/compare 能锚定到具体表格索引；`light` 的 PyMuPDF `find_tables` 仅识别有框线表格为已知限制
 - [x] `office_create` 的 pdf 枚举：明确拒绝并引导 `office_generate_pdf`（消除分派漂移）
 - [x] 工具面一致性：`office_delete` / `workspace_search` 覆盖 pdf/csv；Wiki 队列 PDF 路径
 - [x] `POST /office/extract`（统一提取）与 `POST /office/compare`（Word/Excel/PPT/PDF/CSV diff + Markdown 报告）
 - [x] 工作台对比入口（前端；后端已就绪）—— 文档库「对比」按钮 + `OfficeCompareDialog`（左右各选一份 → 行级 diff 汇总 + Markdown 报告）
 - [x] 聊天附件 docx/xlsx/pptx 富预览（附件链路复用 `WordPreview`/`ExcelPreview`/`PptPreview`）；Excel 图表 / 条件格式 / 数据验证、PPT 版式 / 占位符 / 图表在结构化预览中渲染；`@` Office chip 点击右栏预览（跨工作区 chip 不劫持点击）
-- [ ] PPT 图片在结构化预览中渲染（后端尚未提取 PPT 内嵌图片像素）
-- [ ] Word 模板 Profile/填充前端入口
-- [ ] Excel/PPT 基础规则审校（范围/锚点/只读），AI 语义审校视成本评估
+- [x] PPT 图片在结构化预览中渲染（`read_ppt` opt-in 提取内嵌图片 + 字节预算；前端图片网格 + 省略计数）
+- [x] Word 模板 Profile/填充前端入口（M6e）—— 文档库「模板填充」按钮 + `WordTemplateFillDialog`（分析槽位 → 填值 → 生成 `<stem>-filled.docx` → 导入文档库预览）
+- [x] Excel/PPT 基础规则审校（范围/锚点/只读；M6f）—— `extract_blocks` 按扩展名分派 .docx/.xlsx/.pptx：xlsx 工作表名 → heading、非空行 → table（锚点「工作表「X」第 N 行」）；pptx 标题占位符 → heading、正文 → body、表格 → table（锚点「幻灯片 N …」）；AI 语义审校随既有规则引擎生效（成本由 400 块/200 命中上限约束）
 
 > **实施记录（2026-11-21，M6a PDF 页面操作）**
 > - 新增：`backend/office/pdf_ops.py`（merge/split/rotate/extract/delete/watermark/page-numbers，工作区围栏 + 原子写）
@@ -372,6 +372,42 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 测试：新增 2 个测试文件 + 扩展 2 个；前端 100 文件 / 547 用例绿；tsc / eslint / prettier / architecture 棘轮绿
 > - 双分支：main PR #3232 + win7 PR #3233（cherry-pick 同步，无 Python 依赖变更）
 > - 限制：PPT 内嵌图片像素后端未提取 → 本批不渲染 PPT 图片缩略图
+
+> **实施记录（2026-11-23，M6d Excel 图表数值 + PPT 图片渲染）**
+> - PPT 读取：`read_ppt` / `OfficePptReadRequest` 新增 `include_images`（默认 False）、`max_images_per_slide`（默认 3，≤10）、`embed_image_data`（默认 False）；`PptSlideContent.images` + `images_omitted`
+> - 图片预算：单图原始 ≤1.125MB、全文档 ≤15MB、最多检查 500 张；跨页共享预算字典；超限计入 `images_omitted`；`include_images=False` 不枚举
+> - Excel 图表：`_extract_sheet_charts` 输出 `categories` / `series_items[{name, values}]` / `truncated`（每图 ≤50 点）；openpyxl `series.val`/`cat` 解包 `numRef/strRef/numLit/strLit`
+> - 前端：`MiniChart.tsx` 迷你 SVG 柱状图（PPT 图表与 Excel `series_items`；旧缓存无值回落文字清单）；`PptPreview` 图片网格 +「另有 N 张图片未内联」；`office.preview.chartTruncated` i18n
+> - 预览路径开启 embed：`DocumentPreview`、`useOfficeDocuments.readByType`、`artifact_reader._structured_or_none`（结构化预览数据源）；普通读取默认关闭
+> - 测试：后端新增 unit 10（`test_ppt_images_m6d.py` / `test_excel_chart_values_m6d.py`），端点既有 3 例改用 `OfficePptReadRequest`；Office/artifact 回归 1385 passed / 2 skipped；前端新增 2 文件 7 用例，相关回归 33 passed
+> - 门禁：ruff / py38 兼容 / silent-exceptions / architecture 棘轮（baseline 更新 office_routes 861、excel 1246，新增 useOfficeDocuments 801、types 822）/ tsc / eslint / prettier 全绿
+
+> **实施记录（2026-11-24，M6e Word 模板 Profile/填充前端入口）**
+> - 前端契约：`src/shared/api/types/officeWordTemplateTypes.ts` + `src/shared/api/officeWordTemplateApi.ts`（`POST /api/v1/office/word/template/profile` / `…/profile/fill`）
+> - 入口：`WordTemplateFillDialog.tsx` + `src/pages/Office.tsx` 文档库工具栏「模板填充」按钮（无工作区绑定禁用）
+> - 模板来源双通道：受管 Word 文档（`office/<doc_type>/<id>/<filename>`）+ `<workspace>/office/templates/*.docx`；同一工作区相对 posix 路径喂给后端
+> - 交互：选模板即分析槽位（content_control/bookmark/placeholder/jinja + image），kind 徽章 + 必填标记 + `current_value` 提示；文本槽入 `data`、图片槽入 `images`；本地必填门禁；输出名默认 `<stem>-filled.docx` 可编辑
+> - 结果面板：`filled_count` / `unfilled_slots` / `residual_placeholders` / `jinja_rendered` / `images_rendered` / warnings；「导入文档库并预览」经 `readDroppedMulti` 走既有导入链路
+> - 竞态防护：analyze/fill 各一个 requestId ref（沿用 `OfficeCompareDialog` 模式）；失败分支在对话框内显示
+> - i18n：zh/en 各 +28 key；feature barrel 审计符号 18 → 19
+> - 测试：新增 `WordTemplateFillDialog.test.tsx`（6 例：空态 / 相对路径分析 / 工作区模板过滤 / data+images 分流与 onFilled / 必填门禁 / 分析+填充错误）；三个 Office 页面测试补 stub 导出；相关 32 用例绿
+> - 门禁：tsc / eslint / prettier（源码）/ architecture 棘轮（`types.ts` 条目 822 → 823，仅 +1 export 行）全绿
+> - 限制：不支持在对话框内预览生成结果（M7 内联预览项）；富文本/图片尺寸参数后端暂不支持
+
+> **实施记录（2026-11-24，M6f Excel/PPT 基础规则审校）**
+> - `backend/office/rule_executor.py::extract_blocks` 按后缀分派：`.docx` 走原文档画像；`.xlsx` 走 openpyxl `read_only=True, data_only=True`；`.pptx` 走 python-pptx；其他后缀抛 `OfficeParseError("规则审校仅支持 .docx / .xlsx / .pptx 文档")`
+> - xlsx 范围映射：工作表名 → `heading`（锚点「工作表「<名>」」）；每个非空行 → `table`（文本 ` | ` 连接非空单元格，锚点「工作表「<名>」第 <行> 行」，行号为工作表 1 基实际行号；全空行跳过）
+> - pptx 范围映射：仅**标题占位符** → `heading`（普通文本框不冒充标题，避免 preview 的「首个文本框兜底」导致重复块）；非标题文本段 → 单块 `body`；每张表 → `table`（锚点「幻灯片 <n> 标题/正文/表格 <k>」）
+> - 只读与防爆上限：sheets ≤100、每表 ≤500 行、每行 ≤50 单元格、单元格 ≤500 字符、单块 ≤2000 字符、slides ≤200、单表 ≤200 单元格；`caption` scope 在 xlsx/pptx 上无匹配（保留 docx 题注语义）
+> - AI 规则无新增代码路径：沿用 40 块/批、400 块喂入上限、200 findings 上限，成本可控
+> - 测试：`test_rule_executor.py` 新增 6 例（xlsx 块分类/锚点、scope 命中与 body 空、500 行截断、pptx 块分类、scope 与锚点、不支持后缀）；`test_rules_routes.py` 新增端点用例（xlsx → 200 + 锚点）
+> - 门禁：ruff / py38 兼容（0 违规）/ silent-exceptions（39/39）/ architecture 棘轮（exit=0）全绿；定向 pytest 47 passed
+
+> **实施记录（2026-11-24，M6g PDF 复杂表格兜底）**
+> - `backend/office/extractors/service.py`：`_select_backend` → `_candidate_backends`（返回有序候选链）；`extract_document` 遍历候选，auto 模式下前一条失败则回退到下一条（`extractor_fallback` warning），最后一条失败归一为 `OfficeParseError`；显式 `backend=` 永不回退
+> - `backend/office/extractors/optional.py::DoclingExtractor.extract()`：新增 `document.tables` 迭代，每表 `export_to_markdown()` 输出为 `ExtractedBlock(type="table", anchor={"table_index": N, "source": "docling"})`；单表失败不阻断整篇
+> - 测试：`test_extractors_m6b.py` 新增 3 例（auto 回退、最后候选失败归一、Docling 结构化表格块）
+> - 门禁：office 全量 1426 passed / 2 skipped；ruff / py38 兼容（0 违规）/ silent-exceptions（39/39）/ architecture 棘轮（exit=0，104 baselined）全绿
 
 ### M7 — 前端一致性与漂移清理（P1，对应 G11/G12）
 
@@ -460,6 +496,10 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 | M6b 解析适配器 + 对比 + 工具面 | ✅ 后端 | 本轮提交 | unit 10 + 端点 3 + 工具面 44；全量 2274 passed |
 | M6c PDF 图片读取 + 真 flatten | ✅ | 本轮提交 | 80 PDF 相关测试（安全返工后）；architecture 棘轮绿 |
 | M6b 前端批次（对比入口 / 读侧 extras / chip 预览） | ✅ 前端 | `45adac67c` | main PR #3232 + win7 PR #3233；前端 100 文件 / 547 用例 |
+| M6d Excel 图表数值 + PPT 图片渲染 | ✅ | 本轮提交 | 后端 unit 10 + 回归 1385；前端 7 新用例 / 回归 33；门禁绿 |
+| M6e Word 模板 Profile/填充前端入口 | ✅ | 本轮提交 | 前端 6 新用例 / 相关回归 32；tsc/eslint/prettier/architecture 绿 |
+| M6f Excel/PPT 基础规则审校 | ✅ | 本轮提交 | 后端 unit 6 + 端点 1；定向 pytest 47 passed；ruff/py38/silent/architecture 绿 |
+| M6g PDF 复杂表格兜底 | ✅ | 本轮提交 | 后端 unit 3 新增；office 全量 1426 passed；ruff/py38/silent/architecture 绿 |
 | M7 前端接入 | ⏳ | — | 未开始（M6b 前端批次已先行落 A/B/C/D 四项） |
 | M8 大文件/并发/沙箱 | ⏳ | — | 未开始 |
 
