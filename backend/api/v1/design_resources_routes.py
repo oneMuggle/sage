@@ -11,8 +11,12 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict
 
+from backend.api.v1.design_source_models import (
+    OutlineRequest,
+    SourcePreviewRequest,
+)
 from backend.data.database import get_database
 from backend.design import get_design_studio
 from backend.design.errors import (
@@ -38,23 +42,6 @@ router = APIRouter(prefix="/design", tags=["design"])
 # ---------------------------------------------------------------------------
 
 
-class OutlineRequest(BaseModel):
-    """POST /design/outline body."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    file_path: Optional[str] = None
-    doc_id: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _exactly_one_source(self) -> OutlineRequest:
-        has_path = bool(self.file_path and str(self.file_path).strip())
-        has_id = bool(self.doc_id and str(self.doc_id).strip())
-        if has_path == has_id:
-            raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
-        return self
-
-
 class EmbedChartRequest(BaseModel):
     """POST /design/projects/{id}/chart body."""
 
@@ -62,23 +49,6 @@ class EmbedChartRequest(BaseModel):
 
     chart: dict
     slot: str = "{{CHART}}"
-
-
-class SourcePreviewRequest(BaseModel):
-    """POST /design/source/preview body."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    file_path: Optional[str] = None
-    doc_id: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _exactly_one_source(self) -> SourcePreviewRequest:
-        has_path = bool(self.file_path and str(self.file_path).strip())
-        has_id = bool(self.doc_id and str(self.doc_id).strip())
-        if has_path == has_id:
-            raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
-        return self
 
 
 # ---------------------------------------------------------------------------
