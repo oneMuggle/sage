@@ -11,7 +11,7 @@
  */
 
 import type { RunEvent } from './orchEvents';
-import { getWebAuthHeaders } from './webTransport';
+import { getWebAuthHeaders } from './webAuth';
 
 const MAX_EVENT_LINE_BYTES = 256 * 1024;
 const MAX_BUFFER_BYTES = 512 * 1024;

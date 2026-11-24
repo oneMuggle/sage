@@ -3,7 +3,7 @@ import { DEMO_ENDPOINT_MODELS, type DiscoveredModel } from '../../entities/setti
 import type { EndpointProtocol } from '../../entities/setting/types';
 import { backendRequest } from '../../shared/api/backendRequest';
 import { isDemoMode } from '../../shared/api/demoFlag';
-import { isBrowserRuntime } from '../../shared/api/webTransport';
+import { isBrowserRuntime } from '../../shared/api/webAuth';
 import { inferCapabilities, isEmbeddingModelId } from '../../shared/lib/modelCapabilities';
 
 interface OpenAIModelInfo {

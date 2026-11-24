@@ -12,7 +12,7 @@
  */
 import type { ElectronAPI, UnlistenFn } from '../types/electron-api';
 
-import { listenViaHttp } from './webTransport';
+import { loadWebTransport } from './webTransportLoader';
 
 export type { UnlistenFn };
 
@@ -26,6 +26,7 @@ export async function listen<T>(
   if (!api) {
     // 网页回退模式：后端 NDJSON 流（chat-stream-* / shell-stream-*）直接
     // 由浏览器订阅；主进程才有的应用生命周期事件静默 no-op。
+    const { listenViaHttp } = await loadWebTransport();
     return listenViaHttp<T>(event, handler);
   }
   // Unwrap electronAPI's (payload) → wrap back to Tauri-compatible ({ payload })

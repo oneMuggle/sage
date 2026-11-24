@@ -28,8 +28,16 @@
  */
 import { COMMAND_ROUTES } from '../../../electron/commands';
 
-const TOKEN_STORAGE_KEY = 'sage_auth_token';
+import {
+  getWebAuthHeaders,
+  getWebAuthToken,
+  getWebCapabilityHeaders,
+  isBrowserRuntime,
+} from './webAuth';
 
+// 凭据读取拆到 webAuth.ts（见该文件头注释：桌面端产物不应打包整张
+// IPC 路由表）。这里 re-export 保持既有 import 路径可用。
+export { getWebAuthHeaders, getWebAuthToken, getWebCapabilityHeaders, isBrowserRuntime };
 /** Thrown for Electron-only channels (pty, window management, …) in a browser. */
 export class WebDesktopOnlyError extends Error {
   readonly code = 'WEB_DESKTOP_ONLY';
@@ -38,37 +46,6 @@ export class WebDesktopOnlyError extends Error {
     super(`「${cmd}」仅在 Sage 桌面端可用（网页模式不支持此功能）`);
     this.name = 'WebDesktopOnlyError';
   }
-}
-
-export function isBrowserRuntime(): boolean {
-  return typeof window !== 'undefined' && !window.electronAPI;
-}
-
-export function getWebAuthToken(): string {
-  if (typeof window === 'undefined') return '';
-  try {
-    return window.localStorage.getItem(TOKEN_STORAGE_KEY) || '';
-  } catch {
-    return '';
-  }
-}
-
-/** Capability header for direct same-origin fetches (empty when no token). */
-export function getWebAuthHeaders(): Record<string, string> {
-  const token = getWebAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-/**
- * 浏览器传输层的本地能力凭据。复刻 Electron 主进程 `sage:backend-request`
- * 中继语义：能力放入 `X-Sage-Local-Authorization`，**不**写入 `Authorization`。
- * 这样调用方自带的 `Authorization`（例如 LLM 代理转发的上游 API Key）不会被
- * 本地 token 覆盖。`is_local_auth_valid` 在 `authorization` 为空时回退到
- * `x-sage-local-authorization`，LLM 代理路径则直接以 compatibility 为准。
- */
-export function getWebCapabilityHeaders(): Record<string, string> {
-  const token = getWebAuthToken();
-  return token ? { 'X-Sage-Local-Authorization': `Bearer ${token}` } : {};
 }
 
 /**

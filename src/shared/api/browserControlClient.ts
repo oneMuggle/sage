@@ -7,7 +7,7 @@
  */
 
 import { webAccessApiUrl } from './webAccessClient';
-import { getWebAuthHeaders } from './webTransport';
+import { getWebAuthHeaders } from './webAuth';
 
 export type BrowserControlState = 'agent' | 'paused' | 'user_takeover';
 

@@ -5,7 +5,7 @@
  * Electron 产物直连本机后端。所有接口只返回脱敏字段，不含凭据值。
  */
 
-import { getWebAuthHeaders } from './webTransport';
+import { getWebAuthHeaders } from './webAuth';
 
 export interface SiteSession {
   domain: string;

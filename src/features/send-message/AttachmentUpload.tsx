@@ -2,7 +2,7 @@ import { Loader2, Mic } from 'lucide-react';
 // src/features/send-message/AttachmentUpload.tsx
 import React, { useCallback, useRef, useState } from 'react';
 
-import { getWebAuthHeaders } from '../../shared/api/webTransport';
+import { getWebAuthHeaders } from '../../shared/api/webAuth';
 
 interface MediaRef {
   id: string;
