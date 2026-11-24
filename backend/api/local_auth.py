@@ -115,12 +115,23 @@ def is_local_auth_valid(request: Request) -> bool:
     return False
 
 
+# Non-API paths that stay protected even in web mode. Everything else outside
+# /api/ is the bundled SPA (dist-web): index.html, /sage.svg, /pet.html, fonts,
+# SPA routes… — the browser has to be able to load those unauthenticated, and
+# they contain no user data. /health/ready is excluded because its body lists
+# per-module error details (command paths, disk space); the FastAPI docs pages
+# would otherwise expose the full API surface.
+_WEB_MODE_PROTECTED_PATHS = frozenset({"/health/ready", "/docs", "/redoc", "/openapi.json"})
+
+
 def is_public_path(path: str) -> bool:
     """Return whether a path is needed by a supervisor before authentication."""
     if path in _PUBLIC_PATHS:
         return True
-    # Web mode: static assets are public (served by StaticFiles mount)
-    if is_web_mode() and (path == "/" or path.startswith("/assets/") or path == "/favicon.ico"):
+    # Web mode: the SPA bundle is public, the API is not.
+    if is_web_mode():
+        if path in _WEB_MODE_PROTECTED_PATHS or path.startswith("/api/"):
+            return False
         return True
     return False
 

@@ -10,7 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from enum import Enum
+from typing import Any, Dict, FrozenSet, List, Optional, Tuple, Union
 
 import httpx
 from fastapi import APIRouter, File, UploadFile
@@ -29,6 +30,7 @@ from backend.services.attachment_extract import (
     MAX_OFFICE_ZIP_MEMBERS,  # noqa: F401 — 兼容性 re-export
     _extract_document_text,  # noqa: F401 — 兼容性 re-export
     _guard_office_zip_budget,  # noqa: F401 — 兼容性 re-export
+    decode_text_content,
     extract_attachment_text,
     extract_attachment_text_async,  # noqa: F401 — 兼容性 re-export
 )
@@ -92,32 +94,115 @@ MAX_INDEX_TEXT_CHARS = 400_000
 ATTACHMENT_VECTOR_STORE = attachment_vector_store_path(MEDIA_ROOT.parent)
 
 
-@router.post("/chat/attachments")
-async def upload_chat_attachment(file: UploadFile = File(...)) -> dict:  # noqa: PLR0911 — 每条早退对应一种明确的上传错误
-    """上传聊天附件（音频/文本文档），存储到 data/media/ 并返回 MediaRef
+class AttachmentErrorCode(str, Enum):
+    """附件上传错误码 —— 前端据此显示可读文案。"""
+
+    UNSUPPORTED_TYPE = "unsupported_type"
+    UNSUPPORTED_ENCODING = "unsupported_encoding"
+    TOO_LARGE = "too_large"
+    PARSE_FAILED = "parse_failed"
+    PARSE_TIMEOUT = "parse_timeout"
+
+
+#: 无扩展名但允许上传的文件名（小写精确匹配）。
+#: 前端 CHAT_NO_EXT_FILENAMES 必须与本常量同口径。
+NO_EXT_FILENAMES: FrozenSet[str] = frozenset({"makefile", "dockerfile"})
+
+
+@router.post("/chat/attachments", response_model=None)
+async def upload_chat_attachment(file: UploadFile = File(...)) -> Union[Dict[str, Any], JSONResponse]:  # noqa: PLR0911, PLR0915 — 每条早退对应一种明确的上传错误
+    """上传聊天附件（音频/文本文档），存储到 data/media/ 并返回 MediaRef。
 
     成功: {"media_ref": {...}, "api_url": "/api/v1/media/<id>"}
-    文本文档额外带 "text"（utf-8 解码全文，供聊天上下文注入）
-    失败: {"error": "..."}
+    文本文档额外带 "text"（解码后全文，供聊天上下文注入）
+    失败: JSONResponse(4xx/5xx, {"error_code": "...", "error": "..."})
     """
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
-    if ext and not _ATTACHMENT_EXT_RE.fullmatch(ext):
-        return {"error": "无效的文件扩展名"}
+    # ── 1. 解析文件名与扩展名（含无点白名单）──────────────────────────────
+    name_lower = (file.filename or "").lower()
+    if "." in name_lower:
+        ext = name_lower.rsplit(".", 1)[-1]
+    elif name_lower in NO_EXT_FILENAMES:
+        ext = name_lower  # 作为伪扩展名参与后续判定
+    else:
+        ext = ""
 
+    if ext and not _ATTACHMENT_EXT_RE.fullmatch(ext):
+        return JSONResponse(
+            status_code=415,
+            content={
+                "error_code": AttachmentErrorCode.UNSUPPORTED_TYPE.value,
+                "error": f"无效的文件扩展名: {ext}",
+            },
+        )
+
+    # ── 2. 校验扩展名 + content-type → 415 unsupported_type ──────────────
     is_text = (file.content_type in ALLOWED_TEXT_TYPES) or (ext in ALLOWED_TEXT_EXTENSIONS)
     is_doc = ext in ALLOWED_DOC_EXTENSIONS
     is_audio = (file.content_type in ALLOWED_AUDIO_TYPES) or (ext in ALLOWED_AUDIO_EXTENSIONS)
-    if file.content_type and not is_text and not is_doc and not is_audio:
-        return {"error": f"不支持的文件类型: {file.content_type}"}
-    if not file.content_type and not is_text and not is_doc and not is_audio:
-        return {"error": f"不支持的文件类型: {ext or '(无扩展名)'}"}
+    if not is_text and not is_doc and not is_audio:
+        label = file.content_type or ext or "(无扩展名)"
+        return JSONResponse(
+            status_code=415,
+            content={
+                "error_code": AttachmentErrorCode.UNSUPPORTED_TYPE.value,
+                "error": f"不支持的文件类型: {label}",
+            },
+        )
 
+    # ── 3. 读内容 + 校验大小 → 413 too_large ─────────────────────────────
     content = await file.read()
     if len(content) > MAX_ATTACHMENT_SIZE:
-        return {
-            "error": f"文件过大 ({len(content)} bytes)，上限 {MAX_ATTACHMENT_SIZE // 1024 // 1024}MB"
-        }
+        return JSONResponse(
+            status_code=413,
+            content={
+                "error_code": AttachmentErrorCode.TOO_LARGE.value,
+                "error": f"文件过大 ({len(content)} bytes)，上限 {MAX_ATTACHMENT_SIZE // 1024 // 1024}MB",
+            },
+        )
 
+    # ── 4. 文本解码（UTF-8→GBK→GB18030）/ 文档解析 ──────────────────────
+    # 全部在校验之后、save 之前 —— 失败路径不留磁盘痕迹（无孤儿文件）。
+    text_content: Optional[str] = None
+    if is_text:
+        text_content = decode_text_content(content)
+        if text_content is None:
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "error_code": AttachmentErrorCode.UNSUPPORTED_ENCODING.value,
+                    "error": "文本文件编码无法识别（支持 UTF-8 / GBK / GB18030）",
+                },
+            )
+    elif is_doc:
+        try:
+            text_content = await asyncio.wait_for(
+                asyncio.get_running_loop().run_in_executor(
+                    None, extract_attachment_text, content, ext
+                ),
+                timeout=MAX_ATTACHMENT_PARSE_SECONDS,
+            )
+        except asyncio.TimeoutError:  # noqa: UP041 — py3.8 上不是 builtin TimeoutError 别名
+            logger.warning("attachment parse timeout: ext=%s", ext)
+            return JSONResponse(
+                status_code=504,
+                content={
+                    "error_code": AttachmentErrorCode.PARSE_TIMEOUT.value,
+                    "error": "文档解析超时（文件可能过大或结构异常）",
+                },
+            )
+        except Exception as exc:  # noqa: BLE001 — 解析器异常细节不外泄
+            logger.warning(
+                "attachment parse failed: ext=%s error_type=%s", ext, type(exc).__name__
+            )
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "error_code": AttachmentErrorCode.PARSE_FAILED.value,
+                    "error": "文档解析失败（格式损坏或内容过大）",
+                },
+            )
+
+    # ── 5. 全部校验通过 → store.save()（无孤儿风险）─────────────────────
     store = MediaStore(root=MEDIA_ROOT)
     ref = store.save(
         content=content,
@@ -129,29 +214,10 @@ async def upload_chat_attachment(file: UploadFile = File(...)) -> dict:  # noqa:
     if ext == "pdf":
         _schedule_mineru_enrichment(content, file.filename or "attachment.pdf")
 
+    # ── 6. 构建响应 ──────────────────────────────────────────────────────
     response: dict = {"media_ref": ref, "api_url": ref.api_url}
-    if is_text:
-        try:
-            response["text"] = content.decode("utf-8")[:MAX_TEXT_INJECT_CHARS]
-        except UnicodeDecodeError:
-            return {"error": "文本文件不是有效的 UTF-8 编码"}
-    elif is_doc:
-        try:
-            text = await asyncio.wait_for(
-                asyncio.get_running_loop().run_in_executor(
-                    None, extract_attachment_text, content, ext
-                ),
-                timeout=MAX_ATTACHMENT_PARSE_SECONDS,
-            )
-            response["text"] = text[:MAX_TEXT_INJECT_CHARS]
-        except asyncio.TimeoutError:  # noqa: UP041 — py3.8 上不是 builtin TimeoutError 别名
-            logger.warning("attachment parse timeout: ext=%s", ext)
-            return {"error": "文档解析超时（文件可能过大或结构异常）"}
-        except Exception as exc:  # noqa: BLE001 — 解析器异常细节不外泄
-            logger.warning(
-                "attachment parse failed: ext=%s error_type=%s", ext, type(exc).__name__
-            )
-            return {"error": "文档解析失败（格式损坏或内容过大）"}
+    if text_content is not None:
+        response["text"] = text_content[:MAX_TEXT_INJECT_CHARS]
     return response
 
 

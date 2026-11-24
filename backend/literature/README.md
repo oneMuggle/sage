@@ -42,6 +42,11 @@ search:
 `SageToolDriver`（`backend/literature/sage_driver.py`）把 driver 调用映射到
 `sage.call("browser_*")`，可在 `execute_code` 中使用。
 
+对 `search.mode: url` 的 profile，`search_with_profile` 会先走快路径
+`sage.call("web_fetch")`（自动带该域登录态，比开浏览器快一个数量级）；
+登录墙 / 反爬 / 空正文时自动回落浏览器通道。`search.mode: interactive`
+必须走浏览器（需在真实页面输入检索词），不启用快路径。
+
 ## Claims 账本与核验（M2a）
 
 每次核验生成 `claims.jsonl`，每行一条 claim：

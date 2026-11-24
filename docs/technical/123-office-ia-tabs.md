@@ -15,7 +15,7 @@
 | 预览面板（内嵌审校） | `OfficePreviewPanel` | 高 |
 | 文档列表 / 快照 | `OfficeDocumentList` / `OfficeSnapshotPanel` | 中高 |
 | 编辑预览弹窗 | `OfficeEditPreviewDialog` | 中 |
-| 生成表单 | `OfficeGenerateForm` | 中 |
+| 生成工作台 | `GenerateWorkspace`（已替代孤儿组件 `OfficeGenerateForm`） | 中 |
 | 期刊模板助手 | `JournalPanel` | 低 |
 | Word 规则抽取 | `WordRuleExtractionPanel` | 低 |
 | Word 批量审校 | `WordBatchAuditPanel` | 低 |
@@ -41,7 +41,7 @@
 | Tab | 内容 |
 |-----|------|
 | **文档处理**（默认） | 文件选择 ×4、预览、编辑预览、文档列表、快照、批量 |
-| **文档生成** | `OfficeGenerateForm`；`JournalPanel` 收在默认收起的 `<details>` 折叠卡内 |
+| **文档生成** | `GenerateWorkspace`；`JournalPanel` 收在默认收起的 `<details>` 折叠卡内 |
 | **审校与规范** | `WordRuleExtractionPanel`、`WordBatchAuditPanel`、审校说明卡（按钮跳「文档处理」） |
 | **LaTeX** | 二级 tab：`project`（项目导入 + 编译）/ `templates`（模板助手 + 期刊规范档案）/ `audit`（源码审校 + PDF 版式审计 + 投稿合规） |
 

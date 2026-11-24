@@ -577,7 +577,12 @@ M4 第 3 条验收线"run 汇总成本与后端账一致"；M3.3 亦把成本估
 - [x] 15-2 v21 迁移（重建两表 + 索引 + 外键校验 + 精简 fixture 防御）
 - [x] 15-3 仓储与调用点（conflict target / get / bump 签名）
 - [x] 15-4 测试（跨 run 隔离、旧结构升级、数据保全、复合 FK 可用）
-- [ ] 15-5 门禁与双分支同步（ruff / py38 兼容 / lint-imports / silent-exceptions / 棘轮）
+- [x] 15-5 门禁与双分支同步（ruff / py38 兼容 / lint-imports / silent-exceptions / 棘轮）
+  - main：#3253（`30762cad5`）已合并，lint-imports 1 kept / 0 broken，CI 全绿。
+  - release/win7：#3257（`73d367bf3`）cherry-pick 同步，py38 定向 79 测试通过，CI 全绿；
+    win7 的 `Backend (Python 3.8, Win7 LTS)` job 不运行 lint-imports（该步骤仅在 main/develop
+    的 `backend` job），且 `chat_service → tools.skill_tool` 的 layers 违规在 win7 基线原生存在，
+    与本迁移无关，属既有漂移。
 
 ### 15.4 风险与依赖
 

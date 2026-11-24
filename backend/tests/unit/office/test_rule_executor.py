@@ -41,6 +41,45 @@ def docx_path(tmp_path: Path) -> Path:
     return path
 
 
+@pytest.fixture()
+def xlsx_path(tmp_path: Path) -> Path:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    summary = workbook.active
+    summary.title = "汇总"
+    summary.append(["名称", "状态"])
+    summary.append(["方案A", "待定"])
+    summary.append([None, None])
+    details = workbook.create_sheet("明细")
+    details["A1"] = "干净的正文"
+    path = tmp_path / "sample.xlsx"
+    workbook.save(str(path))
+    return path
+
+
+@pytest.fixture()
+def pptx_path(tmp_path: Path) -> Path:
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+    slide.shapes.title.text = "页面标题"
+    box = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(4), Inches(1))
+    box.text_frame.text = "正文包含待定"
+    table_shape = slide.shapes.add_table(1, 2, Inches(1), Inches(4), Inches(6), Inches(1))
+    table_shape.table.cell(0, 0).text = "表格单元"
+    table_shape.table.cell(0, 1).text = "待定"
+
+    blank = presentation.slides.add_slide(presentation.slide_layouts[6])
+    box2 = blank.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(1))
+    box2.text_frame.text = "第二页无标题正文"
+    path = tmp_path / "sample.pptx"
+    presentation.save(str(path))
+    return path
+
+
 def _rule(**overrides: Any) -> Rule:
     payload = {
         "id": "rule-1",
@@ -142,3 +181,74 @@ async def test_ai_audit_caps_blocks_and_llm_calls(tmp_path: Path) -> None:
     # 400-block cap / 40-block batches = 10 calls, never 500/40 + remainder.
     assert len(client.prompts) == 10
     assert len(client.prompts) <= 10
+
+
+def test_extract_blocks_xlsx_labels_sheets_and_rows(xlsx_path: Path) -> None:
+    blocks = extract_blocks(xlsx_path)
+    assert [(block.kind, block.label) for block in blocks] == [
+        ("heading", "工作表「汇总」"),
+        ("table", "工作表「汇总」第 1 行"),
+        ("table", "工作表「汇总」第 2 行"),
+        ("heading", "工作表「明细」"),
+        ("table", "工作表「明细」第 1 行"),
+    ]
+    assert blocks[2].text == "方案A | 待定"
+
+
+async def test_xlsx_audit_scope_and_anchor(xlsx_path: Path) -> None:
+    table_hit = await run_audit([_rule(scope="table")], xlsx_path)
+    assert table_hit.warning_count == 1
+    assert table_hit.findings[0].location == "工作表「汇总」第 2 行"
+
+    heading_hit = await run_audit(
+        [_rule(id="rule-heading", scope="heading", pattern="汇总")], xlsx_path
+    )
+    assert [item.location for item in heading_hit.findings] == ["工作表「汇总」"]
+
+    body_hit = await run_audit([_rule(scope="body")], xlsx_path)
+    assert body_hit.findings == []
+
+
+def test_extract_blocks_xlsx_caps_rows(tmp_path: Path) -> None:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    for index in range(600):
+        sheet.append([f"行{index}"])
+    path = tmp_path / "long.xlsx"
+    workbook.save(str(path))
+
+    blocks = extract_blocks(path)
+    assert sum(1 for block in blocks if block.kind == "table") == 500
+
+
+def test_extract_blocks_pptx_slides(pptx_path: Path) -> None:
+    blocks = extract_blocks(pptx_path)
+    assert [(block.kind, block.label) for block in blocks] == [
+        ("heading", "幻灯片 1 标题"),
+        ("body", "幻灯片 1 正文"),
+        ("table", "幻灯片 1 表格 1"),
+        ("body", "幻灯片 2 正文"),
+    ]
+    assert blocks[2].text == "表格单元 | 待定"
+
+
+async def test_pptx_audit_scope_and_anchor(pptx_path: Path) -> None:
+    body_hit = await run_audit([_rule(scope="body")], pptx_path)
+    assert [item.location for item in body_hit.findings] == ["幻灯片 1 正文"]
+
+    table_hit = await run_audit([_rule(scope="table")], pptx_path)
+    assert [item.location for item in table_hit.findings] == ["幻灯片 1 表格 1"]
+
+    heading_hit = await run_audit(
+        [_rule(id="rule-heading", scope="heading", pattern="标题")], pptx_path
+    )
+    assert [item.location for item in heading_hit.findings] == ["幻灯片 1 标题"]
+
+
+def test_extract_blocks_rejects_unsupported_suffix(tmp_path: Path) -> None:
+    path = tmp_path / "sample.pdf"
+    path.write_bytes(b"%PDF-1.4")
+    with pytest.raises(OfficeParseError, match="仅支持"):
+        extract_blocks(path)

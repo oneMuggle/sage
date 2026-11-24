@@ -21,6 +21,7 @@ vi.mock('../../../shared/api/officeGenerateApi', () => ({
 vi.mock('../../../shared/api/officeApi', () => ({
   officeApi: {
     listTemplates: vi.fn(),
+    templateThumbnail: vi.fn().mockResolvedValue({ ok: false }),
     listWordStylePresets: vi.fn(),
     listWordStyleTemplates: vi.fn(),
   },

@@ -2,6 +2,8 @@ import { Loader2, Mic } from 'lucide-react';
 // src/features/send-message/AttachmentUpload.tsx
 import React, { useCallback, useRef, useState } from 'react';
 
+import { getWebAuthHeaders } from '../../shared/api/webAuth';
+
 interface MediaRef {
   id: string;
   mime_type: string;
@@ -82,6 +84,7 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
 
           const resp = await fetch('/api/v1/chat/attachments', {
             method: 'POST',
+            headers: { ...getWebAuthHeaders() },
             body: formData,
           });
 
@@ -196,10 +199,7 @@ export function auditAttachmentUpload(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function exportAttachmentUploadAuditJson(
-  attachmentCount = 0,
-  isUploading = false,
-): string {
+export function exportAttachmentUploadAuditJson(attachmentCount = 0, isUploading = false): string {
   return JSON.stringify(auditAttachmentUpload(attachmentCount, isUploading), null, 2);
 }
 
