@@ -168,4 +168,3 @@ def test_subagent_whitelist_gets_screenshot_and_downloads_not_tabs():
     ):
         assert tool in whitelist
 
-

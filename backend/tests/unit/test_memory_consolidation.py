@@ -29,7 +29,7 @@ class _FakeLLM:
         self._response = response
         self.calls: List[str] = []
 
-    def complete(self, prompt: str) -> str | None:
+    def complete(self, prompt: str) -> Optional[str]:
         self.calls.append(prompt)
         return self._response
 

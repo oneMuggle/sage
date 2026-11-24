@@ -5,7 +5,7 @@
 > **P2 备注（2026-06-06）**：Sage 后端已迁移到六边形架构（Ports & Adapters）。
 > 本章中标注的旧 `backend/core/*` 路径已迁移到 `backend/core/legacy/*`（双轨安全网）；
 > 新业务代码位于 `backend/domain/*`（纯领域模型）、`backend/application/services/chat_service.py`（用例编排）、
-> `backend/adapters/out/*`（端口实现）。详细架构请阅读 [`docs/technical/18-hexagonal.md`](./technical/18-hexagonal.md)。
+> `backend/adapters/out/*`（端口实现）。详细架构请阅读 [`docs/technical/18-hexagonal.md`](./18-hexagonal.md)。
 
 ## 5.1 Agent 概述
 

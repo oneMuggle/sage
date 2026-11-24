@@ -1,11 +1,11 @@
-"""Tests for the idempotent memory_traceability schema migration (Task 4 step 9).
+"""Tests for the idempotent memory schema migration contracts.
 
 Pins the contract:
-- After ``init_db()`` on a fresh DB, the new columns exist on
-  ``memories_episodic`` and the supporting indexes exist.
-- Calling ``init_db()`` again on the same DB is a no-op (no exceptions,
-  no duplicate columns, no duplicate indexes).
-- The columns are nullable so existing rows remain valid.
+- win7 Task 4 / Gap A：``init_db()`` 后 ``memories_episodic`` 具备
+  ``source_turn_id`` / ``source_message_id`` / ``memory_category`` 列与支撑索引；
+  重复调用幂等；列可空（存量行保持可读）。
+- 2026-11-17 记忆详情化（main）：存量库缺 ``title`` 列时，``init_db``
+  必须幂等补列（ALTER 路径）。
 """
 
 from __future__ import annotations

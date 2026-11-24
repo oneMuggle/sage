@@ -4,11 +4,11 @@
 
 ## 当前文档
 
-- [Skills 系统端到端技术文档](./technical/24-skills-system.md)
-- [SKILL.md 规范一致性](./technical/28-skill-md-spec-conformance.md)
-- [SKILL.md 编写指南](./user-manual/04-skill-md-authoring.md)
-- [技能生命周期用户手册](./user-manual/08-skill-lifecycle.md)
-- [渐进式功能披露](./technical/44-progressive-disclosure.md)
+- [Skills 系统端到端技术文档](./24-skills-system.md)
+- [SKILL.md 规范一致性](./28-skill-md-spec-conformance.md)
+- [SKILL.md 编写指南](../user-manual/04-skill-md-authoring.md)
+- [技能生命周期用户手册](../user-manual/08-skill-lifecycle.md)
+- [渐进式功能披露](./44-progressive-disclosure.md)
 
 ## 当前实现概览
 

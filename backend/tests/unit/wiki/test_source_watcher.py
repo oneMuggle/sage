@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import List, Tuple
 
 import pytest
 
@@ -16,8 +17,8 @@ class _FakeObserver:
     """记录 schedule/unschedule/start/stop 调用，不启动线程。"""
 
     def __init__(self) -> None:
-        self.scheduled: list[tuple[object, str, bool]] = []
-        self.unscheduled: list[object] = []
+        self.scheduled: List[Tuple[object, str, bool]] = []
+        self.unscheduled: List[object] = []
         self.started: int = 0
         self.stopped: int = 0
 
@@ -50,7 +51,7 @@ def test_degraded_mode_noop_without_watchdog(tmp_path: Path) -> None:
 
 
 def test_handler_enqueues_new_source_file(tmp_path: Path, monkeypatch) -> None:
-    calls: list[tuple[str, str]] = []
+    calls: List[Tuple[str, str]] = []
 
     class _Queue:
         def __init__(self, root: Path) -> None:
@@ -79,7 +80,7 @@ def test_handler_ignores_directories_and_hidden_files(
 ) -> None:
     from backend.wiki import ingest_queue
 
-    calls: list[tuple[str, str]] = []
+    calls: List[Tuple[str, str]] = []
 
     class _Queue:
         def __init__(self, root: Path) -> None:
@@ -109,7 +110,7 @@ def test_handler_deletes_source_and_triggers_cascade(
 ) -> None:
     from backend.wiki import lifecycle
 
-    calls: list[tuple[Path, str]] = []
+    calls: List[Tuple[Path, str]] = []
     monkeypatch.setattr(
         lifecycle,
         "cascade_delete_source",
