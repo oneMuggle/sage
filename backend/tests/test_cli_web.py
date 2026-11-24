@@ -44,6 +44,41 @@ def test_pick_port_raises_when_all_busy() -> None:
         web.pick_port(8765, is_free=lambda _p: False, attempts=3)
 
 
+# ── find_modern_browser ──────────────────────────────────────────────────────
+
+
+def test_find_modern_browser_returns_first_existing_candidate() -> None:
+    env = {"ProgramFiles": r"C:\Program Files"}
+    target = Path(r"C:\Program Files") / r"Google\Chrome\Application\chrome.exe"
+    found = web.find_modern_browser(env, exists=lambda p: p == target, os_name="nt")
+    assert found == ("Google Chrome", target)
+
+
+def test_find_modern_browser_prefers_chrome_over_firefox() -> None:
+    env = {
+        "ProgramFiles": r"C:\Program Files",
+        "LOCALAPPDATA": r"C:\Users\user\AppData\Local",
+    }
+    chrome = Path(r"C:\Users\user\AppData\Local") / r"Google\Chrome\Application\chrome.exe"
+    firefox = Path(r"C:\Program Files") / r"Mozilla Firefox\firefox.exe"
+    found = web.find_modern_browser(env, exists=lambda p: p in (chrome, firefox), os_name="nt")
+    assert found is not None
+    assert found[0] == "Google Chrome"
+
+
+def test_find_modern_browser_none_off_windows() -> None:
+    assert web.find_modern_browser({}, exists=lambda _p: True, os_name="posix") is None
+
+
+def test_find_modern_browser_none_when_absent() -> None:
+    assert (
+        web.find_modern_browser(
+            {"ProgramFiles": r"C:\Program Files"}, exists=lambda _p: False, os_name="nt"
+        )
+        is None
+    )
+
+
 # ── prepare_runtime_env ──────────────────────────────────────────────────────
 
 

@@ -33,16 +33,48 @@ describe('desktopEvent.listen', () => {
     vi.stubGlobal('window', { electronAPI: { listen: apiListen } });
 
     await listen('orch-events-run-1', () => {}, { streamId: 'sid-9' });
-    expect(apiListen).toHaveBeenCalledWith(
-      'orch-events-run-1',
-      expect.any(Function),
-      { streamId: 'sid-9' },
-    );
+    expect(apiListen).toHaveBeenCalledWith('orch-events-run-1', expect.any(Function), {
+      streamId: 'sid-9',
+    });
   });
 
-  it('无 electronAPI（纯浏览器）抛可读错误且不触发 handler', async () => {
+  it('无 electronAPI（纯浏览器）时未知事件返回 no-op unlisten', async () => {
     vi.stubGlobal('window', {});
-    await expect(listen('evt', () => {})).rejects.toThrow('electronAPI not available');
+    const handler = vi.fn();
+    const stop = await listen('evt', handler);
+    expect(typeof stop).toBe('function');
+    stop();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('无 electronAPI 时 chat-stream 事件走 NDJSON 直连', async () => {
+    const encoder = new TextEncoder();
+    let sent = false;
+    const reader = {
+      read: async () => {
+        if (sent) return { done: true, value: undefined };
+        sent = true;
+        return { done: false, value: encoder.encode('{"state":"content_delta"}\n') };
+      },
+    };
+    const fetchStub = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: { getReader: () => reader },
+    });
+    vi.stubGlobal('fetch', fetchStub);
+    vi.stubGlobal('window', {});
+
+    const seen: Array<{ payload: unknown }> = [];
+    const stop = await listen('chat-stream-abc', (e) => seen.push(e));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      '/api/v1/chat/stream/abc',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(seen).toEqual([{ payload: { state: 'content_delta' } }]);
+    stop();
   });
 });
 
