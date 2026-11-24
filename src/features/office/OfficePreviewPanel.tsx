@@ -32,6 +32,7 @@ import {
   FileSpreadsheet,
   FileText,
   FileType,
+  Paintbrush,
   Pencil,
   Presentation,
   ShieldCheck,
@@ -62,6 +63,7 @@ import {
   WordPreview,
 } from './OfficeStructuredPreviews';
 import { PdfFormFillDialog } from './PdfFormFillDialog';
+import { WordStyleApplyDialog } from './WordStyleApplyDialog';
 import { ConverterGuideDialog } from './canvas/ConverterGuideDialog';
 import { resolveDefaultFidelity, shouldAutoLoadFidelity } from './officeFidelity';
 import { dataUrlToBlobUrl, safeRevokeBlobUrl } from './officePreviewBlobUrl';
@@ -239,6 +241,8 @@ export function OfficePreviewPanel({
   }, [originalPdfUrl]);
   // M2c: Word 规则审校面板 + 段落定位高亮。
   const [auditOpen, setAuditOpen] = useState(false);
+  // M2 D4: 已有文档「套用样式」对话框。
+  const [wordStyleDialogOpen, setWordStyleDialogOpen] = useState(false);
   const [highlightParagraphIndex, setHighlightParagraphIndex] = useState<number | null>(null);
   // Declared before the reset effect so closing and reopening the same document
   // can clear the dedupe key; otherwise the auto-load effect short-circuits on
@@ -246,6 +250,7 @@ export function OfficePreviewPanel({
   const autoLoadKeyRef = useRef<string | null>(null);
   useEffect(() => {
     setAuditOpen(false);
+    setWordStyleDialogOpen(false);
     setHighlightParagraphIndex(null);
     // 切文档时释放上一份高保真 blob URL。
     setFidelityUrl((prev) => {
@@ -688,6 +693,23 @@ export function OfficePreviewPanel({
                 规则审校
               </button>
             )}
+            {preview.docType === 'word' && Boolean(workspacePath ?? summary.workspace_path) && (
+              <button
+                type="button"
+                onClick={() => setWordStyleDialogOpen((open) => !open)}
+                aria-pressed={wordStyleDialogOpen}
+                className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors ${
+                  wordStyleDialogOpen
+                    ? 'border-primary text-primary bg-primary/10'
+                    : 'border-border text-text-secondary hover:bg-bg-hover'
+                }`}
+                data-testid="office-word-style-apply-toggle"
+                aria-label={t('office.wordStyle.apply.button')}
+              >
+                <Paintbrush className="w-3.5 h-3.5" />
+                {t('office.wordStyle.apply.button')}
+              </button>
+            )}
             {onEditPreview && (
               <button
                 type="button"
@@ -826,6 +848,17 @@ export function OfficePreviewPanel({
               setHighlightParagraphIndex(anchor.paragraph_index ?? null);
             }}
             onFixed={onRefresh}
+          />
+        </div>
+      )}
+
+      {wordStyleDialogOpen && preview.docType === 'word' && (
+        <div className="border-t border-border p-4" data-testid="office-word-style-apply-host">
+          <WordStyleApplyDialog
+            workspacePath={workspacePath ?? summary.workspace_path ?? ''}
+            managedPath={buildManagedPath(workspacePath ?? summary.workspace_path ?? '')}
+            onApplied={onRefresh}
+            onClose={() => setWordStyleDialogOpen(false)}
           />
         </div>
       )}

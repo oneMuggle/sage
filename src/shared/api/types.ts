@@ -599,6 +599,126 @@ export interface OfficeWordGenerateRequest {
   metadata?: WordMetadataSpec;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// M2 样式模板（backend/office/word_style_presets.py +
+// backend/api/office_word_style_routes.py）
+// ──────────────────────────────────────────────────────────────────────
+
+/** 命名预设元信息（GET /office/word/style-presets）。 */
+export interface WordStylePreset {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface WordStylePresetListResult {
+  ok: boolean;
+  presets: WordStylePreset[];
+}
+
+/** 规则包 → 画像转换时未能映射的规则（附原因）。 */
+export interface WordStyleUnmappedRule {
+  rule_id: string;
+  kind?: string;
+  reason?: string;
+}
+
+/** POST /office/word/style/from-rulepack 请求（inline pack 优先于 rulepack_id）。 */
+export interface WordStyleFromRulepackRequest {
+  workspace_path?: string;
+  rulepack_id?: string;
+  /** 内联规则包（WordRulePack 结构，params 键为用户数据，原样透传） */
+  rulepack?: Record<string, unknown>;
+}
+
+/** POST /office/word/style/from-rulepack 响应。 */
+export interface WordStyleProfileConversion {
+  ok: boolean;
+  rulepack_id: string;
+  format_spec: WordFormatSpec;
+  applied_rule_ids: string[];
+  unmapped: WordStyleUnmappedRule[];
+  warnings: string[];
+}
+
+/**
+ * POST /office/word/style/apply 请求。
+ * 合并链：style_template_id < format_spec_preset < format_spec（显式字段优先）。
+ */
+export interface WordStyleApplyRequest {
+  workspace_path?: string;
+  file_path: string;
+  style_template_id?: string;
+  format_spec_preset?: string;
+  format_spec?: WordFormatSpec;
+  clear_direct_formatting?: boolean;
+  overwrite?: boolean;
+  output_filename?: string;
+  dry_run?: boolean;
+}
+
+/** 逐样式字段 before/after 变更条目（styles_changed 元素）。 */
+export interface WordStyleFieldChange {
+  style: string;
+  field: string;
+  before?: string | number | boolean | null;
+  after?: string | number | boolean | null;
+}
+
+export interface WordStyleApplyResult {
+  ok: boolean;
+  dry_run?: boolean;
+  saved: boolean;
+  output_path: string | null;
+  styles_changed: WordStyleFieldChange[];
+  direct_runs_cleared?: number;
+  warnings?: string[];
+}
+
+export type WordStyleTemplateSourceKind = 'preset' | 'rulepack' | 'manual';
+
+/** 工作区样式模板（office_style_templates 行；format_spec 为保存时画像快照）。 */
+export interface WordStyleTemplate {
+  id: string;
+  workspace_path: string;
+  name: string;
+  format_spec: WordFormatSpec;
+  source_kind: WordStyleTemplateSourceKind;
+  source_ref?: string | null;
+  is_default: boolean;
+  /** epoch 毫秒 */
+  created_at: number;
+  /** epoch 毫秒 */
+  updated_at: number;
+}
+
+export interface WordStyleTemplateListResult {
+  ok: boolean;
+  workspace_path: string;
+  templates: WordStyleTemplate[];
+}
+
+export interface WordStyleTemplateDetailResult {
+  ok: boolean;
+  template: WordStyleTemplate;
+}
+
+/**
+ * POST /office/word/style-templates 请求：来源三选一（规则包 / 预设+画像 / 纯画像）。
+ * 保存的是转换后的画像快照——规则包后续修改不会静默改写已保存模板。
+ */
+export interface WordStyleTemplateSaveRequest {
+  workspace_path: string;
+  name: string;
+  rulepack_id?: string;
+  /** 内联规则包（WordRulePack 结构，params 键为用户数据，原样透传） */
+  rulepack?: Record<string, unknown>;
+  format_spec_preset?: string;
+  format_spec?: WordFormatSpec;
+  source_ref?: string;
+  is_default?: boolean;
+}
+
 export interface ExcelSheetSpec {
   name: string;
   headers?: string[];

@@ -31,7 +31,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { officeApi } from '../../shared/api/officeApi';
-import type { OfficeDocType, OfficeTemplateMeta, PdfPageSize } from '../../shared/api/types';
+import type {
+  OfficeDocType,
+  OfficeTemplateMeta,
+  PdfPageSize,
+  WordStylePreset,
+} from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
@@ -141,6 +146,9 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   // Word — free-form
   const [wordTitle, setWordTitle] = useState('Document Title');
   const [wordBody, setWordBody] = useState('First paragraph of the document.');
+  // M2 版式：仅透传内置预设 id（工作区模板走 GenerateWorkspace）。
+  const [wordStylePreset, setWordStylePreset] = useState('');
+  const [wordStylePresets, setWordStylePresets] = useState<WordStylePreset[]>([]);
 
   // Template mode, one entry per OOXML tab (round-3 N2 generalized the
   // batch-3 word-only toggle).
@@ -182,6 +190,23 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
     setTemplateData({});
     setThumbnails({});
   }, [workspacePath]);
+
+  // 版式预设是内置静态列表（与工作区无关），只在挂载时加载一次；
+  // 失败静默降级为只有「不指定版式」——版式属于可选增强。
+  useEffect(() => {
+    let cancelled = false;
+    officeApi
+      .listWordStylePresets()
+      .then((res) => {
+        if (!cancelled) setWordStylePresets(res.presets);
+      })
+      .catch(() => {
+        if (!cancelled) setWordStylePresets([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadTemplates = useCallback(async () => {
     setTemplateLoad('loading');
@@ -319,8 +344,8 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
 
   /**
    * A4b: word 产物交付验收 —— 条目切 awaiting_approval（携带交付坐标）
-   * 并打开交付抽屉。生成请求不带 format_spec（generateWord/instantiate
-   * 均未透传），lint 段由抽屉如实展示跳过。
+   * 并打开交付抽屉。自由创建请求可带 format_spec_preset（M2 版式），
+   * 模板实例化未透传 format_spec；lint 段由抽屉如实展示跳过。
    */
   const openWordDelivery = (outputPath: string, filename: string) => {
     useTaskCenterStore.getState().updateTask('office:generate', {
@@ -387,6 +412,7 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
           filename,
           title: wordTitle,
           paragraphs: [{ text: wordBody }],
+          ...(wordStylePreset ? { format_spec_preset: wordStylePreset } : {}),
           task_id: taskId,
         });
       } else if (docType === 'pdf') {
@@ -460,6 +486,24 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
               rows={3}
               className={inputClass}
             />
+          </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">
+              {t('office.generate.workspace.styleProfile')}
+            </label>
+            <select
+              value={wordStylePreset}
+              onChange={(e) => setWordStylePreset(e.target.value)}
+              data-testid="office-gen-word-style-preset"
+              className={inputClass}
+            >
+              <option value="">{t('office.generate.workspace.styleNone')}</option>
+              {wordStylePresets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       );

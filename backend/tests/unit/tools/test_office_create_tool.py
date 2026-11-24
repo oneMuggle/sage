@@ -504,6 +504,49 @@ def test_normalize_content_excel_string_still_rejected() -> None:
     assert out is None
 
 
+# ──────────────────────────────────────────────────────────────────────
+# M2: markdown 升级——表格 / 图片 / 行内 runs 透传
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_normalize_content_markdown_table_and_runs_passthrough() -> None:
+    """markdown 的表格、行内 runs、引用块都进入结构化 content。"""
+    md = (
+        "# 标题\n\n"
+        "这是 **重点** 正文\n\n"
+        "> 引用警示\n\n"
+        "| 列A | 列B |\n| --- | --- |\n| 1 | 2 |"
+    )
+    out = OfficeCreateTool._normalize_content(OfficeDocType.WORD, "report.md", md)
+    assert out["title"] == "report"
+    body = out["paragraphs"][1]
+    assert body["text"] == "这是 重点 正文"
+    assert body["runs"] == [
+        {"text": "这是 "},
+        {"text": "重点", "bold": True},
+        {"text": " 正文"},
+    ]
+    assert {"text": "引用警示", "heading": None, "style": "quote"} in out["paragraphs"]
+    assert out["tables"] == [{"headers": ["列A", "列B"], "rows": [["1", "2"]]}]
+
+
+def test_normalize_content_markdown_image_passthrough() -> None:
+    """独立成行的 markdown 图片进入 content['images']。"""
+    md = "前文\n\n![示意图](assets/pic.png)"
+    out = OfficeCreateTool._normalize_content(OfficeDocType.WORD, "report.md", md)
+    assert out["images"] == [
+        {"source": "assets/pic.png", "caption": "示意图", "after_paragraph": 0}
+    ]
+
+
+def test_normalize_content_markdown_without_structure_stays_plain() -> None:
+    """单段无结构文本（即使含行内标记）仍走纯文本兜底。"""
+    out = OfficeCreateTool._normalize_content(
+        OfficeDocType.WORD, "report.md", "只有 **一句话**"
+    )
+    assert out == {"title": "report", "paragraphs": [{"text": "只有 **一句话**"}]}
+
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Round 40: refresh_toc 一步到位刷新目录域

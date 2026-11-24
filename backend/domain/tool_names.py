@@ -98,6 +98,9 @@ OFFICE_TOOLS = (
     "office_revise_word",
     "office_batch_audit",
     "office_render_audit",
+    # 2026-11-23 M2 样式模板：规则包 → 样式画像（READ）与已有文档套用（WRITE_LOCAL）
+    "office_style_from_rulepack",
+    "office_apply_word_style",
     # 2026-10-31 LaTeX 读取：.tex 项目 → 结构化预览（READ，不编译 TeX）
     "office_read_latex",
     # 2026-10-31 LaTeX 模板：槽位/样式分析（READ）与填充（WRITE_LOCAL）

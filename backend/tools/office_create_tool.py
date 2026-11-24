@@ -30,7 +30,7 @@ from typing import Any, Dict, Optional
 from backend.data.database import get_database
 from backend.domain.risk import RiskClass
 from backend.office.excel import generate_xlsx, read_xlsx
-from backend.office.markdown_to_paragraphs import parse_markdown_to_paragraphs
+from backend.office.markdown_to_paragraphs import parse_markdown_document
 from backend.office.models import (
     OfficeDocType,
     OfficeExcelGenerateRequest,
@@ -226,8 +226,9 @@ class OfficeCreateTool(BaseTool):
                 "a target directory. Use when the user asks to create / generate "
                 "a .docx/.xlsx/.pptx file (e.g. on their Desktop). `content` is "
                 "an object whose shape depends on `doc_type`: word → "
-                "{title, paragraphs:[{text, heading?, font_size?, bold?, "
-                "italic?, color?, align?}], tables:[{headers, rows[]}], "
+                "{title, paragraphs:[{text, heading?, style?, runs?, "
+                "font_size?, bold?, italic?, color?, align?}], "
+                "tables:[{headers, rows[]}], "
                 "images?:[{source, width_inches?, height_inches?}]}, excel → "
                 "{sheets:[{name, headers[], rows[], column_widths?}], "
                 "charts?:[{sheet?, type, anchor, data_ref, title?}]}, ppt → "
@@ -303,7 +304,9 @@ class OfficeCreateTool(BaseTool):
                             "access_date?, language?}] 结构化文献, "
                             "citation_style?:'gbt7714'|'apa', "
                             "paragraphs:[{text, citations?:[key], "
-                            "heading?, font_size?, bold?, italic?, color?, "
+                            "heading?, style?:'bullet'|'numbered'|'quote', "
+                            "runs?:[{text, bold?, italic?, link?}], "
+                            "font_size?, bold?, italic?, color?, "
                             "align?}]（text 支持交叉引用占位符 "
                             "{{fig:图题注}}/{{tbl:表题注}}，生成时写成 "
                             "Word 交叉引用域（REF），显示图N/表N且更新域"
@@ -318,8 +321,13 @@ class OfficeCreateTool(BaseTool):
                             "column_widths?}], charts?:[{sheet?, type, anchor, "
                             "data_ref, title?}]}; ppt → {slides:[{title, "
                             "bullets[], notes?, layout?, image?}]}. A plain "
-                            "string is also accepted for word (treated as body "
-                            "text). excel 与 ppt 必须传对象（分别含 sheets / "
+                            "string is also accepted for word: markdown with "
+                            "structure (headings, lists, > quotes, | tables |, "
+                            "standalone ![alt](src) images, "
+                            "**bold**/*italic*/[text](url) inline runs) is "
+                            "parsed into the object shape above; otherwise it "
+                            "is treated as body text. excel 与 ppt 必须传对象"
+                            "（分别含 sheets / "
                             "slides），只有 word 接受纯字符串。"
                         ),
                         "properties": {
@@ -945,6 +953,40 @@ class OfficeCreateTool(BaseTool):
                                             "description": (
                                                 "'h1'/'h2'/'h3'/'h4'/'h5' 或 null"
                                                 "（Round 20 起支持 h4/h5）"
+                                            ),
+                                        },
+                                        "style": {
+                                            "type": "string",
+                                            "enum": ["bullet", "numbered", "quote"],
+                                            "description": (
+                                                "段落样式：bullet/numbered 列表或 "
+                                                "quote 引用块（与 heading 互斥），"
+                                                "缺省为普通正文"
+                                            ),
+                                        },
+                                        "runs": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "text": {"type": "string"},
+                                                    "bold": {"type": "boolean"},
+                                                    "italic": {"type": "boolean"},
+                                                    "link": {
+                                                        "type": "string",
+                                                        "description": (
+                                                            "超链接 URL"
+                                                            "（http/https/mailto），"
+                                                            "生成真实 w:hyperlink"
+                                                        ),
+                                                    },
+                                                },
+                                                "required": ["text"],
+                                            },
+                                            "description": (
+                                                "行内片段：bold→Strong、"
+                                                "italic→Emphasis、link→超链接；"
+                                                "提供时 text 仅为纯文本镜像"
                                             ),
                                         },
                                         "font_size": {
@@ -1692,7 +1734,8 @@ class OfficeCreateTool(BaseTool):
         四层兜底（仅 WORD；excel/ppt 保持严格）：
         1. dict → 直接返回（结构化输入路径）
         2. str + json.loads 成功 + 是 dict → 返回解析结果（修"内容显示不全"bug）
-        3. str + json.loads 失败 + markdown 有结构（多段 / heading / style）→ 解析
+        3. str + json.loads 失败 + markdown 有结构（多段 / heading / style /
+           表格 / 图片）→ 解析（表格与图片随结构一并透传）
         4. str 但 markdown 无结构 → 纯文本单段落（兜底，保持原有行为）
         """
         if isinstance(content, dict):
@@ -1713,13 +1756,23 @@ class OfficeCreateTool(BaseTool):
             pass
 
         # ── 第 3 层：markdown 解析（仅当有结构时才采用 markdown 形式） ──
-        parsed_md = parse_markdown_to_paragraphs(content.strip())
-        if parsed_md and (
-            len(parsed_md) > 1
-            or any(p.get("heading") or p.get("style") for p in parsed_md)
-        ):
+        parsed_md = parse_markdown_document(content.strip())
+        paragraphs = parsed_md["paragraphs"]
+        has_structure = (
+            len(paragraphs) > 1
+            or any(p.get("heading") or p.get("style") for p in paragraphs)
+            or parsed_md["tables"]
+            or parsed_md["images"]
+        )
+        if has_structure:
             title = Path(filename).stem or "文档"
-            return {"title": title, "paragraphs": parsed_md}
+            normalized: Dict[str, Any] = {"title": title, "paragraphs": paragraphs}
+            # 表格 / 图片仅在解析出内容时附键（保持旧输出的键集合不变）
+            if parsed_md["tables"]:
+                normalized["tables"] = parsed_md["tables"]
+            if parsed_md["images"]:
+                normalized["images"] = parsed_md["images"]
+            return normalized
 
         # ── 第 4 层：纯文本兜底（单段无结构 → 保持原有用法） ──
         title = Path(filename).stem or "文档"
