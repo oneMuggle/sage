@@ -300,6 +300,36 @@ def test_duplicate_leader_prefers_fresher_when_importance_ties() -> None:
     assert leaders["older"] == "newer"
 
 
+def test_duplicate_leader_normalizes_second_level_timestamps() -> None:
+    """遗留秒级 created_at 归一后才参与"更新鲜"比较。
+
+    不归一时秒级值(~1.8e9)永远小于毫秒值(~1.8e12)，更新鲜的那条反而
+    被当成副本删掉。
+    """
+    content = "备份策略按周轮换，保留最近四周的快照"
+    rows = [
+        _mem(
+            id="legacy_newer",
+            content=content,
+            importance=6,
+            access_count=3,
+            created_at=NOW_MS // 1000 + 3600,  # 秒级，且比下面那条更新
+        ),
+        _mem(
+            id="millis_older",
+            content=content,
+            importance=6,
+            access_count=3,
+            created_at=NOW_MS,
+        ),
+    ]
+
+    leaders = find_duplicate_leaders(rows)
+
+    assert leaders["legacy_newer"] == "legacy_newer"
+    assert leaders["millis_older"] == "legacy_newer"
+
+
 def test_duplicate_leader_maps_unique_memory_to_itself() -> None:
     """没有近重复的记忆映射到自己 —— 它不是任何副本。"""
     rows = [
