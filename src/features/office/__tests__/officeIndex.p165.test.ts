@@ -17,7 +17,7 @@ describe('office index barrel governance audit (P165)', () => {
   });
 
   it('audits office feature barrel exports and json', () => {
-    expect(auditOfficeFeatureBarrel().symbolCount).toBe(18);
-    expect(JSON.parse(exportOfficeFeatureBarrelAuditJson()).symbolCount).toBe(18);
+    expect(auditOfficeFeatureBarrel().symbolCount).toBe(19);
+    expect(JSON.parse(exportOfficeFeatureBarrelAuditJson()).symbolCount).toBe(19);
   });
 });
