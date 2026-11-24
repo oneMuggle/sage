@@ -11,7 +11,7 @@ import asyncio
 import logging
 import re
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Tuple, Union
 
 import httpx
 from fastapi import APIRouter, File, UploadFile
@@ -105,7 +105,7 @@ class AttachmentErrorCode(str, Enum):
 
 #: 无扩展名但允许上传的文件名（小写精确匹配）。
 #: 前端 CHAT_NO_EXT_FILENAMES 必须与本常量同口径。
-NO_EXT_FILENAMES: frozenset[str] = frozenset({"makefile", "dockerfile"})
+NO_EXT_FILENAMES: FrozenSet[str] = frozenset({"makefile", "dockerfile"})
 
 
 def _decode_text_content(content: bytes) -> Optional[str]:
@@ -119,7 +119,7 @@ def _decode_text_content(content: bytes) -> Optional[str]:
 
 
 @router.post("/chat/attachments", response_model=None)
-async def upload_chat_attachment(file: UploadFile = File(...)) -> dict | JSONResponse:  # noqa: PLR0911, PLR0915 — 每条早退对应一种明确的上传错误
+async def upload_chat_attachment(file: UploadFile = File(...)) -> Union[Dict[str, Any], JSONResponse]:  # noqa: PLR0911, PLR0915 — 每条早退对应一种明确的上传错误
     """上传聊天附件（音频/文本文档），存储到 data/media/ 并返回 MediaRef。
 
     成功: {"media_ref": {...}, "api_url": "/api/v1/media/<id>"}
