@@ -79,6 +79,13 @@ test.describe('office template create → edit preview → apply (demo stub mode
     // ── 2. 生成 → success toast + list gains the doc ─────────────────
     await expect(page.locator('[data-sonner-toast]', { hasText: '已生成' })).toBeVisible();
 
+    // ── 2a. Word 产物自动进入交付验收（M2，对齐 OfficeGenerateForm 的
+    // A4b 流）：交付抽屉覆盖右侧页面，先关闭再继续文档列表操作。 ────────
+    const deliveryDrawer = page.getByTestId('office-delivery-drawer');
+    await expect(deliveryDrawer).toBeVisible();
+    await deliveryDrawer.getByTestId('drawer-close').click();
+    await expect(deliveryDrawer).toBeHidden();
+
     // ── 2b. The generate workspace lives in the "文档生成" tab, but the
     // document list (and the new row's 历史版本 action) is in the
     // "文档处理" tab. Switch back so Playwright can see and click the list.
