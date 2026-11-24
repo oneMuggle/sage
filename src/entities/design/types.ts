@@ -155,6 +155,38 @@ export interface OutlineResult {
   outline_md: string;
 }
 
+// ---------------------------------------------------------------------------
+// Office document library sources (doc_id references)
+// ---------------------------------------------------------------------------
+
+/**
+ * A single Office document that can be referenced as a design source.
+ * Mirrors `backend.design.office_sources.OfficeSourceRef`.
+ */
+export interface OfficeSourceRef {
+  doc_id: string;
+  doc_type: 'word' | 'excel' | string;
+  original_filename: string | null;
+  generated_filename: string;
+  /** Unix milliseconds — matches `OfficeDocumentSummary.created_at`. */
+  created_at: number;
+  size_bytes: number | null;
+}
+
+export interface OfficeSourceListResponse {
+  items: OfficeSourceRef[];
+}
+
+/**
+ * Exactly-one of `file_path` / `doc_id` must be supplied. The backend
+ * validates this in `OutlineRequest` / `SourcePreviewRequest` /
+ * `BindSourceRequest` via a Pydantic `model_validator`.
+ */
+export interface DesignSourceInput {
+  file_path?: string;
+  doc_id?: string;
+}
+
 export type ChartType = 'line' | 'bar' | 'hbar' | 'pie';
 
 export interface ChartSeriesSpec {

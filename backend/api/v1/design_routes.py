@@ -24,13 +24,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from backend.api.v1.design_shared import map_design_error as _map_design_error
 from backend.api.v1.design_streaming import (
     sse_event as _sse_event,
     stream_studio_call as _stream_studio_call,
 )
+from backend.data.database import get_database
 
 # Re-exported symbol: route tests patch `design_routes.get_design_studio`.
 from backend.design import get_design_studio  # noqa: F401
@@ -42,6 +43,10 @@ from backend.design.errors import (
     DesignTemplateNotFoundError,
 )
 from backend.design.export import DesignExporter
+from backend.design.office_sources import (
+    OfficeSourceNotFoundError,
+    resolve_source_input,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,9 +104,18 @@ class BindSourceRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    file_path: str
+    file_path: Optional[str] = None
+    doc_id: Optional[str] = None
     kind: Optional[str] = None
     name: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> BindSourceRequest:
+        has_path = bool(self.file_path and str(self.file_path).strip())
+        has_id = bool(self.doc_id and str(self.doc_id).strip())
+        if has_path == has_id:
+            raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
+        return self
 
 
 class TweaksRequest(BaseModel):
@@ -638,7 +652,7 @@ async def export_artifact(  # noqa: PLR0911 — 每个校验门一个返回是�
 
 
 @router.post("/projects/{project_id}/source")
-async def bind_source(project_id: str, req: BindSourceRequest):
+async def bind_source(project_id: str, req: BindSourceRequest):  # noqa: PLR0911
     """Bind a data source (xlsx/csv/json) to a design project."""
     from backend.design.live_artifact import LiveArtifactEngine
 
@@ -648,11 +662,22 @@ async def bind_source(project_id: str, req: BindSourceRequest):
     except DesignProjectNotFoundError as exc:
         return _map_design_error(exc)
 
+    try:
+        conn = get_database().get_connection()
+        source_path = resolve_source_input(conn, req.file_path, req.doc_id)
+    except OfficeSourceNotFoundError as exc:
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"Office document not found: {exc.doc_id}"},
+        )
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
     engine = LiveArtifactEngine(studio._workspace)
     try:
         binding = engine.bind(
             project_id,
-            req.file_path,
+            str(source_path),
             kind=req.kind,
             name=req.name,
         )
