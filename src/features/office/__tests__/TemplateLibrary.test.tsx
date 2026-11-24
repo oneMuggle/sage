@@ -6,10 +6,14 @@ import { I18nProvider } from '../../../shared/lib/i18n';
 import { TemplateLibrary } from '../TemplateLibrary';
 
 vi.mock('../../../shared/api/officeApi', () => ({
-  officeApi: { listTemplates: vi.fn() },
+  officeApi: {
+    listTemplates: vi.fn(),
+    templateThumbnail: vi.fn().mockResolvedValue({ ok: false }),
+  },
 }));
 
 const mockedListTemplates = vi.mocked(officeApi.listTemplates);
+const mockedThumbnail = vi.mocked(officeApi.templateThumbnail);
 
 const BUILTIN = {
   id: 'weekly_report',
@@ -41,6 +45,7 @@ function renderLibrary(onSelect = vi.fn()) {
 describe('TemplateLibrary', () => {
   beforeEach(() => {
     mockedListTemplates.mockReset();
+    mockedThumbnail.mockReset().mockResolvedValue({ ok: false });
     mockedListTemplates.mockResolvedValue({ templates: [BUILTIN, WORKSPACE] });
   });
 
