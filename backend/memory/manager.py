@@ -858,6 +858,11 @@ class MemoryManager:
                     session_id=session_id,
                     agent_id=agent_id,
                     include_private=read_include_private,
+                    # 记忆被注入 system prompt 即视为"被使用"，计入
+                    # access_count / accessed_at。不追踪的话
+                    # MemoryConsolidationTask 的 promotion_access_count
+                    # 阈值永远不满足，情景记忆无法晋升为语义记忆。
+                    track_access=True,
                 )
                 if self._tier_allowed("episodic")
                 else []

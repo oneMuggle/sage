@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 
 import { memoryApi, Memory } from '../../shared/api';
 import { agentsApi } from '../../shared/api/agentsApi';
+import { QUALITY_LOW_THRESHOLD } from '../../shared/api/types/domainEntityTypes';
 
 import { MemoryItemCard } from './MemoryItemCard';
 import type { MemoryUpdatePayload } from './MemoryItemCard';
@@ -102,7 +103,7 @@ export function MemoryBrowser({
     semantic: 0,
     working: 0,
     session_summary: 0,
-    /** Task 4.4: quality_score < 0.3 的计数(仅 episodic/semantic 有语义)。 */
+    /** Task 4.4: quality_score < 0.4 的计数(仅 episodic/semantic 有语义)。 */
     lowQuality: 0,
   });
 
@@ -187,7 +188,7 @@ export function MemoryBrowser({
         // 检索结果没有 source_breakdown,只更新"当前显示"总数,
         // 其余分类计数保持上一轮全量口径,避免展示成 0 误导。
         const lowQuality = hits.filter(
-          (m) => typeof m.quality_score === 'number' && m.quality_score < 0.3,
+          (m) => typeof m.quality_score === 'number' && m.quality_score < QUALITY_LOW_THRESHOLD,
         ).length;
         setStats((prev) => ({ ...prev, total: hits.length, lowQuality }));
         return;
@@ -204,7 +205,7 @@ export function MemoryBrowser({
       // Task 4.4: 低质量计数 —— 只在 episodic/semantic 行上有 quality_score,
       // working/session_summary 行为 null, 不计入。
       const lowQuality = response.items.filter(
-        (m) => typeof m.quality_score === 'number' && m.quality_score < 0.3,
+        (m) => typeof m.quality_score === 'number' && m.quality_score < QUALITY_LOW_THRESHOLD,
       ).length;
       // 用 envelope 的 source_breakdown 替换旧的 two-call fallback,更准。
       const breakdown = response.source_breakdown;
@@ -282,7 +283,7 @@ export function MemoryBrowser({
     setLoading(true);
     setError(null);
     try {
-      const candidates = await memoryApi.getQualityCandidates(50, 0.3);
+      const candidates = await memoryApi.getQualityCandidates(50, QUALITY_LOW_THRESHOLD);
       if (gen !== requestGenRef.current) return;
       const mapped: Memory[] = candidates.map((c) => ({
         id: c.id,
@@ -574,7 +575,7 @@ export function MemoryBrowser({
               {label}
             </button>
           ))}
-          {/* Task 4.3: 低质量候选 —— 只看质量分 < 0.3 的记忆,最差优先 */}
+          {/* Task 4.3: 低质量候选 —— 只看质量分 < 0.4 的记忆,最差优先 */}
           <button
             data-testid="memory-quality-candidates-toggle"
             className={`px-3 py-1 border border-border rounded-radius-sm text-xs cursor-pointer font-mono ${
@@ -586,7 +587,7 @@ export function MemoryBrowser({
               setQualityMode((v) => !v);
               setBatchConfirming(false);
             }}
-            title="只看质量分低于 0.3 的记忆（按最差优先）"
+            title="只看质量分低于 0.4 的记忆（按最差优先）"
           >
             低质量候选
           </button>
@@ -636,7 +637,7 @@ export function MemoryBrowser({
       {/* Task 4.3: 低质量候选说明条 */}
       {viewMode === 'all' && qualityMode && !loading && !error && (
         <div className="mb-3 px-3 py-2 border border-error/30 bg-error/5 rounded-radius-sm text-xs text-error">
-          低质量候选 · {memories.length} 条（质量分 &lt; 0.3，按最差优先）
+          低质量候选 · {memories.length} 条（质量分 &lt; 0.4，按最差优先）
           {!selectMode && ' — 点「选择」后可批量清理'}
         </div>
       )}

@@ -23,9 +23,17 @@ from backend.memory.preference_labels import (
     PREFERENCE_VALUE_LABELS,
     format_preference,
 )
+from backend.memory.quality_scorer import (
+    MemoryQualityScorer,
+    find_duplicate_leaders,
+)
 from backend.memory.time_utils import now_ms
 from backend.memory.vector_store import prune_orphan_vectors
-from backend.scheduler.evolution_log import elapsed_ms, record_evolution_log
+from backend.scheduler.evolution_log import (
+    STATUS_SKIPPED_NO_LLM,
+    elapsed_ms,
+    record_evolution_log,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +43,17 @@ _EVOLUTION_TASK_TIMEOUT_S = float(
     os.environ.get("SAGE_EVOLUTION_TASK_TIMEOUT_S", "1800")
 )
 
+#: 质量合并的扫描上限 —— 库更大时只扫最新的这么多条。
+#: 独特性是两两比较，扫描量按平方增长，宁可少扫也不让夜间任务跑超时。
+_PRUNE_SCAN_MAX_ROWS = 2000
+
+#: 单次质量合并最多删除多少条 —— 宁可分多次跑，也不一次清空。
+_PRUNE_QUALITY_DELETE_MAX = 100
+
 
 def _utcnow_iso() -> str:
     """ISO 8601 UTC now — for evolution_completed event timestamps."""
     return datetime.now(timezone.utc).isoformat()  # noqa: UP017 — py38: datetime.UTC is 3.11+
-
 
 class BaseEvolutionTask:
     """进化任务基类
@@ -51,16 +65,48 @@ class BaseEvolutionTask:
       existing tests / callers don't need to be modified.
     """
 
+    #: 日志里标识调用方的任务名（子类覆盖）
+    LLM_PURPOSE = "进化任务"
+
     def __init__(self, db=None, memory_manager=None, hooks: Optional[Any] = None):
         # Optional — see ``_emit_evolution_completed``. Set externally
         # by ``create_evolution_tasks(hooks=...)`` or by the lifespan.
         self._hooks = hooks
         self.db = db or get_database()
         self.memory_manager = memory_manager
+        self._llm_cache = None
+        self._llm_cache_resolved = False
 
     async def run_async(self):
         """异步执行任务（子类实现）"""
         raise NotImplementedError
+
+    def _resolve_llm(self):
+        """解析 LLM 客户端（注入优先，settings 兜底）。不可用返回 None。
+
+        与 orchestration/llm_factory 同模式：调用方可注入客户端（测试 /
+        编排链），缺省从 app_settings 解析用户配置的端点。
+
+        降级语义：任何解析失败都返回 None，由各任务决定降级策略，
+        绝不抛异常中断定时任务。解析结果缓存，避免同一轮里反复
+        构造 LLMClient（会重复建连接）。
+        """
+        injected = getattr(self, "llm", None)
+        if injected is not None:
+            return injected
+        if self._llm_cache_resolved:
+            return self._llm_cache
+        try:
+            from backend.core.legacy.llm_client import LLMClient, LLMConfig
+            from backend.orchestration.llm_factory import load_llm_config_from_settings
+
+            cfg = load_llm_config_from_settings()
+            self._llm_cache = LLMClient(LLMConfig(**cfg)) if cfg is not None else None
+        except Exception as exc:  # noqa: BLE001 — 降级路径, 不拖垮定时任务
+            logger.warning(f"{self.LLM_PURPOSE} LLM 客户端解析失败: {exc}")
+            self._llm_cache = None
+        self._llm_cache_resolved = True
+        return self._llm_cache
 
     def run(self):
         """同步执行任务（带 wall-clock 超时保护）"""
@@ -173,6 +219,8 @@ class DailySummaryTask(BaseEvolutionTask):
     3. 保存到情景记忆 (importance=6)
     """
 
+    LLM_PURPOSE = "每日摘要"
+
     def __init__(
         self,
         db=None,
@@ -191,6 +239,19 @@ class DailySummaryTask(BaseEvolutionTask):
         start = time.monotonic()
         logger.info("开始执行每日摘要任务...")
         _started = time.monotonic()
+
+        llm = self._resolve_llm()
+        if llm is None:
+            logger.info("LLM 不可用，跳过每日摘要（不写关键词兜底摘要）")
+            record_evolution_log(
+                self.db,
+                evolution_type="daily_summary",
+                description="跳过: LLM 不可用",
+                status=STATUS_SKIPPED_NO_LLM,
+                duration_ms=elapsed_ms(_started),
+                metrics={"llm_available": False},
+            )
+            return 0
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -252,7 +313,7 @@ class DailySummaryTask(BaseEvolutionTask):
                 continue
 
             # 3. 生成摘要
-            summary = await self._generate_summary(messages)
+            summary = await self._generate_summary(messages, llm)
 
             if not summary:
                 continue
@@ -307,6 +368,7 @@ class DailySummaryTask(BaseEvolutionTask):
             metrics={
                 "sessions_scanned": len(sessions),
                 "sessions_summarized": processed,
+                "llm_available": True,
             },
         )
 
@@ -316,17 +378,11 @@ class DailySummaryTask(BaseEvolutionTask):
         )
         return processed
 
-    async def _generate_summary(self, messages: List[dict]) -> Optional[str]:
+    async def _generate_summary(self, messages: List[dict], llm) -> str | None:
         """
-        生成对话摘要
-
-        Args:
-            messages: 消息列表
-
-        Returns:
-            摘要内容
+        生成对话摘要（仅 LLM 路；无 LLM 时 run_async 已跳过整轮）。
         """
-        if not messages:
+        if not messages or llm is None:
             return None
 
         # 构建消息文本
@@ -337,29 +393,18 @@ class DailySummaryTask(BaseEvolutionTask):
             ]
         )
 
-        # 如果有 LLM 客户端，使用 LLM 生成摘要
-        if self.llm:
-            try:
-                prompt = f"""请总结以下对话的要点，生成一段简洁的摘要 (100字以内):
+        try:
+            prompt = f"""请总结以下对话的要点，生成一段简洁的摘要 (100字以内):
 
 {messages_text}
 
 摘要:"""
 
-                result = await self.llm.complete(prompt)
-                return result.strip() if result else None
-            except Exception as e:
-                logger.error(f"LLM 生成摘要失败: {e}")
-
-        # 简单的备用摘要策略
-        user_messages = [m["content"] for m in messages if m["role"] == "user"]
-        if user_messages:
-            # 取第一条和最后一条用户消息作为摘要
-            first = user_messages[0][:50]
-            user_messages[-1][:50] if len(user_messages) > 1 else ""
-            return f"对话围绕 {first}... 等话题展开，共 {len(messages)} 条消息"
-
-        return None
+            result = await llm.complete(prompt)
+            return result.strip() if result else None
+        except Exception as e:
+            logger.error(f"LLM 生成摘要失败: {e}")
+            return None
 
 
 class MemoryPruningTask(BaseEvolutionTask):
@@ -370,11 +415,12 @@ class MemoryPruningTask(BaseEvolutionTask):
     1. 删除 expires_at < now 的记忆
     2. 删除 importance<=1 且 30天未访问的记忆
     3. 超过上限(1000条)时删除最旧最不重要的
-    4. 按质量分软失效长期未访问的低质量记忆（Task 3.4）
+    4. 质量合并 —— 删除"低质 + 陈旧 + 存在更优副本"的冗余记忆
 
-    前三条是"硬删除"（物理 DELETE），按固定门槛扫；第 4 条是"软失效"
-    （invalid_at + is_valid=0），按写得好不好、有没有被用过、放了多久
-    综合判定。软失效保留行，便于事后追溯与 supersedes 链完整性。
+    **近重复保护**：第 2/3/4 条只看 importance / access_count / created_at，
+    三份内容完全一样的记忆会被三条规则一视同仁地删光 —— 知识随之消失。
+    因此先做一次近重复分组（字符二元组 Jaccard），每组挑出最优的一条当
+    "组长"，组长不被任何规则删除，冗余副本才允许被清理。
     """
 
     def __init__(
@@ -388,6 +434,120 @@ class MemoryPruningTask(BaseEvolutionTask):
         self.config = config or {}
         self.max_memories = self.config.get("max_memories", 1000)
 
+    # ------------------------------------------------------------------ #
+    # 近重复分组
+    # ------------------------------------------------------------------ #
+
+    def _load_prunable_rows(self) -> List[Dict]:
+        """载入待评估的情景记忆行（有效 + 非 environment 标签）。"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, content, importance, access_count, created_at, accessed_at
+            FROM memories_episodic
+            WHERE is_valid = 1
+              AND invalid_at IS NULL
+              AND COALESCE(tags, '') NOT LIKE '%environment%'
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            [_PRUNE_SCAN_MAX_ROWS],
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def _duplicate_leaders(self, rows: List[Dict]) -> Dict[str, str]:
+        """近重复分组 —— 记忆 id → 所在组的组长 id。
+
+        组长 = 组内最优的一条（importance / access_count / created_at / id
+        逐项比较）；没有近重复的记忆映射到自己。
+        """
+        if len(rows) < 2:
+            return {}
+        return find_duplicate_leaders(rows)
+
+    # ------------------------------------------------------------------ #
+    # 质量合并
+    # ------------------------------------------------------------------ #
+
+    def _prune_low_quality(self, rows: List[Dict], leaders: Dict[str, str]) -> int:
+        """删除"低质 + 陈旧 + 有更优副本"的冗余记忆。
+
+        判定用 :class:`MemoryQualityScorer`（质量分 < 阈值且长期未访问），
+        再叠加近重复约束：**只删副本，从不删组长** —— 一组近重复里最优的
+        那条永远留着，所以知识不会因为合并而丢失。
+
+        软删除（is_valid=0）+ 清向量，可恢复、可审计。
+
+        Args:
+            rows: 待评估的情景记忆行
+            leaders: 记忆 id → 所在近重复组的组长 id
+
+        Returns:
+            实际删除条数
+        """
+        if len(rows) < 2:
+            return 0
+
+        # 语料用全库（而非抽样）—— 副本判定的参照物必须包含全部同类内容
+        scorer = MemoryQualityScorer(corpus=rows, max_corpus=len(rows))
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        deleted = 0
+        for row in rows:
+            if deleted >= _PRUNE_QUALITY_DELETE_MAX:
+                logger.warning(
+                    f"质量合并达到单次上限 {_PRUNE_QUALITY_DELETE_MAX} 条，"
+                    f"剩余留到下次运行"
+                )
+                break
+            memory_id = row.get("id")
+            # leaders[id] == id → 没有更优副本（要么是组长，要么本就唯一）
+            if leaders.get(memory_id) == memory_id:
+                continue
+            try:
+                if not scorer.should_delete(row):
+                    continue
+            except Exception:
+                logger.debug("质量评分失败 %s", memory_id, exc_info=True)
+                continue
+
+            cursor.execute(
+                """
+                UPDATE memories_episodic
+                SET is_valid = 0
+                WHERE id = ? AND is_valid = 1
+                """,
+                (memory_id,),
+            )
+            if cursor.rowcount <= 0:
+                # 已被前面的规则硬删除
+                continue
+            # 软删除同样要清向量 —— 行还在主表，对账清扫看不见它
+            try:
+                cursor.execute(
+                    "DELETE FROM memories_vec WHERE memory_id = ?", (memory_id,)
+                )
+            except Exception:
+                logger.warning("向量索引删除失败 (memory_id=%s)", memory_id, exc_info=True)
+
+            deleted += 1
+            _write_evolution_log(
+                self.db,
+                memory_type="episodic",
+                memory_id=memory_id,
+                operation="prune",
+                before_content=str(row.get("content") or "")[:500],
+                after_content="(invalidated)",
+                reason="memory_pruning:quality_merge",
+            )
+
+        if deleted:
+            conn.commit()
+            logger.info(f"质量合并删除冗余记忆: {deleted} 条")
+        return deleted
+
     async def run_async(self):
         """执行记忆修剪"""
         start = time.monotonic()
@@ -400,6 +560,11 @@ class MemoryPruningTask(BaseEvolutionTask):
         total_deleted = 0
         now_ts = now_ms()
         thirty_days_ago = now_ts - 30 * 24 * 3600 * 1000
+
+        # 修剪前的有效记忆数 —— 用来算"还剩多少"（规则逐条删，改用末尾
+        # 查到的数会重复扣减）
+        cursor.execute("SELECT COUNT(*) FROM memories_episodic WHERE is_valid = 1")
+        initial_count = cursor.fetchone()[0]
 
         # 1. 删除过期记忆
         cursor.execute(
@@ -422,7 +587,27 @@ class MemoryPruningTask(BaseEvolutionTask):
                 reason="memory_pruning:expired",
             )
 
-        # 2. 删除极低价值且长期未访问的记忆
+        # 2. 近重复分组 —— 组长受保护，避免整组被下面的规则删光。
+        #    放在过期清理之后算：过期行已经不在库里，不该参与分组
+        #    （否则组长可能是个马上要删的过期行，整组仍会被连坐）。
+        prunable_rows = self._load_prunable_rows()
+        leaders = self._duplicate_leaders(prunable_rows)
+        group_sizes: Dict[str, int] = {}
+        for leader_id in leaders.values():
+            group_sizes[leader_id] = group_sizes.get(leader_id, 0) + 1
+        protected_ids = {lid for lid, n in group_sizes.items() if n > 1}
+        if protected_ids:
+            logger.info(f"近重复分组: {len(protected_ids)} 组组长受保护")
+        # 受保护的组长不参与后面的清理
+        protect_sql = ""
+        protect_params: List = []
+        if protected_ids:
+            protect_sql = " AND id NOT IN ({})".format(
+                ",".join(["?"] * len(protected_ids))
+            )
+            protect_params = list(protected_ids)
+
+        # 3. 删除极低价值且长期未访问的记忆
         # （environment 标签 = 本机工具链事实，豁免清理：环境记忆化 PR）
         cursor.execute(
             """
@@ -431,8 +616,9 @@ class MemoryPruningTask(BaseEvolutionTask):
             AND access_count = 0
             AND created_at < ?
             AND COALESCE(tags, '') NOT LIKE '%environment%'
-        """,
-            [thirty_days_ago],
+            """
+            + protect_sql,
+            [thirty_days_ago] + protect_params,
         )
         low_value_deleted = cursor.rowcount
         total_deleted += low_value_deleted
@@ -447,7 +633,7 @@ class MemoryPruningTask(BaseEvolutionTask):
                 reason="memory_pruning:low_value",
             )
 
-        # 3. 删除孤儿记忆（无关联会话且无重要内容）
+        # 4. 删除孤儿记忆（无关联会话且无重要内容）
         cursor.execute(
             """
             DELETE FROM memories_episodic
@@ -456,8 +642,9 @@ class MemoryPruningTask(BaseEvolutionTask):
             AND access_count = 0
             AND created_at < ?
             AND COALESCE(tags, '') NOT LIKE '%environment%'
-        """,
-            [thirty_days_ago],
+            """
+            + protect_sql,
+            [thirty_days_ago] + protect_params,
         )
         orphaned_deleted = cursor.rowcount
         total_deleted += orphaned_deleted
@@ -472,8 +659,11 @@ class MemoryPruningTask(BaseEvolutionTask):
                 reason="memory_pruning:orphaned",
             )
 
-        # 4. 超过上限时删除最旧的
-        cursor.execute("SELECT COUNT(*) FROM memories_episodic")
+        # 5. 超过上限时删除最旧的
+        #    只统计仍然有效的行 —— 质量合并走的是软删除，不该占额度
+        cursor.execute(
+            "SELECT COUNT(*) FROM memories_episodic WHERE is_valid = 1"
+        )
         current_count = cursor.fetchone()[0]
 
         if current_count > self.max_memories:
@@ -483,12 +673,14 @@ class MemoryPruningTask(BaseEvolutionTask):
                 DELETE FROM memories_episodic
                 WHERE id IN (
                     SELECT id FROM memories_episodic
-                    WHERE COALESCE(tags, '') NOT LIKE '%environment%'
+                    WHERE is_valid = 1
+                    AND COALESCE(tags, '') NOT LIKE '%environment%'
                     ORDER BY importance ASC, created_at ASC
                     LIMIT ?
                 )
-            """,
-                [excess],
+                """
+                + protect_sql,
+                [excess] + protect_params,
             )
             limit_deleted = cursor.rowcount
             total_deleted += limit_deleted
@@ -512,6 +704,11 @@ class MemoryPruningTask(BaseEvolutionTask):
 
         conn.commit()
 
+        # 6. 质量合并 —— 删掉"低质 + 陈旧 + 有更优副本"的冗余记忆。
+        #    放在最后：前面的规则已经清掉的行不必再评一次分。
+        quality_deleted = self._prune_low_quality(prunable_rows, leaders)
+        total_deleted += quality_deleted
+
         # D1 (P6): 向量库补偿式对账 —— 上面的批量 DELETE 只写主表,
         # memories_vec 的对应条目由对账清扫, 避免已删记忆仍被向量检索命中。
         orphan_vectors = prune_orphan_vectors(self.db)
@@ -524,7 +721,7 @@ class MemoryPruningTask(BaseEvolutionTask):
             evolution_type="memory_pruning",
             description=(
                 f"记忆修剪完成，删除了 {total_deleted} 条记忆，"
-                f"当前记忆数: {current_count - total_deleted}，"
+                f"当前记忆数: {initial_count - total_deleted}，"
                 f"低质量软失效: {quality_pruned} 条，"
                 f"清理孤儿向量: {orphan_vectors} 条"
             ),
@@ -532,7 +729,7 @@ class MemoryPruningTask(BaseEvolutionTask):
             duration_ms=elapsed_ms(_started),
             metrics={
                 "memories_deleted": total_deleted,
-                "memories_remaining": current_count - total_deleted,
+                "memories_remaining": initial_count - total_deleted,
                 "memories_quality_pruned": quality_pruned,
                 "orphan_vectors_cleaned": orphan_vectors,
             },
@@ -637,6 +834,8 @@ class PreferenceLearningTask(BaseEvolutionTask):
     3. 保存到语义记忆
     """
 
+    LLM_PURPOSE = "偏好学习"
+
     def __init__(
         self,
         db=None,
@@ -707,6 +906,19 @@ class PreferenceLearningTask(BaseEvolutionTask):
         # 2. 分析偏好模式: 关键词结果 + LLM 结果覆盖
         preferences = self._analyze_preferences(feedback_messages)
         preferences.update(llm_preferences)
+
+        # 值域白名单: 维度→合法取值的单一真相源在 preference_labels。
+        # 关键词/LLM 路径一旦映射出非法值（如 detail_level=detailed），
+        # format_preference 查不到 value label 便回落到原始字符串落库，
+        # 产生"用户偏好详细程度: detailed"这类中英混杂脏数据。
+        # 已知维度丢弃非法取值；未知维度保留，维持 format_preference 的
+        # 前向兼容回落行为。
+        preferences = {
+            key: value
+            for key, value in preferences.items()
+            if key not in PREFERENCE_VALUE_LABELS
+            or value in PREFERENCE_VALUE_LABELS[key]
+        }
 
         # 证据门槛: 关键词与 LLM 采样均无信号时不落库 ——
         # 关键词路径只返回**有命中**的维度（无证据也写入会用默认值
@@ -803,12 +1015,14 @@ class PreferenceLearningTask(BaseEvolutionTask):
         logger.info(f"偏好学习完成: {preferences} + {len(llm_free_text)} 条自由文本")
 
         # 记录进化日志
+        llm_available = self._resolve_llm() is not None
         record_evolution_log(
             self.db,
             evolution_type="preference_learning",
             description=(
                 f"偏好学习完成，分析出 {len(preferences)} 个偏好维度"
                 f" / {len(llm_free_text)} 条自由文本偏好"
+                + ("" if llm_available else "（LLM 不可用，仅关键词路径）")
             ),
             status="success",
             after_state=profile_text,
@@ -816,6 +1030,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
             metrics={
                 "preferences_learned": len(preferences),
                 "free_text_preferences": len(llm_free_text),
+                "llm_available": llm_available,
             },
         )
 
@@ -836,15 +1051,33 @@ class PreferenceLearningTask(BaseEvolutionTask):
         """
         preferences: Dict[str, str] = {}
 
-        # 各维度独立关键词 → 取值映射
-        length_prefs = {"太短": "long", "太长": "short", "简短": "short", "详细": "detailed"}
+        # 简单的关键词分析
+        # response_length 与 detail_level 的合法值域见 preference_labels.PREFERENCE_VALUE_LABELS：
+        #   response_length ∈ {short, medium, long, detailed}
+        #   detail_level    ∈ {brief, medium, comprehensive}
+        # "detailed" 属于 response_length 的枚举，此前误填进 detail_level，
+        # 导致 format_preference 查不到 value label 而回落到原始字符串，
+        # 渲染出"用户偏好详细程度: detailed"这种中英混杂文本。
+        length_prefs = {
+            "太短": "long",
+            "太长": "short",
+            "简短": "short",
+            "简洁": "short",
+            "详细": "detailed",
+        }
         tone_prefs = {
             "友好": "friendly",
             "专业": "professional",
             "幽默": "humorous",
             "严肃": "formal",
         }
-        detail_prefs = {"详细": "detailed", "简单": "brief", "复杂": "comprehensive"}
+        detail_prefs = {
+            "详细": "comprehensive",
+            "全面": "comprehensive",
+            "复杂": "comprehensive",
+            "简单": "brief",
+            "简洁": "brief",
+        }
         code_style_prefs = {
             "函数式": "functional",
             "面向对象": "oop",
@@ -895,27 +1128,6 @@ class PreferenceLearningTask(BaseEvolutionTask):
                     preferences["explanation_depth"] = pref
 
         return preferences
-
-    def _resolve_llm(self):
-        """解析偏好学习用的 LLM 客户端（注入优先，settings 兜底）
-
-        与 orchestration/llm_factory 同模式: 调用方可注入客户端（测试/
-        编排链），缺省从 app_settings 解析用户配置的端点。不可用返回
-        None —— 偏好学习降级为纯关键词路径，绝不抛异常。
-        """
-        if self.llm is not None:
-            return self.llm
-        try:
-            from backend.core.legacy.llm_client import LLMClient, LLMConfig
-            from backend.orchestration.llm_factory import load_llm_config_from_settings
-
-            cfg = load_llm_config_from_settings()
-            if cfg is None:
-                return None
-            return LLMClient(LLMConfig(**cfg))
-        except Exception as exc:  # noqa: BLE001 — 降级路径, 不拖垮定时任务
-            logger.warning(f"偏好学习 LLM 客户端解析失败，降级关键词路径: {exc}")
-            return None
 
     def _fetch_recent_user_messages(self, cursor, days: int = 7):
         """取近 N 天用户消息采样（LLM 路输入, 不做关键词预过滤）"""
@@ -1422,6 +1634,14 @@ class SkillConsolidationTask(BaseEvolutionTask):
         service = get_consolidation_service()
         if service is None:
             logger.info("LLM provider 未装配，技能巡检跳过")
+            record_evolution_log(
+                self.db,
+                evolution_type="skill_consolidation",
+                description="跳过: LLM provider 未装配",
+                status=STATUS_SKIPPED_NO_LLM,
+                duration_ms=elapsed_ms(_started),
+                metrics={"llm_available": False},
+            )
             await self._emit_evolution_completed(
                 items_processed=0,
                 duration_ms=int((time.monotonic() - start) * 1000),
@@ -1522,6 +1742,8 @@ class MemoryReflectionTask(BaseEvolutionTask):
     （``SELECT MAX(created_at) WHERE evolution_type='memory_reflection'``
     即"上次反思时间"，无需新表）。
     """
+
+    LLM_PURPOSE = "记忆反思"
 
     DEFAULT_WINDOW_DAYS = 7
     DEFAULT_SAMPLE_LIMIT = 120
@@ -2134,21 +2356,6 @@ class MemoryReflectionTask(BaseEvolutionTask):
 
     # ---- LLM 客户端 / 调用（与 PreferenceLearningTask 同模式） ----------------
 
-    def _resolve_llm(self):
-        if self.llm is not None:
-            return self.llm
-        try:
-            from backend.core.legacy.llm_client import LLMClient, LLMConfig
-            from backend.orchestration.llm_factory import load_llm_config_from_settings
-
-            cfg = load_llm_config_from_settings()
-            if cfg is None:
-                return None
-            return LLMClient(LLMConfig(**cfg))
-        except Exception as exc:  # noqa: BLE001 — 降级纯启发式, 不拖垮定时任务
-            logger.warning(f"记忆反思 LLM 客户端解析失败，仅走启发式去重: {exc}")
-            return None
-
     async def _chat(self, llm, prompt: str) -> str:
         try:
             try:
@@ -2231,6 +2438,7 @@ class MemoryReflectionTask(BaseEvolutionTask):
             stats["merged"] = llm_stats["merged"]
             stats["invalidated"] = llm_stats["invalidated"]
             stats["kept"] = llm_stats["kept"]
+            stats["llm_available"] = self._resolve_llm() is not None
 
             stats["consolidated"] = await self._consolidate_related_memories(
                 groups, skip_ids=deduped_ids | invalidated_ids
@@ -2242,6 +2450,7 @@ class MemoryReflectionTask(BaseEvolutionTask):
                 f"backlog {stats.get('backlog_scanned', 0)}）, "
                 f"去重 {stats['deduped']}, 合并 {stats['merged']}, "
                 f"失效 {stats['invalidated']}, 主题摘要 {stats['consolidated']}"
+                + ("" if stats["llm_available"] else "（LLM 不可用，仅启发式去重）")
             )
             record_evolution_log(
                 self.db,

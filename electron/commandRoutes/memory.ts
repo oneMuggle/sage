@@ -94,7 +94,7 @@ export const memoryRoutes: Record<string, CommandRoute> = {
     path: (a) => {
       const params = new URLSearchParams({
         limit: String((a?.limit as number) ?? 50),
-        threshold: String((a?.threshold as number) ?? 0.3),
+        threshold: String((a?.threshold as number) ?? 0.4),
       });
       return `/api/v1/memory/quality-candidates?${params.toString()}`;
     },

@@ -111,6 +111,10 @@ export const EvolutionLog: React.FC = () => {
         return { text: '等待中', className: 'text-warning bg-warning/10' };
       case 'running':
         return { text: '执行中', className: 'text-info bg-info/10' };
+      case 'skipped':
+        return { text: '跳过', className: 'text-warning bg-warning/10' };
+      case 'skipped_no_llm':
+        return { text: '跳过（无 LLM）', className: 'text-warning bg-warning/10' };
       default:
         return { text: status, className: 'text-text-secondary bg-bg-subtle' };
     }

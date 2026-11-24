@@ -20,7 +20,12 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
 
 from backend.memory import get_memory_manager
-from backend.memory.quality_scorer import MemoryQualityScorer
+from backend.memory.quality_scorer import (
+    LOW_QUALITY_THRESHOLD,
+    MAX_CORPUS,
+    NEUTRAL_IMPORTANCE,
+    MemoryQualityScorer,
+)
 from backend.scheduler.evolution import _write_evolution_log
 
 logger = logging.getLogger(__name__)
@@ -40,8 +45,23 @@ router = APIRouter()
 
 _QUALITY_CANDIDATES_MAX_LIMIT = 200
 _QUALITY_CANDIDATES_DEFAULT_LIMIT = 50
-_QUALITY_CANDIDATES_DEFAULT_THRESHOLD = 0.3
+_QUALITY_CANDIDATES_DEFAULT_THRESHOLD = LOW_QUALITY_THRESHOLD
+#: 全库扫描上限 —— 库更大时只扫最新的这么多条。
+_QUALITY_SCAN_MAX_ROWS = 2000
 _BATCH_DELETE_MAX_ITEMS = 50
+
+
+def _even_sample(rows: List[Dict[str, Any]], size: int = MAX_CORPUS) -> List[Dict[str, Any]]:
+    """从全库等距抽样，作为独特性参照语料。
+
+    只取最新的一批做语料，会看不见最陈旧的那些重复对 —— 而重复正是
+    低质量的主要成因之一。
+    """
+    total = len(rows)
+    if total <= size:
+        return list(rows)
+    step = total / float(size)
+    return [rows[int(i * step)] for i in range(size)]
 
 
 # ==================== 质量候选列表 ====================
@@ -55,9 +75,12 @@ def get_quality_candidates(
 ):
     """返回质量分低于阈值的 episodic + semantic 记忆,按分数升序 (最差优先)。
 
+    扫描范围是**全库**而非最新 N 条 —— 只扫最新 200 条时,库里有 476 条
+    就意味着最陈旧的那 276 条(也最可能是垃圾)永远拿不到分数。
+
     Args:
         limit: 返回条数上限,默认 50, 最高 200
-        threshold: 质量分阈值,默认 0.3, 低于此值的记录进入候选
+        threshold: 质量分阈值,默认 0.4, 低于此值的记录进入候选
 
     Returns:
         { items: [{id, content, memory_type, importance, quality_score,
@@ -68,23 +91,23 @@ def get_quality_candidates(
         safe_threshold = max(0.0, min(1.0, float(threshold)))
 
         mm = get_memory_manager()
-        # 取当前有效行 (store 内部已过滤 is_valid=1 / invalid_at IS NULL)
-        # 取大一些用于评分,再筛 + 截断
-        fetch_limit = max(safe_limit, _QUALITY_CANDIDATES_MAX_LIMIT)
-        episodic_items = mm.episodic.get_recent(limit=fetch_limit)
-        semantic_items = mm.semantic.get_recent(limit=fetch_limit)
+        # 全库扫描 (store 内部已过滤 is_valid=1 / invalid_at IS NULL)
+        episodic_items = mm.episodic.get_all(limit=_QUALITY_SCAN_MAX_ROWS)
+        semantic_items = mm.semantic.get_all(limit=_QUALITY_SCAN_MAX_ROWS)
+        library = [(r, "episodic") for r in episodic_items] + [
+            (r, "semantic") for r in semantic_items
+        ]
 
-        # scorer 与 /memory/list 'all' 视图同源:episodic + semantic 一起构建
-        scorer = MemoryQualityScorer(
-            corpus=list(episodic_items) + list(semantic_items)
-        )
+        # scorer 与 /memory/list 'all' 视图同源:episodic + semantic 一起构建,
+        # 语料在全库等距抽样,避免"最旧的一批重复对"因不在语料里而看不出来。
+        scorer = MemoryQualityScorer(corpus=_even_sample([r for r, _ in library]))
 
         candidates: List[Dict[str, Any]] = []
-        for record, memory_type in (
-            [(r, "episodic") for r in episodic_items]
-            + [(r, "semantic") for r in semantic_items]
-        ):
+        for record, memory_type in library:
             try:
+                # 下界已过阈值 → 真实分必然过阈值,不必再付独特性的比较开销
+                if scorer.score_lower_bound(record) >= safe_threshold:
+                    continue
                 score = round(scorer.calculate_quality_score(record), 3)
             except Exception:
                 # 评分失败 → 跳过,不让一条异常数据阻塞整页候选
@@ -102,7 +125,7 @@ def get_quality_candidates(
                     "id": record.get("id"),
                     "content": record.get("content", ""),
                     "memory_type": memory_type,
-                    "importance": record.get("importance", 0),
+                    "importance": record.get("importance", NEUTRAL_IMPORTANCE),
                     "quality_score": score,
                     "created_at_ms": record.get("created_at"),
                     "access_count": record.get("access_count", 0),

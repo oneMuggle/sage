@@ -57,6 +57,7 @@ const STATUS_DISPLAY: Record<string, { label: string; className: string }> = {
   success: { label: '成功', className: 'text-success' },
   failed: { label: '失败', className: 'text-danger' },
   skipped: { label: '跳过', className: 'text-warning' },
+  skipped_no_llm: { label: '跳过（无 LLM）', className: 'text-warning' },
 };
 
 export const EvolutionPanel: React.FC = () => {
