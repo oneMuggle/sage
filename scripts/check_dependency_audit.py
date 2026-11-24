@@ -146,9 +146,19 @@ def validate_policy(policy: Any, failures: list[str]) -> set[Key]:
 
 
 def package_identity_from_node(node: Any) -> str | None:
+    """Derive a package identity from a package-lock ``packages`` key.
+
+    Handles both top-level (``node_modules/react``) and nested
+    (``node_modules/foo/node_modules/react``) node_modules paths.  npm may
+    dedupe a shared dependency at the top level while transitive dependents
+    keep their own nested copy; audit reports reference these nested paths,
+    so they must resolve to the package they actually contain.
+    """
     if not isinstance(node, str) or not node.startswith("node_modules/"):
         return None
-    package = node[len("node_modules/"):]
+    # npm nests as ``node_modules/a/node_modules/b``; the identity is whatever
+    # follows the *last* node_modules/ segment (handles scopes too).
+    package = node.rsplit("node_modules/", 1)[-1]
     if not package or package.startswith("/"):
         return None
     if package.startswith("@"):
@@ -237,6 +247,7 @@ def npm_findings(
     findings: set[Key] = set()
     has_valid_advisory = False
     parseable_severities: set[str] = set()
+    parsed_items: dict[str, tuple[str, set[str], set[str]]] = {}
     for package, item in report["vulnerabilities"].items():
         if not isinstance(package, str) or not package.strip() or not isinstance(item, dict):
             report_error(f"{path}: vulnerability item must be an object with a non-empty package name", failures)
@@ -261,30 +272,60 @@ def npm_findings(
             continue
         nodes = item.get("nodes")
         if not isinstance(nodes, list) or not nodes or any(
-            not isinstance(node, str) or not node.strip() or node not in versions or node not in identities
-            for node in nodes
+            not isinstance(node, str) or not node.strip() for node in nodes
         ):
             report_error(f"{path}: {package}: nodes must exist in package-lock", failures)
             continue
+        missing_nodes = [
+            node for node in nodes
+            if node not in versions or node not in identities
+        ]
+        if missing_nodes:
+            # npm audit 对 prune 掉的 optional/dev 嵌套树仍会报 advisory
+            # （实测 node-gyp 嵌套 undici 不在 lockfile packages 里）。
+            # lockfile 是安装事实的权威口径：moderate/low 缺节点按
+            # 「未安装」跳过；high/critical 无法核实 → 维持失败
+            # （宁可误报不可漏报）。
+            if item_severity in {"high", "critical"}:
+                report_error(f"{path}: {package}: nodes must exist in package-lock", failures)
+                continue
+            print(
+                f"{path}: {package}: advisory nodes absent from package-lock "
+                f"(severity {item_severity}) — treated as not installed, skipped"
+            )
+            continue
         lock_identities = {identities[node] for node in nodes}
         lock_versions = {versions[node] for node in nodes}
-        if lock_identities != {package} or len(lock_versions) != 1:
-            report_error(f"{path}: {package}: nodes must match package identity and version", failures)
+        if lock_identities != {package}:
+            report_error(f"{path}: {package}: nodes must match package identity", failures)
             continue
-        if item_version is not None and item_version.strip() not in lock_versions:
-            report_error(f"{path}: {package}: nodes must exist in package-lock and match version", failures)
-            continue
-        version = item_version.strip() if item_version is not None else next(iter(lock_versions))
+        if item_version is not None:
+            version = item_version.strip()
+            if lock_versions != {version}:
+                report_error(
+                    f"{path}: {package}: nodes must exist in package-lock and match version",
+                    failures,
+                )
+                continue
+        else:
+            # npm groups multi-version advisories (e.g. picomatch 2.x and 4.x
+            # both matching ``<=4.0.7``) into one item with no top-level
+            # version.  Nodes still resolve to one package; findings are keyed
+            # per node version so policy matching stays version-accurate.
+            version = None
         via = item.get("via")
         if not isinstance(via, list):
             report_error(f"{path}: {package}: via must be a list", failures)
             continue
         valid_advisories_by_severity = {level: False for level in LEVELS}
+        dependency_references: set[str] = set()
         for node in nodes:
             for advisory in via:
                 if isinstance(advisory, str):
                     if not advisory.strip():
                         report_error(f"{path}: {package}: via dependency reference must be non-empty", failures)
+                    else:
+                        dependency_references.add(advisory.strip())
                     continue
                 if not isinstance(advisory, dict):
                     report_error(f"{path}: {package}: every via entry must be an object or non-empty dependency reference", failures)
@@ -305,9 +346,64 @@ def npm_findings(
                 has_valid_advisory = True
                 parseable_severities.add(severity)
                 if severity in {"high", "critical"}:
-                    findings.add(("npm", item_name, version, identifier, node))
-        if item_severity in {"high", "critical"} and not valid_advisories_by_severity[item_severity]:
-            report_error(f"{path}: {package}: item severity {item_severity} lacks a matching valid advisory", failures)
+                    findings.add(
+                        (
+                            "npm",
+                            item_name,
+                            version if version is not None else versions[node],
+                            identifier,
+                            node,
+                        )
+                    )
+        parsed_items[item_name] = (
+            item_severity,
+            {
+                severity
+                for severity, is_valid in valid_advisories_by_severity.items()
+                if is_valid
+            },
+            dependency_references,
+        )
+
+    severity_rank = {level: index for index, level in enumerate(LEVELS)}
+
+    def has_advisory_chain(
+        package_name: str, minimum_severity: str, visited: set[str]
+    ) -> bool:
+        """Resolve npm meta-vulnerability refs to a direct advisory in this report."""
+        if package_name in visited:
+            return False
+        parsed = parsed_items.get(package_name)
+        if parsed is None:
+            return False
+        item_severity, direct_severities, references = parsed
+        required_rank = severity_rank[minimum_severity]
+        if severity_rank[item_severity] < required_rank:
+            return False
+        if any(severity_rank[level] >= required_rank for level in direct_severities):
+            return True
+        next_visited = visited | {package_name}
+        return any(
+            has_advisory_chain(reference, minimum_severity, next_visited)
+            for reference in references
+        )
+
+    for package_name, (item_severity, direct_severities, references) in parsed_items.items():
+        if item_severity not in {"high", "critical"}:
+            continue
+        required_rank = severity_rank[item_severity]
+        has_direct_advisory = any(
+            severity_rank[level] >= required_rank for level in direct_severities
+        )
+        has_transitive_advisory = any(
+            has_advisory_chain(reference, item_severity, {package_name})
+            for reference in references
+        )
+        if not has_direct_advisory and not has_transitive_advisory:
+            report_error(
+                f"{path}: {package_name}: item severity {item_severity} lacks a matching valid advisory or dependency chain",
+                failures,
+            )
     expected = {level for level in ("high", "critical") if normalized[level]}
     missing_severities = expected - parseable_severities
     if missing_severities:
@@ -413,12 +509,6 @@ def main() -> int:
         for key in sorted(npm_keys):
             if key not in policy_keys:
                 report_error(f"npm {key[1]} {key[3]} package_version={key[2]} affected_path={key[4]}: not covered by policy", failures)
-        for name in ("NPM_AUDIT_ALL_OUTCOME", "NPM_AUDIT_PROD_OUTCOME"):
-            value = outcome(name)
-            if value not in {"success", "failure"}:
-                report_error(f"{name}: unexpected outcome {value!r}", failures)
-            elif value == "failure" and not npm_report_has_findings[name]:
-                report_error(f"{name}: command failed without findings", failures)
     pip_report = read_json(args.pip, failures)
     pip_keys = pip_findings(pip_report, failures, args.pip_affected_path) if pip_report is not None else set()
     print(f"pip findings={len(pip_keys)}")
@@ -429,6 +519,13 @@ def main() -> int:
     for name in outcome_names:
         if outcome(name) != "success":
             report_error(f"{name}: command/environment failed ({outcome(name)})", failures)
+    if not args.pip_only:
+        for name in ("NPM_AUDIT_ALL_OUTCOME", "NPM_AUDIT_PROD_OUTCOME"):
+            value = outcome(name)
+            if value not in {"success", "failure"}:
+                report_error(f"{name}: unexpected outcome {value!r}", failures)
+            elif value == "failure" and not npm_report_has_findings[name]:
+                report_error(f"{name}: command failed without findings", failures)
     pip_outcome = outcome("PIP_AUDIT_OUTCOME")
     if pip_outcome not in {"success", "failure"}:
         report_error(f"PIP_AUDIT_OUTCOME: unexpected outcome {pip_outcome!r}", failures)

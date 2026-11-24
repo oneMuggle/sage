@@ -17,6 +17,9 @@ from pydantic import BaseModel, Field
 
 from backend.data.settings_repo import SettingsRepository
 
+# _constrained_list：win7 双版本安全范式（pydantic v1 只认 min_items）。
+from backend.office.models import _constrained_list
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])
@@ -65,7 +68,7 @@ def list_templates() -> Dict[str, Any]:
 class ReorderIn(BaseModel):
     """PUT /prompts/templates/reorder body —— 按新顺序排列的模板 id 列表。"""
 
-    ordered_ids: List[str] = Field(min_length=1)
+    ordered_ids: _constrained_list(str, min_length=1)
 
 
 @router.put("/templates/reorder")

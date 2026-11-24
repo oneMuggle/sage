@@ -3,7 +3,7 @@
 > **P2 备注（2026-06-06）**：工具系统已纳入六边形架构。
 > 旧 `backend/tools/registry.py` 包装为 `backend/adapters/out/tool/inproc_adapter.py`（`InprocToolAdapter`），
 > 通过 `ToolPort` Protocol 暴露给 `backend/application/services/chat_service.py`。
-> 详细架构请阅读 [`docs/technical/18-hexagonal.md`](./technical/18-hexagonal.md)。
+> 详细架构请阅读 [`docs/technical/18-hexagonal.md`](./18-hexagonal.md)。
 
 ## 6.1 工具系统概述
 
@@ -773,7 +773,7 @@ class ToolLogger:
 ## ghm 外部计算工具（PG3.x）
 
 > 通过 `ComputePort` 桥接 ghm（激波管/风洞计算器）CLI，把 6 个物理计算包装为 LLM tool。
-> 详细架构：[`technical/19-ghm-integration.md`](./technical/19-ghm-integration.md)。
+> 详细架构：[`technical/19-ghm-integration.md`](./19-ghm-integration.md)。
 
 启用条件：`backend/config/ghm.yaml: ghm.enabled = true`。关闭时这些工具不会出现在 LLM 工具列表，对现有行为零影响。
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import List
 
 from backend.core.legacy.agent_state import (
     AgentEvent,
@@ -27,7 +28,7 @@ from backend.orchestration.transcript import TaskTranscriptRecorder
 
 class FakeRepo:
     def __init__(self) -> None:
-        self.rows: list[TaskTranscriptMessage] = []
+        self.rows: List[TaskTranscriptMessage] = []
 
     def max_seq(self, run_id: str, task_id: str) -> int:
         return self.rows[-1].seq if self.rows else 0

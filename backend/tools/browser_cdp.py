@@ -1,6 +1,6 @@
 """浏览器自动化基础设施（对标增强 G7，docs/plans §2.1）。
 
-经 CDP（Chrome DevTools Protocol）驱动本机 Chrome/Edge：
+经 CDP（Chrome DevTools Protocol）驱动本机 Chrome/Edge/Firefox：
 
 - **发现**：环境变量 ``SAGE_BROWSER_PATH`` 优先，回退平台常见安装路径
   与 PATH（chrome / chromium / edge）；
@@ -24,6 +24,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -36,8 +37,8 @@ import uuid
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional
-from urllib.parse import quote
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from urllib.parse import quote, urlparse
 
 from .browser_launcher import (
     EMBEDDED_EXECUTABLE,
@@ -47,7 +48,6 @@ from .browser_launcher import (
     ChromeLauncher,
     FirefoxLauncher,
     discover_and_select,
-    headless_flag,
 )
 from .browser_ws import ws_close, ws_connect, ws_recv_text, ws_send_text
 
@@ -118,6 +118,16 @@ CDP_TIMEOUT_SECONDS = 20.0
 #: DevToolsActivePort 轮询间隔
 _LAUNCH_POLL_INTERVAL = 0.2
 
+#: Firefox 的调试端口是固定的（``-start-debugger-server <port>``），不像
+#: Chromium 支持 ``--remote-debugging-port=0`` 随机端口
+FIREFOX_CDP_PORT = 9229
+
+#: Firefox CDP 握手轮询间隔（Firefox 启动与调试服务就绪都比 Chromium 慢）
+_FIREFOX_POLL_INTERVAL = 0.5
+
+#: ``SAGE_BROWSER_PATH`` 的 Firefox 专用别名（优先级紧随其后）
+FIREFOX_PATH_ENV = "SAGE_FIREFOX_PATH"
+
 
 class BrowserCDPError(RuntimeError):
     """CDP 命令失败（协议错误 / 目标丢失 / 命令报 errorText）。"""
@@ -147,6 +157,22 @@ def _windows_candidates() -> List[Path]:
     edge_rel = r"Microsoft\Edge\Application\msedge.exe"
     bases = [program_files, program_files_x86, local_appdata]
     return [Path(base) / rel for base in bases if base for rel in (chrome_rel, edge_rel)]
+
+
+def _windows_firefox_candidates() -> List[Path]:
+    """Firefox 常见安装位置（Chromium 全部缺失时的兜底，Win7 场景）。"""
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")  # noqa: SIM112
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")  # noqa: SIM112
+    firefox_rel = r"Mozilla Firefox\firefox.exe"
+    bases = [program_files, program_files_x86]
+    return [Path(base) / firefox_rel for base in bases if base]
+
+
+def _infer_browser_type(executable: str) -> BrowserType:
+    """按可执行文件名推断浏览器类型（本模块只需区分 Chromium / Firefox）。"""
+    if "firefox" in Path(executable).name.lower():
+        return BrowserType.FIREFOX
+    return BrowserType.CHROME
 
 
 def _discover_embedded_env() -> Optional[Dict[str, Any]]:
@@ -196,11 +222,74 @@ def _darwin_candidates() -> Optional[str]:
 
     if platform.system() != "Darwin":
         return None
-    for app in ("Google Chrome", "Microsoft Edge", "Chromium"):
-        candidate = Path("/Applications") / f"{app}.app" / "Contents" / "MacOS" / app
+    for app, exe in (
+        ("Google Chrome", "Google Chrome"),
+        ("Microsoft Edge", "Microsoft Edge"),
+        ("Chromium", "Chromium"),
+        ("Firefox", "firefox"),
+    ):
+        candidate = Path("/Applications") / f"{app}.app" / "Contents" / "MacOS" / exe
         if candidate.is_file():
             return str(candidate)
     return None
+
+
+#: Chromium 在 exe 同级保留的版本目录名（如 107.0.5304.87）
+_VERSION_DIR_RE = re.compile(r"(\d+)\.\d+\.\d+\.\d+")
+
+#: --headless=new 自 Chrome 109 起提供；更老内核（Win7 的 Edge 100 /
+#: Chrome 107）只能使用旧无头模式。
+NEW_HEADLESS_MIN_MAJOR = 109
+
+
+def _major_from_version_dirs(executable: str) -> Optional[int]:
+    """exe 同级 ``X.Y.Z.W/`` 版本目录的最大大版本号；无则 None（不 spawn 进程）。"""
+    try:
+        exe_dir = os.path.dirname(executable)
+        versions = [
+            int(match.group(1))
+            for name in os.listdir(exe_dir)
+            for match in [_VERSION_DIR_RE.fullmatch(name)]
+            if match and os.path.isdir(os.path.join(exe_dir, name))
+        ]
+        if versions:
+            return max(versions)
+    except OSError:
+        pass
+    return None
+
+
+def chromium_major_version(executable: str) -> Optional[int]:
+    """探测 Chromium 系浏览器大版本（版本目录优先；Windows 不执行 --version）。"""
+    major = _major_from_version_dirs(executable)
+    if major is not None:
+        return major
+    if os.name == "nt":
+        return None
+    try:
+        completed = subprocess.run(  # noqa: S603 — 可执行路径来自受控发现逻辑
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = _VERSION_DIR_RE.search(completed.stdout or "")
+    return int(match.group(1)) if match else None
+
+
+def headless_flag(executable: str) -> str:
+    """按内核版本选择无头开关：旧内核（< 109）回退旧无头模式。
+
+    每次启动命令构造都会调用，因此只做目录扫描（不 spawn 子进程）；
+    版本未知时保持现行默认新无头。
+    """
+    major = _major_from_version_dirs(executable)
+    if major is not None and major < NEW_HEADLESS_MIN_MAJOR:
+        return "--headless"
+    return "--headless=new"
 
 
 # ---------------------------------------------------------------------------
@@ -721,10 +810,28 @@ def _build_launch_command(
 ) -> List[str]:
     """构造浏览器启动命令（纯函数便于单测）。
 
+    Chromium 用 ``--remote-debugging-port=0`` 随机端口 + ``--user-data-dir``；
+    Firefox 没有对应开关，用 ``-start-debugger-server <固定端口>`` +
+    ``-profile`` + ``-no-remote``。Firefox v1 不支持 ``proxy_flag``
+    （命令行无法覆盖代理，需要写 profile prefs，超出最小兼容层范围）。
+
     ``proxy_flag`` 非空时追加 ``--proxy-server=``（用户级代理配置，见
     http_factory.browser_proxy_flag）——否则浏览器通道绕过代理，代理用户
     经 headless 渲染访问被墙站点依旧不通。
     """
+    if _infer_browser_type(executable) == BrowserType.FIREFOX:
+        command = [
+            executable,
+            "-start-debugger-server",
+            str(FIREFOX_CDP_PORT),
+            "-profile",
+            user_data_dir,
+            "-no-remote",
+        ]
+        command.append("about:blank")
+        if headless:
+            command.insert(1, "-headless")
+        return command
     command = [
         executable,
         "--remote-debugging-port=0",
@@ -754,6 +861,43 @@ def _build_launch_command(
         # Chrome 107）由 headless_flag 降级为旧无头模式
         command.insert(1, headless_flag(executable))
     return command
+
+
+def _wait_for_firefox_cdp(process: subprocess.Popen, deadline: float) -> Tuple[int, str]:
+    """轮询 Firefox 的 ``/json/version`` 完成 CDP 握手。
+
+    Firefox 不写 ``DevToolsActivePort`` 文件；固定端口上暴露 HTTP
+    ``/json/version``，从中解析 ``webSocketDebuggerUrl`` 得到 browser
+    端 WS 路径（可能带 query）。Firefox 的调试端点要求非空 User-Agent。
+    """
+    url = f"http://127.0.0.1:{FIREFOX_CDP_PORT}/json/version"
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise BrowserCDPError(
+                f"Firefox 进程提前退出（退出码 {process.returncode}）——可尝试 headless=false 排查"
+            )
+        try:
+            request = urllib.request.Request(  # noqa: S310 — 仅回环地址
+                url, headers={"User-Agent": "Sage-Diagnostic"}
+            )
+            with urllib.request.urlopen(request, timeout=1.0) as response:  # noqa: S310
+                if response.getcode() == 200:
+                    payload = json.loads(response.read().decode("utf-8"))
+                    ws_url = str(payload.get("webSocketDebuggerUrl") or "")
+                    if ws_url:
+                        parsed = urlparse(ws_url)
+                        ws_path = parsed.path
+                        if parsed.query:
+                            ws_path += "?" + parsed.query
+                        if ws_path.startswith("/devtools/"):
+                            return FIREFOX_CDP_PORT, ws_path
+        except (urllib.error.URLError, OSError, ValueError):
+            pass
+        time.sleep(_FIREFOX_POLL_INTERVAL)
+    raise BrowserCDPError(
+        f"等待 Firefox CDP 接口超时（{LAUNCH_TIMEOUT_SECONDS:.0f} 秒，"
+        f"端口 {FIREFOX_CDP_PORT}）——浏览器可能未完成启动"
+    )
 
 
 class _EmbeddedProcess:

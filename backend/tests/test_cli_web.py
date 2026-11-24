@@ -6,6 +6,7 @@ dev sage-web.bat share one tested implementation.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Dict
 
 import pytest
 
@@ -47,7 +48,7 @@ def test_pick_port_raises_when_all_busy() -> None:
 
 
 def test_prepare_runtime_env_sets_web_mode_and_token() -> None:
-    env: dict[str, str] = {}
+    env: Dict[str, str] = {}
     port, token = web.prepare_runtime_env(env, is_free=lambda _p: True)
 
     assert env["SAGE_WEB_MODE"] == "1"

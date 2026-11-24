@@ -18,6 +18,7 @@ from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+# _constrained_list：win7 双版本安全范式（pydantic v1 只认 min_items）。
 from backend.office.models import _constrained_list
 from backend.services.attachment_rag import (
     AttachmentRagError,
@@ -229,6 +230,21 @@ def _extract_document_text(content: bytes, ext: str) -> str:
     raise ValueError(f"unsupported document extension: {ext}")
 
 
+def load_pdf_figure_manifest(store, media_ref, content):
+    """发送侧门面：读取/构建 PDF 图表清单（调用方在线程池执行）。
+
+    清单缓存到媒体同目录 ``<id>.figures.json``；裁图经 MediaStore 落盘。
+    失败返回空列表，不阻断附件注入。
+    """
+    from backend.services.attachment_pdf import get_or_build_figure_manifest
+
+    try:
+        return get_or_build_figure_manifest(store, media_ref, content)
+    except Exception:  # noqa: BLE001 — fail-safe：图清单不影响文本注入
+        logger.exception("PDF 图表清单构建失败，跳过")
+        return []
+
+
 def _extract_pptx_text(content: bytes) -> str:
     """PPTX → 文本：逐页标题 / 正文段落 / 表格单元格 / 备注。
 
@@ -308,21 +324,6 @@ def _guard_office_zip_budget(content: bytes) -> None:
                 )
 
 
-def load_pdf_figure_manifest(store, media_ref, content):
-    """发送侧门面：读取/构建 PDF 图表清单（调用方在线程池执行）。
-
-    清单缓存到媒体同目录 ``<id>.figures.json``；裁图经 MediaStore 落盘。
-    失败返回空列表，不阻断附件注入。
-    """
-    from backend.services.attachment_pdf import get_or_build_figure_manifest
-
-    try:
-        return get_or_build_figure_manifest(store, media_ref, content)
-    except Exception:  # noqa: BLE001 — fail-safe：图清单不影响文本注入
-        logger.exception("PDF 图表清单构建失败，跳过")
-        return []
-
-
 @router.get("/chat/attachments/{media_id}/text")
 async def get_chat_attachment_text(media_id: str) -> dict:
     """R37/R39: 读取已上传文档附件的全文（txt 直读、pdf/docx/xlsx/pptx 提取）。
@@ -379,14 +380,6 @@ class AttachmentIndexIn(BaseModel):
 class AttachmentSearchIn(BaseModel):
     """查询向量由调用方嵌入后传入——路由自身不做嵌入网络调用。"""
 
-    # _constrained_list 是仓库既有的双版本安全范式（backend/office/models.py:21）：
-    # 先试 v2 的 min_length，TypeError 时回退 v1 的 min_items。
-    # 裸 conlist(float, min_items=1) 在 v2 下会 TypeError（本文件有
-    # `from __future__ import annotations`，注解延后到 pydantic 解析时才 eval）；
-    # 而 List[float] = Field(min_items=1) 在 v2 下会被当 extra 元数据吞掉、
-    # 约束静默失效。另外 conftest 的 setup_test_db 是 autouse fixture、
-    # 会拉起 backend.main，所以这一处在 v2 环境下会让整个
-    # backend 测试套件都起不来。
     query_vector: _constrained_list(float, min_length=1)
     dim: int = Field(ge=1, le=4096)
     media_ids: Optional[List[str]] = None

@@ -495,6 +495,7 @@ class MemoryManager:
             )
 
         elif resolved == "semantic":
+            # 语义分支没有 episodic 分支的 meta 局部变量 —— 在此按需构造。
             meta = metadata or {}
             return self.semantic.save(
                 content=content,

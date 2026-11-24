@@ -7,7 +7,7 @@
 
 ## 背景
 
-`docs/05-agent.md` 设计了 4 个默认 agent(coordinator/researcher/coder/memory_manager),
+`docs/technical/05-agent.md` 设计了 4 个默认 agent(coordinator/researcher/coder/memory_manager),
 但早期实现只把 dataclass 写在 `backend/agents/profiles.py`,**没有 SQLite 持久化、没有
 路由、没有前端入口**。PR-3 起按"单命令一 PR"节奏分阶段补齐:
 
