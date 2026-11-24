@@ -307,6 +307,13 @@ class _FakeDriver:
         self.clicks = []
         self.snapshot_text = "<tree>results</tree>"
         self.download_path = None
+        self.fetched = []
+        self.fetch_result = None
+
+    def fetch_text(self, url):
+        """快路径能力；默认返回 None 以模拟"不可用"，驱动回落浏览器。"""
+        self.fetched.append(url)
+        return self.fetch_result
 
     def navigate(self, url, wait_for=""):
         self.navigated.append((url, wait_for))
@@ -343,6 +350,60 @@ class TestBrowserSearch:
         assert obs.page_url.endswith("/home/1")
         assert "Demo 学术站" in obs.guidance
         assert driver.navigated[0][1] == ".result-list"
+
+    def test_search_prefers_fast_fetch_over_browser(self):
+        from backend.literature.search import search_with_profile
+
+        driver = _FakeDriver()
+        driver.fetch_result = "# 正文\n结果条目"
+        obs = search_with_profile(self._profile(), "机器学习", driver, limit=5)
+        assert driver.fetched
+        assert "demo.example/search" in driver.fetched[0]
+        assert driver.navigated == []
+        assert obs.snapshot == "# 正文\n结果条目"
+        assert "Demo 学术站" in obs.guidance
+
+    def test_search_falls_back_to_browser_when_fast_fetch_empty(self):
+        from backend.literature.search import search_with_profile
+
+        driver = _FakeDriver()
+        obs = search_with_profile(self._profile(), "机器学习", driver, limit=5)
+        assert driver.fetched
+        assert driver.navigated
+        assert obs.snapshot == "<tree>results</tree>"
+
+    def test_search_falls_back_to_browser_when_fast_fetch_raises(self):
+        from backend.literature.search import search_with_profile
+
+        class _BoomDriver(_FakeDriver):
+            def fetch_text(self, url):
+                super().fetch_text(url)
+                raise RuntimeError("login_required")
+
+        driver = _BoomDriver()
+        obs = search_with_profile(self._profile(), "机器学习", driver, limit=5)
+        assert driver.navigated
+        assert obs.snapshot == "<tree>results</tree>"
+
+    def test_interactive_mode_never_uses_fast_fetch(self):
+        from backend.literature.models import profile_from_dict
+        from backend.literature.search import search_with_profile
+
+        raw = _raw_profile()
+        raw["search"] = {
+            "mode": "interactive",
+            "url_template": "https://demo.example/entry",
+            "entry_url": "https://demo.example/entry",
+            "input_selectors": ["input[placeholder*='检索词']"],
+            "submit_key": "Enter",
+            "wait_after_s": 1,
+            "result_hint": "结果条目含下载链接",
+        }
+        driver = _InteractiveDriver()
+        driver.fetch_result = "# 正文"
+        obs = search_with_profile(profile_from_dict(raw), "机器学习", driver, limit=5)
+        assert driver.fetched == []
+        assert obs.snapshot == "<tree>results</tree>"
 
     def test_download_validates_pdf_and_title(self, tmp_path):
         from backend.literature.search import download_pdf
@@ -681,3 +742,53 @@ class TestSageToolDriver:
             ]
         }
         assert SageToolDriver(call).wait_download() == "/b.pdf"
+
+    def test_fetch_text_returns_content_and_tracks_page(self):
+        from backend.literature.sage_driver import SageToolDriver
+
+        call = _FakeCall()
+        call.responses["web_fetch"] = {
+            "url": "https://demo.example/search?q=x",
+            "title": "检索结果",
+            "content": "# 正文",
+        }
+        driver = SageToolDriver(call)
+        assert driver.fetch_text("https://demo.example/search?q=x") == "# 正文"
+        assert driver.current_url() == "https://demo.example/search?q=x"
+        assert driver.current_title() == "检索结果"
+        assert [name for name, _ in call.calls] == ["web_fetch"]
+
+    def test_fetch_text_returns_none_on_tool_error(self):
+        from backend.literature.sage_driver import SageToolDriver
+
+        call = _FakeCall()
+        call.responses["web_fetch"] = RuntimeError("login_required: 仍被要求登录")
+        assert SageToolDriver(call).fetch_text("https://demo.example/") is None
+
+    def test_fetch_text_returns_none_on_empty_body(self):
+        from backend.literature.sage_driver import SageToolDriver
+
+        call = _FakeCall()
+        call.responses["web_fetch"] = {"url": "https://demo.example/", "content": "  "}
+        assert SageToolDriver(call).fetch_text("https://demo.example/") is None
+
+    def test_interaction_after_fetch_navigates_browser_lazily(self):
+        from backend.literature.sage_driver import SageToolDriver
+
+        call = _FakeCall()
+        call.responses["web_fetch"] = {
+            "url": "https://demo.example/search?q=x",
+            "content": "# 正文",
+        }
+        call.responses["browser_navigate"] = {
+            "url": "https://demo.example/search?q=x",
+            "title": "检索结果",
+        }
+        driver = SageToolDriver(call)
+        driver.fetch_text("https://demo.example/search?q=x")
+        driver.click("a.downloadlink")
+        assert [name for name, _ in call.calls] == [
+            "web_fetch",
+            "browser_navigate",
+            "browser_interact",
+        ]

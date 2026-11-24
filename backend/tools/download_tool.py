@@ -384,7 +384,15 @@ class HttpDownloadTool(BaseTool):
                         "description": (
                             "凭据档案 domain（如 .cnki.net）：browser_cookies 导出的 cookie "
                             "或 credential_set 设置的头部凭据，命中域自动附加、跨域剥离；"
+                            "不传时自动从 URL hostname 推断；"
                             "过期报 credential_expired，被送到登录页报 login_required"
+                        ),
+                    },
+                    "account_id": {
+                        "type": "string",
+                        "description": (
+                            "可选：使用浏览器多账号中指定账号的登录态（从 "
+                            "browser_list_accounts 获取）。不传则使用默认账号。"
                         ),
                     },
                     "retries": {
@@ -416,6 +424,7 @@ class HttpDownloadTool(BaseTool):
         filename: Optional[str] = None,
         max_bytes: int = MAX_DOWNLOAD_BYTES,
         credential_domain: str = "",
+        account_id: str = "",
         retries: int = DEFAULT_RETRIES,
         resume: bool = True,
         expected_sha256: str = "",
@@ -429,7 +438,9 @@ class HttpDownloadTool(BaseTool):
             url:       文件 URL
             filename:  工作区内相对文件名；``None`` 则自动推断
             max_bytes: 大小上限（声明值与实际字节双重校验）
-            credential_domain: browser_cookies 档案 domain，附加登录态 cookie
+            credential_domain: browser_cookies 档案 domain，附加登录态 cookie；
+                不传时自动从 URL hostname 推断
+            account_id: 浏览器多账号中指定账号的登录态；不传则使用默认账号
             retries:   失败重试次数（可重试错误：连接 / 超时 / 5xx / 429）
             resume:    存在 ``.part`` 时尝试 Range 续传
             expected_sha256: 完成后校验的 SHA-256
@@ -441,12 +452,37 @@ class HttpDownloadTool(BaseTool):
         if url_error:
             return ToolResult(success=False, error=url_error)
 
+        # 自动推断凭据域（对齐 web_fetch 行为）：
+        # browser_login 导出 cookie 后，http_download 访问同域自动带态。
+        # 多账号：account_id 给定 → 解析为 vault 维度（默认账号 → None）。
+        vault_account_id = ""
+        if account_id.strip():
+            from backend.services.browser_account_service import browser_account_service
+
+            vault_account_id = (
+                browser_account_service.resolve_vault_account_id(account_id) or ""
+            )
+        if not credential_domain.strip():
+            from .credential_vault import find_credential_for_host
+
+            try:
+                _hostname = urlparse(url).hostname or ""
+            except ValueError:
+                _hostname = ""
+            _inferred = find_credential_for_host(
+                _hostname, account_id=(vault_account_id or None)
+            )
+            if _inferred:
+                credential_domain = _inferred
+
         credential_headers: Optional[Dict[str, str]] = None
         if credential_domain.strip():
             from backend.tools.credential_vault import cookie_domain_matches, resolve_credential
 
             credential_domain = credential_domain.strip()
-            resolution = resolve_credential(credential_domain, url=url)
+            resolution = resolve_credential(
+                credential_domain, url=url, account_id=(vault_account_id or None)
+            )
             if resolution.status == "expired":
                 return ToolResult(
                     success=False,

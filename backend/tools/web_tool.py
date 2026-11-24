@@ -868,7 +868,7 @@ class WebFetchTool(BaseTool):
                     vault_account_id,
                 )
             if mode == "files" and content.get("kind") != "binary":
-                self._finalize_files(content, network_policy)
+                self._finalize_files(content, network_policy, credential_headers)
             if use_cache:
                 # 剥离易变 note / cached 标记后存全文副本
                 from .web_cache import put as _cache_put
@@ -1237,7 +1237,12 @@ class WebFetchTool(BaseTool):
             result["files"] = file_links.extract_file_links(text, url)
         return result
 
-    def _finalize_files(self, content: Dict[str, Any], network_policy: NetworkPolicy) -> None:
+    def _finalize_files(
+        self,
+        content: Dict[str, Any],
+        network_policy: NetworkPolicy,
+        credential_headers: Optional[Dict[str, str]] = None,
+    ) -> None:
         """SN2：对 top-N 候选做首块探测（真实 content-type / 魔数 / 大小），原地更新 ``files``。"""
         candidates = list(content.get("files") or [])
         limit = max(1, self._policy.max_result_items)
@@ -1246,7 +1251,9 @@ class WebFetchTool(BaseTool):
         for item in candidates:
             if probed >= self.FILES_PROBE_TOP_N:
                 break
-            probe = self._probe_file_url(str(item.get("url", "")), network_policy)
+            probe = self._probe_file_url(
+                str(item.get("url", "")), network_policy, credential_headers
+            )
             if probe is None:
                 continue
             probed += 1
@@ -1268,7 +1275,10 @@ class WebFetchTool(BaseTool):
         )
 
     def _probe_file_url(  # noqa: PLR0911 — 各探测结论独立 return
-        self, url: str, network_policy: NetworkPolicy
+        self,
+        url: str,
+        network_policy: NetworkPolicy,
+        credential_headers: Optional[Dict[str, str]] = None,
     ) -> Optional[Dict[str, Any]]:
         """流式 GET 读首块即关：→ {probe: file|html|other, detected_type, content_type, content_length}。"""
         if not url.startswith(("http://", "https://")):
@@ -1280,12 +1290,15 @@ class WebFetchTool(BaseTool):
         try:
             # 不自动跟随重定向：每一跳都必须过 check_host（与 _get_with_redirects 同口径），
             # 探测只是"看一眼"，302 直接回报 location 让模型决定。
+            # G2 修复：附加 credential_headers（登录态 cookie / Bearer），避免登录墙后的
+            # 文件链接被误判为 probe=html。
+            probe_headers = {**default_headers(), **(credential_headers or {})}
             with build_client(
                 timeout=15.0,
                 follow_redirects=False,
                 verify=not network_policy.allows_insecure_tls(url),
                 trust_env=not self._policy.subagent_only,
-                headers=default_headers(),
+                headers=probe_headers,
             ) as client:
                 request = client.build_request("GET", url, headers={"Accept": "*/*"})
                 response = client.send(request, stream=True)

@@ -2,9 +2,9 @@
 name: literature-research
 description: 文献调研与综述最小闭环——选站点、检索、筛选、证据表、大纲、分节写作、引用门禁与导出，并交接给 paper-writing 生成 docx。当用户要做文献调研、写文献综述、literature review、或"找资料并整理成综述"时使用；单纯写论文正文请用 paper-writing。
 license: Apache-2.0
-compatibility: 需要 browser_* 工具、execute_code、write_file/read_file、office_parse_bibtex/office_create；站点 profile 见 backend/literature/sites 与 ~/.sage/literature_sites
+compatibility: 需要 browser_* 与 web_fetch 工具、execute_code、write_file/read_file、office_parse_bibtex/office_create；站点 profile 见 backend/literature/sites 与 ~/.sage/literature_sites
 when_to_use: 当用户要做文献调研、文献综述、literature review、systematic review，或说"找资料并整理成综述""帮我调研某主题的文献"时使用
-allowed-tools: browser_launch browser_navigate browser_snapshot browser_interact browser_downloads browser_login ask_user_question execute_code bash write_file read_file office_parse_bibtex office_create office_lint_word
+allowed-tools: browser_launch browser_navigate browser_snapshot browser_interact browser_downloads browser_login web_fetch ask_user_question execute_code bash write_file read_file office_parse_bibtex office_create office_lint_word
 triggers: []
 ---
 
@@ -72,8 +72,17 @@ profile = get_default_store().get("xueshu789")
 print(render_search_guidance(profile, "机器学习 综述", limit=20))
 ```
 
-2. 按指导用 `browser_navigate`（带 `wait_for`）→ `browser_snapshot`。
-   若 profile 是 `search.mode: interactive`，可直接在 `execute_code` 里用真实驱动：
+2. 取页面内容——**优先快路径**：
+   - profile 是 `search.mode: url`（有 `search.url_template`）→ 先用 `web_fetch`
+     直接取该 URL 的正文（自动带该域登录态，比开浏览器快一个数量级）。
+     返回登录墙 / 反爬 / 空正文 → 立刻升级到 `browser_navigate`（带 `wait_for`）
+     → `browser_snapshot`，不要反复重试 `web_fetch`。
+   - profile 是 `search.mode: interactive` → 必须走浏览器（要在真实页面里输入检索词）。
+   - `web_fetch` 报 `login_wall` / `login_required` 时，先 `browser_login` 登录该域，
+     登录态入库后 `web_fetch` 会自动带上，不要手动传 cookie。
+
+   若 profile 是 `search.mode: interactive`，也可直接在 `execute_code` 里用真实驱动
+   （`search_with_profile` 内部对 `url` 模式会先试 `web_fetch` 快路径，失败自动回落浏览器）：
 
 ```python
 from backend.literature.profile_store import get_default_store
