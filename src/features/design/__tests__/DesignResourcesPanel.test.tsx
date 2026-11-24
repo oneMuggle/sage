@@ -11,6 +11,7 @@ vi.mock('../../../shared/lib/i18n', () => ({
 
 vi.mock('../../../entities/design/designApi', () => ({
   previewSource: vi.fn(),
+  listOfficeSources: vi.fn(),
 }));
 
 describe('DesignResourcesPanel', () => {
@@ -56,11 +57,44 @@ describe('DesignResourcesPanel', () => {
 
     await waitFor(() => expect(screen.getByText('name')).toBeTruthy());
     expect(screen.getByText('value')).toBeTruthy();
-    expect(api.previewSource).toHaveBeenCalledWith('/tmp/data.csv');
+    expect(api.previewSource).toHaveBeenCalledWith({ file_path: '/tmp/data.csv' });
 
     fireEvent.click(screen.getByRole('button', { name: 'design.resources.confirmBind' }));
     await waitFor(() =>
-      expect(useDesignStore.getState().bindSource).toHaveBeenCalledWith('p1', '/tmp/data.csv'),
+      expect(useDesignStore.getState().bindSource).toHaveBeenCalledWith('p1', {
+        file_path: '/tmp/data.csv',
+      }),
+    );
+  });
+
+  it('binds a document picked from the Office library without a file picker', async () => {
+    vi.mocked(api.listOfficeSources).mockResolvedValue([
+      {
+        doc_id: 'd1',
+        doc_type: 'excel',
+        original_filename: '销售数据.xlsx',
+        generated_filename: '销售数据.xlsx',
+        created_at: 1760000000000,
+        size_bytes: 2048,
+      },
+    ]);
+    vi.mocked(api.previewSource).mockResolvedValue({
+      ok: true,
+      kind: 'xlsx',
+      sheets: [{ name: 'Q1', row_count: 3, columns: ['amount'], sample: [] }],
+    });
+
+    render(<DesignResourcesPanel projectId="p1" />);
+    fireEvent.click(screen.getByRole('button', { name: 'design.resources.bindFromLibrary' }));
+
+    await waitFor(() => expect(screen.getByText('销售数据.xlsx')).toBeTruthy());
+    fireEvent.click(screen.getByText('销售数据.xlsx'));
+
+    await waitFor(() => expect(api.previewSource).toHaveBeenCalledWith({ doc_id: 'd1' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'design.resources.confirmBind' }));
+    await waitFor(() =>
+      expect(useDesignStore.getState().bindSource).toHaveBeenCalledWith('p1', { doc_id: 'd1' }),
     );
   });
 
