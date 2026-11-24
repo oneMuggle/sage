@@ -98,3 +98,8 @@ export const CHAT_IMAGE_ACCEPT = Array.from(CHAT_IMAGE_MIME_TYPES).join(',');
 // `[:10]` 同口径；在 selection 阶段就拒绝，而不是上传后才 toast。
 export const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024; // 25 MB
 export const MAX_ATTACHMENT_COUNT = 10;
+
+/** 2026-11-24: 无扩展名但允许上传的文件名（小写精确匹配）。
+ * 与后端 `chat_attachment_routes.NO_EXT_FILENAMES` 同口径。
+ * 用于 `preflightAttachment` 显式处理无点文件名。 */
+export const CHAT_NO_EXT_FILENAMES = new Set(['makefile', 'dockerfile']);
