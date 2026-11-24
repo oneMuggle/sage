@@ -20,28 +20,19 @@ from __future__ import annotations
 
 import base64
 import logging
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from backend.api.v1.design_shared import map_design_error as _map_design_error
+from backend.api.v1.design_source_models import BindSourceRequest
 from backend.api.v1.design_streaming import (
     sse_event as _sse_event,
     stream_studio_call as _stream_studio_call,
 )
 from backend.compat.win7.pydantic_compat import ConfigDict
-
-try:
-    from pydantic import model_validator
-
-    PYDANTIC_V2 = True
-except ImportError:  # pragma: no cover — win7 py38 钉 pydantic 1.10
-    from pydantic import root_validator as model_validator  # type: ignore
-
-    PYDANTIC_V2 = False
-
 from backend.data.database import get_database
 
 # Re-exported symbol: route tests patch `design_routes.get_design_studio`.
@@ -108,38 +99,6 @@ class ExportRequest(BaseModel):
 
     format: str = "html"
     inline: bool = False
-
-
-class BindSourceRequest(BaseModel):
-    """POST /design/projects/{id}/source body."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    file_path: Optional[str] = None
-    doc_id: Optional[str] = None
-    kind: Optional[str] = None
-    name: Optional[str] = None
-
-    if PYDANTIC_V2:
-
-        @model_validator(mode="after")
-        def _exactly_one_source(self) -> BindSourceRequest:
-            has_path = bool(self.file_path and str(self.file_path).strip())
-            has_id = bool(self.doc_id and str(self.doc_id).strip())
-            if has_path == has_id:
-                raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
-            return self
-
-    else:  # pragma: no cover — win7 py38 + pydantic 1.10
-
-        @model_validator
-        @classmethod
-        def _exactly_one_source(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-            has_path = bool(values.get("file_path") and str(values.get("file_path")).strip())
-            has_id = bool(values.get("doc_id") and str(values.get("doc_id")).strip())
-            if has_path == has_id:
-                raise ValueError("必须且只能提供 file_path 或 doc_id 之一")
-            return values
 
 
 class TweaksRequest(BaseModel):
