@@ -33,7 +33,7 @@
     "backend/office/tool_service.py": 1023,
     "backend/office/word.py": 1769,
     "backend/orchestration/chat_dispatcher.py": 2670,
-    "backend/scheduler/evolution.py": 2585,
+    "backend/scheduler/evolution.py": 2629,
     "backend/services/arena_draw_engine.py": 1054,
     "backend/services/project_wiki_generator.py": 903,
     "backend/services/usage_tracker.py": 1070,

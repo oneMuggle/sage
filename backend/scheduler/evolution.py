@@ -251,6 +251,10 @@ class DailySummaryTask(BaseEvolutionTask):
                 duration_ms=elapsed_ms(_started),
                 metrics={"llm_available": False},
             )
+            await self._emit_evolution_completed(
+                items_processed=0,
+                duration_ms=int((time.monotonic() - start) * 1000),
+            )
             return 0
 
         conn = self.db.get_connection()
@@ -465,6 +469,36 @@ class MemoryPruningTask(BaseEvolutionTask):
         if len(rows) < 2:
             return {}
         return find_duplicate_leaders(rows)
+
+    def _sole_valid_group_members(self, leaders: Dict[str, str]) -> set:
+        """近重复组里"组内仅剩这一条有效记忆"的 id 集合。
+
+        这些记忆是该组内容的唯一存世副本 —— 软失效它们等于整组知识丢失。
+        组内还有其他有效成员时不在此列（那些成员仍是内容的备份）。
+        """
+        if not leaders:
+            return set()
+        groups: Dict[str, List[str]] = {}
+        for member_id, leader_id in leaders.items():
+            groups.setdefault(leader_id, []).append(member_id)
+        conn = self.db.get_connection()
+        sole_valid = set()
+        for members in groups.values():
+            if len(members) < 2:
+                continue
+            placeholders = ",".join(["?"] * len(members))
+            try:
+                rows = conn.execute(
+                    "SELECT id FROM memories_episodic "
+                    f"WHERE id IN ({placeholders}) AND is_valid = 1",
+                    members,
+                ).fetchall()
+            except Exception:  # noqa: BLE001 — 查询失败不阻断清理
+                logger.warning("近重复组有效成员查询失败", exc_info=True)
+                continue
+            if len(rows) == 1:
+                sole_valid.add(rows[0][0])
+        return sole_valid
 
     # ------------------------------------------------------------------ #
     # 质量合并
@@ -695,19 +729,20 @@ class MemoryPruningTask(BaseEvolutionTask):
                     reason="memory_pruning:limit",
                 )
 
-        # 5. 质量分清理（软失效）：质量分低 **且** 90 天以上未被访问。
+        # 5. 质量合并 —— 删掉"低质 + 陈旧 + 有更优副本"的冗余记忆。
+        #    必须排在低质量软失效之前：合并规则按组判定、组长受保护，
+        #    若先软失效，整组会被一起抹平，重复内容就此丢失。
+        quality_deleted = self._prune_low_quality(prunable_rows, leaders)
+        total_deleted += quality_deleted
+
+        # 6. 质量分清理（软失效）：质量分低 **且** 90 天以上未被访问。
         #    与上面三条硬删除规则不重叠 —— 它们按固定门槛扫，这里按
         #    "写得差 + 从未有用过 + 已经放了很久" 综合判定。
-        quality_pruned = await self._prune_low_quality_memories()
+        quality_pruned = await self._prune_low_quality_memories(leaders)
         if quality_pruned:
             logger.info(f"低质量记忆软失效: {quality_pruned} 条")
 
         conn.commit()
-
-        # 6. 质量合并 —— 删掉"低质 + 陈旧 + 有更优副本"的冗余记忆。
-        #    放在最后：前面的规则已经清掉的行不必再评一次分。
-        quality_deleted = self._prune_low_quality(prunable_rows, leaders)
-        total_deleted += quality_deleted
 
         # D1 (P6): 向量库补偿式对账 —— 上面的批量 DELETE 只写主表,
         # memories_vec 的对应条目由对账清扫, 避免已删记忆仍被向量检索命中。
@@ -741,7 +776,9 @@ class MemoryPruningTask(BaseEvolutionTask):
         )
         return total_deleted
 
-    async def _prune_low_quality_memories(self) -> int:
+    async def _prune_low_quality_memories(
+        self, leaders: Optional[Dict[str, str]] = None
+    ) -> int:
         """按质量分软失效长期未访问的低质量记忆（不物理删除）。
 
         与上面三条硬删除规则的分工：这里只处理"质量分低 **且** 超过 90 天
@@ -749,6 +786,11 @@ class MemoryPruningTask(BaseEvolutionTask):
         DELETE —— 物理删除会切断 ``supersedes`` 链，事后无法追溯。
         ``tags`` 含 ``environment`` 的记忆豁免（已验证的环境解决方案，
         往往是低频但高价值的）。
+
+        Args:
+            leaders: 近重复分组（记忆 id → 组长 id）。组内仅剩一条有效
+                记忆时，那条是内容的唯一存世副本，跳过它 —— 否则整组
+                近重复会被抹平，重复内容就此丢失。
 
         Returns:
             本次软失效的记忆条数。
@@ -773,8 +815,11 @@ class MemoryPruningTask(BaseEvolutionTask):
 
         scorer = MemoryQualityScorer(corpus=rows)
         now_ms = int(time.time() * 1000)
+        sole_valid = self._sole_valid_group_members(leaders or {})
         pruned = 0
         for row in rows:
+            if row.get("id") in sole_valid:
+                continue
             if "environment" in (row.get("tags") or ""):
                 continue
             try:
