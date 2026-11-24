@@ -547,6 +547,7 @@ export const enSettingsAndModels = {
   'office.generate.workspace.resultTitle': 'Result',
   'office.generate.workspace.resultEmpty': 'Nothing generated yet',
   'office.generate.workspace.open': 'Open in Documents',
+  'office.generate.workspace.previewLoading': 'Loading preview…',
   'office.generate.workspace.missingInstruction': 'Enter an instruction',
   'office.generate.workspace.missingTemplate': 'Pick a template',
   'office.generate.workspace.missingSource': 'Pick a source document',
