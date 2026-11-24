@@ -102,7 +102,6 @@
     "backend/services/browser_account_service.py": 828,
     "backend/tests/unit/test_browser_account_service.py": 265,
     "backend/tests/integration/test_office_generate_routes.py": 858,
-    "src/features/office/OfficeGenerateForm.tsx": 835,
     "src/shared/api/demoOfficeAndSystemHandlers.ts": 856,
     "src/shared/api/officeApi.ts": 954
   }
