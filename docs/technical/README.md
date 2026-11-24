@@ -130,7 +130,7 @@
 | 154 | [Web Fallback 模式（Win7 兼容）](./154-web-fallback-mode.md) | Win7 管控环境下 Electron 被拦截时的浏览器降级方案：`SAGE_WEB_MODE` 环境变量 + FastAPI 静态文件服务 + URL param token 认证 + `SageWeb.cmd`（安装版） / `sage-web.bat`（源码）启动脚本 |
 | 155 | [Design Studio 内容库与 Craft 工艺规范](./155-design-studio-content-craft.md) | 四平面架构（设计系统/模板/工艺规范/生成）+ 17 设计系统 / 13 Deck 模板 / 4 原型模板 / 5 条 Craft 规则 + `CraftRuleRegistry` 解析器 + Prompt 注入链路 + 导出管道（PDF/PPTX/ZIP）+ Design Lint + Office 融合（Word→大纲 / 图表嵌入 / Live Artifact）+ 单屏创作器 / 版本恢复 / 迭代消息持久化 / 内联下载导出 / Tweaks 微调面板 / 生成阶段进度 / 素材面板（Word 大纲 / 数据源 / 图表）/ 快速简报 / 模板预览 / 质量评审 |
 | 156 | [本地 AI 模型内置与离线导入](./156-local-ai-models.md) | OCR（6MB）+ Embedding（91MB）随安装包内置：`extraResources` 打包 `resources/models/` + 路径优先级链（userData > bundled > repo）+ 本地导入 IPC（目录选择 + SHA-256 校验）+ CI 缓存下载 |
-| 157 | [MinerU 内网独立部署](./157-mineru-deployment.md) | A6000 服务器独立部署 MinerU 4.1（Python 3.12 + vLLM，`--tier standard`）：模型离线搬运三段式 + `source: local` 零外网依赖 + V1 异步 API 契约（create→PUT→poll→download）+ Sage 工具接入（`mineru_parse_document`）+ systemd 托管与验证清单 |
+| 157 | [MinerU 内网独立部署](./157-mineru-deployment.md) | A6000 服务器独立部署 MinerU 4.1（便携 CPython 3.12 + vLLM，`--tier standard`）：离线包 `scripts/mineru-offline-bundle/`（`build-bundle.sh` 构建 / `install.sh` 安装 / `verify.sh` 验收）+ 模型离线搬运 + `source: local` 零外网依赖 + V1 异步 API 契约（create→PUT→poll→download）+ 鉴权坑与 `--api-key` 包装脚本 + `--auth-mode bearer\|anonymous` + Sage `parse_document` 工具与状态 API |
 | 158 | [项目健康监控与 AI 辅助规程定制](./158-project-health-ai-stages.md) | M1 主动告警（桌面通知 + 24h 节流）+ M2 对话式规程定制（多轮迭代 / 目录推断 / git 推断 / LLM 降级）+ M3 定时健康检查（每天 09:00 cron + HealthReport） |
 | 159 | [PDF 页码引用与图表内联引用](./159-pdf-figure-citation.md) | 页标记文本（`--- page N ---`）+ 图表抽取/图注/清单缓存 + `<attached_figures>` 注入 + RAG 页码反查 + Markdown 图片白名单 + 工具结果 dataclass 序列化修复 |
 | 160 | [启动分层就绪与后台自检](./160-startup-progressive-readiness.md) | L0–L3 分层就绪（StartupRegistry + `/health/ready`）+ MCP 后台发现（不阻塞 lifespan）+ 会话三态/防闪烁骨架 + 启动状态指示条 + last-run 启动瀑布（backend_spawned/ready/sessions_loaded） |
@@ -138,8 +138,8 @@
 | 162 | [受控浏览器使用](./162-controlled-browser-use.md) | 纯 CDP 浏览器工具面（10 个 `browser_*` 工具）+ 无障碍树快照 v2 / ref 协议 + 可见窗口 / 步骤时间线 / 暂停·接管状态机 + 站点策略·敏感动作确认·一次性指纹·注入警告 + 视觉兜底（临时图像 / OCR） |
 | 163 | [记忆页面详情化与结构化标题](./163-memory-page-detail.md) | 卡片可展开查看全文 + 结构化 `title` 列（LLM 提取 / 确定性推导 / 读取兜底）+ `PUT /memory/{id}` 单条编辑（FTS 重建与旧向量清理） |
 | 164 | [Word 样式模板](./164-word-style-template.md) | 样式画像（按级字体/精确行距/题注/表格文字）+ 命名预设（公文/论文/报告）+ 参考文档（reference.docx）+ 规则包→样式画像转换 + 已有文档批量套用样式 |
-| 165 | [Firefox 浏览器兜底（多浏览器支持）](./165-firefox-browser-fallback.md) | 对齐 release/win7：发现优先级增加 `SAGE_FIREFOX_PATH` 与平台扫描 + 固定端口 9229 `-start-debugger-server` 启动 + `/json/version` 握手 + cookie 归一化（剥离 Chromium 特有字段） |
-| 166 | [MinerU 文档解析](./166-mineru-document-parse.md) | 可插拔解析引擎 / async API 客户端 / 质量路由 / 缓存 / 双阶段附件 |
+| 165 | [MinerU 文档解析](./165-mineru-document-parse.md) | 可插拔解析引擎 / async API 客户端 / 质量路由 / 缓存 / 双阶段附件 |
+| 166 | [Firefox 浏览器兜底（多浏览器支持）](./166-firefox-browser-fallback.md) | 对齐 release/win7：发现优先级增加 `SAGE_FIREFOX_PATH` 与平台扫描 + 固定端口 9229 `-start-debugger-server` 启动 + `/json/version` 握手 + cookie 归一化（剥离 Chromium 特有字段） |
 ---
 
 ## 核心章节（基础架构）

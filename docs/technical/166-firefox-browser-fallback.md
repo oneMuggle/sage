@@ -1,4 +1,4 @@
-# 165 Firefox 浏览器兜底（多浏览器支持）
+# 166 Firefox 浏览器兜底（多浏览器支持）
 
 > 对齐 `release/win7` 的 Firefox 兼容层（win7 §103 的 main 侧移植）。
 > main 侧的启动器实现位于 `backend/tools/browser_cdp.py`（win7 为独立的

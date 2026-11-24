@@ -1,8 +1,8 @@
 # MinerU 内网独立部署方案
 
 > 文档编号：157
-> 状态：已实施（2026-11-23 按 4.1.7 实包校正；离线包工具位于 `scripts/mineru-offline-bundle/`）
-> 适用分支：main / release/win7（服务器侧与分支无关，客户端接入两侧一致）
+> 状态：已实施（2026-11-24 自 main 154 章同步；离线包工具位于 `scripts/mineru-offline-bundle/`）
+> 适用分支：main / release/win7（服务器侧与分支无关；客户端接入见 165 章）
 
 ## 1. 背景与目标
 
@@ -318,7 +318,7 @@ POST /v1/tasks/{task_id}/cancel            # 取消未完成文件
 | 应用服务 | `backend/application/document_parse.py` | 用例编排（解析 → 质量 → 降级 → 缓存） |
 | 工具 | `backend/tools/parse_document_tool.py`（新建） | `ParseDocumentTool`，`risk=EXTERNAL`，`is_blocking=True` |
 | 工具注册 | `backend/tools/__init__.py`（`_LAZY_TOOL_EXPORTS`）+ `backend/tools/tool_bundles.py` + `backend/tools/permissions.py` | 与现有工具一致 |
-| 状态 API | `backend/api/mineru_routes.py` | `GET /api/v1/mineru/status`（`backend/main.py:1469` 挂载） |
+| 状态 API | `backend/api/mineru_routes.py` | `GET /api/v1/mineru/status`（`backend/main.py` 以 `prefix="/api/v1"` 挂载） |
 | 设置 UI | `src/pages/settings/MineruServiceCard.tsx` | 仿 `LocalOcrCard.tsx` |
 
 **能力位降级**：与 `OcrEngine.available()` 哲学一致——`baseUrl` 未配置时工具不可用（schema 层不出现或直接返回说明），不影响其他功能。
