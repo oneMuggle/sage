@@ -26,6 +26,13 @@ def test_pdf_upload_enqueues_when_enabled(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         chat_attachment_routes, "load_mineru_settings", lambda: FakeSettings()
     )
+    # 假 PDF 字节无法被真实解析器读取 —— mock extract_attachment_text 绕过解析，
+    # 聚焦测试 MinerU 入队行为。
+    monkeypatch.setattr(
+        chat_attachment_routes,
+        "extract_attachment_text",
+        lambda content, ext: "mocked pdf text",
+    )
     app = FastAPI()
     app.include_router(chat_attachment_routes.router, prefix="/api/v1")
     pdf = b"%PDF-1.4\n%%EOF"

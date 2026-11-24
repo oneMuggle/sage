@@ -3,6 +3,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   CHAT_DOCUMENT_EXTENSIONS,
   CHAT_IMAGE_MIME_TYPES,
+  CHAT_NO_EXT_FILENAMES,
   MAX_ATTACHMENT_COUNT,
   MAX_ATTACHMENT_SIZE,
 } from '../chatAttachmentFormats';
@@ -12,6 +13,7 @@ export {
   CHAT_DOCUMENT_EXTENSIONS,
   CHAT_IMAGE_ACCEPT,
   CHAT_IMAGE_MIME_TYPES,
+  CHAT_NO_EXT_FILENAMES,
   MAX_ATTACHMENT_COUNT,
   MAX_ATTACHMENT_SIZE,
 } from '../chatAttachmentFormats';
@@ -37,8 +39,13 @@ export function preflightAttachment(
   if (totalCount >= MAX_ATTACHMENT_COUNT) return { ok: false, reason: 'count_exceeded' };
   if (file.size > MAX_ATTACHMENT_SIZE) return { ok: false, reason: 'oversize' };
   if (kind === 'file') {
-    const ext = (file.name.split('.').pop() ?? '').toLowerCase();
-    if (!ext || !CHAT_DOCUMENT_EXTENSIONS.has(ext)) {
+    // 2026-11-24: 无点文件名（如 "Makefile"）显式走白名单；有点文件按扩展名匹配。
+    // 与后端 `chat_attachment_routes.NO_EXT_FILENAMES` 同口径。
+    const nameLower = file.name.toLowerCase();
+    const hasDot = nameLower.includes('.');
+    const ext = hasDot ? (nameLower.split('.').pop() ?? '') : nameLower;
+    const isNoExtAllowed = !hasDot && CHAT_NO_EXT_FILENAMES.has(nameLower);
+    if (!ext || (!CHAT_DOCUMENT_EXTENSIONS.has(ext) && !isNoExtAllowed)) {
       return { ok: false, reason: 'unsupported' };
     }
   } else if (!CHAT_IMAGE_MIME_TYPES.has(file.type)) {
