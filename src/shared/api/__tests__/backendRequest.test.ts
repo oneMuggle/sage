@@ -20,15 +20,39 @@ describe('backendRequest', () => {
     expect(fetchStub).not.toHaveBeenCalled();
   });
 
-  it('fails closed when the Electron bridge is unavailable', async () => {
-    const fetchStub = vi.fn();
+  it('falls back to a direct HTTP call when the Electron bridge is unavailable', async () => {
+    const fetchStub = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true }),
+    });
     vi.stubGlobal('fetch', fetchStub);
     vi.stubGlobal('window', {});
 
-    await expect(backendRequest({ path: '/api/v1/private' })).rejects.toBeInstanceOf(
-      BackendNotAvailableError,
+    await expect(backendRequest({ path: '/api/v1/private' })).resolves.toEqual({ ok: true });
+    expect(fetchStub).toHaveBeenCalledWith(
+      '/api/v1/private',
+      expect.objectContaining({ method: 'GET' }),
     );
-    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
+  it('web fallback sends the capability token from localStorage', async () => {
+    const fetchStub = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '' });
+    vi.stubGlobal('fetch', fetchStub);
+    vi.stubGlobal('window', {
+      localStorage: { getItem: (key: string) => (key === 'sage_auth_token' ? 'tok-1' : null) },
+    });
+
+    await backendRequest({ path: '/api/v1/x', method: 'POST', body: { a: 1 } });
+    const [, init] = fetchStub.mock.calls[0] as [string, RequestInit];
+    const headers = new Headers(init.headers);
+    // 本地能力走独立 header,不占用 Authorization —— 否则会覆盖调用方自带的
+    // 上游 API Key (LLM 代理路径), 表现为「上游返回 401: API Key 无效」。
+    expect(headers.get('X-Sage-Local-Authorization')).toBe('Bearer tok-1');
+    expect(headers.get('Authorization')).toBeNull();
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBe(JSON.stringify({ a: 1 }));
   });
 
   it('uses the Electron bridge without exposing a capability to the renderer', async () => {

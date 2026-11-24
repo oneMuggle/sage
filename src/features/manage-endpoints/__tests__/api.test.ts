@@ -444,6 +444,21 @@ describe('upstream error envelope → 中文友好提示', () => {
     expect(result.message).not.toContain('"detail"');
   });
 
+  it('本地授权 401（浏览器传输层 header 冲突）→ 不被误报为上游 API Key 无效', async () => {
+    // 模拟 LocalAuthMiddleware 因 header 合并错误返回的 401：detail 是字符串，
+    // 不是 envelope —— 必须被识别为本地 token 问题，而非上游 key 问题
+    mockFetch(
+      async () =>
+        new Response(JSON.stringify({ detail: '本地授权凭据无效或缺失' }), { status: 401 }),
+    );
+
+    const result = await testEndpointConnection(USER_BASE_URL, USER_API_KEY);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('本地授权凭据无效');
+    expect(result.message).not.toContain('API Key');
+  });
+
   it('裸网络错误 (fetch throw TypeError) → 兜底为「连接失败: <message>」不抛错', async () => {
     // 模拟 fetch 自身抛错 (非 HTTP 状态码), e.g. DNS / 网络断开
     window.fetch = vi.fn(async () => {

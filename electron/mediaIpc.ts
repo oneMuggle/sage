@@ -88,14 +88,36 @@ export function registerMediaIpc(
       body,
     });
 
-    if (!resp.ok) {
-      const text = await resp.text();
-      logger.error('media:upload-attachment failed', { status: resp.status, text });
-      throw new Error(`Upload failed: HTTP ${resp.status} — ${text}`);
+    // 尝试解析 JSON（无论 HTTP 状态）—— 后端在 4xx/5xx 时返回 {error_code, error}
+    let json: { media_ref?: unknown; api_url?: string; error?: string; error_code?: string };
+    try {
+      json = (await resp.json()) as typeof json;
+    } catch {
+      // JSON 解析失败 —— 回退到原始文本错误
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        logger.error('media:upload-attachment failed', { status: resp.status, text });
+        throw new Error(`Upload failed: HTTP ${resp.status} — ${text}`);
+      }
+      throw new Error('Upload failed: invalid JSON response');
     }
 
-    const json = (await resp.json()) as { media_ref: unknown; api_url: string };
+    // 向后兼容：如果后端仍返回 HTTP 200 + {error}，视为失败
+    if (json && typeof json.error === 'string') {
+      logger.error('media:upload-attachment backend error', {
+        status: resp.status,
+        error_code: json.error_code,
+        error: json.error,
+      });
+      throw new Error(json.error);
+    }
+
+    if (!resp.ok) {
+      logger.error('media:upload-attachment failed', { status: resp.status });
+      throw new Error(`Upload failed: HTTP ${resp.status}`);
+    }
+
     logger.info('media:upload-attachment success', { api_url: json.api_url });
-    return json;
+    return { media_ref: json.media_ref, api_url: json.api_url ?? '' };
   }) as (...args: unknown[]) => unknown);
 }

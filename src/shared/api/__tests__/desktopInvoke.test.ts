@@ -59,8 +59,23 @@ describe('invoke demo 分支', () => {
 });
 
 describe('invoke 真实通道', () => {
-  it('无 electronAPI 抛可读错误', async () => {
-    await expect(invoke('x')).rejects.toThrow('electronAPI not available');
+  it('无 electronAPI 时回退为同源 HTTP（网页模式）', async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, text: async () => '{"fine":true}' });
+    vi.stubGlobal('fetch', fetchStub);
+    vi.stubGlobal('window', {});
+
+    await expect(invoke('list_sessions')).resolves.toEqual({ fine: true });
+    expect(fetchStub).toHaveBeenCalledWith(
+      '/api/v1/sessions?limit=100&offset=0',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('浏览器下未知命令给出桌面端专属错误', async () => {
+    vi.stubGlobal('window', {});
+    await expect(invoke('x')).rejects.toThrow('仅在 Sage 桌面端可用');
   });
 
   it('成功透传；args 缺省补空对象', async () => {

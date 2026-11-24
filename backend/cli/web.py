@@ -16,6 +16,7 @@ import argparse
 import os
 import secrets
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -151,14 +152,73 @@ def wait_for_health(
 
 
 def _open_browser_when_ready(port: int, url: str) -> None:
-    if wait_for_health(port):
-        try:
-            if not webbrowser.open(url):
-                print(f"[Sage Web] 无法自动打开浏览器，请手动访问：{url}")
-        except webbrowser.Error:
-            print(f"[Sage Web] 无法自动打开浏览器，请手动访问：{url}")
-    else:
+    if not wait_for_health(port):
         print(f"[Sage Web] 后端未在预期时间内就绪，请检查日志。可手动访问：{url}")
+        return
+    if _open_with_preferred_browser(url):
+        return
+    try:
+        if not webbrowser.open(url):
+            print(f"[Sage Web] 无法自动打开浏览器，请手动访问：{url}")
+    except webbrowser.Error:
+        print(f"[Sage Web] 无法自动打开浏览器，请手动访问：{url}")
+
+
+# ── preferred browser (Windows) ──────────────────────────────────────────────
+
+
+# Win7's default browser may be Internet Explorer, which cannot execute the
+# SPA (no ES module support) — it would render a blank page even when Chrome
+# or Firefox is installed. Probe well-known install locations before falling
+# back to the OS default handler.
+_WINDOWS_BROWSERS: Tuple[Tuple[str, str], ...] = (
+    ("Google Chrome", r"Google\Chrome\Application\chrome.exe"),
+    ("Microsoft Edge", r"Microsoft\Edge\Application\msedge.exe"),
+    ("Mozilla Firefox", r"Mozilla Firefox\firefox.exe"),
+)
+_WINDOWS_BROWSER_ROOTS = ("LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)")
+
+
+def find_modern_browser(
+    environ: Mapping[str, str],
+    *,
+    exists: Callable[[Path], bool] = Path.exists,
+    os_name: Optional[str] = None,
+) -> Optional[Tuple[str, Path]]:
+    """Return ``(name, path)`` of the first modern browser candidate on Windows.
+
+    Returns ``None`` off Windows or when nothing is found; callers fall back to
+    ``webbrowser.open`` (the OS default handler).
+    """
+    if (os_name or os.name) != "nt":
+        return None
+    roots = []
+    for key in _WINDOWS_BROWSER_ROOTS:
+        value = environ.get(key)
+        if value:
+            roots.append(Path(value))
+    for name, relative in _WINDOWS_BROWSERS:
+        for root in roots:
+            candidate = root / relative
+            try:
+                if exists(candidate):
+                    return name, candidate
+            except OSError:
+                continue
+    return None
+
+
+def _open_with_preferred_browser(url: str) -> bool:
+    found = find_modern_browser(os.environ)
+    if not found:
+        return False
+    name, executable = found
+    try:
+        subprocess.Popen([str(executable), url], close_fds=True)
+    except OSError:
+        return False
+    print(f"[Sage Web] 已使用 {name} 打开：{url}")
+    return True
 
 
 # ── entry point ──────────────────────────────────────────────────────────────
