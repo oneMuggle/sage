@@ -919,6 +919,11 @@ export interface ChatConfig {
   apiUrl?: string;
   model?: string;
   /**
+   * Task 5: 请求方指定的端点 id —— 优先于持久化设置，用于上下文窗口解析与
+   * 用量/端点归因（尤其会话级模型覆盖）。Electron relay 转成 endpoint_id。
+   */
+  endpointId?: string;
+  /**
    * Task 7 (2026-10-28) 智能路由：调用方声明的任务类型，仅在 routing.mode=auto
    * 时由 useChat 写入；后端 ChatRequest.task_type 消费。未设置 = 后端按 "chat"。
    */

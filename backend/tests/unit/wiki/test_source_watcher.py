@@ -50,14 +50,15 @@ def test_degraded_mode_noop_without_watchdog(tmp_path: Path) -> None:
 
 
 def test_handler_enqueues_new_source_file(tmp_path: Path, monkeypatch) -> None:
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, int]] = []
 
     class _Queue:
         def __init__(self, root: Path) -> None:
             self.root = root
 
-        def add(self, path: str, priority: str = "normal") -> None:
-            calls.append((path, priority))
+        def add(self, path: str, max_retries: int = 3) -> str:
+            calls.append((path, max_retries))
+            return "task-1"
 
     from backend.wiki import ingest_queue
 
@@ -71,7 +72,24 @@ def test_handler_enqueues_new_source_file(tmp_path: Path, monkeypatch) -> None:
         )
     )
 
-    assert calls == [("raw/sources/a.pdf", "normal")]
+    assert calls == [("raw/sources/a.pdf", 3)]
+
+
+def test_handler_enqueues_into_real_queue(tmp_path: Path) -> None:
+    """真实 IngestQueue 入队 —— 锁住 add() 的真实签名（曾误传 priority 被吞）。"""
+    from backend.wiki.ingest_queue import IngestQueue
+
+    handler = sw._SourceHandler(tmp_path)
+    handler.on_created(
+        SimpleNamespace(
+            is_directory=False,
+            src_path=str(tmp_path / "raw/sources/a.pdf"),
+        )
+    )
+
+    assert [task.source_path for task in IngestQueue(tmp_path).get_all()] == [
+        "raw/sources/a.pdf"
+    ]
 
 
 def test_handler_ignores_directories_and_hidden_files(
@@ -79,14 +97,15 @@ def test_handler_ignores_directories_and_hidden_files(
 ) -> None:
     from backend.wiki import ingest_queue
 
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, int]] = []
 
     class _Queue:
         def __init__(self, root: Path) -> None:
             self.root = root
 
-        def add(self, path: str, priority: str = "normal") -> None:
-            calls.append((path, priority))
+        def add(self, path: str, max_retries: int = 3) -> str:
+            calls.append((path, max_retries))
+            return "task-1"
 
     monkeypatch.setattr(ingest_queue, "IngestQueue", _Queue)
 
