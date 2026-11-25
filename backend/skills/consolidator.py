@@ -42,19 +42,35 @@ class ConsolidationService:
         self,
         skills: List[Dict[str, Any]],
         pinned_names: Optional[List[str]] = None,
+        similarity_service: Any = None,
     ) -> List[Dict[str, Any]]:
         """扫描技能清单，返回归一化后的建议列表（不落库）。
 
         Args:
             skills: [{name, description, when_to_use, usage_count, stale}]
             pinned_names: pinned 技能 —— 永不出现在 archive 建议中
+            similarity_service: SkillSimilarityService 实例（可选），
+                传入时会先计算 embedding 相似度作为 LLM 的先验证据
 
         Returns:
-            [{type, skill_names, reason}]（LLM 失败/不可解析 → []）
+            [{type, skill_names, reason, similarity_evidence?}]
+            （LLM 失败/不可解析 → []）
         """
         pinned = set(pinned_names or [])
         if not skills:
             return []
+
+        # --- M1: 结构化预筛（embedding 相似度） ---
+        duplicate_pairs: list = []
+        if similarity_service is not None:
+            try:
+                duplicate_pairs = await similarity_service.find_duplicates(skills)
+                if duplicate_pairs:
+                    logger.info(
+                        "相似度预筛发现 %d 对疑似重复技能", len(duplicate_pairs)
+                    )
+            except Exception as exc:  # noqa: BLE001 - 预筛失败不阻塞主流程
+                logger.warning("相似度预筛失败（跳过）: %s", exc)
 
         lines = [
             f"- {s.get('name', '')}: 描述={s.get('description', '')!r} "
@@ -62,6 +78,22 @@ class ConsolidationService:
             f"使用次数={s.get('usage_count', 0)} {'[疑似过时]' if s.get('stale') else ''}"
             for s in skills
         ]
+
+        # 构建相似度证据段
+        similarity_section = ""
+        if duplicate_pairs:
+            evidence_lines = [
+                f"  - {a} ↔ {b}（相似度 {sim:.0%}）"
+                for a, b, sim in duplicate_pairs
+            ]
+            similarity_section = (
+                "\n【结构化相似度分析结果（embedding cosine similarity）】\n"
+                "以下是通过向量相似度计算发现的疑似重复技能对，"
+                "请优先确认这些是否应该合并：\n"
+                + "\n".join(evidence_lines)
+                + "\n"
+            )
+
         prompt = (
             "以下是 AI 助手的技能清单（SKILL.md 技能库）。请做一次巡检：\n"
             "1. merge —— 功能/触发场景高度重叠的技能组（给出成员名单）；\n"
@@ -69,10 +101,12 @@ class ConsolidationService:
             "3. revise —— 描述/触发条件写得含糊、值得修订的技能。\n\n"
             "严格要求：\n"
             "- 只基于清单内容判断，不要臆测；\n"
+            "- 有相似度分析结果时，优先确认其中的疑似重复对；\n"
             "- 没有值得建议的就输出空数组；\n"
             "- 只输出 JSON 数组，元素形如 "
             '{"type": "merge", "skill_names": ["a", "b"], "reason": "…"}。\n\n'
-            "技能清单:\n" + "\n".join(lines)
+            + similarity_section
+            + "技能清单:\n" + "\n".join(lines)
         )
 
         from backend.domain.message import Message
@@ -91,7 +125,32 @@ class ConsolidationService:
         if not getattr(turn, "text", None):
             logger.warning("巡检 LLM 返回空响应")
             return []
-        return self._parse_suggestions(turn.text, pinned)
+        suggestions = self._parse_suggestions(turn.text, pinned)
+
+        # 将相似度证据附加到 merge 类型的建议上
+        if duplicate_pairs and suggestions:
+            for sug in suggestions:
+                if sug.get("type") == "merge":
+                    names = sug.get("skill_names", [])
+                    matched = [
+                        {"a": a, "b": b, "similarity": sim}
+                        for a, b, sim in duplicate_pairs
+                        if a in names and b in names
+                    ]
+                    if matched:
+                        sim_summary = ", ".join(
+                            f"{m['a']}↔{m['b']}({m['similarity']:.0%})"
+                            for m in matched
+                        )
+                        existing = sug.get("reason", "")
+                        sug["reason"] = (
+                            f"[相似度证据: {sim_summary}] {existing}"
+                            if existing
+                            else f"[相似度证据: {sim_summary}]"
+                        )
+                        sug["similarity_evidence"] = matched
+
+        return suggestions
 
     @staticmethod
     def _parse_suggestions(

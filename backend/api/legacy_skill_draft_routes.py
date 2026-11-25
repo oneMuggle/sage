@@ -447,7 +447,14 @@ async def scan_skill_consolidation(auto_draft: bool = True, mode: str = "full"):
     store = get_lifecycle_store()
     pinned = store.get_pinned_names()
     skills = collect_active_skills(names=candidate_names)
-    suggestions = await service.scan(skills, pinned_names=sorted(pinned))
+
+    # M1: 注入相似度预筛服务
+    from backend.skills.similarity import get_similarity_service
+
+    similarity_service = get_similarity_service()
+    suggestions = await service.scan(
+        skills, pinned_names=sorted(pinned), similarity_service=similarity_service
+    )
 
     # 建议落审计台账（append-only；每条建议一条 consolidation_note）
     from backend.skills.audit import get_skill_audit_log

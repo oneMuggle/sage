@@ -1330,7 +1330,14 @@ class SkillConsolidationTask(BaseEvolutionTask):
             return 0
 
         pinned = self._pinned_names()
-        suggestions = await service.scan(skills, pinned_names=sorted(pinned))
+
+        # M1: 注入相似度预筛服务
+        from backend.skills.similarity import get_similarity_service
+
+        similarity_service = get_similarity_service()
+        suggestions = await service.scan(
+            skills, pinned_names=sorted(pinned), similarity_service=similarity_service
+        )
 
         from backend.skills.audit import SkillAuditLog
 
