@@ -444,6 +444,65 @@ class WebFetchTool(BaseTool):
             return {"success": False, "error": str(e)}
 ```
 
+#### 登录态与多账号：`web_fetch` / `http_download`
+
+两个出网工具共用同一套凭据解析链路（`backend/tools/credential_vault.py`）：先确定 `credential_domain`，再由 `resolve_credential()` 解出要附加的请求头（`Cookie`，或 `credential_set` 设置的 `Authorization` 等头部凭据）。
+
+**参数与推断优先级**（`http_download` 的取值顺序，`web_fetch` 同构）：
+
+1. **显式 `credential_domain`**：非空时直接使用，不做推断。
+2. **从 URL 主机名自动推断**：未传 `credential_domain` 时，取 `urlparse(url).hostname` 调 `find_credential_for_host()`，在所有凭据档案里做 RFC 6265 域匹配（`.cnki.net` 命中 `cnki.net` 及其任意子域），**多候选取域名最长者**（最具体匹配），跳过已过期或无可用 cookie 的档案。命中后写回 `credential_domain`。
+3. **`account_id` 决定账号维度**：非空时先经 `browser_account_service.resolve_vault_account_id()` 从账号注册表 ID 解析到凭据库维度（默认账号 → `None`，未知账号原样透传），再传给推断与 `resolve_credential()`。
+   - `account_id` 为空 / 默认账号 → 只匹配**平铺（默认账号）**档案；
+   - 指定账号 → 只匹配 `domain::account_id` 命名档案，因此命名账号的凭据必须显式传 `account_id` 才会被推断命中。
+
+解析成功后，凭据头**只附加到凭据域命中的重定向 hop**；跨域重定向（如 302 到第三方 SSO）自动剥离，避免凭据外带。失败时返回明确状态：`credential_expired`（凭据全部过期）、`credential_insecure_scheme`（头部凭据不附加到明文 `http`，本地回环除外）、`credential_not_found`、`credential_domain_mismatch`（目标 host 不在档案域内）；带凭据仍被踢到登录页时，`http_download` 返回 `login_required`。
+
+`http_download` 与 `web_fetch` 对齐的点：`credential_domain`（含自动推断）、`account_id`、`resolve_credential()` 的账号口径一致。「登录一次」后，两个工具都自动带态，不必分别传参。
+
+#### `mode=files` 的文件探测也带凭据
+
+`web_fetch mode=files` 会对页面内候选文件链接做首块探测（流式 `GET` 读首块即关），判断它是真实文件还是登录页 / 中转页。探测复用主请求解析出的同一份凭据头：
+
+- `execute()` 里 `resolve_credential()` 得到的 `credential_headers`，透传到 `_finalize_files()` → `_probe_file_url()`；
+- 探测客户端默认头为 `{**default_headers(), **credential_headers}`，即凭据头与主请求**同一份**（同一个 `resolution.headers`）。
+
+与主抓取请求的差异（均属非凭据头或链路行为，不影响登录态本身）：
+
+| 维度 | 主抓取（`_get_with_redirects`） | 文件探测（`_probe_file_url`） |
+| --- | --- | --- |
+| 凭据头附加范围 | 仅 `cookie_domain_matches` 命中的 hop | 直接附加到探测 URL（不再做域匹配） |
+| `Accept` | 默认浏览器式 `Accept` | 覆盖为 `*/*` |
+| `Accept-Encoding` | 强制 `identity`（便于比对 `Content-Length`） | 不强制 |
+| 重定向 | 跟随并对每一跳重新校验 | 不跟随，返回 `probe=redirect` + `final_url` |
+| 重试 / 限速 | 走 `retrying_send()` | 单次 `client.send()`，不重试 |
+
+效果：登录墙后的文件链接不会再因为拿到登录页 HTML 而被误判为 `probe=html`，能正确给出 `probe=file` / `detected_type` / `content_length`。探测只发生在 `mode=files`，最多探测 top N（`FILES_PROBE_TOP_N = 5`，且不超过 `max_result_items`）。
+
+#### 文献子系统的快路径（`SageToolDriver.fetch_text`）
+
+文献子系统通过 `SageToolDriver` 把 `sage.call` 桥接成 `BrowserDriver`，快路径实现位于 `backend/literature/sage_driver.py` 与 `backend/literature/search.py`：
+
+- **`SageToolDriver.fetch_text(url)`**：调用 `sage.call("web_fetch", url=url, mode="text")`，成功则更新驱动的 `_url` / `_title` 并返回正文文本；登录墙、反爬、工具异常或空正文一律返回 `None`。它只走 HTTP——`web_fetch` 自身在 `render=auto` 下可能内部拉起受控 headless 浏览器渲染，但**不经过交互浏览器会话**。
+- **`search_with_profile()` 的优先级**：
+  - `search.mode == "interactive"` → **只走浏览器**（在真实页面里输入检索词并提交），提前返回，**绝不**走快路径；
+  - `search.mode == "url"` → 先 `render_search_url()` 生成检索 URL，再 `_fast_fetch_text()` 走快路径；取到正文即以该文本作为 `SearchObservation.snapshot` 返回；取不到（`None`）则回落 `driver.navigate(url, wait_for=...)` + `driver.snapshot()`，行为与改动前一致。
+  - `_fast_fetch_text()` 用 `getattr(driver, "fetch_text", None)` 鸭子探测：驱动不实现 `fetch_text` 即视为不支持。`BrowserDriver` Protocol **未新增必选方法**，既有自定义驱动（含测试假驱动）零改动。
+- **`_ensure_browser()` 惰性拉起浏览器**：在 `click` / `click_text` / `type_text` / `press_key` 交互前调用；仅当驱动**尚无页面**（`_browser_ready` 为假）且已知 `_url` 时，补一次 `browser_navigate` 到 `_url` 并置 `_browser_ready = True`。快路径只走 HTTP、浏览器此时没有页面，靠它保证「快路径检索 + 后续点 DOM 元素下载」的组合可用；`navigate()` 已置位的驱动不会重复导航。
+- 只有 `search.mode: url` 的 profile 会真正用到快路径；随包唯一的 `xueshu789.yaml` 是 `search.mode: interactive`，仍全程走浏览器（PDF 下载必须点 `a.downloadlink`，直连截断 URL 会失败）。
+
+#### 设计取舍
+
+| 取舍 | 结论 | 理由 |
+| --- | --- | --- |
+| `http_download` 自动推断是否要求显式 `account_id` | 否；仅在传入时才解析为凭据库账号维度 | 与 `web_fetch` 保持一致；多账号场景由调用方显式传 `account_id` 即可，默认账号零参数可用 |
+| 文件探测是否复用主请求凭据头 | 是，`{**default_headers(), **credential_headers}` | 登录墙后的文件链接必须带同一套登录态，才能探测出真实类型而非登录页 HTML |
+| 快路径失败语义 | 一律回落浏览器，不抛错 | 快路径是纯增量优化，不得改变既有行为；任何失败都等价于「没有快路径」 |
+| 交互前是否补浏览器导航 | 是，`_ensure_browser()` 惰性补 `browser_navigate` | 快路径只走 HTTP，浏览器无页面时点 DOM 元素必失败 |
+| 是否改 `BrowserDriver` Protocol | 否，用 `getattr` 鸭子探测 `fetch_text` | 既有自定义驱动零改动不被破坏 |
+
+明确不做的部分：`web_search` 不加 cookie（公开搜索引擎无需登录态，站内检索改用 `web_fetch` / `browser_*`）；`browser_*` 工具行为不变（浏览器本就走登录态）；`literature-research` 的 `interactive` 检索与 PDF 下载不迁移到快路径。
+
 ### 6.2.5 Memory 工具
 
 ```python

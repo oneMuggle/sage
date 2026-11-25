@@ -79,6 +79,78 @@ POST /api/v1/office/word/rulepacks/extract/save
 - 置信度 = 主导值占比，clamp 到 0.5–0.95；
 - 无正文样本 / 多节页面尺寸不一致 → warning。
 
+### 5.1 段落格式规则抽取（Heading / 特殊样式）
+
+字体之外，范本抽取同时读取**样式级段落属性**，为同一批样式再产出一条
+`style.paragraph` 规则，使范本既能还原字形字号，也能还原对齐/行距/段前段后/缩进。
+
+**数据源**：`doc_profile` 的 `styles[]`（来自 `StyleResolver.styles()`）在字体字段外
+还带 `alignment`、`line_spacing`（倍数）、`line_spacing_pt`（固定行距）、
+`space_before_pt`、`space_after_pt`、`first_line_indent_pt`、`left_indent_pt`；
+`WordStyleProfile` 同步收录这些字段（`extra="forbid"`，`/word/profile` 可直接读到）。
+字体沿 `basedOn` 链解析为有效值，段落字段只取样式自身 `pPr`，不做链式合并。
+没有独立的“行高”字段：行距由 `line_spacing` / `line_spacing_pt` 表达，字号仍属 `style.font`。
+
+**字段映射**（`_extract_paragraph_format`）：
+
+| 样式侧字段 | 规则 params | 换算 |
+|---|---|---|
+| `alignment` | `alignment` | 原值（小写 `left/center/right/justify/…`） |
+| `line_spacing` | `line_spacing` | 倍数，原值 |
+| `line_spacing_pt` | `line_spacing_pt` | 1 位小数（固定行距，pt） |
+| `space_before_pt` / `space_after_pt` | 同名 | 1 位小数（pt） |
+| `first_line_indent_pt` / `left_indent_pt` | `first_line_indent_cm` / `left_indent_cm` | ×2.54/72 转 cm，2 位小数 |
+
+- params 固定带 `style`（样式名）；至少有一个段落字段才生成规则，置信度固定 0.85（不按主导值占比）；
+- `source_excerpt` 形如 `Heading 1 段落格式: 对齐=center, 行距=2.0倍`（只列对齐/行距/段前/段后）。
+
+**覆盖的样式**：
+
+- Heading：样式名匹配 `^heading\s+(\d+)$`（不区分大小写），每条样式同时产出
+  `style.font`（0.85）与 `style.paragraph`（0.85），并汇总一条 `structure.heading_sequence`；
+- 特殊样式：按名称查表——`作者/中文作者 → 作者`、`英文作者 → 作者(英文)`、
+  `摘要/中文摘要 → 摘要`、`关键词`、`图题/图说 → 图题`、`表题`、`表文字`、
+  `参考文献`、`Header → 页眉`；同一标签只取首个匹配样式；`style.font` 0.8、
+  `style.paragraph` 0.85；
+- 正文 `Normal` 的段落规则仍走上文“正文段落统计”路径（主导值 + 占比置信度），
+  不重复走样式级路径；同 `style` 的多条候选最终按字段合并为一条规则。
+
+**合并与冲突**：`style.paragraph` 先按 `style` 子分组，再按 `line_spacing` /
+`line_spacing_pt` / `first_line_indent_cm` / `left_indent_cm` / `space_before_pt` /
+`space_after_pt` / `alignment` 合并；同一字段不同值 →
+`conflict_group=conflict/style.paragraph/<style>`，保留全部候选交由人工选择。
+
+**落地与消费**：
+
+- 规则 id 形如 `extracted/style.paragraph`、`extracted/style.paragraph-2`；标题由
+  `_dynamic_title` 生成（`正文段落格式`、`Heading 1 段落格式`、`作者 段落格式`）；
+- 审校：`word_audit._check_style_paragraph` 按 `style` 找到文档样式，比对
+  `line_spacing`（±0.01）、`line_spacing_pt`（±0.5pt）、`first_line_indent_cm`
+  （`tolerance_cm` 默认 0.05）、`alignment`；`space_before_pt` / `space_after_pt` /
+  `left_indent_cm` 不参与审校；
+- 修复：`word_fix._fix_style_paragraph` 回写上述四类字段；
+- 生成/套用：`word_style_profile.format_spec_from_rulepack` 把规则包编译为
+  `WordFormatSpec`（`POST /api/v1/office/word/style/from-rulepack`，也可存为工作区
+  样式模板后再 `style/apply`）：
+  - `Normal` → `body`，映射 `line_spacing` / `line_spacing_pt` /
+    `first_line_indent_cm` / `space_before_pt` / `space_after_pt` / `alignment→align`；
+    `left_indent_cm` 不属画像字段，不进入生成侧；
+  - `Heading 1–5` → `headings.hN`，只映射 `space_before_pt` / `space_after_pt` /
+    `alignment→align`（行距与缩进记 `unsupported_field` warning）；`Heading 6–9`
+    无画像目标，记 `unsupported_style`；
+  - `图题/表题/题注/图注/表注/图标题/表标题/caption` → `caption`，只映射对齐；
+  - 其余特殊样式（作者/摘要/关键词/参考文献/页眉/表文字等）无画像目标，记 `unsupported_style`；
+  - 超界值（倍数 1–3、固定行距 1–200pt、首行缩进 0–5cm、段间距 body 0–48pt /
+    标题 0–96pt）记 `invalid_value` 并忽略，不静默截断；
+  - 画像由 `_apply_body_style` / `_apply_heading_style` 写入 Normal / Heading / Title
+    样式的 `paragraph_format`（固定行距优先于倍数行距）；生成走 `apply_format_spec`，
+    已有文档套用走 `apply_style_to_document`（只改样式定义，不改正文）。
+
+**为何同时产出两者**：字体与段落是不同 kind（`style.font` / `style.paragraph`），
+各有独立的 kind 元数据、审校/修复处理器与冲突字段集合；只抽字体会出现“字体对了、
+版式不还原”。同时产出两条规则、各自按 `style` 分组，既不互相覆盖，也能对两维规则
+分别启停。
+
 ## 6. 去重与冲突
 
 - `page.margins` / `style.font` / `style.paragraph`：按字段合并同 kind 候选；

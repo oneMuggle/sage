@@ -74,7 +74,7 @@ main.py (lifespan)
 - 单个 craft 文件不可读（非 UTF-8 / IO 错误）→ 跳过该文件，不抛异常。
 - frontmatter `priority` 非整数（如 `high`）→ 回退为 `99`（排在最后）。
 - 多个文件的 frontmatter `id` 重复 → 以 `id` 去重，只保留一个。
-- 正文开头的 H1 若重复 `name` 会被剥离，避免 prompt 中出现重复标题。
+- 正文开头的首个 H1 一律剥离（不论是否与 `name` 同名），避免 prompt 中出现重复标题。
 - 空 frontmatter（`---\n---`）→ 使用文件名 stem 作为 id。
 
 ## 6. 内容清单（2026-11-19 校准,以磁盘为准）
@@ -88,9 +88,9 @@ main.py (lifespan)
 
 ## 7. 扩展方式
 
-- **新增设计系统**：在 `content/systems/<id>/` 放置 `manifest.json`（含 `id/name/category/description/tags`）+ `DESIGN.md` + `tokens.css`，无需改代码。
-- **新增模板**：在 `content/templates/<kind>/<id>/` 放置 `SKILL.md`（frontmatter 必含 `name/kind/description/design_system_required`），可选 `example.html` 与 `assets/*.css|*.js`。
-- **新增 craft 规则**：在 `content/craft/` 放置 `<id>.md`，frontmatter 必含 `id/name/applies_to/priority`。正文会整体进入 prompt，建议单文件 < 2KB；若某规则只适用于某类产物，用 `applies_to: deck|prototype` 缩小注入面。
+- **新增设计系统**：在 `content/systems/<id>/` 放置 `manifest.json`（`id/name` 必填，`category/description/tags` 可选，缺省为 `general`/空/`[]`）+ `DESIGN.md` + `tokens.css`，无需改代码。
+- **新增模板**：在 `content/templates/<kind>/<id>/` 放置 `SKILL.md`（frontmatter 支持 `name/kind/description/design_system_required`，缺省回退为目录名/所属 kind 目录名/空/false），可选 `example.html` 与 `assets/*.css|*.js`。
+- **新增 craft 规则**：在 `content/craft/` 放置 `<id>.md`，frontmatter 支持 `id/name/applies_to/priority`，缺省回退为文件名 stem/stem/`both`/`99`。正文会整体进入 prompt，建议单文件 < 2KB；若某规则只适用于某类产物，用 `applies_to: deck|prototype` 缩小注入面。
 
 ## 8. 导出管道（2026-11-13 新增）
 
@@ -99,6 +99,7 @@ Design Studio 支持将生成的 HTML 产物导出为可交付文件格式：
 | 格式 | 实现 | 降级策略 |
 |------|------|----------|
 | **PDF** | LibreOffice headless（`soffice --convert-to pdf`） | reportlab 直绘（纯文本，无复杂布局） |
+| **PPTX** | python-pptx 结构化映射（见 §10） | `soffice --convert-to pptx` |
 | **ZIP** | `zipfile` 打包 `index.html` | 无降级（ZIP 始终可用） |
 | **HTML** | 原样返回 bundled HTML | 无降级 |
 
@@ -106,13 +107,14 @@ Design Studio 支持将生成的 HTML 产物导出为可交付文件格式：
 
 ```
 POST /api/v1/design/projects/{id}/export
-Body: { "format": "pdf" | "zip" | "html" }
+Body: { "format": "pdf" | "zip" | "pptx" | "html" }
   ↓
 design_routes.export_artifact()
   ↓
 DesignExporter.export(html, output_dir, format)
   ↓
   ├─ PDF → _convert_with_libreoffice() → 失败 → _convert_with_reportlab()
+  ├─ PPTX → pptx_mapper.HtmlToPptxMapper → 失败 → soffice --convert-to pptx
   ├─ ZIP → _export_zip() (zipfile)
   └─ HTML → 直接返回 html_content
 ```
@@ -121,15 +123,16 @@ DesignExporter.export(html, output_dir, format)
 
 ```python
 POST /api/v1/design/projects/{project_id}/export
-Body: { "format": "pdf" | "zip" | "html" }
+Body: { "format": "pdf" | "zip" | "html", "inline": false }
 Response:
   - format=html: { ok, format, html_content }
-  - format=pdf/zip: { ok, format, file_path }
+  - format=pdf/pptx/zip: { ok, format, file_path }
+  - inline=true 且非 html: { ok, format, filename, content_base64 }
 ```
 
 ### 8.3 LLM 工具
 
-`design_export` 工具新增 `format` 参数（默认 `"html"`，向后兼容）：
+`design_export` 工具新增 `format` 参数（默认 `"html"`，向后兼容），取值 `html / pdf / pptx / zip`：
 
 ```python
 design_export(project_id="abc", format="pdf")
@@ -144,6 +147,8 @@ design_export(project_id="abc", format="pdf")
 3. 平台特定安装路径（Windows/macOS/Linux）
 
 若未找到 soffice，自动降级到 reportlab（仅支持纯文本渲染）。
+
+并发的 soffice 进程会共享同一用户配置并相互冲突，导出器用模块级锁把转换串行化。
 
 ### 8.5 测试
 
@@ -181,6 +186,8 @@ DesignGenerator.generate()
                  └─ 反馈注入到 iterate prompt → 重试一次
 ```
 
+`generate()` 与 `iterate()` 都经 `DesignStudio._apply_lint()` 走同一链路：先 `auto_fix` 再复检；重试结果仅在 P0 数量下降时才被采用。`DesignStudio(lint_retry=False)` 可关闭重试。lint 报告只写日志，不随 artifact 持久化。
+
 ### 9.3 API
 
 ```python
@@ -203,7 +210,7 @@ if not report.ok:
   backend/tests/unit/test_design_lint.py -v
 ```
 
-覆盖：7 条规则的正例/反例（34 个测试），`LintReport` 模型，`auto_fix` 颜色替换，`generate_feedback` 反馈生成。
+覆盖：7 条规则的正例/反例（35 个测试函数），`LintReport` 模型，`auto_fix` 颜色替换，`generate_feedback` 反馈生成。
 
 ## 10. HTML → PPTX 结构化映射（2026-11-13 新增）
 
@@ -237,6 +244,7 @@ if not report.ok:
 
 - 右栏双 Tab：「修改」（迭代聊天）与「版本」（`DesignVersionPanel`）。
 - 版本列表来自 `GET /design/projects/{id}/artifacts`；「预览」调用单版本端点并显示只读横幅；「恢复」调用 restore 端点，服务端把旧 HTML 作为新版本追加（`DesignStudio.restore_artifact`，不经过 LLM）。
+- 项目与产物元数据存于 SQLite 的 `design_projects` / `design_artifacts` 表（`backend/data/design_repo.py`），HTML 正文按 `file_path` 落盘。
 - 迭代历史持久化在 `<workspace>/design/<project_id>/messages.json`（`backend/design/messages_store.py`），`iterate()` 记录 user / assistant 两条消息；记录失败仅告警，不影响生成主流程。
 
 导出：
@@ -334,3 +342,12 @@ REST 端点：
 ## 14. 来源说明
 
 系统/模板/craft 内容为原创撰写，遵循 OpenDesign 的四平面架构模式，未逐字复制其文本，故未附加 Apache 2.0 NOTICE。
+
+## 15. 已知限制与未完成
+
+- **PPTX 映射精度**：`HtmlToPptxMapper` 只保留标题 / 副标题 / 正文层级，使用空白版式与默认字号（36 / 24 / 18pt），不保留原字体、配色与布局；`img` 只记录 `src`，不嵌入图片。真实 PowerPoint / WPS 打开验证仍需人工执行。
+- **lint 报告不持久化**：`_apply_lint()` 的结果只写日志，不随 artifact 保存；详情页「质量评审」通过 `GET /design/projects/{id}/review` 重新计算。
+- **独立 AI 痕迹 craft 未落地**：未新增 `content/craft/ai-tell-detector.md`，反 AI 痕迹由 `DesignLinter` 的 7 条规则承担。
+- **PPTX → HTML 反向转换未实现**：当前仅支持 HTML → PPTX。
+- **Live Artifact 为整篇重生成**：数据源渲染为 Markdown 摘要后追加到 brief 再调用 `generate()`，未做单元格级或模板变量绑定；无绑定数据源时 refresh 退化为按原 brief 重生成。
+- **人工验证缺口**：桌面端真实 UI 冒烟（创建 → 生成 → 导出，需后端 LLM 可用）与导出文件的办公软件打开验证仍是人工步骤，未纳入自动化测试。

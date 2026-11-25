@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-166；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-173；本索引以目录中的实际文件为准。
 
 
 ## 章节目录
@@ -43,7 +43,7 @@
 | 47   | [Git Worktree 并行开发](./47-git-worktree-workflow.md)                                 | `scripts/worktree.sh` helper（new/list/ports/remove/clean）+ `.worktrees/` 端口分配机制 + main/release-win7 并行 cherry-pick 场景 + 与 `.claude/worktrees/` agent 隔离的边界                                                                                                                                                                                                  |
 | 48   | [Office CRUD 闭环完成](./48-office-crud-completion.md)                                 | 2026-09 PR-1..5：profile 白名单接通 + archive/restore + pre-edit snapshot + chat @filename 兜底 + re-read 元数据保留 + write_file 二进制黑名单 + win7 同步；闭环增删改查 + chat ref + 二进制防护 + win7 兼容                                                                                                                                                                  |
 | 49   | [本地开发环境助手](./49-local-development-assistant.md)                                | 运行时探测 + 项目诊断 + 安全执行：`backend/domain` + 3 tools + `/api/v1/runtime/*` + Electron IPC + Settings 开发环境 Tab + humanize 渲染 + doctor check                                                                                                                                                                                                                      |
-| 50   | [Wiki 完整性优化](./50-wiki-completeness-optimization.md)                              | 4 项补齐：持久化摄入队列（5 状态）/ Chrome Web Clipper（Manifest V3）/ Lint（6 规则）/ Review（5 确定性审核器 + blake2b 稳定 ID + Jaccard 0.6）                                                                                                                                                                                                                               |
+| 50   | [Wiki 完整性优化](./106-wiki-completeness-optimization.md)                              | 4 项补齐：持久化摄入队列（5 状态）/ Chrome Web Clipper（Manifest V3）/ Lint（6 规则）/ Review（5 确定性审核器 + blake2b 稳定 ID + Jaccard 0.6）                                                                                                                                                                                                                               |
 | 53   | [学术检索 skill 与 skill_save 工具](./53-academic-search-skill.md)                     | M1 `skill_save`（用户显式触发沉淀）+ O2 `AcademicSearchSkill` builtin + `academic_adapters` 注册表（CNKI adapter）→ 用户引导 LLM → 流程沉淀闭环                                                                                                                                                                                                                               |
 | 54   | [Office 对标追踪基线](./54-office-parity-tracking.md)                                  | 产品×能力对标矩阵（M365 Copilot/Claude/ChatGPT/Gemini/WPS AI）+ Sage 能力落地清单（PR 号索引）+ 维护约定；随 office 迭代/对标轮更新                                                                                                                                                                                                                                           |
 | 55   | [期刊模板子系统](./55-journal-template-subsystem.md)                                   | N1–N8 完整闭环：模板表 + 字段语义 + 多步向导 + 状态机 + 预览/导出 + SKILL 引导 + 持久化                                                                                                                                                                                                                                                                                       |
@@ -140,6 +140,13 @@
 | 164 | [Word 样式模板](./164-word-style-template.md) | 样式画像（按级字体/精确行距/题注/表格文字）+ 命名预设（公文/论文/报告）+ 参考文档（reference.docx）+ 规则包→样式画像转换 + 已有文档批量套用样式 |
 | 165 | [MinerU 文档解析](./165-mineru-document-parse.md) | 可插拔解析引擎 / async API 客户端 / 质量路由 / 缓存 / 双阶段附件 |
 | 166 | [Firefox 浏览器兜底（多浏览器支持）](./166-firefox-browser-fallback.md) | 对齐 release/win7：发现优先级增加 `SAGE_FIREFOX_PATH` 与平台扫描 + 固定端口 9229 `-start-debugger-server` 启动 + `/json/version` 握手 + cookie 归一化（剥离 Chromium 特有字段） |
+| 167 | [文献研究子系统](./167-literature-research.md) | 声明式站点画像 / 交互检索 / 核验报告 / 导出 |
+| 168 | [智能体编排协作对标](./168-agent-orchestration-parity.md) | 多代理编排：计划确认、transcript、成本归因与任务中心 |
+| 169 | [待办事项 AI 原生能力](./169-todo-ai-native.md) | 待办数据模型、REST/IPC、提醒调度、AI 提炼与前端实现 |
+| 170 | [压缩包文件预览与浏览](./170-archive-file-preview.md) | 压缩包目录 / 条目读取 + 预览 entry + 限额防穿越 |
+| 171 | [会话模型覆盖与端点路由](./171-session-model-endpoint-routing.md) | 模型与凭据成对路由：会话覆盖重解析端点，前后端双保险 |
+| 172 | [渲染器 CSP 与高保真文档预览](./172-renderer-csp-high-fidelity-preview.md) | 生产 CSP 指令表 + dataUrlToBlob 本地解码，修复高保真预览 |
+| 173 | [对标改进循环 SOP](./173-parity-loop-sop.md) | 对标迭代闭环 SOP：步骤 / py38 兼容 / 验证矩阵 / 踩坑与红线 |
 ---
 
 ## 核心章节（基础架构）
@@ -168,7 +175,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 基础架构   | 本目录 01-14                                                |
-| 横切关注点 | 本目录 15-166                                               |
+| 横切关注点 | 本目录 15-173                                               |
 ---
 
 _本目录文档命名规则：`XX-topic-name.md`（XX 为两位数字，topic-name 为 kebab-case）。_

@@ -366,3 +366,209 @@ function mapBackendItem(raw: ReviewItemRaw): ReviewItem {
 - **PDF 全文**：Zotero FTS 改为附件 itemID 优先，父条目 legacy fallback。
 - **剩余观察项**：真实 Zotero 库手工验证、Win7 实机 reparse/HNSW 验证。
 
+## 9. LLM 任务路由与设置（2026-11-14）
+
+Wiki 的 LLM 调用层支持按任务类型路由到不同模型、按任务选择推理模式，并可通过
+HTTP 端点读写项目级设置。设置按项目隔离，缺省时全部回退到全局默认模型。
+
+### 9.1 项目级设置存储
+
+**位置**：`backend/wiki/settings.py`（dataclass，非 pydantic 模型）
+
+```python
+@dataclass
+class TaskRoutingConfig:
+    chat_model: Optional[str] = None      # None = 用全局默认模型
+    ingest_model: Optional[str] = None
+    research_model: Optional[str] = None
+
+@dataclass
+class ReasoningConfig:
+    chat_mode: str = "auto"
+    ingest_mode: str = "off"              # 入库默认关闭，避免空内容
+
+@dataclass
+class WikiSettings:
+    task_routing: TaskRoutingConfig = field(default_factory=TaskRoutingConfig)
+    reasoning: ReasoningConfig = field(default_factory=ReasoningConfig)
+```
+
+**持久化**：`<project_root>/.llm-wiki/settings.json`
+
+- `load_settings(project_root)`：文件缺失、JSON 损坏或字段类型异常时返回默认
+  `WikiSettings()`（仅告警，不抛错）。
+- `save_settings(project_root, settings)`：写 `settings.json.tmp` 后 `replace`
+  原子替换，父目录自动创建。
+- `resolve_model_for_task(settings, task, default_model)`：按 `chat` / `ingest` /
+  `research` 查表，命中值非空则用之，否则返回 `default_model`；未知 task 同样
+  回退默认值。
+
+### 9.2 任务路由接入点
+
+`backend/wiki/llm_context.py::make_task_llm_context` 统一完成「加载设置 → 解析
+模型 → 选推理模式 → 构建 `LLMContext`」：
+
+```python
+settings = load_settings(project_root) if project_root is not None else WikiSettings()
+model = resolve_model_for_task(settings, task, default_model)
+mode = settings.reasoning.ingest_mode if task == "ingest" else settings.reasoning.chat_mode
+return make_llm_context(..., model, reasoning_mode=mode)
+```
+
+调用点及其任务类型：
+
+| 入口 | 文件 | task |
+|------|------|------|
+| Ingest 流式 | `backend/api/wiki_routes.py`（`/wiki/ingest/stream`） | `ingest` |
+| Chat 流式 | `backend/api/wiki_routes.py`（`/wiki/chat/stream`） | `chat` |
+| Deep Research | `backend/api/wiki_routes.py`（`/wiki/research`） | `research` |
+| Web Clip | `backend/api/wiki_routes.py`（`/wiki/clip`） | `ingest` |
+| 队列消费 | `backend/wiki/queue_worker.py` | `ingest` |
+
+解析后的模型会写回 `config.llm_model = ctx.model`，因此 ingest/chat/research
+各自使用项目设置中配置的模型；设置未配置时沿用请求里传入的默认模型。
+
+### 9.3 Provider 推理模式适配
+
+**位置**：`backend/wiki/reasoning.py`
+
+**Provider 能力表**（`REASONING_CAPABILITIES`）：
+
+| provider | 支持的模式 |
+|----------|-----------|
+| `openai` | `auto` / `low` / `medium` / `high` |
+| `anthropic` | `auto` / `low` / `medium` / `high` / `max` |
+| `google` | `auto` / `low` / `medium` / `high` / `max` |
+| `deepseek` | `auto` / `high` / `max` |
+| `ollama` | `auto` / `low` / `medium` / `high` / `max` |
+
+**默认值**：`CHAT_DEFAULT_MODE = "auto"`、`INGEST_DEFAULT_MODE = "off"`。
+
+**mode → token 预算**：`low=1024`、`medium=4096`、`high=10000`、`max=20000`
+（`off`/`auto` 不注入参数）。
+
+**请求适配**：`apply_reasoning_to_request(request_body, provider, mode)` 把 mode
+翻译成 provider 专属字段并就地注入：
+
+| provider | 注入字段 |
+|----------|---------|
+| `openai` | `reasoning_effort = mode` |
+| `anthropic` | `thinking = {"type": "enabled", "budget_tokens": budget}` |
+| `google` | `thinking_config = {"thinking_budget": budget}` |
+| `deepseek` / `ollama` | `reasoning_effort = mode` |
+
+`off` / `auto` 原样返回；provider 不支持的 mode 先 `normalize_mode` 降级为
+`auto`，再按上面的规则跳过注入。
+
+**provider 推断**：`infer_provider(base_url)` 依据 URL 关键字推断
+（`anthropic` / `generativelanguage`·`googleapis` / `deepseek` / `ollama`·`11434`
+/ `openai`），识别失败返回空串，此时不注入任何推理参数。调用方目前不显式传
+provider，均由 base_url 推断。
+
+### 9.4 purpose.md / schema.md 注入
+
+**读取**：`backend/wiki/ingest.py::_read_wiki_context(project_root)`
+
+- `purpose.md` 取自 **项目根** `<project_root>/purpose.md`；
+- `schema.md` 取自 `<project_root>/wiki/schema.md`。
+- 单文件经 `secure_read_file_bounded` 读取，截断到 `MAX_CONTEXT_CHARS = 4000`
+  字符；缺失、越界或读取失败一律返回空串，不阻断 ingest。
+
+**注入**：`backend/wiki/llm_prompts.py` 的 `STEP1_ANALYZE`（分析）与
+`STEP2_WRITE`（写作）模板各带 `{purpose_section}` / `{schema_section}` 占位符。
+
+- `_context_sections(purpose, schema)` 生成片段：非空时为
+  `"\n\n项目目的:\n<purpose>"` 与 `"\n\n页面结构规范:\n<schema>"`，空则空串。
+- `format_step1_prompt(...)` / `format_step2_prompt(...)` 通过 `str.format`
+  内插，内容中的花括号不会被当作模板变量解析。
+- `ingest.py` 在 `analyze_source`（Step 1）和 `generate_pages`（Step 2）中各读
+  一次上下文再格式化对应 prompt。
+
+### 9.5 Source 目录自动监听
+
+**位置**：`backend/wiki/source_watcher.py`，依赖 `watchdog`（可选依赖）。
+
+- **优雅降级**：`watchdog` 未安装时 `_WATCHDOG_AVAILABLE = False`，`start()`
+  直接返回，不影响手动 ingest。
+- **监听范围**：`<project_root>/raw/sources/`，`recursive=False`；忽略目录事件
+  与以 `.` 开头的文件名。
+- **事件处理**：
+  - 新增文件 → `IngestQueue(project_root).add("raw/sources/<name>", priority="normal")`。
+  - 删除文件 → `lifecycle.cascade_delete_source(project_root, "raw/sources/<name>")`。
+- **共享 Observer**：`SourceWatcher(project_root, observer=...)` 传入外部
+  Observer 时只注册/注销监听（生命周期由调用方管理）；不传则自建并自管。
+- **幂等**：watcher 本身只负责入队/级联删除；重复触发由 ingest 的 SHA256 缓存
+  （`.llm-wiki/ingest-cache.json`）去重。
+- **守护进程集成**：`backend/wiki/queue_daemon.py` 的 `run_queue_daemon` 启动时
+  为所有已初始化项目（存在 `.llm-wiki/`）创建 watcher 并共享单个 Observer，
+  `finally` 中先逐个 `watcher.stop()` 再停止 Observer；单个项目失败不影响其他
+  项目。
+
+### 9.6 操作日志
+
+**位置**：`backend/wiki/operation_log.py`，日志文件 `<project_root>/wiki/log.md`。
+
+**格式**（确定性、可解析，UTC 时间）：
+
+```markdown
+- [2026-11-14T10:30:00Z] ingest: raw/sources/paper.pdf -> wiki/sources/paper.md
+- [2026-11-14T10:35:12Z] delete: raw/sources/paper.pdf -> [...]
+- [2026-11-14T11:00:00Z] rename: wiki/sources/a.md -> wiki/sources/b.md
+```
+
+`append_log(project_root, action, detail)` 以追加模式写入
+`- [<YYYY-MM-DDTHH:MM:SSZ>] <action>: <detail>\n`。写失败仅告警，不向上抛错。
+
+**实际调用点**：
+
+| action | 文件 | 时机 |
+|--------|------|------|
+| `ingest` | `backend/wiki/ingest.py` | 非流式 ingest 完成后 |
+| `ingest` | `backend/wiki/ingest.py` | 流式 ingest `completed` 前 |
+| `delete` | `backend/wiki/lifecycle.py` | 源文件级联删除后 |
+| `rename` | `backend/api/wiki_routes.py`（`/wiki/rename`） | 重命名成功后 |
+
+`log.md` 在级联清理时与 `index.md`、`schema.md` 一同被排除，不会被误删。
+
+### 9.7 设置读写端点
+
+**路由**：`backend/api/wiki_routes.py` 的 `/wiki/settings`，挂载于 `/api/v1`，
+完整路径为 `/api/v1/wiki/settings`。
+
+**鉴权**：两端点均先经 `authorize_registered_project(project_path)`。项目须已登记
+（recent 列表或 projects 注册表的并集，fail-closed），且目录下存在 `wiki/`。路径
+非法 → 400，未登记 → 403，目录不存在 → 404。
+
+**GET `/api/v1/wiki/settings?project_path=...`**
+
+- 查询参数：`project_path`。
+- 返回：`{"task_routing": {"chat_model", "ingest_model", "research_model"},
+  "reasoning": {"chat_mode", "ingest_mode"}}`；无 settings.json 时返回默认值。
+
+**PUT `/api/v1/wiki/settings`**
+
+- 请求体（pydantic `WikiSettingsPayload`）：
+
+  ```json
+  {
+    "project_path": "/abs/project",
+    "task_routing": {"chat_model": null, "ingest_model": "m1", "research_model": null},
+    "reasoning": {"chat_mode": "auto", "ingest_mode": "off"}
+  }
+  ```
+
+- 校验：`chat_mode` / `ingest_mode` 必须属于
+  `{auto, off, low, medium, high, max}`，否则 400 `不支持的推理模式: <mode>`。
+- 行为：`save_settings` 落盘后返回保存后的完整设置（与 GET 同形）。
+
+**前端**：
+
+- 类型：`src/shared/types/wiki.ts`（`WikiProjectSettings`、`WikiTaskRouting`、
+  `WikiReasoningSettings`、`ReasoningMode`、`DEFAULT_WIKI_SETTINGS`）。
+- API：`src/shared/api-client/wiki.ts`（`getWikiSettings` / `updateWikiSettings`）。
+- 状态：`src/entities/wiki/settings-store.ts`（`useWikiSettingsStore`，含
+  `settings` / `isLoading` / `isSaving` / `error` 与 `loadSettings` / `saveSettings`
+  / `reset`）。
+- 界面：`src/widgets/wiki/WikiSettingsDialog.tsx`，由 `WikiToolbar.tsx` 打开；
+  模型留空即用全局默认，推理模式按对话/入库分别选择。
+
