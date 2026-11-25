@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import asdict
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -47,7 +47,7 @@ from backend.office.rule_repo import (
 )
 from backend.office.storage import validate_workspace
 from backend.office.word_rule_extract import extract_word_rules_async
-from backend.office.word_rulepack_models import WordRuleSpec
+from backend.office.word_rulepack_models import WordRuleCandidate, WordRuleSpec
 from backend.orchestration.llm_factory import build_llm_client_from_settings
 
 router = APIRouter(prefix="/rules", tags=["office"])
@@ -123,6 +123,9 @@ class RuleCreateRequest(BaseModel):
     pattern: Optional[str] = None
     ai_prompt: Optional[str] = None
     enabled: bool = True
+    structured_params: Optional[dict] = None
+    confidence: Optional[float] = None
+    source_excerpt: Optional[str] = None
 
     @field_validator("pattern")
     @classmethod
@@ -144,6 +147,9 @@ class RuleUpdateRequest(BaseModel):
     pattern: Optional[str] = None
     ai_prompt: Optional[str] = None
     enabled: Optional[bool] = None
+    structured_params: Optional[dict] = None
+    confidence: Optional[float] = None
+    source_excerpt: Optional[str] = None
 
     @field_validator("pattern")
     @classmethod
@@ -169,6 +175,95 @@ class ExtractWarning(BaseModel):
 class ExtractResponse(BaseModel):
     rules: List[Rule]
     warnings: List[ExtractWarning]
+
+
+class DraftRuleItem(BaseModel):
+    """One rule in a draft extraction result, with full structured metadata."""
+
+    temp_id: str
+    name: str
+    kind: str
+    params: dict
+    category: str
+    severity: str
+    confidence: float
+    source_excerpt: str
+    conflict_group: Optional[str] = None
+    suggested_check_mode: str = "ai"
+    suggested_ai_prompt: str = ""
+    suggested_type: str = "custom"
+    suggested_scope: str = "body"
+    description: str = ""
+
+
+class DraftConflict(BaseModel):
+    kind: str
+    rule_ids: List[str]  # draft temp_ids (mapped from extracted/... ids)
+    message: str
+
+
+class DraftExtractResponse(BaseModel):
+    rules: List[DraftRuleItem]
+    conflicts: List[DraftConflict]
+    warnings: List[ExtractWarning]
+
+
+class CommitRuleItem(BaseModel):
+    """One rule to persist during commit."""
+
+    name: str = Field(..., min_length=1, max_length=200)
+    type: str = Field(..., pattern="^(format|terminology|citation|structure|custom)$")
+    severity: str = Field(..., pattern="^(error|warning|info)$")
+    scope: str = Field(..., pattern="^(full|heading|body|table|caption)$")
+    description: str = ""
+    check_mode: str = Field(..., pattern="^(regex|ai)$")
+    pattern: Optional[str] = None
+    ai_prompt: Optional[str] = None
+    enabled: bool = True
+    structured_params: Optional[dict] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    source_excerpt: Optional[str] = None
+
+    @field_validator("pattern")
+    @classmethod
+    def _validate_pattern(cls, value: Optional[str]) -> Optional[str]:
+        return _check_pattern(value)
+
+
+class CommitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    group_name: str = Field(..., min_length=1, max_length=200)
+    rules: List[CommitRuleItem] = Field(default_factory=list)
+    target_group_id: Optional[str] = None
+
+
+class RefineDraftRule(BaseModel):
+    """One current draft rule sent to the AI refine endpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    temp_id: str = Field(..., min_length=1, max_length=80)
+    name: str = Field(..., min_length=1, max_length=200)
+    kind: str = ""
+    params: dict = Field(default_factory=dict)
+    severity: str = "warning"
+    description: str = ""
+    ai_prompt: str = ""
+    type: str = "custom"
+    scope: str = "body"
+
+
+class RefineRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    instruction: str = Field(..., min_length=1, max_length=2000)
+    rules: List[RefineDraftRule] = Field(default_factory=list)
+
+
+class RefineResponse(BaseModel):
+    actions: List[dict] = Field(default_factory=list)
+    warnings: List[ExtractWarning] = Field(default_factory=list)
 
 
 class DeleteResponse(BaseModel):
@@ -272,6 +367,9 @@ def create_rule_endpoint(group_id: str, req: RuleCreateRequest) -> Rule:
         pattern=req.pattern,
         ai_prompt=req.ai_prompt,
         enabled=req.enabled,
+        structured_params=req.structured_params,
+        confidence=req.confidence,
+        source_excerpt=req.source_excerpt,
     )
 
 
@@ -320,6 +418,137 @@ async def extract_endpoint(req: ExtractRequest) -> ExtractResponse:
         warnings=[
             ExtractWarning(code=item["code"], message=item["message"]) for item in result.warnings
         ],
+    )
+
+
+def _candidate_to_draft(
+    index: int,
+    candidate: WordRuleCandidate,
+) -> DraftRuleItem:
+    """Convert a WordRuleCandidate into a DraftRuleItem preserving structured data."""
+    spec = candidate.rule
+    category = str(spec.category)
+    detail = spec.description or spec.fix_hint or spec.title
+    params_str = ", ".join(f"{key}={value}" for key, value in sorted(spec.params.items()))
+    prompt = f"检查文档是否满足规则「{spec.title}」：{detail}"
+    if params_str:
+        prompt = f"{prompt}（判定参数：{params_str}）"
+    return DraftRuleItem(
+        temp_id=f"draft_{index}",
+        name=spec.title,
+        kind=spec.kind,
+        params=dict(spec.params),
+        category=category,
+        severity=str(spec.severity),
+        confidence=candidate.confidence,
+        source_excerpt=candidate.source_excerpt,
+        conflict_group=candidate.conflict_group,
+        suggested_check_mode="ai",
+        suggested_ai_prompt=prompt,
+        suggested_type=_CATEGORY_TO_TYPE.get(category, "custom"),
+        suggested_scope=_CATEGORY_TO_SCOPE.get(category, "body"),
+        description=spec.description,
+    )
+
+
+@router.post("/extract/draft", response_model=DraftExtractResponse)
+async def extract_draft_endpoint(req: ExtractRequest) -> DraftExtractResponse:
+    """Extract rules as a draft — returns structured data without persisting."""
+    workspace, source = _resolve_source(req.workspace_path, req.file_path, req.max_size_bytes)
+    result = await extract_word_rules_async(
+        source,
+        file_type=req.file_type,
+        workspace_path=str(workspace),
+        use_llm=req.use_llm,
+    )
+    draft_rules = [
+        _candidate_to_draft(i, candidate)
+        for i, candidate in enumerate(result.candidates)
+    ]
+    # Translate each conflict's rule_ids from "extracted/..." to the draft temp_ids
+    # so the frontend can match them via rule.tempId.
+    extracted_to_draft: Dict[str, str] = {
+        candidate.rule.id: f"draft_{i}"
+        for i, candidate in enumerate(result.candidates)
+    }
+    draft_conflicts = [
+        DraftConflict(
+            kind=c.kind,
+            rule_ids=[extracted_to_draft.get(rid, rid) for rid in c.rule_ids],
+            message=c.message,
+        )
+        for c in result.conflicts
+    ]
+    return DraftExtractResponse(
+        rules=draft_rules,
+        conflicts=draft_conflicts,
+        warnings=[
+            ExtractWarning(code=item["code"], message=item["message"]) for item in result.warnings
+        ],
+    )
+
+
+class CommitResponse(BaseModel):
+    group_id: str
+    rules_created: int
+
+
+@router.post("/extract/commit", response_model=CommitResponse, status_code=status.HTTP_201_CREATED)
+def extract_commit_endpoint(req: CommitRequest) -> CommitResponse:
+    """Commit a batch of reviewed rules into a rule group."""
+    conn = _db().get_connection()
+    if req.target_group_id:
+        try:
+            get_group(conn, req.target_group_id)
+        except ValueError as exc:
+            raise _not_found(exc) from exc
+        group_id = req.target_group_id
+    else:
+        group = create_group(conn, name=req.group_name, description="", priority=0)
+        group_id = group.id
+    created = 0
+    for item in req.rules:
+        create_rule(
+            conn,
+            group_id=group_id,
+            name=item.name,
+            type=item.type,
+            severity=item.severity,
+            scope=item.scope,
+            check_mode=item.check_mode,
+            description=item.description,
+            pattern=item.pattern,
+            ai_prompt=item.ai_prompt,
+            enabled=item.enabled,
+            structured_params=item.structured_params,
+            confidence=item.confidence,
+            source_excerpt=item.source_excerpt,
+        )
+        created += 1
+    return CommitResponse(group_id=group_id, rules_created=created)
+
+
+@router.post("/refine", response_model=RefineResponse)
+async def refine_endpoint(req: RefineRequest) -> RefineResponse:
+    """Turn a natural-language instruction into draft-rule actions via LLM.
+
+    The response is a list of validated add/modify/delete/explain actions.
+    Nothing is persisted; the frontend applies actions only after the user
+    accepts them.
+    """
+    llm_client = build_llm_client_from_settings()
+    if llm_client is None:
+        raise HTTPException(status_code=503, detail="LLM 客户端未配置")
+
+    from backend.office.rule_refine_llm import refine_rules
+
+    current_rules = [rule.model_dump() for rule in req.rules]
+    actions, warnings = await refine_rules(
+        current_rules, req.instruction, client=llm_client
+    )
+    return RefineResponse(
+        actions=actions,
+        warnings=[ExtractWarning(code=item["code"], message=item["message"]) for item in warnings],
     )
 
 

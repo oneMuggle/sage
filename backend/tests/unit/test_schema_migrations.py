@@ -139,6 +139,7 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
             19,
             20,
             21,
+            22,
         }
         # schema_version 表已建（账本就绪）
     finally:

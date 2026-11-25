@@ -29,7 +29,6 @@ import { toast } from 'sonner';
 
 import { useOfficeWorkspaceStore } from '../../../entities/office/officeWorkspaceStore';
 import { officeRulesApi } from '../../../shared/api/officeRulesApi';
-import type { WireRuleInput } from '../../../shared/api/types';
 import { useKeepAliveTabs } from '../../../shared/lib/hooks/useKeepAliveTabs';
 import { useI18n, type TranslationKey } from '../../../shared/lib/i18n';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../shared/ui/Tabs';
@@ -38,8 +37,9 @@ import { officeDocumentPath } from '../officeDocumentPath';
 
 import { AiAuditTab } from './AiAuditTab';
 import { BatchToolsTab } from './BatchToolsTab';
+import { RuleExtractionDraft } from './RuleExtractionDraft';
 import { RulesWorkspace } from './RulesWorkspace';
-import { ruleFieldsToWire, ruleFromWire } from './ruleMapping';
+import { useRuleDraftStore } from './ruleDraftStore';
 
 const RULE_SUBTAB_IDS = ['rules-library', 'ai-audit', 'batch-tools'] as const;
 type RuleSubtabId = (typeof RULE_SUBTAB_IDS)[number];
@@ -56,12 +56,6 @@ export interface RulesSubtabsProps {
   onGoToDocuments: () => void;
 }
 
-/** "deck.pptx" → "deck" — used to name the auto-created rule group. */
-function fileBaseName(filename: string): string {
-  const dot = filename.lastIndexOf('.');
-  return dot > 0 ? filename.slice(0, dot) : filename;
-}
-
 export function RulesSubtabs({ workspacePath, onGoToDocuments }: RulesSubtabsProps) {
   const { t } = useI18n();
   const activeDocument = useOfficeWorkspaceStore((state) => state.activeDocument);
@@ -73,6 +67,11 @@ export function RulesSubtabs({ workspacePath, onGoToDocuments }: RulesSubtabsPro
   const [focusGroupId, setFocusGroupId] = useState<string | null>(null);
   const mounted = useKeepAliveTabs(activeSubtab);
 
+  const openDraft = useRuleDraftStore((state) => state.open);
+  const setLoading = useRuleDraftStore((state) => state.setLoading);
+  const setDraft = useRuleDraftStore((state) => state.setDraft);
+  const setDraftError = useRuleDraftStore((state) => state.setError);
+
   const documentPath = activeDocument ? officeDocumentPath(activeDocument) : null;
 
   const handleExtractFromActiveDocument = async () => {
@@ -80,66 +79,34 @@ export function RulesSubtabs({ workspacePath, onGoToDocuments }: RulesSubtabsPro
       toast.warning(t('office.rules.extractNoActiveDoc'));
       return;
     }
+    const sourceName =
+      activeDocument.original_filename ?? activeDocument.generated_filename ?? activeDocument.id;
+    openDraft(sourceName, workspacePath);
+    setLoading(true);
     setExtracting(true);
-    toast.info(t('office.rules.extractStarted'));
-    let createdGroupId: string | null = null;
-    let createdCount = 0;
-    let extractedTotal = 0;
     try {
-      const result = await officeRulesApi.extractRules({
+      const result = await officeRulesApi.extractDraft({
         workspace_path: workspacePath,
         file_path: documentPath,
         file_type: 'template',
         use_llm: true,
       });
-      result.warnings.slice(0, 3).forEach((warning) => {
-        toast.warning(warning.message);
-      });
-      const extracted = result.rules.map(ruleFromWire);
-      extractedTotal = extracted.length;
-      if (extracted.length === 0) {
-        toast.warning(t('office.rules.workspace.extractEmpty'));
-        return;
-      }
-
-      const sourceName =
-        activeDocument.original_filename ?? activeDocument.generated_filename ?? activeDocument.id;
-      const groupName = `${fileBaseName(sourceName)} · ${t('office.rules.workspace.extractGroupName')}`;
-      const group = await officeRulesApi.createGroup({
-        name: groupName,
-        description: '',
-        priority: 0,
-      });
-      createdGroupId = group.id;
-
-      for (const rule of extracted) {
-        await officeRulesApi.createRule(group.id, ruleFieldsToWire(rule) as WireRuleInput);
-        createdCount += 1;
-      }
-
-      setFocusGroupId(group.id);
-      setReloadKey((key) => key + 1);
-      toast.success(
-        t('office.rules.extractSuccess')
-          .replace('{n}', String(createdCount))
-          .replace('{name}', groupName),
+      setDraft(
+        result.rules,
+        result.conflicts,
+        result.warnings.map((w) => w.message),
       );
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      if (createdGroupId) {
-        // The group exists but some rules failed — surface the partial result
-        // and still show the group the user would have got.
-        setFocusGroupId(createdGroupId);
-        setReloadKey((key) => key + 1);
-        toast.error(
-          `${t('office.rules.workspace.extractPartial')} (${createdCount}/${extractedTotal}): ${message}`,
-        );
-      } else {
-        toast.error(`${t('office.rules.workspace.operationFailed')}: ${message}`);
-      }
+      setDraftError(message);
     } finally {
       setExtracting(false);
     }
+  };
+
+  const handleCommitted = (groupId: string, _count: number) => {
+    setFocusGroupId(groupId);
+    setReloadKey((key) => key + 1);
   };
 
   return (
@@ -220,6 +187,8 @@ export function RulesSubtabs({ workspacePath, onGoToDocuments }: RulesSubtabsPro
           </TabsContent>
         ))}
       </Tabs>
+
+      <RuleExtractionDraft onCommitted={handleCommitted} />
     </div>
   );
 }
