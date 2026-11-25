@@ -258,7 +258,13 @@ export interface SessionStreamSlots {
    * 先于 task_plan 到达时任务板还不存在，故独立于 TaskBoardState 存槽位；
    * task_plan 初始化 / finishStream 兜底时清空。
    */
-  preflightPhase: 'clarify' | 'scout' | 'complexity_classify' | 'execution_mode_classify' | null;
+  preflightPhase:
+    | 'clarify'
+    | 'scout'
+    | 'scout_deep'
+    | 'complexity_classify'
+    | 'execution_mode_classify'
+    | null;
   /**
    * 2026-10-28 (Plan Mode 增强): 计划模式收尾时后端分类器给出的执行模式推荐。
    * 在 DONE 之前随 `plan_execution_mode` 事件到达，供 PlanApprovalBar 做
@@ -395,7 +401,13 @@ interface ChatStreamStoreState {
   /** Round 3 (2026-09-19): 写入/清空编排拆解前置阶段指示。 */
   setPreflightPhase: (
     sessionId: string,
-    phase: 'clarify' | 'scout' | 'complexity_classify' | 'execution_mode_classify' | null,
+    phase:
+      | 'clarify'
+      | 'scout'
+      | 'scout_deep'
+      | 'complexity_classify'
+      | 'execution_mode_classify'
+      | null,
   ) => void;
   /**
    * 2026-10-28 (Plan Mode 增强): 写入/清空计划模式的执行模式推荐。
