@@ -1,4 +1,4 @@
-# 172 · 自部署服务通用化框架（P0–P2）
+# 173 · 自部署服务通用化框架（P0–P2）
 
 > 三期均已落地：P0 激活 DrawIO 渲染，P1 统一富媒体契约，P2 声明式服务注册。
 > 计划文档：`docs/plans/2026-11-25-selfhosted-service-framework.md`。

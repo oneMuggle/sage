@@ -914,9 +914,9 @@ git commit -m "refactor(settings): render external services from declarative spe
 - Delete plan doc after merge（按项目规范）
 
 - [x] **Step 1: 写技术文档**：三层通道（内置工具 / MCP / 插件）、RichMedia 契约、ExternalServiceSpec 声明示例、DrawIO 部署、双分支注意。
-  - 实际：`docs/technical/172-selfhosted-service-framework.md` 已存在（P0 阶段创建并已入目录），本次**更新**该文件为 P0–P2 全量内容，而非新建编号（避免并发编号抢占）。用户手册新增 `59-selfhosted-services.md`。
+  - 实际：`docs/technical/173-selfhosted-service-framework.md`（原 P0 阶段以 172 创建；rebase 到 #3301 后 172 被规则抽取占用，顺延为 173）。用户手册为 `60-selfhosted-services.md`（原 59，同样顺延）。
 - [x] **Step 2: 注册到 README 目录**（编号取合并时实际最大号 +1；并发 PR 可能抢占，需顺延）。
-  - 实际：技术目录复用 172 并更新简介为 P0–P2；用户手册登记 59。
+  - 实际：技术目录登记 173（简介 P0–P2）；用户手册登记 60。
 - [x] **Step 3: 全量验证**
 
 ```bash
