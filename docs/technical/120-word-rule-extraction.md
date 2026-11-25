@@ -79,6 +79,28 @@ POST /api/v1/office/word/rulepacks/extract/save
 - 置信度 = 主导值占比，clamp 到 0.5–0.95；
 - 无正文样本 / 多节页面尺寸不一致 → warning。
 
+### 段落格式规则抽取
+
+Heading 1–9 与模板特殊样式在抽取 `style.font` 的同时，还会为同一样式产出 `style.paragraph` 段落格式规则；两类规则都用 `params.style` 标记样式。只有当该样式至少存在一项段落属性时才生成段落规则。
+
+- 样式来源：
+  - 标题：样式名匹配 `^heading\s+(\d+)$`（忽略大小写），按层级升序；
+  - 特殊样式：按样式名关键字归一为固定标签——`作者`/`中文作者`→`作者`、`英文作者`→`作者(英文)`、`摘要`/`中文摘要`→`摘要`、`关键词`→`关键词`、`图题`/`图说`→`图题`、`表题`→`表题`、`表文字`→`表文字`、`参考文献`→`参考文献`、`Header`→`页眉`；同一标签只取文档样式顺序中首个命中的样式。
+- 段落属性：由 `StyleResolver._read_ppr` 读取样式自身的 `w:pPr`（不沿 `basedOn` 继承），写入 `params` 时归一：
+  - `alignment`：小写（`left`/`center`/`right`/`justify` 等）；
+  - `line_spacing`：倍数行距（浮点）；`line_spacing_pt`：固定行距（`EXACT`/`AT_LEAST`，pt，1 位小数）；
+  - `space_before_pt` / `space_after_pt`：段前/段后间距（pt，1 位小数）；
+  - `first_line_indent_pt` / `left_indent_pt`：首行/左缩进，输出时换算为 `first_line_indent_cm` / `left_indent_cm`（cm，2 位小数）；
+  - 字号、粗体、斜体仍归 `style.font`，不进入段落规则。
+- 规则形态：`kind="style.paragraph"`，`params={"style": <样式标签>, ...段落属性}`；标题由 `_dynamic_title` 生成 `<样式> 段落格式`（`Normal` 为「正文段落格式」），`category="style"`、`severity="error"`、`fixable=true`；置信度固定 0.85，来源为 `<相对路径>（范本主导值）`，摘录摘要列出对齐/行距/段前/段后。
+- 去重：与 `style.font` 一样按 `style` 分组独立合并（避免 `Heading 1` 与「作者」被当成同字段冲突）；冲突时 `conflict_group=conflict/style.paragraph/<样式>`，消息列出冲突字段。
+- 落地与消费：
+  - 保存：`POST /office/word/rulepacks/extract/save` 经 `save_rulepack` 写入 `<workspace>/.sage/word-rulepacks/<id>.json`；
+  - 审校：`word_audit._check_style_paragraph` 逐样式比对 `line_spacing` / `line_spacing_pt` / `first_line_indent_cm`（容差默认 0.05cm）/ `alignment`；
+  - 修复：`word_fix._fix_style_paragraph` 把上述四个字段回写到目标文档同名样式的 `paragraph_format`；
+  - 样式画像：`word_style_profile.format_spec_from_rulepack` 把规则编译进 `WordFormatSpec`，再经 `word_layout` 的样式套用路径（生成期 `apply_format_spec`、既有文档 `apply_style_definitions`）落到 `Normal`、`Title` 与 Heading 1–5——正文承接行距/首行缩进/段前/段后/对齐，标题承接段前/段后/对齐；题注样式只在生成期题注路径生效且只承接对齐；作者/摘要/参考文献/表文字/页眉/关键词以及 Heading 6–9 不在画像映射内，仅由审校/修复消费。
+- 同时产出两类规则的原因：一套样式既定义 run 级字体，也定义段落级排版；只抽字体时，标题居中、图题段前段后、参考文献行距等版式无法审校或还原，模板还原会出现「字体对、版式不对」。
+
 ## 6. 去重与冲突
 
 - `page.margins` / `style.font` / `style.paragraph`：按字段合并同 kind 候选；
