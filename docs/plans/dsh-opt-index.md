@@ -2,7 +2,7 @@
 
 > 对标对象：[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
 > （"everything-is-a-plugin" agent harness）。本账本由 dsh-opt 循环维护，
-> 随轮次追加；循环 SOP 沿用 [parity-loop-sop.md](parity-loop-sop.md)。
+> 随轮次追加；循环 SOP 见 [173 对标改进循环 SOP](../technical/173-parity-loop-sop.md)。
 
 ## 1. 系列路线（源自 2026-09-23 差距分析）
 

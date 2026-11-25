@@ -2,7 +2,6 @@
 
 > 文档编号：159
 > 状态：已实现（2026-11-15，分支 `feat/pdf-figure-citation`）
-> 来源计划：`docs/plans/2026-11-15_pdf-figure-citation.md`
 
 ## 1. 背景
 
@@ -40,7 +39,8 @@ render_page_marked_text(pages) -> str
 第十二页正文...
 ```
 
-空页跳过，但页码保持真实。`_extract_document_text` 的 PDF 分支改为
+空页跳过，但页码保持真实；页标记格式与 `@file` 工作区 PDF 摘要的既有格式一致。
+`_extract_document_text` 的 PDF 分支改为
 `render_page_marked_text(extract_pdf_pages(content))`，上传、取全文、RAG 索引、
 发送侧注入共用同一实现。
 
@@ -55,7 +55,7 @@ extract_pdf_figures(content) -> List[ExtractedFigure]
 - `page.get_images(full=True)` + `page.get_image_rects(xref)` 取 bbox，
   `doc.extract_image(xref)` 取原始字节；
 - 过滤：宽 < 80 或高 < 60 的小图标；占页面积 ≥ 85% 的整页扫描背景；
-  sha1 跨页/跨文档重复图；单文档最多 40 张；
+  sha1 跨页重复图；单文档最多 40 张；
 - 图注：图片下方 120pt 内优先找以 `图/表/Figure/Fig./Table + 序号` 开头的
   文本块，否则取最近下方文本前 120 字符；
 - **边界**：只覆盖嵌入位图；矢量图（Office 图表 / LaTeX 绘图）与复杂版式
@@ -70,7 +70,10 @@ figures_manifest_path(media_file) -> Path
 
 - 裁出的图经 `MediaStore.save(kind=IMAGE, source="pdf_figure")` 落盘，
   sidecar 元数据含 `source_media_id/page/figure_id/caption`；
-- 清单缓存到媒体同目录 `<media_id>.figures.json`（原子写，损坏自动重建）：
+- 发送侧经线程池调用 `load_pdf_figure_manifest`（`chat_attachment_routes` 门面），
+  避免阻塞事件循环；图抽取、单张落盘失败均 fail-safe 跳过，不阻断聊天；
+- 清单缓存到媒体同目录 `<media_id>.figures.json`（原子写，损坏自动重建，
+  二次调用直接读缓存）：
 
 ```json
 {
@@ -93,7 +96,7 @@ figures_manifest_path(media_file) -> Path
 
 ### 2.4 注入格式
 
-发送侧在 `<attached_document>` 内追加图清单，并为本请求追加一次引用说明：
+发送侧在 `<attached_document>` 内追加图清单；本请求存在任何插图时，只追加一次引用说明：
 
 ```xml
 <attached_document id='abc123' name='paper.pdf' type='application/pdf' pages="20">
@@ -109,8 +112,9 @@ figures_manifest_path(media_file) -> Path
 ```
 
 ```
-[附件图片引用说明] 回答涉及 <attached_figures> 中的图片时，使用
-![简短图注](media属性值 "第N页 · 图X") 内联展示原图；引用 PDF 正文时标注页码。
+[附件图片引用说明] 回答涉及 <attached_figures> 中的图片时，在对应位置使用 Markdown
+图片语法 ![简短图注](media属性值 "第N页 · 图X") 内联展示原图；引用 PDF 正文时标注
+页码（例如「第 12 页」）。
 ```
 
 无文本层但有图时（扫描页），注入占位说明而不是 `empty_text` 跳过。
@@ -122,7 +126,7 @@ figures_manifest_path(media_file) -> Path
 
 - `ChunkCitation` 增加 `page_start/page_end`；
 - `locate_chunk_pages(full_text, chunk_text)` 用命中 chunk 在带页标记全文中的
-  偏移反查页码范围（定位失败返回 `None`，前端不展示页码）；
+  偏移反查页码范围（定位失败返回 `(None, None)`，前端不展示页码）；
 - `attachment_rag_used` 事件与 `RagCitation` 线协议透传页码；
 - 前端附件引用明细显示 `#0 (0.91) · 第12-13页`。
 
