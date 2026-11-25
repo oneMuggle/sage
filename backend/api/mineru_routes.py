@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from backend.adapters.out.document_parse.mineru_client import MineruClient
 from backend.api.external_service_routes import build_external_service_router
 from backend.domain.document_parse import DEFAULT_TIMEOUT_SECONDS
 from backend.services.external_services.registry import get_service
@@ -22,6 +21,9 @@ def _as_float(value: Any, default: float) -> float:
 
 
 async def _probe_mineru(values: Dict[str, Any]) -> Dict[str, Any]:
+    # 函数内导入：保持测试对 mineru_client.MineruClient 的打桩点有效。
+    from backend.adapters.out.document_parse.mineru_client import MineruClient
+
     client = MineruClient(
         base_url=str(values.get("baseUrl") or ""),
         api_key=str(values.get("apiKey") or ""),
