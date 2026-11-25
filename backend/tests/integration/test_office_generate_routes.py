@@ -65,6 +65,166 @@ def test_generate_nl_word_happy_path(tmp_path: Path) -> None:
     assert request.title == "Test"
 
 
+def test_generate_nl_word_applies_style_preset(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    fake = _make_output(workspace, "word", "abc123", "Test.docx", b"fake docx")
+
+    llm = AsyncMock()
+    llm.complete.return_value = '{"title": "Test", "paragraphs": [{"text": "Hello"}]}'
+
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        with patch(
+            "backend.api.office_generate_routes.generate_docx", return_value=fake
+        ) as mock_gen:
+            resp = _client().post(
+                "/api/v1/office/generate/nl",
+                json={
+                    "workspace_path": str(workspace),
+                    "instruction": "写一份报告",
+                    "doc_type": "word",
+                    "format_spec_preset": "report",
+                },
+            )
+
+    assert resp.status_code == 200, resp.text
+    request = mock_gen.call_args.args[0]
+    assert request.format_spec is not None
+    assert request.format_spec.body is not None
+    assert request.format_spec.body.font_family == "宋体"
+    assert request.format_spec.body.font_size_pt == 12
+
+
+def test_generate_nl_word_uses_saved_style_template(tmp_path: Path) -> None:
+    from backend.data.database import get_database
+    from backend.office.style_template_store import create_style_template
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    resolved = str(workspace.resolve())
+    row = create_style_template(
+        get_database().get_connection(),
+        workspace_path=resolved,
+        name="公文版式",
+        format_spec={"body": {"font_family": "仿宋", "font_size_pt": 14}},
+        source_kind="manual",
+    )
+    fake = _make_output(workspace, "word", "abc123", "Test.docx", b"fake docx")
+
+    llm = AsyncMock()
+    llm.complete.return_value = '{"title": "Test", "paragraphs": [{"text": "Hello"}]}'
+
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        with patch(
+            "backend.api.office_generate_routes.generate_docx", return_value=fake
+        ) as mock_gen:
+            resp = _client().post(
+                "/api/v1/office/generate/nl",
+                json={
+                    "workspace_path": str(workspace),
+                    "instruction": "写一份通知",
+                    "doc_type": "word",
+                    "style_template_id": row["id"],
+                },
+            )
+
+    assert resp.status_code == 200, resp.text
+    request = mock_gen.call_args.args[0]
+    assert request.format_spec is not None
+    assert request.format_spec.body is not None
+    assert request.format_spec.body.font_family == "仿宋"
+    assert request.format_spec.body.font_size_pt == 14
+
+
+def test_generate_nl_unknown_style_template_returns_422(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    llm = AsyncMock()
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        resp = _client().post(
+            "/api/v1/office/generate/nl",
+            json={
+                "workspace_path": str(workspace),
+                "instruction": "写一份通知",
+                "doc_type": "word",
+                "style_template_id": "missing-template",
+            },
+        )
+
+    assert resp.status_code == 422, resp.text
+    assert "样式模板不存在" in resp.text
+    llm.complete.assert_not_called()
+
+
+def test_generate_nl_unknown_style_preset_returns_generate_error(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    llm = AsyncMock()
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        resp = _client().post(
+            "/api/v1/office/generate/nl",
+            json={
+                "workspace_path": str(workspace),
+                "instruction": "写一份通知",
+                "doc_type": "word",
+                "format_spec_preset": "no-such-preset",
+            },
+        )
+
+    # 未知预设沿用与 POST /office/word/generate 相同的错误映射（500）。
+    assert resp.status_code == 500, resp.text
+    assert "unknown_style_preset" in resp.text
+    llm.complete.assert_not_called()
+
+
+def test_generate_nl_non_word_ignores_style_fields(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    fake = _make_output(workspace, "pdf", "pdf123", "generated.pdf", b"%PDF-1.4")
+
+    llm = AsyncMock()
+    llm.complete.return_value = '{"pages": [{"title": "P1", "paragraphs": ["hi"]}]}'
+    pdf_result = PdfGenerateResult(
+        output_path=str(fake),
+        filename="generated.pdf",
+        file_size_bytes=8,
+        page_count=1,
+    )
+
+    with patch(  # noqa: SIM117 — py38 不支持括号多上下文 with
+        "backend.api.office_generate_routes.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        with patch("backend.api.office_generate_routes.generate_pdf", return_value=pdf_result):
+            resp = _client().post(
+                "/api/v1/office/generate/nl",
+                json={
+                    "workspace_path": str(workspace),
+                    "instruction": "生成一页 PDF",
+                    "doc_type": "pdf",
+                    # 非 word 类型忽略版式字段：未知模板/预设也不报错。
+                    "format_spec_preset": "no-such-preset",
+                    "style_template_id": "missing-template",
+                },
+            )
+
+    assert resp.status_code == 200, resp.text
+
+
 def test_generate_nl_pdf_uses_result_output_path(tmp_path: Path) -> None:
     workspace = tmp_path / "ws"
     workspace.mkdir()

@@ -9,6 +9,9 @@ vi.mock('../../../shared/api/officeApi', () => ({
   officeApi: {
     listTemplates: vi.fn(),
     templateThumbnail: vi.fn().mockResolvedValue({ ok: false }),
+    // M2: TemplateLibrary 现在内嵌 WordStyleTemplateLibrary 分区。
+    listWordStylePresets: vi.fn(),
+    listWordStyleTemplates: vi.fn(),
   },
 }));
 
@@ -47,6 +50,14 @@ describe('TemplateLibrary', () => {
     mockedListTemplates.mockReset();
     mockedThumbnail.mockReset().mockResolvedValue({ ok: false });
     mockedListTemplates.mockResolvedValue({ templates: [BUILTIN, WORKSPACE] });
+    vi.mocked(officeApi.listWordStylePresets).mockReset();
+    vi.mocked(officeApi.listWordStyleTemplates).mockReset();
+    vi.mocked(officeApi.listWordStylePresets).mockResolvedValue({ ok: true, presets: [] });
+    vi.mocked(officeApi.listWordStyleTemplates).mockResolvedValue({
+      ok: true,
+      workspace_path: '/ws',
+      templates: [],
+    });
   });
 
   it('renders builtin and workspace templates with source badges', async () => {

@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from backend.domain.tool_policy import ToolPolicy
-from backend.office.models import WordFormatSpec
+from backend.office.models import WordFormatSpec, WordParagraphSpec, WordRunSpec
 from backend.tools.office_create_tool import OfficeCreateTool
 from backend.tools.office_lint_tool import OfficeLintWordTool
 
@@ -52,6 +52,38 @@ def test_schema_format_spec_properties_match_model_fields():
         "office_create schema 的 format_spec 属性与 WordFormatSpec 模型"
         "字段不一致——模型新增/删除字段时必须同步工具 schema 声明"
     )
+
+
+def test_schema_paragraph_properties_cover_model_fields():
+    """schema 的 paragraphs item 属性覆盖 WordParagraphSpec 全部字段。
+
+    M2 新增 ``style="quote"`` 与 ``runs``；未声明即 LLM 不可见。
+    """
+    tool = OfficeCreateTool(policy=ToolPolicy())
+    item_props = tool.schema.parameters["properties"]["content"]["properties"][
+        "paragraphs"
+    ]["items"]["properties"]
+    missing = set(WordParagraphSpec.model_fields) - set(item_props)
+    assert not missing, f"schema paragraphs 缺属性: {sorted(missing)}"
+
+
+def test_schema_paragraph_style_enum_matches_model():
+    """style 枚举与模型 Literal 全等（防止 schema 虚报模型拒绝的值）。"""
+    tool = OfficeCreateTool(policy=ToolPolicy())
+    item_props = tool.schema.parameters["properties"]["content"]["properties"][
+        "paragraphs"
+    ]["items"]["properties"]
+    assert set(item_props["style"]["enum"]) == {"bullet", "numbered", "quote"}
+
+
+def test_schema_run_properties_cover_model_fields():
+    """schema 的 runs item 属性覆盖 WordRunSpec 全部字段。"""
+    tool = OfficeCreateTool(policy=ToolPolicy())
+    run_props = tool.schema.parameters["properties"]["content"]["properties"][
+        "paragraphs"
+    ]["items"]["properties"]["runs"]["items"]["properties"]
+    missing = set(WordRunSpec.model_fields) - set(run_props)
+    assert not missing, f"schema runs 缺属性: {sorted(missing)}"
 
 
 def test_types_ts_word_format_spec_covers_model_fields():

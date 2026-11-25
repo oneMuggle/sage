@@ -44,7 +44,9 @@ function toLintResult(result: WordLintResult): OfficeWordLintResult {
     error_count: result.error_count,
     warning_count: result.warning_count,
     checked_rules: result.checked_rules,
-    issues: result.issues.map((issue): OfficeWordLintIssue => ({ ...issue, fix_hint: issue.fix_hint ?? '' })),
+    issues: result.issues.map(
+      (issue): OfficeWordLintIssue => ({ ...issue, fix_hint: issue.fix_hint ?? '' }),
+    ),
   };
 }
 
@@ -55,6 +57,11 @@ export interface OfficeDeliveryDrawerProps {
   filePath: string;
   /** 生成时携带的格式规范；null = 无规范，lint 段展示跳过。 */
   formatSpec: WordFormatSpec | null;
+  /**
+   * M2 D5: 生成时选择的样式模板 id。formatSpec 为空时先取模板快照
+   * （`listWordStyleTemplates` 按 id 匹配）作为 lint / 修复的输入。
+   */
+  styleTemplateId?: string | null;
   /** 受控可见性（调用方通常接 taskCenterStore.delivery）。 */
   open: boolean;
   /** 请求关闭。 */
@@ -117,6 +124,7 @@ export function OfficeDeliveryDrawer({
   workspacePath,
   filePath,
   formatSpec,
+  styleTemplateId,
   open,
   onClose,
 }: OfficeDeliveryDrawerProps) {
@@ -127,6 +135,8 @@ export function OfficeDeliveryDrawer({
   const [lint, setLint] = useState<OfficeWordLintResult | null>(null);
   const [lintState, setLintState] = useState<LintState>('loading');
   const [lintSeq, setLintSeq] = useState(0);
+  // M2 D5: formatSpec 缺省时由所选样式模板解析出的快照（lint / 修复共用）。
+  const [resolvedSpec, setResolvedSpec] = useState<WordFormatSpec | null>(null);
   const [preview, setPreview] = useState<OfficePreviewData | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   // P0-2: 自动修复状态。repairState 独立于 lintState —— 修复是副作用操作，
@@ -136,30 +146,58 @@ export function OfficeDeliveryDrawer({
 
   useEffect(() => {
     if (!open) return;
-    if (!formatSpec) {
+    let cancelled = false;
+    const runLint = (spec: WordFormatSpec) => {
+      setLintState('loading');
+      officeApi
+        .lintWord({ workspace_path: workspacePath, file_path: filePath, format_spec: spec })
+        .then((result) => {
+          if (cancelled) return;
+          setLint(result);
+          setLintState('ready');
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setLint(null);
+            setLintState('error');
+          }
+        });
+    };
+
+    setResolvedSpec(null);
+    if (formatSpec) {
+      runLint(formatSpec);
+    } else if (styleTemplateId) {
+      // M2 D5: 模板存的是转换后的画像快照 —— 找到即用它跑 lint，无需
+      // from-rulepack 转换；模板已被删除时如实展示跳过。
+      setLintState('loading');
+      setLint(null);
+      officeApi
+        .listWordStyleTemplates(workspacePath)
+        .then((res) => {
+          if (cancelled) return;
+          const template = res.templates.find((tpl) => tpl.id === styleTemplateId);
+          if (!template) {
+            setLintState('skipped');
+            return;
+          }
+          setResolvedSpec(template.format_spec);
+          runLint(template.format_spec);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setLint(null);
+            setLintState('error');
+          }
+        });
+    } else {
       setLintState('skipped');
       setLint(null);
-      return;
     }
-    let cancelled = false;
-    setLintState('loading');
-    officeApi
-      .lintWord({ workspace_path: workspacePath, file_path: filePath, format_spec: formatSpec })
-      .then((result) => {
-        if (cancelled) return;
-        setLint(result);
-        setLintState('ready');
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLint(null);
-          setLintState('error');
-        }
-      });
     return () => {
       cancelled = true;
     };
-  }, [open, workspacePath, filePath, formatSpec, lintSeq]);
+  }, [open, workspacePath, filePath, formatSpec, styleTemplateId, lintSeq]);
 
   useEffect(() => {
     if (!open) return;
@@ -209,13 +247,14 @@ export function OfficeDeliveryDrawer({
    * 直接用它替换 lint 展示（而不是再打一次 lint，多一次往返）。
    */
   const handleRepair = async () => {
-    if (!formatSpec) return;
+    const spec = formatSpec ?? resolvedSpec;
+    if (!spec) return;
     setRepairState('running');
     try {
       const result = await officeApi.repairWord({
         workspace_path: workspacePath,
         file_path: filePath,
-        format_spec: formatSpec,
+        format_spec: spec,
         overwrite: false,
       });
       setRepairReport(result);
@@ -302,7 +341,10 @@ export function OfficeDeliveryDrawer({
                 </span>
               </div>
               <div className="text-xs text-text-muted mb-1">
-                {t('office.delivery.rulesChecked').replace('{n}', String(lint.checked_rules.length))}
+                {t('office.delivery.rulesChecked').replace(
+                  '{n}',
+                  String(lint.checked_rules.length),
+                )}
               </div>
               {lint.issues.length > 0 && (
                 <ul className="space-y-1" data-testid="lint-issues">
@@ -310,7 +352,9 @@ export function OfficeDeliveryDrawer({
                     <li key={`${issue.rule_id}-${issue.message}`} className="text-xs">
                       <span
                         className={
-                          issue.severity === 'error' ? 'text-error font-medium' : 'text-warning font-medium'
+                          issue.severity === 'error'
+                            ? 'text-error font-medium'
+                            : 'text-warning font-medium'
                         }
                       >
                         [{issue.rule_id}]
@@ -372,7 +416,9 @@ export function OfficeDeliveryDrawer({
                     data-testid="lint-repair-button"
                     className="text-xs px-2 py-1 rounded border border-primary text-primary hover:bg-primary/10 disabled:opacity-50"
                   >
-                    {repairState === 'running' ? t('office.delivery.repairing') : t('office.delivery.repair')}
+                    {repairState === 'running'
+                      ? t('office.delivery.repairing')
+                      : t('office.delivery.repair')}
                   </button>
 
                   {repairState === 'failed' && (

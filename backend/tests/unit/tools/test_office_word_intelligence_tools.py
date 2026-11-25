@@ -80,6 +80,199 @@ def test_tools_require_context(tmp_path: Path) -> None:
     ).success
 
 
+# ──────────────────────────────────────────────────────────────────────
+# M2 样式模板：规则包 → 画像（READ）+ 已有文档套用（WRITE_LOCAL）
+# ──────────────────────────────────────────────────────────────────────
+
+_STYLE_PACK = {
+    "id": "style-pack",
+    "name": "Style pack",
+    "rules": [
+        {
+            "id": "page/margins",
+            "title": "页边距",
+            "category": "page",
+            "severity": "error",
+            "kind": "page.margins",
+            "params": {
+                "top_cm": 3.0,
+                "bottom_cm": 2.5,
+                "left_cm": 2.6,
+                "right_cm": 2.4,
+            },
+            "fixable": True,
+        },
+        {
+            "id": "body/font",
+            "title": "正文字体",
+            "category": "style",
+            "severity": "warning",
+            "kind": "style.font",
+            "params": {
+                "style": "Normal",
+                "font_east_asia": "宋体",
+                "size_pt": 12,
+            },
+            "fixable": False,
+        },
+    ],
+}
+
+
+def test_style_tools_require_context(tmp_path: Path) -> None:
+    from backend.tools.office_word_intelligence_tools import (
+        OfficeApplyWordStyleTool,
+        OfficeStyleFromRulepackTool,
+    )
+
+    path = _doc(tmp_path / "doc.docx", ["正文"])
+    assert not OfficeStyleFromRulepackTool(_policy(tmp_path)).execute(
+        rulepack=_STYLE_PACK
+    ).success
+    assert not OfficeApplyWordStyleTool(_policy(tmp_path)).execute(
+        file_path=str(path), format_spec_preset="default"
+    ).success
+
+
+def test_style_from_rulepack_returns_format_spec(tmp_path: Path) -> None:
+    from backend.tools.office_word_intelligence_tools import (
+        OfficeStyleFromRulepackTool,
+    )
+
+    token = _ctx(tmp_path)
+    try:
+        result = OfficeStyleFromRulepackTool(_policy(tmp_path)).execute(
+            rulepack=_STYLE_PACK
+        )
+    finally:
+        reset_tool_context(token)
+    assert result.success is True
+    spec = result.content["format_spec"]
+    assert spec["page"]["margins_cm"]["top"] == 3.0
+    assert spec["body"]["font_family"] == "宋体"
+    assert spec["body"]["font_size_pt"] == 12
+    assert result.content["applied_rule_ids"] == ["page/margins", "body/font"]
+
+
+def test_apply_word_style_preset_writes_styled_copy(tmp_path: Path) -> None:
+    from backend.tools.office_word_intelligence_tools import OfficeApplyWordStyleTool
+
+    path = _doc(tmp_path / "doc.docx", ["正文"])
+    token = _ctx(tmp_path)
+    try:
+        result = OfficeApplyWordStyleTool(_policy(tmp_path)).execute(
+            file_path=str(path), format_spec_preset="report"
+        )
+    finally:
+        reset_tool_context(token)
+    assert result.success is True
+    assert result.content["saved"] is True
+    assert Path(result.content["output_path"]).name == "doc-styled.docx"
+
+
+def test_apply_word_style_requires_spec(tmp_path: Path) -> None:
+    from backend.tools.office_word_intelligence_tools import OfficeApplyWordStyleTool
+
+    path = _doc(tmp_path / "doc.docx", ["正文"])
+    token = _ctx(tmp_path)
+    try:
+        result = OfficeApplyWordStyleTool(_policy(tmp_path)).execute(file_path=str(path))
+    finally:
+        reset_tool_context(token)
+    assert result.success is False
+    assert "style_spec_required" in result.error
+
+
+def _seed_style_template(workspace: Path, spec: dict) -> str:
+    """把样式模板写进内存库（get_database 读全局 _db）."""
+    from backend.data import database as db_mod
+    from backend.data.database import Database
+    from backend.office.style_template_store import create_style_template
+
+    db_mod._db = Database(":memory:")
+    db_mod._db.init_db()
+    row = create_style_template(
+        db_mod._db.get_connection(),
+        workspace_path=str(workspace),
+        name="学院模板",
+        format_spec=spec,
+    )
+    return row["id"]
+
+
+def _drop_seeded_db() -> None:
+    from backend.data import database as db_mod
+
+    if db_mod._db is not None:
+        db_mod._db.close()
+        db_mod._db = None
+
+
+def test_apply_word_style_uses_workspace_template(tmp_path: Path) -> None:
+    from backend.tools.office_word_intelligence_tools import OfficeApplyWordStyleTool
+
+    template_id = _seed_style_template(
+        tmp_path, {"body": {"font_family": "微软雅黑", "font_size_pt": 14}}
+    )
+    try:
+        path = _doc(tmp_path / "doc.docx", ["正文"])
+        token = _ctx(tmp_path)
+        try:
+            result = OfficeApplyWordStyleTool(_policy(tmp_path)).execute(
+                file_path=str(path), style_template_id=template_id
+            )
+        finally:
+            reset_tool_context(token)
+    finally:
+        _drop_seeded_db()
+    assert result.success is True
+    assert result.content["saved"] is True
+    assert Path(result.content["output_path"]).name == "doc-styled.docx"
+
+
+def test_apply_word_style_unknown_template_fails(tmp_path: Path) -> None:
+    from backend.tools.office_word_intelligence_tools import OfficeApplyWordStyleTool
+
+    _seed_style_template(tmp_path, {"body": {"font_size_pt": 12}})
+    try:
+        path = _doc(tmp_path / "doc.docx", ["正文"])
+        token = _ctx(tmp_path)
+        try:
+            result = OfficeApplyWordStyleTool(_policy(tmp_path)).execute(
+                file_path=str(path), style_template_id="no-such"
+            )
+        finally:
+            reset_tool_context(token)
+    finally:
+        _drop_seeded_db()
+    assert result.success is False
+    assert "style_template_not_found" in result.error
+
+
+def test_apply_word_style_template_scoped_by_workspace(tmp_path: Path) -> None:
+    """其它工作区的模板不能借 id 套用."""
+    from backend.tools.office_word_intelligence_tools import OfficeApplyWordStyleTool
+
+    other = tmp_path / "other"
+    other.mkdir()
+    template_id = _seed_style_template(
+        other, {"body": {"font_size_pt": 12}}
+    )
+    try:
+        path = _doc(tmp_path / "doc.docx", ["正文"])
+        token = _ctx(tmp_path)
+        try:
+            result = OfficeApplyWordStyleTool(_policy(tmp_path)).execute(
+                file_path=str(path), style_template_id=template_id
+            )
+        finally:
+            reset_tool_context(token)
+    finally:
+        _drop_seeded_db()
+    assert result.success is False
+    assert "style_template_not_found" in result.error
+
+
 def test_audit_tool_returns_anchored_issue(tmp_path: Path) -> None:
     path = _doc(tmp_path / "doc.docx", ["AI 方案"])
     token = _ctx(tmp_path)
@@ -190,6 +383,8 @@ def test_tools_registered_and_visible_to_writer() -> None:
         "office_revise_word",
         "office_batch_audit",
         "office_render_audit",
+        "office_style_from_rulepack",
+        "office_apply_word_style",
     }
     registry = ToolRegistry()
     register_all_tools(registry, policy=ToolPolicy())

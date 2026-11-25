@@ -7,6 +7,10 @@ export interface OfficeNlGenerateRequest {
   instruction: string;
   doc_type: OfficeDocType;
   reference_paths?: string[];
+  /** M2 版式（仅 doc_type=word）：命名预设 id。 */
+  format_spec_preset?: string;
+  /** M2 版式（仅 doc_type=word）：工作区样式模板 id（与预设深合并，预设显式字段优先）。 */
+  style_template_id?: string;
 }
 
 export interface OfficeTemplateChatMessage {

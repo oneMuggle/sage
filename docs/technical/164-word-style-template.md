@@ -1,7 +1,7 @@
 # 164 — Word 样式模板（样式画像 / 预设 / 参考文档 / 规则包转换 / 已有文档套用）
 
-> 状态：已实现（2026-11-23，分支 `feat/word-style-template`）
-> 相关代码：`backend/office/word_style_presets.py`、`word_style_profile.py`、`word_style_apply.py`、`word_layout.py`、`word_lint.py`、`backend/api/office_word_style_routes.py`
+> 状态：已实现（一期 2026-11-23 `feat/word-style-template`；二期 M2 `feat/word-style-template-m2`）
+> 相关代码：`backend/office/word_style_presets.py`、`word_style_profile.py`、`word_style_apply.py`、`word_layout.py`、`word_lint.py`、`markdown_to_paragraphs.py`、`style_template_store.py`、`style_template_models.py`、`backend/api/office_word_style_routes.py`、`backend/tools/office_word_intelligence_tools.py`
 > 相关文档：[55 版式引擎](./55-word-format-spec-engine.md)、[117 文档画像](./117-word-document-profile.md)、[119 规则包审校](./119-word-rulepack-audit.md)、[120 规则抽取](./120-word-rule-extraction.md)、[134 AI 文档工作台](./134-office-ai-workbench.md)
 
 ## 1. 能力边界
@@ -17,6 +17,10 @@
 | 规则包 → 样式画像 | `POST /office/word/style/from-rulepack` | 把规则包/规范书（含模板抽取结果）编译为 `format_spec` |
 | 已有文档套用样式 | `POST /office/word/style/apply` | 按画像批量重排样式定义，可选清除直接格式、dry-run、原子覆盖 |
 | 字体 Lint | `word_lint` 新增规则 | `body/font_family`、`body/ascii_font`、`headings/hN/font_family`、`body/line_spacing_pt` |
+| Markdown 命名样式（M2） | `content` Markdown / `paragraphs[].runs` | bold/italic → Strong/Emphasis 字符样式；链接 → Hyperlink + `w:hyperlink`；`> 引用` → Quote；表格/图片结构化，见 §11 |
+| 工作区样式模板（M2） | `GET/POST /office/word/style-templates` | 规则包/预设/自定义画像存快照，工作区隔离；默认模板只用于前端下拉预选，见 §12 |
+| LLM 工具（M2） | `office_style_from_rulepack`（READ）/ `office_apply_word_style`（WRITE_LOCAL） | 规则包→画像、已有文档套用；均需工具上下文，见 §13 |
+| 前端入口（M2） | 生成页「版式」下拉、模板库样式模板分区、预览「套用样式」、交付抽屉 Lint | 见 §14 |
 
 优先级：**参考文档样式 < 命名预设 < 显式 `format_spec` 字段**（逐字段深合并，None 不覆盖）。
 
@@ -114,8 +118,13 @@ OfficeWordGenerateRequest: … + format_spec_preset / template_docx_path
 |------|------|------|
 | GET | `/api/v1/office/word/style-presets` | 列出内置预设（id/name/description） |
 | POST | `/api/v1/office/word/style/from-rulepack` | 规则包/规范书 → 样式画像（body 支持 `rulepack_id` 或内联 `rulepack`） |
-| POST | `/api/v1/office/word/style/apply` | 已有文档套用样式画像（dry-run / overwrite / clear_direct_formatting） |
-| POST | `/api/v1/office/word/generate` | 请求新增 `format_spec_preset` / `template_docx_path` |
+| POST | `/api/v1/office/word/style/apply` | 已有文档套用样式画像（dry-run / overwrite / clear_direct_formatting；M2 起支持 `style_template_id`） |
+| GET | `/api/v1/office/word/style-templates?workspace_path=` | 列出工作区样式模板（不含默认模板的隐式应用） |
+| POST | `/api/v1/office/word/style-templates` | 保存模板：`format_spec` 原样 / `format_spec_preset` 展开 / `rulepack_id`\|`pack` 转换 |
+| POST | `/api/v1/office/word/style-templates/{id}/activate` | 设该模板为工作区默认（生成接口不隐式应用） |
+| DELETE | `/api/v1/office/word/style-templates/default` | 清除工作区默认模板 |
+| DELETE | `/api/v1/office/word/style-templates/{id}` | 删除模板（仅限该工作区） |
+| POST | `/api/v1/office/word/generate` | 请求新增 `format_spec_preset` / `template_docx_path` / `style_template_id` |
 
 ## 9. 坑与注意事项
 
@@ -138,11 +147,75 @@ OfficeWordGenerateRequest: … + format_spec_preset / template_docx_path
 | `backend/tests/unit/office/test_word_style_apply.py` | 套用样式/dry-run/直接格式清理/幂等/覆盖 |
 | `backend/tests/unit/tools/test_office_create_tool.py` | 工具直通路径 preset/参考文档 |
 | `backend/tests/unit/tools/test_office_create_schema_contract.py` | schema/types.ts 防漂移 |
+| `backend/tests/unit/office/test_markdown_to_paragraphs.py` | 内联 runs / 引用 / 表格 / 图片解析 |
+| `backend/tests/integration/test_office_word_markdown_styles.py` | Markdown → 命名样式渲染闭环 |
+| `backend/tests/unit/office/test_style_template_store.py` | 样式模板 CRUD / 工作区隔离 |
+| `backend/tests/unit/tools/test_office_word_intelligence_tools.py` | 两个新 LLM 工具（列于该文件内） |
+| `src/features/office/__tests__/GenerateWorkspace.test.tsx` | 版式下拉透传 / 交付抽屉接线 |
+| `src/features/office/__tests__/WordStyleTemplateLibrary.test.tsx` | 模板库样式模板分区 |
+| `src/features/office/__tests__/WordStyleApplyDialog.test.tsx` | 已有文档套用样式对话框 |
+| `src/features/office/__tests__/OfficeDeliveryDrawer.test.tsx` | 交付抽屉 Lint 解析所选模板快照 |
 
-## 11. 后续（未实现）
+## 11. Markdown → 命名样式（M2）
+`backend/office/markdown_to_paragraphs.py` 的 `parse_markdown_document(text)` 返回
+`{"paragraphs", "tables", "images"}`；`parse_markdown_to_paragraphs` 保留旧签名（薄封装）。
 
-1. **Markdown 解析升级**：`markdown_to_paragraphs.py` 把 bold/italic/链接/图片/表格/引用映射到命名样式，而非直接格式。
-2. **前端 UI**：自由创建页的「版式」下拉、模板库的样式模板分区、已有文档「套用模板」入口；交付抽屉的 Lint 使用所选模板。
-3. **LLM 工具注册**：`office_apply_word_style`（WRITE_LOCAL）与 `office_style_from_rulepack`（READ）尚未注册，golden 快照待同步。
-4. **工作区级样式模板持久化**：复用 `spec_library` 的绑定模型，把「规则包 → 样式画像」结果存成可复用模板。
-5. **release/win7 同步**：已同步（PR #3240，2026-11-23；cherry-pick #3231 + #3235 至 `release/win7`，win7 侧技术文档编号为 164）。
+- 块级：`#`–`###` 标题（行内标记拍平为纯文本）、`-`/`*` 与 `1.` 列表、`> 引用`
+  （`style="quote"`）、管道表格（首行表头 + `|---|` 分隔行）、独立 `![alt](src)` 行
+  （记入 `after_paragraph` 前一段下标）。
+- 行内：`**bold**` → `bold`、`*italic*` → `italic`、`***both***`、`[text](url)` → `link`；
+  无标记的段落**不附** `runs` 键，返回结构与历史版本逐键一致。
+- 渲染（`word.py`）：`runs` 非空时逐 run 写入——bold → `Strong`、italic → `Emphasis`
+  字符样式（参考文档缺该样式时回退直接格式）；link → `w:hyperlink` + 关系 +
+  `Hyperlink` 字符样式；`style="quote"` → `Quote` 段落样式（缺失回退默认）。URL 仅
+  放行 `http/https/mailto`，其余按纯文本渲染。
+- 不处理（YAGNI）：嵌套列表/嵌套强调、转义字符、单元格内 runs。
+
+## 12. 工作区级样式模板（M2）
+
+- 表 `office_style_templates(id, workspace_path, name, format_spec, source_kind,
+  source_ref, is_default, created_at, updated_at)`，幂等迁移；仓储
+  `style_template_store.py`（list/get/create/delete/set_default，全部工作区限定，
+  旧库宽容：表不存在 → 空列表/503）。
+- `format_spec` 存**转换后的画像快照**，而非规则包引用——规则包后续修改不静默
+  改写已保存模板；`source_kind ∈ {preset, rulepack, manual}` + `source_ref` 溯源。
+- 三种保存来源（见 §8）：`format_spec` 原样 / `format_spec_preset` 展开 /
+  `rulepack_id`|`pack` 走 `format_spec_from_rulepack` 转换。
+- 生成接口**不隐式应用**工作区默认模板（避免改变既有生成结果）；默认只用于前端
+  下拉预选。`/style/apply` 与 `/generate` 的合并链：模板 < 预设 < 显式字段
+  （None 不覆盖）。
+
+## 13. LLM 工具（M2）
+
+两个工具在 `backend/tools/office_word_intelligence_tools.py`，均
+`requires_tool_context = True`（无绑定时不可见，故不进 `_EXPECTED_SCHEMA_NAMES`）：
+
+- `office_style_from_rulepack`（READ）：入参 `{rulepack_id?, rulepack?}`；内联 pack
+  优先，否则按 `rulepack_id or DEFAULT_RULEPACK_ID`（`general-quality`）加载 →
+  `format_spec_from_rulepack(pack).model_dump()`。
+- `office_apply_word_style`（WRITE_LOCAL）：入参 `{file_path, format_spec_preset?,
+  style_template_id?, format_spec?, clear_direct_formatting?, dry_run?, overwrite?,
+  output_filename?}`；无预设/模板/画像时报错；默认输出 `<stem>-styled.docx`。
+
+注册面（缺一即红）：`OFFICE_TOOLS`（`tool_names.py`）、`TOOL_CAPABILITIES` 与
+`_BOUNDARY_SPECS`（`permissions.py`，写工具的 `file_path` 边界）、office_quality
+bundle、`tools/__init__._LAZY_TOOL_EXPORTS`、Writer 显式清单、前端
+`toolCapabilities.ts`、`test_tool_bundles_parity` golden 计数（122→124 等）。
+
+## 14. 前端入口（M2）
+
+| 入口 | 位置 | 行为 |
+|------|------|------|
+| 版式下拉 | `GenerateWorkspace`（实际挂载）NL/reference 路径；`OfficeGenerateForm`（未挂载，测试引用） | 内置预设 + 工作区模板；默认模板预选；NL 请求带 `format_spec_preset` / `style_template_id` |
+| 样式模板分区 | `TemplateLibrary` 内 `WordStyleTemplateLibrary` | 列表 + 默认徽章 + 删除 / 设默认，数据源 `/style-templates` |
+| 套用样式 | `OfficePreviewPanel` Word 工具栏 → `WordStyleApplyDialog` | 预设/模板下拉 + dry-run 预览 + 应用统计，成功后刷新预览 |
+| 交付抽屉 Lint | `OfficeDeliveryDrawer` | `formatSpec` 缺失时按 `styleTemplateId` 取模板快照跑 lint / 修复；模板已删 → 如实展示跳过；列表请求失败 → 错误 + 重试 |
+| 交付接线 | `GenerateWorkspace` 生成成功后 | word 产物 → `awaiting_approval` + `deliveryRef{formatSpec:null, styleTemplateId}` + 打开抽屉；非 word → `finishTask` |
+
+已知边界：预设（preset）没有公开的 preset → `format_spec` 端点，交付抽屉只能解析
+样式模板；选择预设的生成在抽屉里如实显示 lint 跳过。
+
+## 15. win7 同步
+
+一期已同步（PR #3240，2026-11-23），win7 侧技术文档编号为 164；二期（M2）随后
+cherry-pick 至 `release/win7`，py38 兼容约束见 §9 末条。

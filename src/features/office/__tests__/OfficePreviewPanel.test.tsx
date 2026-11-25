@@ -20,6 +20,10 @@ const mockExportPdf = vi.fn();
 const mockReadPdfData = vi.fn();
 const mockPdfPreview = vi.fn();
 const mockReadWordData = vi.fn();
+// M2 D4: Word 工具栏「套用样式」入口挂载 WordStyleApplyDialog。
+const mockListWordStylePresets = vi.fn();
+const mockListWordStyleTemplates = vi.fn();
+const mockApplyWordStyle = vi.fn();
 vi.mock('../../../shared/api/officeApi', () => ({
   officeApi: {
     exportPdf: (...args: unknown[]) => mockExportPdf(...args),
@@ -29,6 +33,9 @@ vi.mock('../../../shared/api/officeApi', () => ({
     // the structured view stays reachable; individual tests override it.
     pdfPreview: (...args: unknown[]) => mockPdfPreview(...args),
     readWordData: (...args: unknown[]) => mockReadWordData(...args),
+    listWordStylePresets: (...args: unknown[]) => mockListWordStylePresets(...args),
+    listWordStyleTemplates: (...args: unknown[]) => mockListWordStyleTemplates(...args),
+    applyWordStyle: (...args: unknown[]) => mockApplyWordStyle(...args),
   },
 }));
 
@@ -702,5 +709,22 @@ describe('OfficePreviewPanel — fidelity defaults & auto-load (Task 2)', () => 
     });
     expect(screen.getByTestId('office-preview-structured')).toBeInTheDocument();
     expect(screen.getByText('正文段落。')).toBeInTheDocument();
+  });
+});
+
+describe('OfficePreviewPanel — Word style apply entry (M2 D4)', () => {
+  it('opens the style apply dialog from the Word toolbar', async () => {
+    mockListWordStylePresets.mockResolvedValue({ ok: true, presets: [] });
+    mockListWordStyleTemplates.mockResolvedValue({
+      ok: true,
+      workspace_path: '/tmp/ws',
+      templates: [],
+    });
+    renderPanel(WORD_PREVIEW);
+
+    fireEvent.click(screen.getByTestId('office-word-style-apply-toggle'));
+
+    expect(await screen.findByTestId('office-word-style-apply-dialog')).toBeInTheDocument();
+    expect(mockListWordStyleTemplates).toHaveBeenCalledWith('/tmp/ws');
   });
 });

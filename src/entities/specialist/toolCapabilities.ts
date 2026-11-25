@@ -118,6 +118,8 @@ export const TOOL_CAPABILITY_PACKS: readonly ToolCapabilityPack[] = [
       'office_revise_word',
       'office_batch_audit',
       'office_render_audit',
+      'office_style_from_rulepack',
+      'office_apply_word_style',
       'office_read_latex',
       'office_analyze_latex_template',
       'office_fill_latex_template',

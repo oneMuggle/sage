@@ -552,6 +552,9 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_revise_word",
                 "office_batch_audit",
                 "office_render_audit",
+                # 2026-11-23 M2: 样式画像转换（READ）+ 已有文档套用样式（WRITE_LOCAL）
+                "office_style_from_rulepack",
+                "office_apply_word_style",
                 # Round 12 自动修复: lint→修复→复检（WRITE_LOCAL）
                 "office_repair_word",
                 # 2026-11-21 M5: OOXML 校验/run 合并（WRITE_LOCAL）
@@ -807,6 +810,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     # 2026-11-01 M6: 规则包审校/修复/抽取/修订/批量/渲染（与 writer.tools 同步）。
     "office_audit_word", "office_fix_word", "office_extract_rules", "office_revise_word",
     "office_batch_audit", "office_render_audit",
+    # 2026-11-23 M2: 样式画像转换 + 已有文档套用样式（与 writer.tools 同步）。
+    "office_style_from_rulepack", "office_apply_word_style",
     # 2026-09-12 Round 12: 自动修复（与 writer.tools 同步）。
     "office_repair_word",
     # 2026-11-21 M5: OOXML 校验/run 合并（与 writer.tools 同步）。

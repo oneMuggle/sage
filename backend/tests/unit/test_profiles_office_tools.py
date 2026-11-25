@@ -75,6 +75,7 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
         "office_analyze_latex_template",
         "office_analyze_ppt_template",
         "office_analyze_word_template",
+        "office_apply_word_style",
         "office_archive",
         "office_audit_latex",
         "office_audit_latex_pdf",
@@ -110,6 +111,7 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
         "office_repair_word",
         "office_restore",
         "office_revise_word",
+        "office_style_from_rulepack",
         "office_update",
     ]
 
@@ -139,6 +141,7 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
         "office_analyze_latex_template",
         "office_analyze_ppt_template",
         "office_analyze_word_template",
+        "office_apply_word_style",
         "office_archive",
         "office_audit_latex",
         "office_audit_latex_pdf",
@@ -173,6 +176,7 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
         "office_repair_word",
         "office_restore",
         "office_revise_word",
+        "office_style_from_rulepack",
         "office_update",
     ]
     assert "office_delete" not in visible

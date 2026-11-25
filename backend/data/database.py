@@ -1481,6 +1481,32 @@ class Database:
             "ON office_spec_documents(workspace_path, is_default)"
         )
 
+        # M2 (2026-11-23): Word 样式模板库 — 每行是一份可复用的生成侧样式
+        # 画像快照（WordFormatSpec JSON）。规则包后续修改不会静默改写已保存
+        # 模板；source_kind ∈ preset/rulepack/manual + source_ref 保留溯源。
+        # Additive + idempotent, 同 office_spec_documents 迁移模式.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS office_style_templates (
+                id TEXT PRIMARY KEY,
+                workspace_path TEXT NOT NULL,
+                name TEXT NOT NULL,
+                format_spec TEXT NOT NULL,
+                source_kind TEXT NOT NULL DEFAULT 'manual',
+                source_ref TEXT,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_office_style_tpl_workspace "
+            "ON office_style_templates(workspace_path)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_office_style_tpl_default "
+            "ON office_style_templates(workspace_path, is_default)"
+        )
+
         # M2.5: 文档 → 规范书绑定列（可空，NULL = 跟随工作区默认）.
         # 幂等迁移，复用 derived_from/archived_at 的 PRAGMA 模式.
         cursor.execute("PRAGMA table_info(office_documents)")

@@ -4,6 +4,8 @@ import { officeApi } from '../../shared/api/officeApi';
 import type { OfficeTemplateMeta } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { WordStyleTemplateLibrary } from './WordStyleTemplateLibrary';
+
 export interface TemplateLibraryProps {
   workspacePath: string;
   selectedId: string | null;
@@ -73,6 +75,8 @@ export function TemplateLibrary({ workspacePath, selectedId, onSelect }: Templat
 
   return (
     <div data-testid="office-template-library" className="space-y-2">
+      <WordStyleTemplateLibrary workspacePath={workspacePath} />
+
       <h3 className="text-xs font-medium text-text-secondary">
         {t('office.generate.workspace.templatePick')}
       </h3>

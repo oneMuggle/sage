@@ -33,6 +33,7 @@ export function DeliveryDrawerHost() {
         workspacePath={ref.workspacePath}
         filePath={ref.filePath}
         formatSpec={ref.formatSpec}
+        styleTemplateId={ref.styleTemplateId ?? null}
         open
         onClose={closeDelivery}
       />

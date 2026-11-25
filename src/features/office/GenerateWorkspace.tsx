@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
+import { officeApi } from '../../shared/api/officeApi';
 import { officeGenerateApi } from '../../shared/api/officeGenerateApi';
 import type {
   OfficeDocType,
@@ -8,6 +9,8 @@ import type {
   OfficeGenerateResult,
   OfficeTemplateChatMessage,
   OfficeTemplateMeta,
+  WordStylePreset,
+  WordStyleTemplate,
 } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
@@ -60,10 +63,49 @@ export function GenerateWorkspace({
   const [selectedTemplate, setSelectedTemplate] = useState<OfficeTemplateMeta | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<OfficeTemplateChatMessage[]>([]);
+  const [styleChoice, setStyleChoice] = useState('');
+  const [stylePresets, setStylePresets] = useState<WordStylePreset[]>([]);
+  const [styleTemplates, setStyleTemplates] = useState<WordStyleTemplate[]>([]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<OfficeGenerateResult | null>(null);
   const [preview, setPreview] = useState<OfficePreviewData | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  // 版式选项是可选增强：加载失败（离线/demo 未覆盖）时静默降级为「不指定」。
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [presetRes, templateRes] = await Promise.all([
+          officeApi.listWordStylePresets(),
+          officeApi.listWordStyleTemplates(workspacePath || undefined),
+        ]);
+        if (cancelled) return;
+        setStylePresets(presetRes.presets);
+        setStyleTemplates(templateRes.templates);
+        const defaultTemplate = templateRes.templates.find((tpl) => tpl.is_default);
+        if (defaultTemplate) {
+          setStyleChoice((prev) => prev || `template:${defaultTemplate.id}`);
+        }
+      } catch {
+        if (!cancelled) {
+          setStylePresets([]);
+          setStyleTemplates([]);
+        }
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspacePath]);
+
+  const selectedPresetId = styleChoice.startsWith('preset:')
+    ? styleChoice.slice('preset:'.length)
+    : null;
+  const selectedStyleTemplateId = styleChoice.startsWith('template:')
+    ? styleChoice.slice('template:'.length)
+    : null;
 
   const wordDocuments = useMemo(
     () =>
@@ -139,7 +181,44 @@ export function GenerateWorkspace({
       instruction: instruction.trim(),
       doc_type: docType,
       ...(referencePaths.length > 0 ? { reference_paths: referencePaths } : {}),
+      ...(docType === 'word' && selectedPresetId ? { format_spec_preset: selectedPresetId } : {}),
+      ...(docType === 'word' && selectedStyleTemplateId
+        ? { style_template_id: selectedStyleTemplateId }
+        : {}),
     });
+  };
+
+  /**
+   * M2 D5: word 产物进交付验收（对齐 OfficeGenerateForm 的 A4b 流）——
+   * 条目切 awaiting_approval 并携带交付坐标；实际生效的样式模板 id 一并
+   * 透传，交付抽屉据此解析模板快照跑 lint（formatSpec 仍为 null）。
+   */
+  const openWordDelivery = (res: OfficeGenerateResult) => {
+    useTaskCenterStore.getState().updateTask(TASK_ID, {
+      title: res.filename,
+      phase: t('office.delivery.awaiting'),
+      status: 'awaiting_approval',
+      deliveryRef: {
+        workspacePath,
+        filePath: res.output_path,
+        formatSpec: null,
+        // 只有 NL / 参考模式会把下拉选择透传给生成请求。
+        styleTemplateId:
+          (mode === 'nl' || mode === 'reference') && docType === 'word'
+            ? selectedStyleTemplateId
+            : null,
+      },
+    });
+    useTaskCenterStore.getState().openDelivery({ kind: 'office', entryId: TASK_ID });
+  };
+
+  /** 生成产物是否为 word 文档（决定是否进交付验收）。 */
+  const isWordGeneration = (): boolean => {
+    if (mode === 'template') return selectedTemplate?.doc_type === 'word';
+    if (mode === 'iterate') {
+      return documents.find((doc) => doc.id === iterateId)?.doc_type === 'word';
+    }
+    return docType === 'word';
   };
 
   const handleSubmit = async () => {
@@ -172,7 +251,6 @@ export function GenerateWorkspace({
       toast.error(`${t('office.generate.failed')}: ${msg}`);
     } finally {
       stopPoll();
-      finishTask(TASK_ID);
       setBusy(false);
     }
 
@@ -193,6 +271,13 @@ export function GenerateWorkspace({
           }
         })
         .catch(() => undefined);
+      if (isWordGeneration()) {
+        openWordDelivery(res);
+      } else {
+        finishTask(TASK_ID);
+      }
+    } else {
+      finishTask(TASK_ID);
     }
   };
 
@@ -246,6 +331,42 @@ export function GenerateWorkspace({
                   {t(`office.generate.docType.${type}`)}
                 </option>
               ))}
+            </select>
+          </label>
+        ) : null}
+
+        {(mode === 'nl' || mode === 'reference') && docType === 'word' ? (
+          <label className="block space-y-1">
+            <span className="text-xs text-text-secondary">
+              {t('office.generate.workspace.styleProfile')}
+            </span>
+            <select
+              className={inputClass}
+              value={styleChoice}
+              data-testid="office-generate-workspace-style"
+              onChange={(e) => setStyleChoice(e.target.value)}
+            >
+              <option value="">{t('office.generate.workspace.styleNone')}</option>
+              {stylePresets.length > 0 ? (
+                <optgroup label={t('office.generate.workspace.stylePresetsGroup')}>
+                  {stylePresets.map((preset) => (
+                    <option key={preset.id} value={`preset:${preset.id}`}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {styleTemplates.length > 0 ? (
+                <optgroup label={t('office.generate.workspace.styleTemplatesGroup')}>
+                  {styleTemplates.map((tpl) => (
+                    <option key={tpl.id} value={`template:${tpl.id}`}>
+                      {tpl.is_default
+                        ? `${tpl.name}${t('office.generate.workspace.styleDefaultTag')}`
+                        : tpl.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </select>
           </label>
         ) : null}
