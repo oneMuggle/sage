@@ -147,6 +147,9 @@ export const chatApi = {
       apiKey: config?.apiKey ?? null,
       apiUrl: config?.apiUrl ?? null,
       model: config?.model ?? null,
+      // Task 5: 请求方指定的端点 id，用于上下文窗口解析与用量/端点归因
+      //（尤其会话级模型覆盖）。relay 转成 endpoint_id。
+      endpointId: config?.endpointId ?? null,
       // Task 7 (2026-10-28) 智能路由任务类型。未设置时**省略**该键 ——
       // stream.test.ts 对整个 body 做精确断言，null 会破坏它。
       ...(config?.taskType ? { taskType: config.taskType } : {}),

@@ -14,7 +14,8 @@ from .files import (
     secure_write_file,
 )
 from .operation_log import append_log
-from .vectorstore import VectorStore
+from .vectorstore import read_stored_dim
+from .vectorstore_factory import open_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +68,18 @@ def cascade_delete_source(project_root: Path, source_path: str) -> dict:
             pages_to_delete.append(md_file)
 
     # Step 2: 删除 wiki 页面和嵌入向量
+    # 向量维度由嵌入模型自适应决定（1024 / 1536 / …），必须按库内记录的维度
+    # 打开；库不存在时没有可删向量，直接跳过（不创建空库）。
+    storage_path = project_root / ".llm-wiki" / "vectors.json"
+    stored_dim = read_stored_dim(storage_path)
     vector_store = None
-    try:
-        vector_store = VectorStore.open(project_root, dim=1536)
-    except Exception as exc:
-        logger.warning("无法打开向量存储: error_type=%s", type(exc).__name__)
+    if stored_dim is None:
+        logger.debug("无已记录的 wiki 向量库，跳过向量清理")
+    else:
+        try:
+            vector_store = open_vector_store(project_root, stored_dim)
+        except Exception as exc:
+            logger.warning("无法打开向量存储: error_type=%s", type(exc).__name__)
 
     deleted_titles = set()
     for page_path in pages_to_delete:

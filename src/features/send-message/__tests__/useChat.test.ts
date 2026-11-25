@@ -267,6 +267,7 @@ describe('useChat', () => {
         expect.objectContaining({
           model: 'vision-model',
           apiUrl: 'https://api.example.test/v1',
+          endpointId: 'ep-1',
         }),
       );
     });
