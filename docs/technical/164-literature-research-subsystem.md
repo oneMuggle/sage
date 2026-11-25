@@ -35,7 +35,7 @@
 
 | 层 | 目录 | 说明 |
 |---|---|---|
-| builtin | `backend/literature/sites/` | 随包发布，目前只有 `xueshu789.yaml` |
+| builtin | `backend/literature/sites/` | 随包发布；保持中立，不携带具体站点（示例见 `docs/templates/literature-sites/`） |
 | user | `$SAGE_LITERATURE_SITES_DIR`，未设置时为 `~/.sage/literature_sites` | 用户自建站点 |
 | project | `<cwd>/.sage/literature_sites/` | 项目级覆盖 |
 
@@ -103,9 +103,9 @@
 - `_with_defaults` 补齐 `status: draft`、`version: 0.1.0`、`last_verified_at` 为当天、`compliance` 默认 `{note: "仅本人账号/机构授权", default_enabled: False}`；
 - `profile_draft_from_observation(raw)` / `write_profile_draft(raw, out_path)` 写出 YAML 草稿，随后用 `cli validate-profile` 校验。
 
-### 2.6 xueshu789 内置 profile 的实测事实
+### 2.6 示例 profile：浏览器登录 + 检索 + PDF 下载（xueshu789）
 
-`backend/literature/sites/xueshu789.yaml` 当前是 `status: ready`、`version: 0.3.0`、`last_verified_at: "2026-11-22"`：
+`docs/templates/literature-sites/xueshu789.yaml`（示例模板，不自动加载；复制到 `~/.sage/literature_sites/` 后启用）当前是 `status: ready`、`version: 0.3.0`、`last_verified_at: "2026-11-22"`：
 
 | 项 | 值 |
 |---|---|
@@ -205,11 +205,11 @@ wait_download(timeout_s=60) -> Optional[str]
 5. `validate_pdf(path, expected_title, magic)` 检查：文件存在、文件头等于 magic（默认 `%PDF-`）、归一化后的文件名与题名互相包含；
 6. 若 `pdf.forbid` 中的词出现在文件后缀里（如 `CAJ`）则记错误。
 
-返回 `DownloadResult(path, ok, errors)`。xueshu789 的 `&ddata=` 坑就是这一层设计的直接原因，见 §2.6。
+返回 `DownloadResult(path, ok, errors)`。部分站点的 `&ddata=` 附加参数坑就是这一层设计的直接原因，见 §2.6。
 
 ### 3.5 交互式检索的边界
 
-- 验证码/滑块只报告不破解；`/dbItem/2` 会触发滑块，`/dbItem/3` 是当前可用入口。
+- 验证码/滑块只报告不破解；若入口页触发滑块，改用该站点 profile 中已验证可用的入口 URL。
 - 限速由 `profile.rate_limit` 声明，guidance 会把它传给 LLM；执行层不做强制节流，由使用方遵守。
 - 站点改版导致选择器失效时，先 `validate-profile` 与一次 dry-run 检索定位问题，必要时用 `draft-profile` 重新录制，不改 pipeline 代码。
 
@@ -385,7 +385,7 @@ supported → flagged → unsupported → unclear → unresolved → unverified
 | `backend/literature/rubric.py` | 四维 Rubric |
 | `backend/literature/export.py` | 导出与 paper-writing 交接 |
 | `backend/literature/cli.py` | 命令行入口 |
-| `backend/literature/sites/xueshu789.yaml` | 内置站点 profile |
+| `docs/templates/literature-sites/xueshu789.yaml` | 示例站点 profile（不自动加载） |
 | `backend/literature/README.md` | 模块说明与运行示例 |
 | `backend/skills/skill_md/shipped/literature-research/SKILL.md` | 对 LLM 的工作流定义 |
 | `backend/skills/skill_md/shipped/literature-research/references/pipeline.md` | 运行目录字段级 schema |
