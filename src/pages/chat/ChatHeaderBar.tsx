@@ -9,7 +9,6 @@ import { RightPanelToggle } from '../../widgets/chat/RightPanelToggle';
 import { SessionIdBadge } from '../../widgets/chat/SessionIdBadge';
 import { SessionModelPicker } from '../../widgets/chat/SessionModelPicker';
 import { SessionParticipantsStrip } from '../../widgets/chat/SessionParticipantsStrip';
-import { SessionUsageBadge } from '../../widgets/chat/SessionUsageBadge';
 import { WorkspaceBranchPicker } from '../../widgets/chat/WorkspaceBranchPicker';
 
 import { DisplayModeSwitch } from './DisplayModeSwitch';
@@ -66,7 +65,6 @@ export function ChatHeaderBar({
           onOpenWorkbench={() => navigate('/projects')}
         />
         <WorkspaceBranchPicker sessionId={currentSessionId} />
-        <SessionUsageBadge sessionId={currentSessionId} />
         <SessionIdBadge sessionId={currentSessionId} />
       </div>
       <div className="flex items-center gap-1.5 flex-wrap" data-testid="chat-header-controls">

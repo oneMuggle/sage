@@ -1,16 +1,12 @@
 // src/widgets/chat/__tests__/ContextMeter.sources.test.tsx
 // 批次 C · 来源可追溯：已注入 / 已截断 / 被排除 / 未核验四态，以及“无标识”时的诚实提示。
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+// 2026-11-25 (composer 状态条下沉): ContextMeter 改为受控展示（usage prop），
+// 本测试直接传夹具，不再 mock usageApi。
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
 
 import type { ContextSource, SessionUsage } from '../../../shared/api/usageApi';
 import { ContextMeter } from '../ContextMeter';
-
-const mockFetch = vi.fn<(sessionId: string) => Promise<SessionUsage>>();
-
-vi.mock('../../../shared/api/usageApi', () => ({
-  fetchSessionUsage: (sessionId: string) => mockFetch(sessionId),
-}));
 
 function usageFixture(sources: ContextSource[]): SessionUsage {
   return {
@@ -43,20 +39,14 @@ function usageFixture(sources: ContextSource[]): SessionUsage {
   };
 }
 
-async function openPanel(sources: ContextSource[]): Promise<void> {
-  mockFetch.mockResolvedValue(usageFixture(sources));
-  render(<ContextMeter sessionId="s1" />);
-  await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+function openPanel(sources: ContextSource[]): void {
+  render(<ContextMeter usage={usageFixture(sources)} />);
   fireEvent.click(screen.getByTestId('context-meter'));
 }
 
 describe('ContextMeter 来源明细', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('可追溯来源展开后列出真实标识，并标记单条截断与被排除条数', async () => {
-    await openPanel([
+  it('可追溯来源展开后列出真实标识，并标记单条截断与被排除条数', () => {
+    openPanel([
       {
         key: 'project_materials',
         tokens: 12_000,
@@ -83,16 +73,16 @@ describe('ContextMeter 来源明细', () => {
     );
   });
 
-  it('无单条标识的记忆来源明确说明不可逐条追溯，不虚构来源', async () => {
-    await openPanel([{ key: 'memory', tokens: 800, count: 1, identifiable: false }]);
+  it('无单条标识的记忆来源明确说明不可逐条追溯，不虚构来源', () => {
+    openPanel([{ key: 'memory', tokens: 800, count: 1, identifiable: false }]);
     fireEvent.click(screen.getByTestId('context-meter-source-toggle-memory'));
     const detail = screen.getByTestId('context-meter-source-detail-memory');
     expect(detail.textContent).toContain('无法逐条追溯');
     expect(screen.queryByTestId('context-meter-source-item-memory')).toBeNull();
   });
 
-  it('保留“非内容验真”的口径声明', async () => {
-    await openPanel([{ key: 'skills', tokens: 500, count: 1, identifiable: true, items: [] }]);
+  it('保留“非内容验真”的口径声明', () => {
+    openPanel([{ key: 'skills', tokens: 500, count: 1, identifiable: true, items: [] }]);
     expect(screen.getByTestId('context-meter-sources').textContent).toContain('不是发送前预览');
   });
 });
