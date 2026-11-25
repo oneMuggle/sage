@@ -10,9 +10,11 @@ change that disambiguates MCP tools from built-ins).
 
 from __future__ import annotations
 
+import base64
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
+from backend.domain.media import RichMedia, media_envelope
 from backend.mcp.client import McpClientError
 from backend.mcp.pool import McpServerPool, get_pool, namespaced_tool_name
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
@@ -53,6 +55,54 @@ class McpTool(BaseTool):
             parameters=input_schema,
         )
 
+    def _persist_mcp_image(
+        self,
+        b64_data: str,
+        image_format: str,
+        mime_full: str,
+        tool_name: str,
+        store: Optional[Any] = None,
+    ) -> Optional[RichMedia]:
+        """Persist an inline MCP image to MediaStore, return a URL reference.
+
+        Returns None on any failure so the caller can fall back to the legacy
+        inline ``imageData`` path — a persistence hiccup must never drop the
+        image from the assistant's reply.
+        """
+        try:
+            from backend.services.multimodal.media_store import MediaKind, MediaStore
+
+            raw = base64.b64decode(b64_data, validate=False)
+            store = store or MediaStore()
+            ref = store.save(
+                raw,
+                MediaKind.IMAGE,
+                source=f"mcp:{self._server_name}",
+                metadata={
+                    "original_filename": f"{tool_name}.{image_format}",
+                    "mime_type": mime_full,
+                },
+                ext=image_format,
+            )
+            return RichMedia(
+                id=ref.id,
+                kind="diagram" if image_format == "svg" else "image",
+                mime_type=ref.mime_type,
+                api_url=ref.api_url,
+                format=image_format,
+                title=tool_name,
+                source=f"mcp:{self._server_name}",
+                interactive=image_format == "svg",
+            )
+        except Exception as exc:  # noqa: BLE001 — persist failure must not lose the image
+            logger.warning(
+                "MCP image persist failed (server=%s tool=%s): %s",
+                self._server_name,
+                tool_name,
+                exc,
+            )
+            return None
+
     def execute(self, **kwargs: Any) -> ToolResult:
         """Call the MCP tool via the pool and return the result."""
         mcp_tool_name = self._tool_spec["name"]
@@ -85,6 +135,7 @@ class McpTool(BaseTool):
         # Extract content
         content_parts = response.get("content", [])
         text_parts = []
+        media: List[RichMedia] = []
         metadata: Dict[str, Any] = {}
 
         for part in content_parts:
@@ -104,7 +155,19 @@ class McpTool(BaseTool):
                 else:
                     image_format = "png"
                     mime_full = mime
-                # Reconstruct full data URL with prefix if missing
+                # A data URL prefix must be stripped before base64 decoding.
+                b64_data = (
+                    raw_data.split(",", 1)[1]
+                    if raw_data.startswith("data:")
+                    else raw_data
+                )
+                ref = self._persist_mcp_image(
+                    b64_data, image_format, mime_full, mcp_tool_name
+                )
+                if ref is not None:
+                    media.append(ref)
+                    continue
+                # Fallback: keep the inline data URL (legacy path).
                 if raw_data.startswith("data:"):
                     metadata["imageData"] = raw_data
                 else:
@@ -118,13 +181,24 @@ class McpTool(BaseTool):
         text_output = "\n".join(text_parts) if text_parts else ""
 
         if is_error:
+            error_content: Any = text_output
+            if metadata:
+                error_content = {"text": text_output, "metadata": metadata}
             return ToolResult(
                 success=False,
-                content={"text": text_output, "metadata": metadata} if metadata else text_output,
+                content=error_content,
                 error=text_output or "MCP tool returned error",
             )
 
-        # Return with metadata for frontend to handle images
+        # Persisted media wins; inline metadata only survives on fallback paths.
+        if media:
+            return ToolResult(
+                success=True,
+                content=media_envelope(
+                    text_output, media, extra_metadata=metadata or None
+                ),
+            )
+
         result_content: Any = text_output
         if metadata:
             result_content = {"text": text_output, "metadata": metadata}
