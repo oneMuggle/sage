@@ -321,7 +321,7 @@ async def complete_utility(
         raise RuntimeError("no usable LLM endpoint configured")
     try:
         return await client.complete(prompt)
-    except Exception as exc:  # noqa: BLE001 — 仅对配置拒绝做一次回退
+    except Exception as exc:  # noqa: BLE001 — 任何异常都做一次无思考参数的回退；最多多一次请求
         if llm_client is not None:
             raise
         logger.warning(
