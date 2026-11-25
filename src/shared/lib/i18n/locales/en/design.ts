@@ -72,6 +72,7 @@ export const enDesign = {
   'design.version.restored': 'Restored as a new version',
 
   'design.composer.importOutline': 'Import outline from Word',
+  'design.composer.pickFromLibrary': 'Choose a Word from library',
   'design.composer.outlineLoaded': 'Imported outline ({count} sections)',
   'design.composer.outlineFailed': 'Failed to import outline: {error}',
   'design.composer.quickBrief': 'Quick brief',
@@ -131,6 +132,15 @@ export const enDesign = {
   'design.resources.removeSeries': 'Remove series',
   'design.resources.embed': 'Embed chart',
   'design.resources.embedded': 'Embedded as v{version}',
+  'design.resources.bindFromLibrary': 'Choose from library',
+
+  // Office document library picker
+  'design.officePicker.title': 'Choose from library',
+  'design.officePicker.loading': 'Loading library…',
+  'design.officePicker.empty': 'No documents in the library yet',
+  'design.officePicker.failed': 'Failed to load library: {error}',
+  'design.officePicker.refresh': 'Refresh library',
+  'design.officePicker.close': 'Close',
 
   // Tweaks
   'design.tweaks.title': 'Tweaks',

@@ -13,6 +13,7 @@ import type {
   DesignProject,
   DesignProjectDetail,
   DesignSourceBinding,
+  DesignSourceInput,
   DesignSystem,
   DesignTemplate,
   EmbedChartResult,
@@ -23,6 +24,8 @@ import type {
   GenerationProgress,
   IterateRequest,
   IterationMessage,
+  OfficeSourceListResponse,
+  OfficeSourceRef,
   OutlineResult,
   ProjectTweaks,
   ReviewResult,
@@ -180,12 +183,24 @@ export function subscribeDesignProgress(
 // ---------------------------------------------------------------------------
 
 /** 从 .docx 提取大纲（后端只接受 docx 路径） */
-export async function extractOutline(filePath: string): Promise<OutlineResult> {
+export async function extractOutline(source: DesignSourceInput): Promise<OutlineResult> {
   return backendRequest<OutlineResult>({
     method: 'POST',
     path: `${BASE}/outline`,
-    body: { file_path: filePath },
+    body: { ...source },
   });
+}
+
+/** 列出可作设计素材的 Office 文档（word / excel） */
+export async function listOfficeSources(docType?: 'word' | 'excel'): Promise<OfficeSourceRef[]> {
+  const params = new URLSearchParams();
+  if (docType) params.set('doc_type', docType);
+
+  const response = await backendRequest<OfficeSourceListResponse>({
+    method: 'GET',
+    path: `${BASE}/office-sources${params.toString() ? `?${params.toString()}` : ''}`,
+  });
+  return response.items ?? [];
 }
 
 /** 读取项目的数据源绑定（未绑定时后端返回 404） */
@@ -199,21 +214,21 @@ export async function getSource(projectId: string): Promise<DesignSourceBinding>
 /** 绑定数据源（xlsx/csv/json） */
 export async function bindSource(
   projectId: string,
-  filePath: string,
+  source: DesignSourceInput,
 ): Promise<DesignSourceBinding> {
   return backendRequest<DesignSourceBinding>({
     method: 'POST',
     path: `${BASE}/projects/${projectId}/source`,
-    body: { file_path: filePath },
+    body: { ...source },
   });
 }
 
 /** 绑定前预览数据源（列名/行数/样例） */
-export async function previewSource(filePath: string): Promise<SourcePreview> {
+export async function previewSource(source: DesignSourceInput): Promise<SourcePreview> {
   return backendRequest<SourcePreview>({
     method: 'POST',
     path: `${BASE}/source/preview`,
-    body: { file_path: filePath },
+    body: { ...source },
   });
 }
 

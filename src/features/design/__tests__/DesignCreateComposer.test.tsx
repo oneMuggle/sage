@@ -1,11 +1,17 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import * as api from '../../../entities/design/designApi';
 import { useDesignStore } from '../../../entities/design/designStore';
 import { DesignCreateComposer } from '../DesignCreateComposer';
 
 vi.mock('../../../shared/lib/i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock('../../../entities/design/designApi', () => ({
+  extractOutline: vi.fn(),
+  listOfficeSources: vi.fn(),
 }));
 
 describe('DesignCreateComposer', () => {
@@ -86,5 +92,37 @@ describe('DesignCreateComposer', () => {
   it('keeps the submit button disabled until a brief is entered', () => {
     render(<DesignCreateComposer onCancel={() => {}} onCreated={() => {}} />);
     expect(screen.getByRole('button', { name: 'design.composer.create' })).toBeDisabled();
+  });
+
+  it('imports an outline from a Word document in the office library', async () => {
+    vi.mocked(api.listOfficeSources).mockResolvedValue([
+      {
+        doc_id: 'd1',
+        doc_type: 'word',
+        original_filename: '年度总结.docx',
+        generated_filename: '年度总结.docx',
+        created_at: 1760000000000,
+        size_bytes: 2048,
+      },
+    ]);
+    vi.mocked(api.extractOutline).mockResolvedValue({
+      title: '年度总结',
+      source_path: '/workspace/office/word/d1/年度总结.docx',
+      slide_count: 3,
+      outline_md: '# 第一节\n# 第二节',
+    });
+
+    render(<DesignCreateComposer onCancel={() => {}} onCreated={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'design.composer.pickFromLibrary' }));
+
+    await waitFor(() => expect(screen.getByText('年度总结.docx')).toBeTruthy());
+    fireEvent.click(screen.getByText('年度总结.docx'));
+
+    await waitFor(() => expect(api.extractOutline).toHaveBeenCalledWith({ doc_id: 'd1' }));
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText('design.composer.brief') as HTMLTextAreaElement).value,
+      ).toContain('# 第一节'),
+    );
   });
 });

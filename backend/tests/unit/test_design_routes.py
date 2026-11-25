@@ -1595,3 +1595,293 @@ class TestDesignRoutes:
                     # acceptable; the route still correctly emits an error
                     # frame instead of crashing.
                     assert "detail" in json.loads(frames[-1][1])
+
+    # ---------------------------------------------------------------
+    # POST /design/outline & /source/preview — doc_id code path
+    # GET  /design/office-sources
+    # ---------------------------------------------------------------
+
+    @staticmethod
+    def _make_office_db(tmp_path):
+        """Build an in-memory sqlite conn with an ``office_documents`` row.
+
+        Returns ``(conn, workspace)`` where ``workspace`` contains the
+        materialised document file.
+        """
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            CREATE TABLE office_documents (
+                id TEXT PRIMARY KEY,
+                workspace_path TEXT NOT NULL,
+                doc_type TEXT NOT NULL,
+                original_filename TEXT,
+                generated_filename TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                metadata TEXT,
+                derived_from TEXT,
+                archived_at INTEGER,
+                active_spec_id TEXT
+            )
+            """
+        )
+        conn.commit()
+
+        workspace = tmp_path / "office_ws"
+        doc_dir = workspace / "office" / "word" / "d1"
+        doc_dir.mkdir(parents=True)
+        docx_path = doc_dir / "src.docx"
+
+        from docx import Document
+
+        doc = Document()
+        doc.add_heading("Docid 标题", level=1)
+        doc.add_paragraph("Docid 第一段")
+        doc.add_heading("第二节", level=1)
+        doc.add_paragraph("Docid 第二段")
+        doc.save(str(docx_path))
+
+        conn.execute(
+            """
+            INSERT INTO office_documents
+                (id, workspace_path, doc_type, original_filename,
+                 generated_filename, status, created_at, updated_at,
+                 metadata, derived_from, archived_at, active_spec_id)
+            VALUES (?, ?, 'word', 'src.docx', 'src.docx',
+                    'parsed', 1000, 1000, '{"file_size_bytes": 5}',
+                    NULL, NULL, NULL)
+            """,
+            ("d1", str(workspace)),
+        )
+        conn.commit()
+        return conn, workspace
+
+    async def test_outline_with_doc_id_succeeds(self, studio, tmp_path):
+        from backend.design import office_sources
+        from backend.main import app
+
+        conn, workspace = self._make_office_db(tmp_path)
+        fake_db = MagicMock()
+        fake_db.get_connection.return_value = conn
+
+        with patch(
+            "backend.api.v1.design_resources_routes.get_design_studio",
+            return_value=studio,
+        ), patch(
+            "backend.api.v1.design_resources_routes.get_database",
+            return_value=fake_db,
+        ), patch.object(
+            office_sources.DefaultWorkspaceResolver,
+            "default_workspace_path",
+            lambda self: str(workspace),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    "/api/v1/design/outline",
+                    json={"doc_id": "d1"},
+                )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["title"] == "Docid 标题"
+        assert body["slide_count"] == 2
+        assert "Docid 第一段" in body["outline_md"]
+
+    async def test_outline_rejects_both_sources(self, studio):
+        """Providing file_path AND doc_id is a 422 (Pydantic validator)."""
+        from backend.main import app
+
+        with patch(
+            "backend.api.v1.design_resources_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    "/api/v1/design/outline",
+                    json={"file_path": "/tmp/x.docx", "doc_id": "d1"},
+                )
+        assert resp.status_code == 422
+
+    async def test_outline_rejects_neither_source(self, studio):
+        """Providing neither file_path nor doc_id is a 422."""
+        from backend.main import app
+
+        with patch(
+            "backend.api.v1.design_resources_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    "/api/v1/design/outline", json={},
+                )
+        assert resp.status_code == 422
+
+    async def test_preview_with_unknown_doc_id_returns_404(
+        self, studio, tmp_path,
+    ):
+        from backend.main import app
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            CREATE TABLE office_documents (
+                id TEXT PRIMARY KEY, workspace_path TEXT NOT NULL,
+                doc_type TEXT NOT NULL, original_filename TEXT,
+                generated_filename TEXT NOT NULL, status TEXT NOT NULL,
+                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                metadata TEXT, derived_from TEXT,
+                archived_at INTEGER, active_spec_id TEXT
+            )
+            """
+        )
+        conn.commit()
+        fake_db = MagicMock()
+        fake_db.get_connection.return_value = conn
+
+        with patch(
+            "backend.api.v1.design_resources_routes.get_design_studio",
+            return_value=studio,
+        ), patch(
+            "backend.api.v1.design_resources_routes.get_database",
+            return_value=fake_db,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    "/api/v1/design/source/preview",
+                    json={"doc_id": "missing-id"},
+                )
+        assert resp.status_code == 404
+        assert "missing-id" in resp.json()["detail"]
+
+    async def test_office_sources_lists_documents(self, studio, tmp_path):
+        from backend.design import office_sources
+        from backend.main import app
+
+        conn, workspace = self._make_office_db(tmp_path)
+        fake_db = MagicMock()
+        fake_db.get_connection.return_value = conn
+
+        with patch(
+            "backend.api.v1.design_resources_routes.get_design_studio",
+            return_value=studio,
+        ), patch(
+            "backend.api.v1.design_resources_routes.get_database",
+            return_value=fake_db,
+        ), patch.object(
+            office_sources.DefaultWorkspaceResolver,
+            "default_workspace_path",
+            lambda self: str(workspace),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.get(
+                    "/api/v1/design/office-sources?doc_type=word",
+                )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["items"][0]["doc_id"] == "d1"
+        assert body["items"][0]["doc_type"] == "word"
+
+    @staticmethod
+    def _make_excel_office_db(tmp_path):
+        """Build an in-memory sqlite conn with an ``office_documents`` row
+        pointing to a materialised Excel file under ``workspace``."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            CREATE TABLE office_documents (
+                id TEXT PRIMARY KEY,
+                workspace_path TEXT NOT NULL,
+                doc_type TEXT NOT NULL,
+                original_filename TEXT,
+                generated_filename TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                metadata TEXT,
+                derived_from TEXT,
+                archived_at INTEGER,
+                active_spec_id TEXT
+            )
+            """
+        )
+        conn.commit()
+
+        workspace = tmp_path / "office_ws_xl"
+        doc_dir = workspace / "office" / "excel" / "xl1"
+        doc_dir.mkdir(parents=True)
+        xlsx_path = doc_dir / "sales.xlsx"
+
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["region", "amount"])
+        ws.append(["华东", 100])
+        ws.append(["华北", 200])
+        wb.save(str(xlsx_path))
+
+        conn.execute(
+            """
+            INSERT INTO office_documents
+                (id, workspace_path, doc_type, original_filename,
+                 generated_filename, status, created_at, updated_at,
+                 metadata, derived_from, archived_at, active_spec_id)
+            VALUES (?, ?, 'excel', 'sales.xlsx', 'sales.xlsx',
+                    'parsed', 1000, 1000, '{"file_size_bytes": 5}',
+                    NULL, NULL, NULL)
+            """,
+            ("xl1", str(workspace)),
+        )
+        conn.commit()
+        return conn, workspace
+
+    async def test_bind_source_with_doc_id(self, studio, tmp_path):
+        from backend.design import office_sources
+        from backend.main import app
+
+        conn, workspace = self._make_excel_office_db(tmp_path)
+        fake_db = MagicMock()
+        fake_db.get_connection.return_value = conn
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ), patch(
+            "backend.api.v1.design_routes.get_database",
+            return_value=fake_db,
+        ), patch.object(
+            office_sources.DefaultWorkspaceResolver,
+            "default_workspace_path",
+            lambda self: str(workspace),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                pid = await self._create_project(client, studio)
+                resp = await client.post(
+                    f"/api/v1/design/projects/{pid}/source",
+                    json={"doc_id": "xl1"},
+                )
+                assert resp.status_code == 200
+                body = resp.json()
+                assert body["kind"] == "xlsx"
