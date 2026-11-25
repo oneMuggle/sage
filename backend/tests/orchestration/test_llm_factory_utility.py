@@ -90,3 +90,45 @@ def test_complete_utility_without_client_raises(monkeypatch):
     )
     with pytest.raises(RuntimeError):
         asyncio.run(llm_factory.complete_utility("x"))
+
+
+def test_build_utility_llm_client_without_task_type_skips_routing(monkeypatch):
+    overlay_calls = []
+
+    def _spy_overlay(cfg, task_type=None, **_kw):
+        overlay_calls.append(task_type)
+        return cfg
+
+    monkeypatch.setattr(
+        llm_factory, "load_llm_config_from_settings", lambda: {"model": "m"}
+    )
+    monkeypatch.setattr(llm_factory, "apply_auto_routing_overlay", _spy_overlay)
+    import backend.core.legacy.llm_client as legacy
+
+    monkeypatch.setattr(legacy, "LLMConfig", dict)
+    monkeypatch.setattr(legacy, "LLMClient", lambda cfg: cfg)
+
+    client = llm_factory.build_utility_llm_client()
+    assert client is not None
+    assert overlay_calls == []
+
+
+def test_build_utility_llm_client_with_task_type_routes(monkeypatch):
+    overlay_calls = []
+
+    def _spy_overlay(cfg, task_type=None, **_kw):
+        overlay_calls.append(task_type)
+        return cfg
+
+    monkeypatch.setattr(
+        llm_factory, "load_llm_config_from_settings", lambda: {"model": "m"}
+    )
+    monkeypatch.setattr(llm_factory, "apply_auto_routing_overlay", _spy_overlay)
+    import backend.core.legacy.llm_client as legacy
+
+    monkeypatch.setattr(legacy, "LLMConfig", dict)
+    monkeypatch.setattr(legacy, "LLMClient", lambda cfg: cfg)
+
+    client = llm_factory.build_utility_llm_client(task_type="classification")
+    assert client is not None
+    assert overlay_calls == ["classification"]

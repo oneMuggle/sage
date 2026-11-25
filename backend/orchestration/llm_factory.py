@@ -284,18 +284,19 @@ def _apply_utility_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def build_utility_llm_client(task_type: str = "classification") -> Optional[Any]:
+def build_utility_llm_client(task_type: Optional[str] = None) -> Optional[Any]:
     """构建规划前哨（模式/复杂度分类、澄清）专用客户端。
 
     与 ``build_llm_client_from_settings`` 的差异：
-    1. 应用按用途路由（``routing.mode == "auto"`` 时才生效）；
+    1. 应用按用途路由（仅在传入 task_type 且 routing.mode == "auto" 时生效）；
     2. 默认关思考 —— 二分类/澄清无需长推理，可省数十秒。
     """
     cfg = load_llm_config_from_settings()
     if cfg is None:
         return None
     try:
-        cfg = apply_auto_routing_overlay(cfg, task_type=task_type)
+        if task_type:
+            cfg = apply_auto_routing_overlay(cfg, task_type=task_type)
         from backend.core.legacy.llm_client import LLMClient, LLMConfig
 
         return LLMClient(LLMConfig(**_apply_utility_overrides(cfg)))

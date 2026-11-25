@@ -194,7 +194,10 @@ async def test_clarify_full_loop_collects_answer(monkeypatch):
 
 @pytest.mark.asyncio()
 async def test_clarify_not_needed_skips_questions(monkeypatch):
-    client = FakeLLM(json.dumps({"need_clarify": False, "questions": []}))
+    client = FakeLLM(
+        json.dumps({"complexity": "medium", "research_needed": False, "reasoning": "test"}),
+        json.dumps({"need_clarify": False, "questions": []}),
+    )
     _enable(monkeypatch, client=client, plan_scout_enabled=False)
     monkeypatch.setattr(
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()

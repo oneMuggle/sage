@@ -226,7 +226,7 @@ async def run_plan_preflight(
             logger.info("plan_preflight: 无 LLM 配置，跳过复杂度分类/澄清/侦察")
             return None
 
-        # 前哨小任务（澄清/侦察）默认关思考；侦察需要工具调用，故不带路由 overlay。
+        # 前哨小任务（澄清/侦察）默认关思考；侦察需要工具调用，故不传 task_type（不加路由 overlay）。
         clarify_client = build_utility_llm_client(task_type="planning") or client
         scout_client = build_utility_llm_client() or client
 
