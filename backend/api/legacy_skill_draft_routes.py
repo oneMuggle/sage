@@ -447,7 +447,14 @@ async def scan_skill_consolidation(auto_draft: bool = True, mode: str = "full"):
     store = get_lifecycle_store()
     pinned = store.get_pinned_names()
     skills = collect_active_skills(names=candidate_names)
-    suggestions = await service.scan(skills, pinned_names=sorted(pinned))
+
+    # M1 相似度预筛接入
+    from backend.skills.similarity import get_similarity_service
+
+    similarity_service = get_similarity_service()
+    suggestions = await service.scan(
+        skills, pinned_names=sorted(pinned), similarity_service=similarity_service
+    )
 
     # 建议落审计台账（append-only；每条建议一条 consolidation_note）
     from backend.skills.audit import get_skill_audit_log
@@ -483,10 +490,223 @@ async def scan_skill_consolidation(auto_draft: bool = True, mode: str = "full"):
     }
 
 
+# ---------------------------------------------------------------------------
+# M2: 技能质量评分 API
+# ---------------------------------------------------------------------------
+
+
+@router.get("/skills/scores")
+async def get_skill_scores():
+    """获取全部技能的质量评分（M2）。
+
+    返回 [{name, overall, usage_freq, success_rate, freshness,
+           description_quality, tier}, ...]
+    """
+    from backend.skills.consolidator import collect_active_skills
+    from backend.skills.scoring import get_scoring_service
+    from backend.skills.usage import get_usage_store
+
+    scoring = get_scoring_service()
+    skills = collect_active_skills()
+
+    # 收集使用统计
+    usage_store = get_usage_store()
+    usage_map = {}
+    for skill in skills:
+        name = skill.get("name", "")
+        stats = usage_store.get(name)
+        if stats:
+            usage_map[name] = stats
+
+    scores = scoring.compute_batch(skills, usage_map=usage_map)
+
+    # 缓存结果
+    for score in scores:
+        scoring.set_cached(score)
+
+    return {"scores": [s.to_dict() for s in scores]}
+
+
+@router.get("/skills/{skill_name}/score")
+async def get_skill_score(skill_name: str):
+    """获取单个技能的质量评分（M2）。"""
+    from backend.skills.consolidator import collect_active_skills
+    from backend.skills.scoring import get_scoring_service
+    from backend.skills.usage import get_usage_store
+
+    scoring = get_scoring_service()
+
+    # 查找技能
+    skills = collect_active_skills(names={skill_name})
+    if not skills:
+        raise HTTPException(status_code=404, detail=f"技能 {skill_name!r} 不存在")
+
+    skill = skills[0]
+    usage_store = get_usage_store()
+    stats = usage_store.get(skill_name)
+
+    # 收集全部技能的 use_count 用于归一化
+    all_stats = usage_store.get_all()
+    all_counts = [s.get("use_count", 0) for s in all_stats]
+
+    score = scoring.compute(
+        name=skill_name,
+        usage_stats=stats,
+        description=skill.get("description", ""),
+        when_to_use=skill.get("when_to_use", ""),
+        all_usage_counts=all_counts,
+    )
+    scoring.set_cached(score)
+    return score.to_dict()
+
+
+# ---------------------------------------------------------------------------
+# M3: 渐进式技能上下文 API
+# ---------------------------------------------------------------------------
+
+
+@router.get("/skills/context")
+async def get_skill_context():
+    """获取渐进式技能上下文（M3）。
+
+    返回分层摘要（hot path 优先）+ 搜索冷路径技能的能力。
+    用于注入 system prompt，控制在 token 预算内。
+    """
+    from backend.skills.consolidator import collect_active_skills
+    from backend.skills.progressive_loader import get_progressive_loader
+    from backend.skills.usage import get_usage_store
+
+    loader = get_progressive_loader()
+    skills = collect_active_skills()
+
+    usage_store = get_usage_store()
+    usage_map = {}
+    for skill in skills:
+        name = skill.get("name", "")
+        stats = usage_store.get(name)
+        if stats:
+            usage_map[name] = stats
+
+    ctx = await loader.build_context(skills, usage_map=usage_map)
+
+    return {
+        "initial_context": ctx.initial_context,
+        "hot_count": len(ctx.hot_skills),
+        "warm_count": len(ctx.warm_skills),
+        "cold_count": ctx.cold_count,
+        "estimated_tokens": ctx.estimated_tokens,
+    }
+
+
+@router.post("/skills/search")
+async def search_skills(query: str = "", top_k: int = 5):
+    """搜索技能（M3 冷路径搜索 + 全量搜索）。
+
+    在所有技能（包括冷路径）中搜索匹配的技能。
+    """
+    from backend.skills.consolidator import collect_active_skills
+    from backend.skills.progressive_loader import get_progressive_loader
+
+    loader = get_progressive_loader()
+    skills = collect_active_skills()
+
+    # 使用渐进式加载器的搜索能力
+    results = loader.search_cold_skills(query, skills, top_k=top_k)
+
+    return {
+        "query": query,
+        "results": [
+            {
+                "name": s.get("name", ""),
+                "description": s.get("description", ""),
+            }
+            for s in results
+        ],
+    }
+
+
 class ConsolidationAcceptRequest(BaseModel):
     """``POST /skills/consolidation/accept`` 请求体（Round 15）。"""
 
     skill_names: List[str]
+
+
+# ---------------------------------------------------------------------------
+# M4: 技能进化 API
+# ---------------------------------------------------------------------------
+
+
+@router.post("/skills/evolution/check")
+async def check_skill_evolution(skill_name: str = ""):
+    """检查技能是否需要进化（M4）。
+
+    基于执行反馈统计评估触发条件，产出 EvolutionProposal。
+    """
+    from backend.skills.evolution import (
+        get_evolution_service,
+        get_feedback_store,
+    )
+    from backend.skills.usage import get_usage_store
+
+    service = get_evolution_service()
+    feedback_store = get_feedback_store()
+    usage_store = get_usage_store()
+
+    if skill_name:
+        # 单技能检查
+        names = [skill_name]
+    else:
+        # 全量检查
+        all_usage = usage_store.get_all()
+        names = [s.get("name", "") for s in all_usage if s.get("name")]
+
+    proposals = []
+    for name in names:
+        # 合并 usage_store 和 feedback_store 的统计数据
+        stats = usage_store.get(name) or {}
+        feedback_stats = feedback_store.get_stats(name)
+        # feedback_store 优先（更详细的执行反馈）
+        merged = {**stats, **feedback_stats}
+
+        errors = feedback_store.get_recent_errors(name)
+        proposal = await service.check_and_evolve(
+            name, stats=merged, recent_errors=errors or None
+        )
+        if proposal:
+            proposals.append(proposal.to_dict())
+
+    return {"proposals": proposals, "checked": len(names)}
+
+
+class SkillFeedbackBody(BaseModel):
+    """``POST /skills/feedback`` 请求体（M4）。"""
+
+    skill_name: str
+    success: bool = True
+    error: Optional[str] = None
+    user_thumbs: Optional[bool] = None
+    token_cost: int = 0
+
+
+@router.post("/skills/feedback")
+async def record_skill_feedback(body: SkillFeedbackBody):
+    """记录技能执行反馈（M4）。
+
+    Body: {skill_name, success, error?, user_thumbs?, token_cost?}
+    """
+    from backend.skills.evolution import get_feedback_store
+
+    store = get_feedback_store()
+    if not body.skill_name:
+        raise HTTPException(status_code=400, detail="skill_name is required")
+
+    store.record(body.skill_name, {
+        "success": body.success,
+        "error": body.error,
+        "user_thumbs": body.user_thumbs,
+        "token_cost": body.token_cost,
+    })
+    return {"ok": True}
 
 
 @router.post("/skills/consolidation/accept")
