@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import re
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -47,6 +47,9 @@ class Rule(BaseModel):
     ai_prompt: Optional[str] = None
     enabled: bool = True
     group_id: str
+    structured_params: Optional[Dict[str, Any]] = None
+    confidence: Optional[float] = None
+    source_excerpt: Optional[str] = None
 
     @field_validator("pattern")
     @classmethod

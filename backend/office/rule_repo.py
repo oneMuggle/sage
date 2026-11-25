@@ -3,14 +3,16 @@
 
 from __future__ import annotations
 
+import json
 import uuid
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from backend.office.rule_models import Rule, RuleGroup
 
 _RULE_COLUMNS = (
     "id, name, type, severity, scope, description, check_mode, "
-    "pattern, ai_prompt, enabled, group_id"
+    "pattern, ai_prompt, enabled, group_id, "
+    "structured_params, confidence, source_excerpt"
 )
 
 
@@ -19,6 +21,12 @@ def _gen_id(prefix: str) -> str:
 
 
 def _row_to_rule(row: Any) -> Rule:
+    structured_params: Optional[Dict[str, Any]] = None
+    if len(row) > 11 and row[11] is not None:
+        try:
+            structured_params = json.loads(row[11])
+        except (json.JSONDecodeError, TypeError):
+            structured_params = None
     return Rule(
         id=row[0],
         name=row[1],
@@ -31,6 +39,9 @@ def _row_to_rule(row: Any) -> Rule:
         ai_prompt=row[8],
         enabled=bool(row[9]),
         group_id=row[10],
+        structured_params=structured_params,
+        confidence=row[12] if len(row) > 12 else None,
+        source_excerpt=row[13] if len(row) > 13 else None,
     )
 
 
@@ -156,14 +167,19 @@ def create_rule(
     pattern: Optional[str] = None,
     ai_prompt: Optional[str] = None,
     enabled: bool = True,
+    structured_params: Optional[Dict[str, Any]] = None,
+    confidence: Optional[float] = None,
+    source_excerpt: Optional[str] = None,
 ) -> Rule:
     rule_id = _gen_id("rule")
+    sp_json = json.dumps(structured_params, ensure_ascii=False) if structured_params is not None else None
     conn.cursor().execute(
         """
         INSERT INTO office_rules
             (id, name, type, severity, scope, description, check_mode,
-             pattern, ai_prompt, enabled, group_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             pattern, ai_prompt, enabled, group_id,
+             structured_params, confidence, source_excerpt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             rule_id,
@@ -177,6 +193,9 @@ def create_rule(
             ai_prompt,
             int(enabled),
             group_id,
+            sp_json,
+            confidence,
+            source_excerpt,
         ),
     )
     conn.commit()
@@ -195,10 +214,18 @@ def update_rule(conn: Any, rule_id: str, **kwargs: Any) -> Rule:
         "check_mode",
         "pattern",
         "ai_prompt",
+        "source_excerpt",
     ):
         if key in kwargs:
             updates.append(f"{key} = ?")
             params.append(kwargs[key])
+    if "structured_params" in kwargs:
+        sp = kwargs["structured_params"]
+        updates.append("structured_params = ?")
+        params.append(json.dumps(sp, ensure_ascii=False) if sp else None)
+    if "confidence" in kwargs:
+        updates.append("confidence = ?")
+        params.append(kwargs["confidence"])
     if "enabled" in kwargs:
         updates.append("enabled = ?")
         params.append(int(kwargs["enabled"]))
