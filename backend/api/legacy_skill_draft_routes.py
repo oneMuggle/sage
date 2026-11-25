@@ -490,6 +490,76 @@ async def scan_skill_consolidation(auto_draft: bool = True, mode: str = "full"):
     }
 
 
+# ---------------------------------------------------------------------------
+# M2: 技能质量评分 API
+# ---------------------------------------------------------------------------
+
+
+@router.get("/skills/scores")
+async def get_skill_scores():
+    """获取全部技能的质量评分（M2）。
+
+    返回 [{name, overall, usage_freq, success_rate, freshness,
+           description_quality, tier}, ...]
+    """
+    from backend.skills.scoring import get_scoring_service
+    from backend.skills.consolidator import collect_active_skills
+    from backend.skills.usage import get_usage_store
+
+    scoring = get_scoring_service()
+    skills = collect_active_skills()
+
+    # 收集使用统计
+    usage_store = get_usage_store()
+    usage_map = {}
+    for skill in skills:
+        name = skill.get("name", "")
+        stats = usage_store.get(name)
+        if stats:
+            usage_map[name] = stats
+
+    scores = scoring.compute_batch(skills, usage_map=usage_map)
+
+    # 缓存结果
+    for score in scores:
+        scoring.set_cached(score)
+
+    return {"scores": [s.to_dict() for s in scores]}
+
+
+@router.get("/skills/{skill_name}/score")
+async def get_skill_score(skill_name: str):
+    """获取单个技能的质量评分（M2）。"""
+    from backend.skills.scoring import get_scoring_service
+    from backend.skills.consolidator import collect_active_skills
+    from backend.skills.usage import get_usage_store
+
+    scoring = get_scoring_service()
+
+    # 查找技能
+    skills = collect_active_skills(names={skill_name})
+    if not skills:
+        raise HTTPException(status_code=404, detail=f"技能 {skill_name!r} 不存在")
+
+    skill = skills[0]
+    usage_store = get_usage_store()
+    stats = usage_store.get(skill_name)
+
+    # 收集全部技能的 use_count 用于归一化
+    all_stats = usage_store.get_all()
+    all_counts = [s.get("use_count", 0) for s in all_stats]
+
+    score = scoring.compute(
+        name=skill_name,
+        usage_stats=stats,
+        description=skill.get("description", ""),
+        when_to_use=skill.get("when_to_use", ""),
+        all_usage_counts=all_counts,
+    )
+    scoring.set_cached(score)
+    return score.to_dict()
+
+
 class ConsolidationAcceptRequest(BaseModel):
     """``POST /skills/consolidation/accept`` 请求体（Round 15）。"""
 

@@ -15,6 +15,8 @@ import type {
   SkillExecuteRequest,
   SkillExecuteResult,
   SkillRollbackResult,
+  SkillScore,
+  SkillScoresResult,
 } from './types';
 import { handleApiError, withRetry } from './utils';
 
@@ -268,6 +270,39 @@ export const skillsApi = {
     return withRetry(async () => {
       try {
         return await invoke<SkillRollbackResult>('skill_rollback', { name });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  // ---- M2: 技能质量评分 ----
+
+  /**
+   * 获取全部技能的质量评分（M2）。
+   *
+   * Backend: GET /api/v1/skills/scores。
+   */
+  async getScores(): Promise<SkillScore[]> {
+    return withRetry(async () => {
+      try {
+        const result = await invoke<SkillScoresResult>('skills_scores');
+        return result.scores;
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 获取单个技能的质量评分（M2）。
+   *
+   * Backend: GET /api/v1/skills/{name}/score。
+   */
+  async getScore(name: string): Promise<SkillScore> {
+    return withRetry(async () => {
+      try {
+        return await invoke<SkillScore>('skill_score', { name });
       } catch (error) {
         throw handleApiError(error);
       }

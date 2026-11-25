@@ -51,6 +51,16 @@ export const skillRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/skills/consolidation/accept',
   },
 
+  // M2: 技能质量评分
+  skills_scores: {
+    method: 'GET',
+    path: () => '/api/v1/skills/scores',
+  },
+  skill_score: {
+    method: 'GET',
+    path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/score`,
+  },
+
   // P2-2 (可审计可回滚): 技能演化的审计台账与回滚。后端端点早已存在
   // (backend/api/legacy_skill_draft_routes.py 的 /skills/{name}/audit 与
   // /skills/{name}/rollback)，但此前没有任何前端入口 —— 技能被自动演化改动后，

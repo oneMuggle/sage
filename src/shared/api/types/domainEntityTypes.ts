@@ -306,6 +306,23 @@ export interface ConsolidationAcceptResult {
   missing: string[];
 }
 
+/** M2: 技能质量评分 — GET /skills/{name}/score。 */
+export interface SkillScore {
+  name: string;
+  overall: number;
+  usage_freq: number;
+  success_rate: number;
+  user_satisfaction: number;
+  freshness: number;
+  description_quality: number;
+  tier: 'hot' | 'warm' | 'cold';
+}
+
+/** M2: 批量评分结果 — GET /skills/scores。 */
+export interface SkillScoresResult {
+  scores: SkillScore[];
+}
+
 /**
  * P2-2 技能审计台账条目 — GET /skills/{name}/audit。
  *
