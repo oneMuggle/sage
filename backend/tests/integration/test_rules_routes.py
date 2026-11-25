@@ -158,6 +158,7 @@ def test_extract_maps_word_specs_to_ai_rules(client: TestClient, tmp_path: Path)
         assert rule["type"] in {"format", "terminology", "citation", "structure", "custom"}
 
 
+
 def test_extract_rejects_path_outside_workspace(client: TestClient, tmp_path: Path) -> None:
     response = client.post(
         "/api/v1/rules/extract",
