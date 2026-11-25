@@ -423,10 +423,72 @@ M6 实测：7 个文件上传（5 成功 + 2 失败），磁盘文件数 `before
 | 后端单测 | `backend/tests/unit/test_chat_attachment_text.py` | 旧 HTTP 200 断言同步到新状态码契约（422 / 415 + `error_code`） |
 | 主进程单测 | `electron/__tests__/mediaIpc.test.ts` | 后端返回 4xx + `{error, error_code}` 时 reject 抛真实文案；200 + `{error}` 的兼容分支 |
 
-## 12. 未完成项（后续 PR）
+## 12. 标识符与扩展名校验（2026-11-15）
+
+上传与读取链路的两个外部输入 —— media id 与文件扩展名 —— 都会拼进磁盘路径并参与通配匹配，
+因此各自在最靠近落盘/查询的入口做字符集校验。
+
+### 12.1 media_id：阻断 glob 注入
+
+`backend/services/multimodal/media_store.py`：
+
+```python
+_MEDIA_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _is_valid_media_id(media_id: str) -> bool:
+    return bool(media_id) and bool(_MEDIA_ID_RE.fullmatch(media_id))
+```
+
+`load()` / `delete()` 进入 `rglob` 前先校验，非法 id 分别返回 `None` / `False`：
+
+```python
+for f in self.root.rglob(f"{media_id}.*"):
+```
+
+`media_id` 被直接拼进 glob 模式。未校验时 `media_id="*"` 会展开成 `*.*`，命中媒体根下
+几乎所有产物（`<id>.<ext>` 与 `<id>.meta.json` 都含点）—— `load()` 可越权读出其他会话的附件，
+`delete()` 可越权删除。字符集排除 `*` `?` `[` `]` 等 glob 元字符，也排除 `/`、`\`、`.` 等
+路径字符，`"../*"`、`"[*]"` 一并被拒。
+
+`save()` 生成的 id 是 `uuid.uuid4().hex[:12]`（12 位十六进制）；正则放宽到
+`[A-Za-z0-9_-]{1,64}` 是为兼容历史数据，同时留出 `-` / `_` 的余量。
+
+回归测试：`backend/tests/unit/test_media_store.py` 的 `test_load_rejects_glob_media_id` /
+`test_delete_rejects_glob_media_id` 断言 `"*"` / `"../*"` / `"[*]"` 全部被拒，合法 id 仍可读写，
+且非法 id 不会删掉既有文件。
+
+### 12.2 上传扩展名：`[a-z0-9]{1,16}`
+
+`backend/api/chat_attachment_routes.py` 的 `upload_chat_attachment()` 在解析文件名后、
+白名单判定前校验扩展名格式：
+
+```python
+#: 扩展名只允许小写字母数字，防止拼进 MediaStore 文件名时带入路径/glob 字符。
+_ATTACHMENT_EXT_RE = re.compile(r"^[a-z0-9]{1,16}$")
+```
+
+- 文件名先整体转小写再取扩展名（`name_lower.rsplit(".", 1)[-1]`），因此 `.PDF` 归一为 `pdf`；
+- 无点文件名命中 `NO_EXT_FILENAMES`（`makefile` / `dockerfile`）时用文件名本身当伪扩展名，
+  同样满足该正则；
+- 不匹配 → `415 unsupported_type`，文案 `无效的文件扩展名: {ext}`。这一步**先于**白名单判定：
+  带 `*`、`/` 等字符的扩展名在此被拦下，而 `.exe` 这类格式合法但不在白名单的输入由下一步拦截；
+- 通过校验的扩展名随后进入 `MediaStore.save()` 拼成 `<media_id>.<ext>` 落盘，
+  该字符集是文件名的最后一道注入防线。
+
+**前端口径**：前端没有对应正则，`preflightAttachment()` 用 `CHAT_DOCUMENT_EXTENSIONS` 集合做
+白名单判定（集合元素全为小写字母数字，最长 `dockerfile` 10 字符），再加 `CHAT_NO_EXT_FILENAMES`。
+凡前端放行的扩展名天然满足后端 `[a-z0-9]{1,16}`；后端正则兜住的是绕过前端预检、直接调接口的输入。
+
+## 13. 未完成项（后续 PR）
 
 | 项 | 内容 |
 | --- | --- |
 | PDF 视觉通道 | 已完成「页标记文本 + 图表抽取 + 内联引用」（见 §159）；剩余：视觉模型逐页读图与命中页低 DPI 复核 |
 | 上下文计量 | `ContextMeter` 显示附件占 token，超 100k 截断时给 inline 提示 |
 | 编排 / 插话路径 | planner 提示词注入附件概要；插话请求支持 `attachment_media_ids` 或明确告知不含附件 |
+| 旧版 `.doc` / `.xls` / `.ppt` | 附件白名单与提取集合只有 OOXML（`.docx` / `.xlsx` / `.pptx`）；仓库内的 soffice 仅用于设计导出的 HTML→PDF/PPTX，未接入附件入站转换。旧格式需先转存为 OOXML。 |
+| 扫描件与纯图片幻灯片 OCR | PDF 扫描页（文本层近空）有 OCR 兜底，但默认关闭：需 `SAGE_OCR=1` 或设置页「Office OCR」开关，且依赖 tesseract。PPTX 只读文字层，纯图片幻灯片返回空文本（`empty_text`），无 OCR。 |
+| 工作区文件选择器 | 附件仅来自拖放 / 文件选择 / 粘贴，没有「从工作区选文件」的入口。 |
+| 附件限额配置化 | 25 MB / 10 个仍是前后端硬编码常量（`MAX_ATTACHMENT_SIZE` / `MAX_ATTACHMENT_COUNT`），未做成设置项。 |
+| 统一 `DocumentExtractor` 注册表 | 聊天附件走 `extract_attachment_text`；`@` 引用走 `backend.office.{ppt,word,excel,pdf}` 的 `read_*`；知识库导入与 Office 工作台各自维护，尚未收敛到单一注册表。 |

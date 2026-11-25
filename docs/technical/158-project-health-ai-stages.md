@@ -1,6 +1,7 @@
 # 158 — 项目健康监控与 AI 辅助规程定制
 
 > 2026-11-14 M1–M3：主动告警推送 / 对话式规程定制 / 定时健康检查
+> 2026-11-15 M4：项目健康看板 UI 打磨（纯前端）
 
 ## 背景
 
@@ -133,6 +134,101 @@ except Exception:
   - 下部：项目列表（按严重度圆点 + 名称 + 阶段 + 里程碑进度 + 逾期数）
   - 空态 / 错误态 / 无匹配提示三态完备
 - **挂载点**：`src/pages/ProjectsOverview.tsx` 搜索栏下方、项目列表上方
+
+> 2026-11-15 M4 对看板做了视觉升级（3 张指标卡 / 按严重度分组 / 逾期徽标），最终形态以下节为准。
+
+---
+
+## M4：项目健康看板 UI 打磨（2026-11-15）
+
+> 纯前端改造：不改后端 API、请求/响应类型与路由；严重度与逾期仍由 `ProjectHealthMonitor` 判定。
+
+### 共享 severity token
+
+**新增 `src/shared/lib/healthSeverity.tsx`**：把严重度 → 图标 / 颜色 / 文案收敛为共享常量，`HealthDashboard` 与 `HealthSummaryCard` 共用同一套。
+
+| `severity` | `label` | `stateLabel` | 图标（lucide） | 圆点 / 文字色 | 卡片底 / 描边 | 逾期徽标 |
+|---|---|---|---|---|---|---|
+| `critical` | 风险 | 存在风险 | `AlertTriangle` | `bg-rose-500` / `text-rose-500` | `bg-rose-500/10` / `border-rose-500/25` | `bg-rose-500/15 text-rose-500` |
+| `warning` | 关注 | 需要关注 | `AlertCircle` | `bg-amber-500` / `text-amber-500` | `bg-amber-500/10` / `border-amber-500/25` | `bg-amber-500/15 text-amber-500` |
+| `ok` | 正常 | 一切正常 | `CheckCircle2` | `bg-emerald-500` / `text-emerald-500` | `bg-emerald-500/10` / `border-emerald-500/25` | `bg-emerald-500/15 text-emerald-500` |
+
+- `SEVERITY_ORDER = ['critical', 'warning', 'ok']`：指标卡与分组列表都按风险优先排列。
+- 配色注意：rose / amber / emerald 取自 Tailwind 默认调色板（`tailwind.config.js` 未覆盖这三档），**不随主题或暗色模式变化**；其余样式使用语义 token（`border-border`、`bg-ui-card`、`text-text`、`text-text-muted`、`bg-bg-muted`、`bg-bg-hover`、`text-primary`、`text-text-inverse`）。
+
+### 三张指标卡
+
+`HealthDashboard` 顶部把原先的纯文本统计换成 3 张等宽指标卡（`grid grid-cols-3`），顺序固定为 风险 → 关注 → 正常。
+
+| 指标卡 | 指标名 | 数值含义（单位） | 取值来源 | 颜色语义 |
+|---|---|---|---|---|
+| `critical` | 风险 | 严重度为 critical 的**项目数**（个） | `ProjectsHealthCheckResult.severities.critical` | 玫红 `rose-500` + `AlertTriangle` |
+| `warning` | 关注 | 严重度为 warning 的**项目数**（个） | `severities.warning` | 琥珀 `amber-500` + `AlertCircle` |
+| `ok` | 正常 | 严重度为 ok 的**项目数**（个） | `severities.ok` | 翠绿 `emerald-500` + `CheckCircle2` |
+
+- `severities` 由 `GET /api/v1/projects/health-check`（`list_projects_health`）一次性聚合，**不随筛选器变化**——切到「风险」筛选后三张卡仍显示全量计数。
+- 卡片结构：左侧图标（16px），右侧上方为大号数字（`text-lg font-semibold tabular-nums`），下方为等级名（`text-ui-2xs text-text-muted`）；卡片本身带对应等级的浅色底与描边。
+- 无障碍：另有一份 `sr-only` 文本「风险 X · 关注 Y · 正常 Z」供读屏器读取。
+
+### 按严重度分组
+
+- 分组只发生在渲染层，数据仍是后端按 `(严重度等级, 逾期条数降序)` 排好的 `summaries` 数组。
+- `filter === 'all'` 时按 `SEVERITY_ORDER` 分成 风险 / 关注 / 正常 三组，**空组不渲染**。
+- 组标题（圆点 + 组名 + 项目数）**仅在「全部」视图且存在 ≥ 2 个非空组时显示**；选中单个等级筛选时列表直接平铺，不显示组标题。
+- 每条项目行：严重度圆点 + 项目名（超长截断）+ 阶段标签（`project_stage` 非空时）+ `已完成/总数 里程碑`，右侧再跟逾期徽标或状态词；行 hover 时出现描边与背景高亮（`transition-colors`）。
+
+### 逾期徽标
+
+- **判定**（后端 `ProjectHealthMonitor.summarize`）：里程碑 `due_date` 非空、`status != "completed"`、日期可解析，且 `due_date` 早于今天 → 计入逾期，`days_overdue = 今天 - due_date`；逾期条目按天数降序存入 `summary.overdue`。
+- **看板行内徽标**：`summary.overdue.length > 0` 时显示「逾期 N 项」（N = 逾期里程碑条数），样式为圆角胶囊（`rounded-full px-2 py-0.5 font-medium`）。
+- **颜色固定用 critical 色板**（`bg-rose-500/15 text-rose-500`），与项目自身严重度无关——关注级项目只要存在逾期，徽标同样为玫红。
+- 无逾期时，徽标位置改显该等级的 `stateLabel`（存在风险 / 需要关注 / 一切正常），文字色随等级。
+
+### 严重度判定规则
+
+`ProjectHealthMonitor.summarize` 的判定顺序（自上而下，命中即停）：
+
+| 条件 | 严重度 |
+|---|---|
+| 最久逾期里程碑 ≥ `CRITICAL_OVERDUE_DAYS`（= 7）天 | `critical`（风险） |
+| 存在逾期（1~6 天）**或**存在 `blocked` 状态的里程碑 | `warning`（关注） |
+| 既无逾期也无阻塞 | `ok`（正常） |
+
+- 扫描范围：`scan_all(limit=100)` 仅取 `status == "active"` 的项目；结果按严重度等级、再按逾期条数降序返回。
+- 因此「关注」不一定有逾期：仅里程碑阻塞、没有任何逾期时同样判为 warning。
+
+### 交互与状态
+
+| 状态 | 表现 |
+|---|---|
+| 首次加载 | 列表位置显示 3 行骨架占位（`h-9 animate-pulse rounded-md bg-bg-muted/60`）；「重新检查」按钮文案为「检查中…」且图标旋转 |
+| 刷新（已有数据） | 保留现有行，仅「重新检查」按钮禁用并显示「检查中…」 |
+| 空态 | 「暂无活跃项目需要检查。」 |
+| 错误态 | 「健康检查失败：<错误信息>」（玫红文字） |
+| 筛选无匹配 | 「没有符合该风险等级的项目。」 |
+| 筛选器 | 4 个胶囊按钮：全部 / 风险 / 关注 / 正常；选中态 `bg-primary text-text-inverse`，带 `transition-colors` 与 `aria-pressed` |
+| 刷新 | 「重新检查」重新调用 `listProjectsHealth()`；该接口只读、不推通知 |
+
+### 单项目健康卡增强（HealthSummaryCard）
+
+- 卡片按 `summary.severity` 取共享 token 上色；标题栏图标随等级切换（`AlertTriangle` / `AlertCircle` / `CheckCircle2`），右侧显示 `stateLabel`。
+- 新增里程碑进度条：`completed_milestones / total_milestones` 换算百分比（`Math.round`），`total_milestones === 0` 时不渲染。
+- 非 ok 且存在逾期时，最多列出 3 条「里程碑标题 + 逾期 N 天」胶囊；超过 3 条追加「…还有 N 项」（N = `overdue.length - 3`）。
+- 非 ok 但无逾期（即阻塞导致）时，显示「有 N 个里程碑处于阻塞状态」+ `AlertTriangle`。
+- ok 时显示「所有里程碑进度正常」+ `CheckCircle2`。
+- 数据来源仍是 `POST /api/v1/projects/{project_id}/health-check`。
+
+### 顾问卡视觉对齐（ProjectAdvisorCard）
+
+同一轮把 `ProjectAdvisorCard` 的按钮从描边样式改为无边框 / 胶囊（`rounded-full`）样式，统一 hover 态，并把健康分数与严重度配色对齐到 emerald / amber / orange / rose。**按钮集合与交互结构保持不变**（未改为下拉菜单）。
+
+### 相关 UI 测试
+
+| 文件 | 覆盖点 |
+|---|---|
+| `src/features/project-health/__tests__/HealthDashboard.test.tsx` | 指标卡计数与项目行、按等级筛选、空态 / 无匹配 / 错误态、重新检查 |
+| `src/pages/governance/__tests__/HealthSummaryCard.test.tsx` | ok 态、逾期列表、「…还有 N 项」折叠、阻塞提示、错误态、切换项目重新拉取 |
+| `src/features/project-type/__tests__/ProjectAdvisorCard.p190.test.ts` | 顾问卡交互 |
 
 ---
 

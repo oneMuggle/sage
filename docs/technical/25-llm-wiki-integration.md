@@ -982,3 +982,96 @@ _🎉 PR-8 完成。本文档随 Phase 实施滚动更新,最终更新于 Phase 
   `win_reparse_io.write_file_reparse_safe`（CREATE_NEW + 句柄复核），
   修复 Windows 上 ingest/导入/队列必然失败的问题。
 
+## 2026-11-15 修复：导入失败渲染 / 嵌入可选
+
+### 导入失败的错误契约
+
+`ingest/stream` 的 `failed` 事件早期把结构化错误对象塞进 `message`
+（`{"stage":"failed","percent":0,"message":{"code":"wiki_ingest_failed","message":"Wiki 导入失败"}}`）。
+前端 `useWikiIngest` 把 `message` 原样存进 `error`（类型声明是 `string | null`），
+`WikiIngestProgress` 失败分支直接渲染 `导入失败: {error}`，React 抛
+"Objects are not valid as a React child"，整个页面崩溃。现契约固定为
+**`message` 恒为字符串，错误分类走独立的 `code` 字段**：
+
+```json
+{"event":"progress","data":{"stage":"failed","percent":0,"message":"Wiki 导入失败（LLM 请求返回 HTTP 401）","code":"wiki_ingest_failed"}}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `stage` | string | 固定 `failed` |
+| `percent` | number | 固定 `0` |
+| `message` | string | 用户可见文案，恒为字符串 |
+| `code` | string | 错误分类，当前固定 `wiki_ingest_failed` |
+
+后端（`backend/wiki/ingest.py`）：
+
+- `emit(stage, percent, message, **extra)` 把附加字段并入 `data`；
+  失败路径为 `yield emit("failed", 0, _stream_failure_message(e), code=INGEST_STREAM_ERROR_CODE)`
+  之后重新 `raise`，让 FastAPI 关闭流。
+- `INGEST_STREAM_ERROR_CODE = "wiki_ingest_failed"`，`INGEST_STREAM_ERROR_MESSAGE = "Wiki 导入失败"`。
+- `_stream_failure_message(exc)` 从异常的 `response.status_code` 取上游状态码，拼出
+  `Wiki 导入失败（LLM 请求返回 HTTP {status}）`；非 HTTP 异常回落到通用文案。
+  文案不包含响应体、URL query 或任何凭据。
+
+前端（`src/features/wiki/useWikiIngest.ts`、`src/widgets/wiki/WikiIngestProgress.tsx`）：
+
+- `IngestProgress` 类型为 `{ stage, percent, message?: string | null, code?: string }`。
+- `normalizeIngestProgress(payload)` 对旧后端做兼容：`message` 为字符串则保留；
+  对象型 `message` 取嵌套的字符串 `message`；仅有 `code` 时用 `code`；其余落 `null`。
+  监听器回调先归一化再 `broadcast`，`ensureModuleListener` 的 catch 分支也收敛为字符串，
+  保证组件拿到的 `message` 永远是字符串或 `null`。
+- Hook 的 `error` 取 `p.message || '导入失败'`，`WikiIngestProgress` 失败分支只渲染
+  `导入失败: {error}`，因此对象型 payload 不再能进入 React 子树。
+
+同一修复还加入凭据兜底 `backend/api/wiki_credentials.py::resolve_llm_api_key(base_url, provided_key)`：
+请求携带的 key 非空直接返回（尊重 UI 新输入），否则读 `app_settings` 的 endpoints，
+按 `baseUrl`（`strip()` + 去尾部 `/` + 小写）匹配补真实 key；读取失败降级为空串。
+`/ingest/stream`、`/chat/stream`、`/research` 三个入口分别对 LLM key（以及前两者的
+embed key）应用，避免渲染层脱敏后的空 key 直接打上游 401。
+
+### 可选嵌入与自适应维度
+
+嵌入不再是导入的必经步骤（对齐 llm_wiki 的"可选能力"定位），相关行为：
+
+| 场景 | 行为 |
+|------|------|
+| 未配置嵌入（`embed_base_url` 或 `embed_model` 为空） | `embed_pages` 记 info 日志后返回 `None`，跳过向量化，导入照常完成 |
+| 已配置但嵌入请求/解析/写库失败 | 记 warning 日志后返回 `None`，非致命，导入照常完成 |
+| 向量维度与既有库不一致 | 重置派生向量库后写入新维度（JSON 后端） |
+
+- **可选门控**：`backend/wiki/ingest.py::embed_pages` 返回 `Optional[int]`
+  （写入的向量维度，跳过/失败为 `None`），`ingest_source` 与
+  `ingest_source_stream` 共用；未配置时日志为
+  `embed_pages skipped: embedding not configured`。
+- **非致命失败**：`_request_page_vectors` 捕获嵌入请求异常与空响应，
+  `_store_page_vectors` 捕获向量库写入异常，均只记录 `error_type`，不抛出。
+- **维度自适应**：`parse_embed_response(body, 0)` 关闭固定维度校验，
+  维度取 `len(vectors[0])` 并校验批内一致；`_store_page_vectors` 通过
+  `backend/wiki/vectorstore.py::read_stored_dim` 读取 `.llm-wiki/vectors.json`
+  的 `dim`，不一致时 warning + 删除该 JSON 文件，再按新维度打开。
+  HNSW 后端（`SAGE_WIKI_VECTOR_BACKEND=hnsw`，索引在 `.llm-wiki/vectors.hnsw`）
+  的维度不匹配异常同样被捕获并告警，检索层降级。
+  向量是派生数据，wiki 页面不受影响，重新导入源文件即可恢复向量检索。
+- **进度文案**：`embedding` 阶段（80%）在有配置时为 `嵌入 {file}`，
+  未配置时为 `跳过嵌入（未配置嵌入模型）`；已配置但 `embed_pages` 返回 `None`
+  时追加一条 `embedding` 85% 的 `嵌入失败，已跳过（详见后端日志）`，
+  终态仍是 `completed`。
+- **聊天检索**：`backend/wiki/chat.py::_build_chat_context` 同样用
+  `parse_embed_response(..., 0)` 取查询向量实际维度，再以 `len(query_vec)`
+  打开向量库；嵌入未配置、调用失败或维度不匹配时整段向量检索被 `try/except`
+  跳过，仅用 token 检索参与 RRF，不阻塞问答。
+- **请求模型**：`backend/api/wiki_routes.py::IngestRequest` / `ChatRequest`
+  的 `embed_base_url` / `embed_api_key` / `embed_model` 默认空串，
+  调用方可完全省略嵌入配置。
+- **队列**：`backend/wiki/queue_worker.py::process_pending` 仅要求 LLM 配置
+  （缺失返回 `error: "LLM 模型未配置"`）；`_load_embedding_config()` 为 `None`
+  时记 info 日志并以空 embed 配置继续处理。
+- **前端**：`SourcesView.handleIngest` 不再拦截无嵌入配置的导入，改为
+  `toast.info('未配置嵌入模型，本次导入将跳过向量化（可在设置 → 模型选择中配置）')`
+  后继续，且未就绪时整组 embedding 字段传空；`WikiChat` 使用
+  `modelSelections.embeddingModel` 的端点/模型，未配置时传空串交给后端降级。
+- `IngestConfig.embed_dim` / `EmbeddingConfig.dim` 仍保留 `DEFAULT_EMBED_DIM = 1536`
+  作为 dataclass 默认值，但已不参与请求体（`build_embed_request` 只发
+  `model` + `input`），也不再参与响应校验，因此不再构成维度约束。
+

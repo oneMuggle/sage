@@ -362,6 +362,77 @@
 **LRU 回收**：`BrowserSessionManager.require()` 每次被工具调用时调用 `session.touch()` 更新
 `last_used_at`；`register()` 在超限时按 `last_used_at` 升序选择最久未用者关闭。跳过保留池槽位。
 
+## 知网 KNS 5.5 真机验收清单
+
+老版知网 KNS 5.5 把检索结果放在 `<iframe id="iframeResult">` / `frameset/<frame>` 内，是跨 frame
+巡检的主要目标站点。验收共 5 项，逐条状态如下（真机集成用例：
+`backend/tests/integration/test_browser_cross_frame_real.py`）：
+
+| # | 验收项 | 覆盖方式 | 当前状态 |
+|---|---|---|---|
+| 1 | 同源 `#iframeResult`：snapshot 返回结果链接且带 `frame_url` | 真机集成 `test_cross_frame_snapshot_click_and_frameset`（本地 fixture + 真实 Chromium/CDP） | fixture 通过；真实知网站点尚未记录验收 |
+| 2 | 跨域子 frame：snapshot 返回结果文本与 ref | 同一用例（不同端口的跨源 iframe） | 通过 |
+| 3 | frameset：snapshot 能读取结果，`frames[].state == "scanned"` | 同一用例 | 通过 |
+| 4 | 子 frame 内 ref 点击进入详情；`#Page_next` 翻页后重新快照正常 | ref 点击进详情由同一用例覆盖；翻页操作只在技能指引中描述，未自动化 | 部分通过（翻页未覆盖） |
+| 5 | 子 frame 域名被 block 时 snapshot 不读内容、interact 被拒 | 单测 `test_snapshot_skips_blocked_child_frame`、`test_interact_frame_ref_respects_blocked_frame` | 通过 |
+
+说明：
+
+- 集成用例只访问 `127.0.0.1` 本地 fixture，不触外网；本机无 Chrome/Edge 时整体 skip。
+  用例内固定 online 网络策略，不依赖本机气隙/内网设置。
+- 真实知网 KNS 5.5 站点的端到端验收尚未记录。站点侧操作要点在
+  `backend/skills/skill_md/shipped/cnki-research/SKILL.md`：旧版入口形如
+  `.../kns/brief/result.aspx?...` 或 `.../Kns55/brief/...`；`#Page_next` 与条目详情链接必须用
+  `browser_interact ref=<ref>` 点击（`text=` 只作用于顶层文档）；每次翻页/进详情后重新
+  `browser_snapshot`，旧 ref 失效；不要把带 `QueryID` 的结果页 URL 复制到新窗口。
+
+## 设置页浏览器列表的鉴权与加载失败处理
+
+设置页「网络 → 浏览器」的列表来自 `GET /api/v1/diagnostic/browser/list`，用户选择写
+`PUT /api/v1/diagnostic/browser/path`。后端路由定义在 `backend/api/diagnostic_routes.py`
+（router prefix `/diagnostic`，由 `backend/main.py` 挂载到 `/api/v1`），前端封装在
+`src/shared/api/browserSettingsClient.ts`，渲染组件为 `src/pages/settings/BrowserSettingsSection.tsx`。
+
+### 鉴权：裸 fetch 导致 401
+
+- 历史实现用裸 `fetch` 请求 `/api/v1/diagnostic/browser/*`，不带 `Authorization` 头。后端
+  `LocalAuthMiddleware` 对非公开路径一律 401（`{"detail":"本地授权凭据无效或缺失"}`），
+  列表加载因此失败。
+- 现在 `browserSettingsClient` 统一走 `webAccessClient.requestJson`：Electron 下经
+  `window.electronAPI.backendRequest` 由主进程中继转发（注入本地 bearer token、解析真实后端
+  端口）；浏览器 dev 走同源 / Vite 代理。失败时抛
+  `Error(payload.error || payload.detail || "HTTP <status>")`，保留后端 `detail`。
+  新增访问本机后端的客户端必须复用该函数，不要直接 `fetch`。
+- 同页「高级」区域的 `NetworkCredentialsSection.tsx`（凭据、主机指标、配置、browser health）
+  也一并迁到 `requestJson`，不再硬编码 8765 端口。
+
+### 加载失败不再伪装成「未发现可用浏览器」
+
+- `BrowserSettingsSection` 用独立的 `error` 状态区分请求失败与空结果：
+  - 请求失败：渲染 `data-testid="browser-load-error"` 错误块，展示
+    `settings.network.browser.load_failed` 文案、错误详情与 `data-testid="browser-retry"`
+    重试按钮（重新执行 `load()`）。
+  - 空态：仅当后端明确返回 `browsers: []` 且 `embeddedAvailable === false` 时，才显示
+    `settings.network.browser.none_found`（「未发现可用浏览器」）。
+  - `embeddedAvailable === true` 时即使系统浏览器列表为空，也至少渲染内置浏览器选项，不显示空态。
+- 后端发现逻辑 `_discover_all_browsers` 是纯路径扫描，没有版本门槛；版本号来自
+  `chromium_major_version`（优先读 exe 同级的 `X.Y.Z.W/` 版本目录，Windows 上不再执行
+  `--version`，避免拉起窗口与 5s 白等）。因此修好鉴权后，Edge 100 / Chrome 107 等旧内核也能
+  正常列出。
+
+### 内置浏览器与启动优先级
+
+- 内置浏览器选项用哨兵值 `(embedded)`（后端 `browser_launcher.EMBEDDED_EXECUTABLE`，前端
+  `EMBEDDED_PATH`）写入 `browser_path` 设置。后端只有在
+  `SAGE_EMBEDDED_BROWSER=1` + `SAGE_EMBEDDED_BROWSER_PORT` + `SAGE_EMBEDDED_BROWSER_TOKEN`
+  三者齐全时 `embeddedAvailable=true`，设置页才渲染 `data-testid="embedded-browser-option"`。
+- 启动发现链 `browser_launcher.discover_and_select()`（`browser_cdp.launch_browser` /
+  `discover_browser_executable` 调用）的优先级为：
+  `SAGE_BROWSER_PATH` / `SAGE_FIREFOX_PATH` 环境变量 → 用户设置 `browser_path` → 内置浏览器 →
+  Windows / macOS / PATH 扫描。`SAGE_EMBEDDED_BROWSER` 只决定内置浏览器是否可选，
+  **不再覆盖**用户配置的路径。历史上内置浏览器排在用户设置之前，导致 Win7 上即使选择了
+  Chrome/Edge 也不生效；该顺序已修正。
+
 ## 已知限制
 
 | 限制 | 现状 / 影响 |

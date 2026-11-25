@@ -141,32 +141,40 @@ RapidOCR/onnxruntime 未进默认安装包；缺依赖时能力位降级，不�
 
 ### 视觉能力判定（前端与后端）
 
-`src/shared/lib/visionCapability.ts` 的 `resolveVisionSupport(endpoint, modelId, catalog)` 是前端唯一
-视觉能力判定入口，按权威度分层：
+判定原则是「未知 ≠ 不支持」：未识别只说明启发式不认识该模型名，不能当成厂商声明不支持。
+前端唯一入口是 `src/shared/lib/visionCapability.ts` 的
+`resolveVisionSupport(endpoint, modelId, catalog)`，返回
+`'supported' | 'unsupported' | 'unknown'`，按权威度分层：
 
 1. model-catalog `getEffective().capabilities.vision`：`true` → `supported`，`false` → `unsupported`。
-   catalog 的 capabilities 按 `user_override > probe > imported_snapshot > builtin`
-   逐 key 合并，用户可在「模型目录」或聊天页警告条中把某个模型手动标记为支持/不支持；
-2. 回退 `endpoint.discoveredModels` 中该模型 `capabilities` 是否含 `'vision'`：含 → `supported`，
-   不含或未命中该模型 → **`unknown`**。discovered capabilities 只是模型名字符串 marker 的
-   启发式推断（`src/shared/lib/modelCapabilities.ts` 的 `inferCapabilities`），未识别不等于
-   厂商声明不支持；
-3. **只有 catalog 明确 `vision: false` 才是 `unsupported`**。
+   catalog 的 capabilities 逐 key 按
+   `user_override > service_probe > imported_snapshot > builtin > unknown` 合并。
+   用户可在「设置 → 模型 → 视觉能力」选择 自动 / 支持 / 不支持，或点聊天页警告条的
+   「误判了？标记为支持图片」，写入或删除 catalog override；
+2. catalog 无该字段或请求失败（404 / 网络错误）时回退 `endpoint.discoveredModels`：
+   命中且 `capabilities` 含 `'vision'` → `supported`；不含或未命中该模型 → `unknown`。
+   discovered capabilities 只是 `src/shared/lib/modelCapabilities.ts` 中 `inferCapabilities`
+   的模型名 marker 启发式（负数 marker 优先、embedding 短路），端点发现与管理页共用这一份实现；
+3. 只有权威源明确 `vision: false` 才返回 `unsupported`。
 
-`unknown` 与 `supported` 同等对待（fail-open），与后端 `agent.py` 的「未知=支持」语义一致；
-`ChatInput` 仅在 `unsupported` 时禁用图片上传，并提供「误判了？标记为支持图片」按钮写入
-catalog override；「设置 → 模型 → 视觉能力」另提供 自动 / 支持 / 不支持 三态覆盖。
-会话内用 `SessionModelPicker` 切换模型时，`sessionApi.setModelOverride` 会广播
-`session-model-override-changed` 事件，`ChatInput` 据此立即刷新判定。
-`useChat` 仅在 `unsupported` 时把 `ChatRequest.capabilities` 置为 `['chat']`。
+`unknown` 与 `supported` 同等放行（fail-open），与后端 `agent.py` 的「未知=支持」语义一致。
+`ChatInput` 在端点或模型变化时读取 catalog，catalog 返回前按 `discoveredModels` 回退，不阻塞渲染。
+仅当判定为 `unsupported`、未配置 `visionModel`、且本地 OCR 不可用时才禁用图片上传；
+配置了 `visionModel` 走视觉模型回退，OCR 可用则走本地 OCR 回退，并显示对应提示。
+会话内用 `SessionModelPicker` 切换模型时，`sessionApi.setModelOverride` 广播
+`sage:session-model-override-changed` 事件，`ChatInput` 订阅后立即重新判定。
 视觉判定与请求凭据都使用 `src/shared/lib/effectiveChatModel.ts` 的
 `resolveEffectiveChatModel` —— 会话级模型覆盖优先于全局 `chatModel`，同端点覆盖也会替换模型 id。
-catalog 请求有 1.5s 超时，失败按 `unknown` 处理。
+
+`useChat` 用 `toRequestCapabilities` 把三态映射为 `ChatRequest.capabilities`：
+`unsupported` → `['chat']`，`supported` / `unknown` → `['chat', 'vision']`。
+后端 `legacy_routes` 在 `capabilities` 不含 `'vision'` 时触发 visionModel / OCR 回退，
+含 `'vision'` 则按原生多模态处理。
 
 后端 `ModelCapabilities.vision_known` 区分「确认不支持」与「名字未识别」：
-OpenAI 兼容 / Anthropic / Gemini / Ollama 的 `model_capabilities` 在正负 marker 都未命中时返回
+OpenAI 兼容 / Anthropic / Gemini / Ollama 的 `model_capabilities` 在未识别模型名时返回
 `vision_known=False`，`agent._get_model_capabilities` 将其与 `resolver is None` 一样按未知放行。
-若上游对带图请求返回 400/422 且响应体命中 image/vision 特征串，`llm_client` 会给出
+若上游对带图请求返回 400/413/422 且响应体命中 image/vision 特征串，`llm_client` 会给出
 「更换支持视觉的对话模型，或在设置页把当前模型标记为不支持图片，以启用视觉理解模型 / OCR 回退」
 的可操作错误文案。
 
