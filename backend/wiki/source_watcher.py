@@ -93,7 +93,7 @@ class _SourceHandler(FileSystemEventHandler):  # type: ignore[misc]
             from backend.wiki.ingest_queue import IngestQueue
 
             queue = IngestQueue(self.project_root)
-            queue.add(f"raw/sources/{filename}", priority="normal")
+            queue.add(f"raw/sources/{filename}")
         except Exception:
             logger.warning("source watcher: 入队失败", exc_info=True)
 
