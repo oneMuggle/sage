@@ -137,9 +137,12 @@ class SkillEvolutionService:
                 triggers.append(EvolutionTrigger.LOW_SUCCESS_RATE)
 
         # 低满意度
-        if use_count >= MIN_USAGE_FOR_SATISFACTION and satisfaction is not None:
-            if satisfaction < SATISFACTION_THRESHOLD:
-                triggers.append(EvolutionTrigger.LOW_SATISFACTION)
+        if (
+            use_count >= MIN_USAGE_FOR_SATISFACTION
+            and satisfaction is not None
+            and satisfaction < SATISFACTION_THRESHOLD
+        ):
+            triggers.append(EvolutionTrigger.LOW_SATISFACTION)
 
         return triggers
 

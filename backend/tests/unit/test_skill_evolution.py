@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from backend.skills.evolution import (
-    EvolutionProposal,
     EvolutionTrigger,
     EvolutionType,
     SkillEvolutionService,
@@ -19,7 +18,7 @@ from backend.skills.evolution import (
 class TestEvolutionService:
     """进化服务测试。"""
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_no_trigger_insufficient_usage(self):
         """使用次数不足时不触发。"""
         service = SkillEvolutionService()
@@ -29,7 +28,7 @@ class TestEvolutionService:
         )
         assert proposal is None
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_trigger_low_success_rate(self):
         """低成功率触发演化。"""
         service = SkillEvolutionService()
@@ -47,7 +46,7 @@ class TestEvolutionService:
         assert proposal.evolution_type == EvolutionType.REVISE_CONTENT
         assert "成功率" in proposal.reason
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_trigger_low_satisfaction(self):
         """低满意度触发演化。"""
         service = SkillEvolutionService()
@@ -64,7 +63,7 @@ class TestEvolutionService:
         assert proposal.trigger == EvolutionTrigger.LOW_SATISFACTION
         assert proposal.evolution_type == EvolutionType.REVISE_DESCRIPTION
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_no_trigger_healthy(self):
         """健康技能不触发。"""
         service = SkillEvolutionService()
@@ -79,7 +78,7 @@ class TestEvolutionService:
         )
         assert proposal is None
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_proposal_to_dict(self):
         """proposal 序列化。"""
         service = SkillEvolutionService()

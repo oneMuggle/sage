@@ -10,18 +10,17 @@
 from __future__ import annotations
 
 import math
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from backend.skills.similarity import (
     SkillSimilarityService,
+    _skill_text,
     cosine_similarity,
     get_similarity_service,
     reset_similarity_service,
-    _skill_text,
 )
-
 
 # ------------------------------------------------------------------ #
 # cosine_similarity
@@ -141,7 +140,7 @@ class TestSkillSimilarityService:
         pairs = service._find_duplicates_tfidf(skills, threshold=0.85)
         assert len(pairs) == 0
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_find_duplicates_with_mock_embedding(self):
         """mock embedding 端点测试 embedding 路径。"""
         mock_config = MagicMock()
@@ -182,7 +181,7 @@ class TestSkillSimilarityService:
         pair_names = {(a, b) for a, b, _ in pairs}
         assert ("academic-search", "paper-search") in pair_names
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_fallback_to_tfidf_on_embedding_failure(self):
         """embedding 全部失败时降级到 TF-IDF（需要 sklearn）。"""
         pytest.importorskip("sklearn")

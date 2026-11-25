@@ -203,10 +203,7 @@ class SkillScoringService:
         success_count = usage.get("success_count", 0)
         fail_count = usage.get("fail_count", 0)
         total = success_count + fail_count
-        if total > 0:
-            success_rate = (success_count / total) * 100
-        else:
-            success_rate = 50.0  # 无数据时默认中性
+        success_rate = (success_count / total) * 100 if total > 0 else 50.0
 
         # 3. 用户满意度（目前无显式反馈，使用成功率近似）
         user_satisfaction = success_rate

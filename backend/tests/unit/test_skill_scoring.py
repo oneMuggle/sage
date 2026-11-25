@@ -9,9 +9,9 @@ import pytest
 from backend.skills.scoring import (
     SkillScore,
     SkillScoringService,
+    _classify_tier,
     _compute_description_quality,
     _compute_freshness,
-    _classify_tier,
     get_scoring_service,
     reset_scoring_service,
 )

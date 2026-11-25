@@ -6,7 +6,6 @@ import pytest
 
 from backend.skills.progressive_loader import (
     ProgressiveSkillLoader,
-    SkillContext,
     get_progressive_loader,
     reset_progressive_loader,
 )
@@ -15,7 +14,7 @@ from backend.skills.progressive_loader import (
 class TestProgressiveSkillLoader:
     """渐进式加载测试。"""
 
-    @pytest.fixture
+    @pytest.fixture()
     def sample_skills(self):
         return [
             {
@@ -38,7 +37,7 @@ class TestProgressiveSkillLoader:
             },
         ]
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_build_context_empty_skills(self):
         loader = ProgressiveSkillLoader()
         ctx = await loader.build_context([])
@@ -46,7 +45,7 @@ class TestProgressiveSkillLoader:
         assert ctx.hot_skills == []
         assert ctx.cold_count == 0
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_build_context_without_scoring(self, sample_skills):
         """无评分服务时全部归为 warm。"""
         loader = ProgressiveSkillLoader(scoring_service=None)
@@ -56,7 +55,7 @@ class TestProgressiveSkillLoader:
         assert ctx.cold_count == 0
         assert "academic-search" in ctx.initial_context
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_build_context_respects_budget(self, sample_skills):
         """上下文应在 token 预算内。"""
         loader = ProgressiveSkillLoader(context_budget_tokens=50)

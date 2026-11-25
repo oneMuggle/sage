@@ -93,11 +93,11 @@ class SkillSimilarityService:
             return self._cache[text]
 
         try:
+            from backend.services.http_client import http_post
             from backend.wiki.embeddings import (
                 build_embed_request,
                 parse_embed_response,
             )
-            from backend.services.http_client import http_post
 
             req = build_embed_request(self.embed_config, [text])
             response = await http_post(req.url, req.headers, req.body)
@@ -216,10 +216,7 @@ class SkillSimilarityService:
                 dot = (row_i.multiply(row_j)).sum()
                 norm_i = math.sqrt((row_i.multiply(row_i)).sum())
                 norm_j = math.sqrt((row_j.multiply(row_j)).sum())
-                if norm_i == 0 or norm_j == 0:
-                    sim = 0.0
-                else:
-                    sim = dot / (norm_i * norm_j)
+                sim = 0.0 if norm_i == 0 or norm_j == 0 else dot / (norm_i * norm_j)
                 if sim >= threshold:
                     pairs.append((names[i], names[j], round(float(sim), 4)))
 
