@@ -1,8 +1,8 @@
 {
-  "real": 11,
-  "main_only": 30,
-  "actionable": 41,
-  "updated_at": "2026-11-22",
-  "updated_by": "sync/win7-user-profile-v2 — user_profile v2 同步后实测",
-  "note": "actionable = real + main-only。棘轮：超过该值 CI fail；收敛后请下调本文件。real=11 为 design（4）+ literature（7），由 PR #3038/#3194 承接；main-only=30 为 design 内容资产（systems/templates/tests），随 PR #3038 合入后消失。"
+  "real": 7,
+  "main_only": 0,
+  "actionable": 7,
+  "updated_at": "2026-11-25",
+  "updated_by": "Word 样式模板 M2（#3265）+ Design Studio Office（#3280）+ 记忆系统 P0（#3277）三批 win7 同步后实测",
+  "note": "actionable = real + main-only。棘轮：超过该值 CI fail；收敛后请下调本文件。main-only=0 —— main 侧增量（M2/M7/记忆 P0/附件错误透传等）已全部同步到 release/win7。real=7 为 design_studio(2)+firefox/browser(2)+memory evolution(1)+prompt_routes(1)+sage-web.bat(1)，均属已审计的 win7 必要差异。"
 }
