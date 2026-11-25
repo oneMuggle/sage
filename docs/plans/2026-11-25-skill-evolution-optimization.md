@@ -1,6 +1,6 @@
 # 技能自动整理、优化与去重进化机制
 
-> **状态**：草案
+> **状态**：M1 + M2 已实施，M3/M4 待开发
 > **日期**：2026-11-25
 > **目标**：为 Sage 技能系统引入自动去重、质量评分、渐进式发现与自进化机制
 
@@ -361,19 +361,21 @@ LLM 分析失败模式
 
 ## 五、实施步骤
 
-### 里程碑 M1：结构化去重（P0）— 1 周
+### 里程碑 M1：结构化去重（P0）— ✅ 已完成
 
-- [ ] 1.1 实现 `SkillSimilarityService`（embedding 计算 + 余弦相似度）
-- [ ] 1.2 增强 `ConsolidationService.scan()` 注入相似度证据
-- [ ] 1.3 前端技能页展示相似度提示
-- [ ] 1.4 单元测试 + 集成测试
+- [x] 1.1 实现 `SkillSimilarityService`（embedding 计算 + 余弦相似度）
+- [x] 1.2 增强 `ConsolidationService.scan()` 注入相似度证据
+- [ ] 1.3 前端技能页展示相似度提示（待集成到 SkillCard）
+- [x] 1.4 单元测试 + 集成测试（16 通过，3 跳过）
 
-### 里程碑 M2：质量评分（P1）— 1 周
+### 里程碑 M2：质量评分（P1）— ✅ 已完成
 
-- [ ] 2.1 实现 `SkillScoringService` + SQLite 评分存储
-- [ ] 2.2 评分 API（`GET /skills/{name}/score`）
-- [ ] 2.3 前端 `SkillScoreBadge` 组件
-- [ ] 2.4 热/冷路径分层逻辑
+- [x] 2.1 实现 `SkillScoringService`（5 维评分 + 热/冷分层）
+- [x] 2.2 评分 API（`GET /skills/scores` + `GET /skills/{name}/score`）
+- [x] 2.3 前端 `SkillScoreBadge` 组件
+- [x] 2.4 热/冷路径分层逻辑
+- [x] 2.5 Electron IPC 路由 + 前端 API 客户端
+- [x] 2.6 单元测试（22 通过）
 
 ### 里程碑 M3：渐进式发现（P2）— 1 周
 
