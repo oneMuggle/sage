@@ -150,6 +150,7 @@
 | 170 | [对标迭代 SOP](./170-parity-loop-sop.md) | 对标迭代闭环 SOP：步骤 / py38 兼容 / 验证矩阵 / 踩坑与红线 |
 | 171 | [Composer 状态条](./171-composer-status-bar.md) | 用量 / 响应速度 / 上下文三块观测指标下沉到输入框下方 + `useSessionUsage` 统一取数（单次请求 / 流中轮询 / 流末补拉 / 迟到响应守卫）+ 受控徽章与上下文条 + 空会话引导语互斥 |
 | 172 | [规则抽取草稿审阅 + AI 精炼](./172-rule-extraction-draft.md) | 抽取结果先预览再落库（置信度色标 + 冲突并排对比）+ 侧栏对话式 AI 精炼（自然语言 → add/modify/delete diff 卡片 + 逐条接受）+ 草稿 zustand 状态 + v22 迁移新增结构化元数据列 |
+| 173 | [自部署服务通用化（P0）](./172-selfhosted-service-framework.md) | DrawIO 激活：MCP 服务 → backend pool → Puppeteer/Chrome 渲染 → 会话内图表显示；P1 富媒体契约 / P2 声明式服务注册路线图 |
 ---
 
 ## 核心章节（基础架构）
