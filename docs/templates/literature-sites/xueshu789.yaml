@@ -1,3 +1,15 @@
+# xueshu789 站点 profile —— 示例模板，不随产品自动加载。
+# 启用方式（任选其一）：
+#   cp docs/templates/literature-sites/xueshu789.yaml ~/.sage/literature_sites/
+#   或复制到 <项目>/.sage/literature_sites/
+# 加载顺序：builtin < ~/.sage/literature_sites < .sage/literature_sites
+#
+# 实测要点（2026-11-22，仅作启用参考，实际以真机为准）：
+#   - 卡号+密码登录，成功后 URL 进 /dbList/，标题不含「登录」
+#   - /dbItem/3 可用（重定向知网代理检索页）；/dbItem/1 代理报错；/dbItem/2 触发滑块验证
+#   - 下载：必须点击 a.downloadlink 元素本身，完整 href 含 &ddata=文件名|库|题名|库|hash
+#     不要用快照里截断的 doDownload?url=... 直连（缺 ddata 报「参数错误」）
+#   - 下载完成后新标签可能显示 CNKI「页面不存在」，以浏览器下载目录为准
 id: xueshu789
 display_name: 学术资源站
 home_url: https://www.xueshu789.cc/
