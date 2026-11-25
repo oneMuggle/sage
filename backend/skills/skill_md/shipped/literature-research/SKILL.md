@@ -2,7 +2,7 @@
 name: literature-research
 description: 文献调研与综述最小闭环——选站点、检索、筛选、证据表、大纲、分节写作、引用门禁与导出，并交接给 paper-writing 生成 docx。当用户要做文献调研、写文献综述、literature review、或"找资料并整理成综述"时使用；单纯写论文正文请用 paper-writing。
 license: Apache-2.0
-compatibility: 需要 browser_* 与 web_fetch 工具、execute_code、write_file/read_file、office_parse_bibtex/office_create；站点 profile 见 backend/literature/sites 与 ~/.sage/literature_sites
+compatibility: 需要 browser_* 与 web_fetch 工具、execute_code、write_file/read_file、office_parse_bibtex/office_create；站点 profile 由用户在 ~/.sage/literature_sites 或 <项目>/.sage/literature_sites 配置，示例模板见 docs/templates/literature-sites
 when_to_use: 当用户要做文献调研、文献综述、literature review、systematic review，或说"找资料并整理成综述""帮我调研某主题的文献"时使用
 allowed-tools: browser_launch browser_navigate browser_snapshot browser_interact browser_downloads browser_login web_fetch ask_user_question execute_code bash write_file read_file office_parse_bibtex office_create office_lint_word
 triggers: []
@@ -36,11 +36,12 @@ triggers: []
 
 ### 0. 选择站点与确认合规
 
-- 从 profile 注册表选择站点：`xueshu789`（学术资源站，`status: draft`）、
-  `cnki`，或用户在 `~/.sage/literature_sites/` 自建的站点。
-- xueshu789 实测：`/dbItem/3` 可用（重定向到知网代理检索页）；`/dbItem/1`
-  代理报错、`/dbItem/2` 触发滑块验证；下载已实测通过（点击 `a.downloadlink`，
-  完整 href 含 `&ddata=`）。
+- 先用 `get_default_store().list_ids()` 列出已配置站点，从中选一个 `status: ready`
+  的 `<site_id>`；用户级站点放在 `~/.sage/literature_sites/`，项目级放
+  `<项目>/.sage/literature_sites/`。没有合适站点时，引导用户从
+  `docs/templates/literature-sites/` 复制示例并填写选择器。
+- 选定后读取该 profile 的 `search`/`pdf`/`rate_limit`/`compliance` 配置驱动流程，
+  **不要**把某个站点的主机名或选择器写死在工作流里。
 - 需要登录时调用 `browser_login`，让用户在自己的可见窗口完成登录；
   **不要代填密码、不要导出 cookie、不要绕过付费墙**；验证码/滑块交还用户。
 - 第三方站点默认禁用，用户显式同意后再使用。
@@ -57,7 +58,7 @@ triggers: []
 ```python
 from pathlib import Path
 from backend.literature.run_store import create_run
-run = create_run(Path("<workspace>/.sage/literature_runs"), "主题", "xueshu789")
+run = create_run(Path("<workspace>/.sage/literature_runs"), "主题", "<site_id>")
 print(run.run_dir)
 ```
 
@@ -68,7 +69,7 @@ print(run.run_dir)
 ```python
 from backend.literature.profile_store import get_default_store
 from backend.literature.guidance import render_search_guidance
-profile = get_default_store().get("xueshu789")
+profile = get_default_store().get("<site_id>")
 print(render_search_guidance(profile, "机器学习 综述", limit=20))
 ```
 
@@ -89,18 +90,18 @@ from backend.literature.profile_store import get_default_store
 from backend.literature.search import search_with_profile
 from backend.literature.sage_driver import SageToolDriver
 
-profile = get_default_store().get("xueshu789")
+profile = get_default_store().get("<site_id>")
 obs = search_with_profile(profile, "机器学习 综述", SageToolDriver(sage.call), limit=20)
 print(obs.guidance)
 print(obs.snapshot[:3000])
 ```
 
 驱动会自动：打开入口页 → 尝试 `search.input_selectors` → `press Enter` →
-等待 `wait_after_s` → 抓取快照。下载时点击结果条目里的 `a.downloadlink`
-（真实 href 含 `&ddata=文件名|库|题名|库|hash`），**不要**用快照里截断的
-`doDownload?url=...` 直连（缺少 `ddata` 会报「参数错误」）；点击后
-`browser_downloads` 等待并校验 `%PDF-` 与题名。xueshu789 下载完成后新标签
-可能显示「页面不存在」，以浏览器下载目录为准。
+等待 `wait_after_s` → 抓取快照。下载时点击结果条目里 profile 声明的 PDF 入口
+元素本身（selector 优先），**不要**用快照里可能截断的 URL 直连——部分站点的
+真实链接还带额外参数（如 `&ddata=`），截断直连会报错；点击后
+`browser_downloads` 等待并校验 `%PDF-` 与题名。部分站点下载完成后新标签
+可能显示错误页，以浏览器下载目录为准。
 3. 从 snapshot 解析文献列表为 JSON；每条必须有 `paper_key`（DOI / arXiv ID /
    站点导出 ID / 规范化标题+作者+年份）与 `title`。
 4. 用 `execute_code` 记录：
@@ -109,7 +110,7 @@ print(obs.snapshot[:3000])
 from pathlib import Path
 from backend.literature.run_store import load_run, record_papers, record_query
 run = load_run(Path("<run_dir>"))
-record_query(run, "机器学习 综述", "xueshu789", 20)
+record_query(run, "机器学习 综述", "<site_id>", 20)
 print(record_papers(run, papers))  # papers 是上一步的 JSON 数组
 ```
 
@@ -211,7 +212,7 @@ docx；生成后跑 `office_lint_word` 自检。不要在本技能里重复实�
 - 不编造引用；引用 key 不在文献池 → 停下来补文献或删句子。
 - 不把全文塞进上下文；用证据表与 PaperDB 摘要。
 - 不自动点击下载未知/危险文件；只点 profile 声明的 PDF 入口。
-- xueshu789 的搜索 URL 模板与结果选择器仍是 `status: draft`；首次使用先用
+- 新站点的搜索 URL 模板与结果选择器若未验证（`status: draft`），首次使用先用
   `draft-profile` 记录观测，或让用户确认选择器。
 - 站点改版时用 `validate-profile` 与一次 dry-run 检索定位问题，不要改
   pipeline 代码。
@@ -219,10 +220,23 @@ docx；生成后跑 `office_lint_word` 自检。不要在本技能里重复实�
 ## 快速命令（本地调试）
 
 ```bash
-python -m backend.literature.cli init --root runs --topic 主题 --site xueshu789
-python -m backend.literature.cli guidance --site xueshu789 --query 机器学习
+python -m backend.literature.cli init --root runs --topic 主题 --site <site_id>
+python -m backend.literature.cli guidance --site <site_id> --query 机器学习
 python -m backend.literature.cli gate --run runs/<id>
 python -m backend.literature.cli report --run runs/<id>
 python -m backend.literature.cli rubric --run runs/<id>
 python -m backend.literature.cli export --run runs/<id> [--style ieee]
 ```
+
+## 附录：站点 profile 示例
+
+`docs/templates/literature-sites/` 提供可复制的示例 profile（如浏览器登录+检索+PDF
+下载的 `xueshu789.yaml`）。这些模板**不参与运行时自动加载**，仅供理解 profile 字段
+形态和快速创建新站点：
+
+```bash
+mkdir -p ~/.sage/literature_sites
+cp docs/templates/literature-sites/xueshu789.yaml ~/.sage/literature_sites/
+```
+
+字段完整清单见 `backend/literature/README.md` 与 `backend/literature/models.py`。
