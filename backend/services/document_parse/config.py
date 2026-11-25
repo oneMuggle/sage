@@ -33,13 +33,6 @@ def _read_preference() -> Dict[str, Any]:
         return {}
 
 
-def _pick(raw: Dict[str, Any], *names: str) -> Any:
-    for name in names:
-        if name in raw:
-            return raw[name]
-    return None
-
-
 def _as_bool(value: Any, default: bool) -> bool:
     if isinstance(value, bool):
         return value
@@ -62,49 +55,26 @@ def _as_int(value: Any, default: int, low: int, high: int) -> int:
     return min(high, max(low, parsed))
 
 
-def _env_str(name: str) -> str:
-    return os.environ.get(name, "").strip()
-
-
 def load_mineru_settings() -> MineruSettings:
     try:
-        raw = _read_preference()
-        base_url = _env_str("SAGE_MINERU_BASE_URL") or str(
-            _pick(raw, "baseUrl", "base_url") or ""
-        ).strip()
-        api_key = _env_str("SAGE_MINERU_API_KEY") or str(
-            _pick(raw, "apiKey", "api_key") or ""
-        ).strip()
-        tier = _env_str("SAGE_MINERU_TIER") or str(
-            _pick(raw, "defaultTier", "default_tier") or DEFAULT_TIER
-        ).strip()
-        timeout_raw = _env_str("SAGE_MINERU_TIMEOUT_SECONDS")
-        timeout = _as_float(
-            timeout_raw or _pick(raw, "timeoutSeconds", "timeout_seconds"),
-            DEFAULT_TIMEOUT_SECONDS,
-            5.0,
-            3600.0,
-        )
+        from backend.services.external_services.registry import get_service
+        from backend.services.external_services.settings import merge_service_settings
+
+        spec = get_service("mineru")
+        stored = _read_preference()
+        raw = stored if spec is None else merge_service_settings(spec, stored, os.environ)
         return MineruSettings(
-            enabled=_as_bool(_pick(raw, "enabled"), False),
-            base_url=base_url,
-            api_key=api_key,
-            default_tier=tier or DEFAULT_TIER,
-            timeout_seconds=timeout,
-            max_upload_mb=_as_int(
-                _pick(raw, "maxUploadMb", "max_upload_mb"),
-                DEFAULT_MAX_UPLOAD_MB,
-                1,
-                200,
+            enabled=_as_bool(raw.get("enabled"), False),
+            base_url=str(raw.get("baseUrl") or "").strip(),
+            api_key=str(raw.get("apiKey") or "").strip(),
+            default_tier=str(raw.get("defaultTier") or DEFAULT_TIER).strip() or DEFAULT_TIER,
+            timeout_seconds=_as_float(
+                raw.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS, 5.0, 3600.0
             ),
-            use_in_chat_attachment=_as_bool(
-                _pick(raw, "useInChatAttachment", "use_in_chat_attachment"), True
-            ),
+            max_upload_mb=_as_int(raw.get("maxUploadMb"), DEFAULT_MAX_UPLOAD_MB, 1, 200),
+            use_in_chat_attachment=_as_bool(raw.get("useInChatAttachment"), True),
             min_quality_threshold=_as_float(
-                _pick(raw, "minQualityThreshold", "min_quality_threshold"),
-                DEFAULT_MIN_QUALITY,
-                0.0,
-                1.0,
+                raw.get("minQualityThreshold"), DEFAULT_MIN_QUALITY, 0.0, 1.0
             ),
         )
     except Exception:  # noqa: BLE001 — 配置异常不得阻断解析链路

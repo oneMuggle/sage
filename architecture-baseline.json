@@ -99,7 +99,7 @@
     "src/shared/lib/i18n/locales/zh/chatAndSider.ts": 963,
     "src/shared/types/electron-api.d.ts": 1038,
     "src/widgets/chat/ChatInput.tsx": 1006,
-    "src/widgets/chat/Message.tsx": 936,
+    "src/widgets/chat/Message.tsx": 964,
     "tests/electron/test_stub_backend.py": 896,
     "backend/services/browser_account_service.py": 828,
     "backend/tests/unit/test_browser_account_service.py": 265,
