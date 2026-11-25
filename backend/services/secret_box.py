@@ -27,7 +27,10 @@ import os
 import shutil
 import subprocess
 import sys
-from typing import Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+
+if TYPE_CHECKING:
+    from backend.services.external_services.spec import ExternalServiceSpec
 
 logger = logging.getLogger(__name__)
 
@@ -454,55 +457,74 @@ def unwrap_search_config_json(raw: str | None) -> str | None:
     return json.dumps(data, ensure_ascii=False)
 
 
-#: MinerU 服务配置里需要静态加密的字段：(JSON 字段名, 加密账户名)
-_MINERU_SERVICE_KEY_FIELDS: List[Tuple[str, str]] = [("apiKey", "mineru:api_key")]
+def wrap_service_json(spec: ExternalServiceSpec, raw: str | None) -> str | None:
+    """按 ``spec.secret_fields`` 对 JSON 字符串做字段级加密(幂等, 已 enc: 跳过)。"""
+    if raw is None or not spec.secret_fields:
+        return raw
+    try:
+        import json
+
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+    if not isinstance(data, dict):
+        return raw
+    for secret in spec.secret_fields:
+        value = data.get(secret.json_field)
+        if isinstance(value, str) and value and not is_wrapped(value):
+            try:
+                data[secret.json_field] = encrypt_secret(value, secret.account)
+            except Exception:
+                logger.warning(
+                    "SecretBox: encrypt failed for %s.%s (kept plaintext)",
+                    spec.preference_key,
+                    secret.json_field,
+                )
+    return json.dumps(data, ensure_ascii=False)
+
+
+def unwrap_service_json(spec: ExternalServiceSpec, raw: str | None) -> str | None:
+    """与 :func:`wrap_service_json` 对称；单字段解密失败置空。"""
+    if raw is None or not spec.secret_fields:
+        return raw
+    try:
+        import json
+
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+    if not isinstance(data, dict):
+        return raw
+    for secret in spec.secret_fields:
+        value = data.get(secret.json_field)
+        if isinstance(value, str) and is_wrapped(value):
+            try:
+                data[secret.json_field] = decrypt_secret(value)
+            except Exception:
+                logger.warning(
+                    "SecretBox: decrypt failed for %s.%s (treated as unconfigured)",
+                    spec.preference_key,
+                    secret.json_field,
+                )
+                data[secret.json_field] = ""
+    return json.dumps(data, ensure_ascii=False)
 
 
 def wrap_mineru_service_json(raw: str | None) -> str | None:
-    """字符串层包装(preferences "mineru_service" 写侧): apiKey 就地加密。"""
-    if raw is None:
-        return raw
-    try:
-        import json
+    """字符串层包装(preferences "mineru_service" 写侧): 委托通用 spec 驱动实现。"""
+    from backend.services.external_services.registry import get_service
 
-        data = json.loads(raw)
-    except (TypeError, ValueError):
+    spec = get_service("mineru")
+    if spec is None:
         return raw
-    if not isinstance(data, dict):
-        return raw
-    for field, account in _MINERU_SERVICE_KEY_FIELDS:
-        value = data.get(field)
-        if isinstance(value, str) and value and not is_wrapped(value):
-            try:
-                data[field] = encrypt_secret(value, account)
-            except Exception:
-                logger.warning(
-                    "SecretBox: encrypt failed for mineru_service.%s (kept plaintext)", field
-                )
-    return json.dumps(data, ensure_ascii=False)
+    return wrap_service_json(spec, raw)
 
 
 def unwrap_mineru_service_json(raw: str | None) -> str | None:
-    """与 :func:`wrap_mineru_service_json` 对称；单字段解密失败置空。"""
-    if raw is None:
-        return raw
-    try:
-        import json
+    """与 :func:`wrap_mineru_service_json` 对称；委托通用 spec 驱动实现。"""
+    from backend.services.external_services.registry import get_service
 
-        data = json.loads(raw)
-    except (TypeError, ValueError):
+    spec = get_service("mineru")
+    if spec is None:
         return raw
-    if not isinstance(data, dict):
-        return raw
-    for field, _account in _MINERU_SERVICE_KEY_FIELDS:
-        value = data.get(field)
-        if isinstance(value, str) and is_wrapped(value):
-            try:
-                data[field] = decrypt_secret(value)
-            except Exception:
-                logger.warning(
-                    "SecretBox: decrypt failed for mineru_service.%s (treated as unconfigured)",
-                    field,
-                )
-                data[field] = ""
-    return json.dumps(data, ensure_ascii=False)
+    return unwrap_service_json(spec, raw)
