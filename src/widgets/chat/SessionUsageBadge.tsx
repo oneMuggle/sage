@@ -1,17 +1,17 @@
 // src/widgets/chat/SessionUsageBadge.tsx
 //
-// U14 会话级用量徽章 (对标增强第二轮批次 C): 当前会话累计 token/成本,
+// U14 会话级用量徽章 (对标增强第二轮批次 C): 当前会话累计 token/成本/缓存命中/响应速度。
+//
+// 2026-11-25 (composer 状态条下沉): 改为**受控展示**组件 —— 取数收敛到
+// hooks/useSessionUsage.ts（单次请求 + 流末刷新），本组件只负责渲染：
+//   - 单行紧凑摘要（对齐 ChatGPT / Claude 的 composer footer）
+//   - 点击展开的明细弹层（原生 title tooltip 装不下 P95 / 最慢 / 分模型明细）
 // 数据源 usage_events 持久化表 (GET /api/v1/usage/session/{id})。
-// 会话切换时拉取 + 每 60s 轮询 (流式进行中会持续产生新用量)。
 
 import { Coins } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import {
-  useChatStreamStore,
-  selectSessionSlots,
-} from '../../features/send-message/chatStreamStore';
-import { fetchSessionUsage, type SessionUsage } from '../../shared/api/usageApi';
+import type { SessionUsage } from '../../shared/api/usageApi';
 import { useI18n } from '../../shared/lib/i18n';
 
 function formatTokens(total: number): string {
@@ -21,9 +21,8 @@ function formatTokens(total: number): string {
 }
 
 interface SessionUsageBadgeProps {
-  sessionId: string | null;
-  /** 外部可触发刷新 (例如流结束后) */
-  refreshKey?: number;
+  /** 用量快照（由 useSessionUsage 提供）；null 表示尚无数据。 */
+  usage: SessionUsage | null;
 }
 
 export function formatSessionUsageMarkdown(usage: SessionUsage | null): string {
@@ -53,38 +52,29 @@ export function formatSessionUsageJson(usage: SessionUsage | null): string {
   );
 }
 
-export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBadgeProps) {
+export function SessionUsageBadge({ usage }: SessionUsageBadgeProps) {
   const { t } = useI18n();
-  const [usage, setUsage] = useState<SessionUsage | null>(null);
-  // 2026-11-05: 仅流式活跃时启用 60s 轮询。空闲会话只在挂载/sessionId 变化/
-  // refreshKey 时拉一次,避免主会话持续产生无效刷新。
-  const streaming = useChatStreamStore((s) => selectSessionSlots(s, sessionId).streaming !== null);
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLSpanElement | null>(null);
 
+  // 弹层外点 / Escape 关闭
   useEffect(() => {
-    if (!sessionId) {
-      setUsage(null);
-      return;
-    }
-    let cancelled = false;
-    const load = (): void => {
-      fetchSessionUsage(sessionId)
-        .then((u) => {
-          if (!cancelled) setUsage(u);
-        })
-        .catch(() => {
-          /* 静默: 徽章是增强信息 */
-        });
+    if (!open) return;
+    const onDown = (e: MouseEvent): void => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
     };
-    load();
-    if (!streaming) return;
-    const timer = window.setInterval(load, 60_000);
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
     return () => {
-      cancelled = true;
-      window.clearInterval(timer);
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
     };
-  }, [sessionId, refreshKey, streaming]);
+  }, [open]);
 
-  if (!sessionId || !usage || usage.requests === 0) return null;
+  if (!usage || usage.requests === 0) return null;
 
   const cost = usage.estimated_cost_usd > 0 ? ` · $${usage.estimated_cost_usd.toFixed(4)}` : '';
 
@@ -104,7 +94,7 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
   const hasLatency = usage.avg_latency_ms !== null && usage.avg_latency_ms !== undefined;
   const avgLatencySec = hasLatency ? (usage.avg_latency_ms! / 1000).toFixed(1) : null;
 
-  // 2026-10-28: 按模型统计详情（tooltip 展示）
+  // 2026-10-28: 按模型统计详情（明细弹层展示）
   const modelStats = usage.latency_by_model && usage.latency_by_model.length > 0;
   const modelStatsText = modelStats
     ? '\n\n按模型统计:\n' +
@@ -123,34 +113,105 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
   const isSlowRequest = hasLatency && usage.avg_latency_ms! > 10000;
   const latencyTone = isSlowRequest ? 'text-warning' : 'text-text-muted';
 
-  /* v8 ignore start */
-
-  /* v8 ignore stop */
-
   return (
-    <span
-      className="flex items-center gap-1 text-ui-2xs text-text-secondary shrink-0"
-      title="本会话累计用量 (token / 估算成本 / 缓存命中率 / 响应时间)"
-      data-testid="session-usage-badge"
-    >
-      <Coins className="w-3 h-3" />
-      {formatTokens(usage.total_tokens)} tok{cost}
-      {cacheInteractive && (
-        <span
-          className={`ml-1 ${hitRateTone}`}
-          data-testid="session-cache-hit-rate"
-          title={`${t('settings.usage.cacheRead')}: ${usage.cache_read_tokens.toLocaleString()} · ${t('settings.usage.cacheCreation')}: ${usage.cache_creation_tokens.toLocaleString()}`}
-        >
-          · 🎯 {hitRatePct}%
+    <span className="relative shrink-0 text-ui-2xs text-text-secondary" ref={panelRef}>
+      <button
+        type="button"
+        className="flex items-center gap-1 hover:text-text"
+        title="本会话累计用量 (token / 估算成本 / 缓存命中率 / 响应时间)"
+        aria-expanded={open}
+        data-testid="session-usage-badge"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Coins className="w-3 h-3" />
+        {/* 窄屏 (<640px) 折叠：只保留延迟段，避免状态条换行挤压输入区 */}
+        <span className="hidden sm:inline" data-testid="session-usage-tokens">
+          {formatTokens(usage.total_tokens)} tok{cost}
         </span>
-      )}
-      {hasLatency && (
+        {cacheInteractive && (
+          <span
+            className={`ml-1 hidden lg:inline ${hitRateTone}`}
+            data-testid="session-cache-hit-rate"
+            title={`${t('settings.usage.cacheRead')}: ${usage.cache_read_tokens.toLocaleString()} · ${t('settings.usage.cacheCreation')}: ${usage.cache_creation_tokens.toLocaleString()}`}
+          >
+            · 🎯 {hitRatePct}%
+          </span>
+        )}
+        {hasLatency && (
+          <span
+            className={`ml-1 ${latencyTone}`}
+            data-testid="session-avg-latency"
+            title={latencyTooltip}
+          >
+            <span className="hidden sm:inline">· </span>⚡ {avgLatencySec}s
+          </span>
+        )}
+      </button>
+
+      {open && (
         <span
-          className={`ml-1 ${latencyTone}`}
-          data-testid="session-avg-latency"
-          title={latencyTooltip}
+          className="absolute bottom-full left-0 z-50 mb-2 block w-80 rounded-lg border border-border bg-surface-overlay p-3 text-left shadow-xl backdrop-blur-sm"
+          data-testid="session-usage-popover"
         >
-          · ⚡ {avgLatencySec}s
+          <span className="mb-2 flex items-center justify-between gap-1.5">
+            <span className="text-xs font-medium text-text">{t('chat.status.usage')}</span>
+            <span className="shrink-0 truncate text-ui-2xs text-text-muted">{usage.session_id}</span>
+          </span>
+
+          <span className="block text-ui-2xs text-text-secondary">
+            <span className="flex items-center justify-between gap-2 py-0.5">
+              <span>请求次数</span>
+              <span className="tabular-nums">{usage.requests}</span>
+            </span>
+            <span className="flex items-center justify-between gap-2 py-0.5">
+              <span>总 Token</span>
+              <span className="tabular-nums">
+                {usage.total_tokens} · {formatTokens(usage.total_tokens)}
+              </span>
+            </span>
+            <span className="flex items-center justify-between gap-2 py-0.5">
+              <span>输入 / 输出 Token</span>
+              <span className="tabular-nums">
+                {usage.prompt_tokens} / {usage.completion_tokens}
+              </span>
+            </span>
+            <span className="flex items-center justify-between gap-2 py-0.5">
+              <span>估算成本 (USD)</span>
+              <span className="tabular-nums">${usage.estimated_cost_usd.toFixed(4)}</span>
+            </span>
+            <span className="flex items-center justify-between gap-2 py-0.5">
+              <span>{t('chat.status.cacheHit')}</span>
+              <span className="tabular-nums">
+                {(usage.cache_hit_rate * 100).toFixed(0)}% · 读取 {usage.cache_read_tokens} / 创建{' '}
+                {usage.cache_creation_tokens}
+              </span>
+            </span>
+            <span className="flex items-center justify-between gap-2 py-0.5">
+              <span>{t('chat.status.latency')}</span>
+              <span className="tabular-nums">
+                {hasLatency
+                  ? `平均 ${avgLatencySec}s · P95 ${(usage.p95_latency_ms! / 1000).toFixed(1)}s · 最慢 ${(usage.max_latency_ms! / 1000).toFixed(1)}s`
+                  : '—'}
+              </span>
+            </span>
+            {modelStats && (
+              <span className="mt-1 block border-t border-border pt-1.5">
+                <span className="mb-0.5 block text-text-muted">按模型</span>
+                {usage.latency_by_model!.map((m) => (
+                  <span
+                    key={m.model}
+                    className="flex items-center justify-between gap-2 py-0.5"
+                    data-testid={`session-usage-model-${m.model}`}
+                  >
+                    <span className="truncate">{m.model}</span>
+                    <span className="tabular-nums">
+                      {(m.avg_latency_ms / 1000).toFixed(1)}s · {m.count} 次
+                    </span>
+                  </span>
+                ))}
+              </span>
+            )}
+          </span>
         </span>
       )}
     </span>

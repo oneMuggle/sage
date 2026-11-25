@@ -162,6 +162,11 @@ export const enChatAndSider = {
   'chat.welcome_sub': 'Start a new conversation',
   'chat.hint':
     'Sage remembers your project context · Supports Markdown · Type / for commands, @ to reference workspace files',
+  // 2026-11-25 (composer status bar): labels for the footer status bar and its popovers
+  'chat.status.usage': 'Session usage',
+  'chat.status.cacheHit': 'Cache hit rate',
+  'chat.status.latency': 'Latency',
+  'chat.status.context': 'Context usage',
   'chat.rag_citations_toggle': 'Attachment retrieval citations',
   'chat.rag_citations_count': '{n} chunks injected',
   'chat.rag_citation_source': 'source',
