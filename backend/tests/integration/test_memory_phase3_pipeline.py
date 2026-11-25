@@ -366,5 +366,6 @@ def test_prune_keeps_near_duplicate_group_leader(db):
     # 组长（importance 更高）即使质量分也低，仍然保留且不带失效时间
     assert _row(db, leader)["is_valid"] == 1
     assert _row(db, leader)["invalid_at"] is None
-    # 冗余副本被质量合并（软失效）
+    # 冗余副本被质量合并（软失效：is_valid=0 且写 invalid_at）
     assert _row(db, duplicate)["is_valid"] == 0
+    assert _row(db, duplicate)["invalid_at"] is not None
