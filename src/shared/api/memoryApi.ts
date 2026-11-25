@@ -38,6 +38,7 @@ import type {
   UserProfileEntry,
   UserProfileResponse,
 } from './types';
+import { QUALITY_LOW_THRESHOLD } from './types';
 import { ApiException, handleApiError, withRetry } from './utils';
 
 export interface MemoryDiagnostics {
@@ -767,17 +768,17 @@ export const memoryApi = {
    * Task 4.3: 拉取质量分低于阈值的候选记忆 (最差优先)。
    *
    * 后端 GET /memory/quality-candidates 只返 is_valid=1 / invalid_at IS NULL 的
-   * episodic + semantic 行。threshold 默认 0.3, limit 默认 50 (上限 200)。
+   * episodic + semantic 行。threshold 默认 0.4, limit 默认 50 (上限 200)。
    */
   async getQualityCandidates(
     limit: number = 50,
-    threshold: number = 0.3,
+    threshold: number = QUALITY_LOW_THRESHOLD,
   ): Promise<MemoryQualityCandidate[]> {
     const safeLimit = Math.min(200, Math.max(1, Math.floor(Number(limit) || 50)));
     const rawThreshold = Number(threshold);
     const safeThreshold = Number.isFinite(rawThreshold)
       ? Math.min(1, Math.max(0, rawThreshold))
-      : 0.3;
+      : QUALITY_LOW_THRESHOLD;
 
     return withRetry(async () => {
       try {

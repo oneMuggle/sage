@@ -48,14 +48,22 @@ WEIGHTS: Dict[str, float] = {
 RECENCY_HALF_LIFE_DAYS = 60.0
 
 #: 质量分低于此值才具备被清理的资格（还要再满足"长期未访问"）
-LOW_QUALITY_THRESHOLD = 0.3
+LOW_QUALITY_THRESHOLD = 0.4
 
 #: 距上次访问超过此天数才允许清理 —— 新建但还没被检索到的记忆
 #: 天然 access_count=0，只靠质量分会误伤。
-STALE_DAYS = 90.0
+#:
+#: 90 天太宽松：桌面端关机就错过夜间任务，实际等同于"永不清理"。
+#: 30 天与 MemoryPruningTask 既有的低价值清理口径一致。
+STALE_DAYS = 30.0
 
 #: 访问多少次算"用得很勤"（封顶 1.0）
 USAGE_SATURATION = 10
+
+#: importance 字段缺失时按此值折算 —— 字段缺失 ≠ 重要性为零。
+#: ``memories_semantic`` 表没有 importance 列，按 0 计会把全部语义记忆
+#: 压进低分档，白白挤进"低质量候选"列表。显式写 0 仍按 0 计。
+NEUTRAL_IMPORTANCE = 5.0
 
 #: 内容长度：低于此值视为残缺；此值以内视为"长度适中"
 MIN_CONTENT_LENGTH = 4
@@ -65,6 +73,9 @@ MAX_CONTENT_LENGTH = 500
 
 #: 语料上限 —— 独特性是 O(N*M) 比较，语料太大时按最近 N 条取样。
 MAX_CORPUS = 200
+
+#: 近重复判定阈值（字符二元组 Jaccard）—— 超过它算"另一条记忆的副本"。
+DUPLICATE_SIMILARITY = 0.85
 
 #: importance 字段的取值上限
 MAX_IMPORTANCE = 10.0
@@ -90,6 +101,64 @@ def _jaccard(a: Set[str], b: Set[str]) -> float:
     return inter / float(len(a | b))
 
 
+def _num(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _rank_key(row: Dict[str, Any]) -> Tuple[float, float, float, str]:
+    """记忆的"优劣序" —— 逐项比较，越靠前越该保留。
+
+    数值项取负 —— 排序是升序的，只有取负才能让"更重要 / 更常被访问 /
+    更新鲜"的排在前面，否则组长会选中最差的那条副本。
+    最后拿 id 兜底，保证同组里恰好一条排第一。
+
+    ``created_at`` 走 ``_as_millis`` 归一 —— 遗留脏数据可能是秒级，
+    不归一会让秒级行永远排在毫秒行之后，"更新鲜优先"就失效了。
+    """
+    return (
+        -_num(row.get("importance")),
+        -_num(row.get("access_count")),
+        -_num(_as_millis(row.get("created_at")) or 0.0),
+        str(row.get("id") or ""),
+    )
+
+
+def find_duplicate_leaders(
+    rows: Sequence[Dict[str, Any]],
+    threshold: float = DUPLICATE_SIMILARITY,
+) -> Dict[str, str]:
+    """把每条记忆映射到它所在近重复组的组长（记忆 id → 组长 id）。
+
+    近重复判定用字符二元组 Jaccard；组长 = 组内最优的那条
+    （importance / access_count / created_at / id 逐项比较）。
+    没有近重复的记忆映射到自己。
+
+    同一内容的多份拷贝里，只有组长的映射指向自己 —— 于是
+    "我是不是冗余副本"等价于"我的组长是不是我自己"。
+    """
+    bigrams = [_bigrams(r.get("content") or "") for r in rows]
+    order = sorted(range(len(rows)), key=lambda i: _rank_key(rows[i]))
+    rank_of = [0] * len(rows)
+    for pos, i in enumerate(order):
+        rank_of[i] = pos
+
+    leaders: Dict[str, str] = {}
+    for i, row in enumerate(rows):
+        best = i
+        for j in range(len(rows)):
+            if i == j or not bigrams[i] or not bigrams[j]:
+                continue
+            if _jaccard(bigrams[i], bigrams[j]) < threshold:
+                continue
+            if rank_of[j] < rank_of[best]:
+                best = j
+        leaders[row.get("id")] = rows[best].get("id")
+    return leaders
+
+
 class MemoryQualityScorer:
     """记忆质量评分器。
 
@@ -103,8 +172,10 @@ class MemoryQualityScorer:
         self,
         corpus: Optional[Iterable[Dict[str, Any]]] = None,
         now_ms: Optional[float] = None,
+        max_corpus: int = MAX_CORPUS,
     ) -> None:
         self.now_ms = float(now_ms) if now_ms is not None else time.time() * 1000.0
+        self.max_corpus = max(1, int(max_corpus))
         self._corpus: List[Dict[str, Any]] = []
         self._corpus_bigrams: List[Set[str]] = []
         self.set_corpus(corpus or [])
@@ -112,8 +183,8 @@ class MemoryQualityScorer:
     # ---- 语料 ---------------------------------------------------------------
 
     def set_corpus(self, corpus: Iterable[Dict[str, Any]]) -> None:
-        """设置参照语料（截断到 ``MAX_CORPUS`` 条）。"""
-        rows = list(corpus or [])[:MAX_CORPUS]
+        """设置参照语料（截断到 ``max_corpus`` 条）。"""
+        rows = list(corpus or [])[: self.max_corpus]
         self._corpus = rows
         self._corpus_bigrams = [_bigrams(r.get("content") or "") for r in rows]
 
@@ -151,9 +222,14 @@ class MemoryQualityScorer:
 
     @staticmethod
     def _score_importance(memory: Dict[str, Any]) -> float:
-        """重要性：``importance`` 字段（0-10）归一到 0-1。"""
+        """重要性：``importance`` 字段（0-10）归一到 0-1。
+
+        字段**缺失**时按中性值 ``NEUTRAL_IMPORTANCE`` 折算 —— 缺失说明
+        这张表/这行根本没有"重要性"这个概念（如 ``memories_semantic``
+        无 importance 列），不等于"这条记忆不重要"。
+        """
         try:
-            value = float(memory.get("importance") or 0)
+            value = float(memory.get("importance", NEUTRAL_IMPORTANCE))
         except (TypeError, ValueError):
             value = 0.0
         if value < 0:
@@ -201,19 +277,35 @@ class MemoryQualityScorer:
 
     # ---- 汇总 ---------------------------------------------------------------
 
-    def score_breakdown(self, memory: Dict[str, Any]) -> Dict[str, float]:
-        """各维度得分（诊断用：低分时能看出是哪一项拖后腿）。"""
+    def _base_parts(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        """除独特性外的四个维度（独特性需要 O(N*M) 语料比较，最贵）。"""
         return {
             "clarity": self._score_clarity(memory.get("content") or ""),
             "importance": self._score_importance(memory),
             "recency": self._score_recency(memory),
             "usage": self._score_usage(memory),
-            "uniqueness": self._score_uniqueness(memory),
         }
+
+    def score_breakdown(self, memory: Dict[str, Any]) -> Dict[str, float]:
+        """各维度得分（诊断用：低分时能看出是哪一项拖后腿）。"""
+        parts = self._base_parts(memory)
+        parts["uniqueness"] = self._score_uniqueness(memory)
+        return parts
 
     def calculate_quality_score(self, memory: Dict[str, Any]) -> float:
         """计算记忆质量分（0-1）。"""
         parts = self.score_breakdown(memory)
+        score = sum(WEIGHTS[key] * value for key, value in parts.items())
+        return max(0.0, min(1.0, score))
+
+    def score_lower_bound(self, memory: Dict[str, Any]) -> float:
+        """把独特性按 0 计的分数下界。
+
+        独特性恒在 [0, 1]，故真实分 ∈ [下界, 下界 + 独特性权重]。
+        下界 ≥ 阈值 ⇒ 真实分 ≥ 阈值 ⇒ 该条不可能是低质量候选，
+        可以跳过昂贵的语料比较。全库扫描时先用它剪枝。
+        """
+        parts = self._base_parts(memory)
         score = sum(WEIGHTS[key] * value for key, value in parts.items())
         return max(0.0, min(1.0, score))
 
@@ -247,10 +339,13 @@ class MemoryQualityScorer:
 
 
 __all__ = [
+    "DUPLICATE_SIMILARITY",
     "LOW_QUALITY_THRESHOLD",
     "MAX_CORPUS",
+    "NEUTRAL_IMPORTANCE",
     "MemoryQualityScorer",
     "RECENCY_HALF_LIFE_DAYS",
     "STALE_DAYS",
     "WEIGHTS",
+    "find_duplicate_leaders",
 ]

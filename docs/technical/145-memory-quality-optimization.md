@@ -773,9 +773,9 @@ def test_extract_free_text_preference():
 
 ---
 
-## 五、进化执行与补跑（2026-11-17）
+## 八、进化执行与补跑（2026-11-17）
 
-### 5.1 根因
+### 8.1 根因
 
 用户 Win7 端约 300 条记忆长期未合并/修剪。排查确认三层叠加：
 
@@ -791,7 +791,7 @@ def test_extract_free_text_preference():
    `MemoryReflectionTask` 只看近 7 天、每表 120 条；`memory_consolidation`
    实际只做晋升/衰减，不合并重复。
 
-### 5.2 修复
+### 8.2 修复
 
 - 新增 `backend/memory/time_utils.py`：`now_ms()` / `to_ms()` 作为毫秒
   单一真相源；`evolution_log.created_at` 仍为秒（前端契约）。
@@ -820,7 +820,7 @@ def test_extract_free_text_preference():
   避免 FastAPI 序列化成裸数字。
 - 记忆固化的重要度衰减与修剪/重评估一致，豁免 `environment` 标签记忆。
 
-### 5.3 验证
+### 8.3 验证
 
 ```bash
 # 后端（release/win7，Python 3.8 环境）
@@ -836,7 +836,7 @@ npx vitest run src/shared/api/__tests__/memoryConsolidation.test.ts \
 npm run typecheck
 ```
 
-### 5.4 后续（P2/P3）
+### 8.4 后续（P2/P3）
 
 - 记忆管理中心：按主题/类别聚合、编辑/合并/删除/固定/忘记、来源追踪；
 - 记忆健康看板：总数、重复率、90 天未用占比、上次合并时间；
@@ -844,6 +844,120 @@ npm run typecheck
 
 ---
 
-**文档版本**：v1.2
-**最后更新**：2026-11-17
+## 九、P0 修复 PR-A（2026-11-24）
+
+> main：[#3275](https://github.com/oneMuggle/sage/pull/3275)；
+> win7：[#3277](https://github.com/oneMuggle/sage/pull/3277)
+
+### 9.1 背景
+
+内网 sage 部署后记忆系统出现 4 个症状：记忆条目持续膨胀（476 条且不降）、
+只有情景记忆、用户偏好退化成字符串拼接
+（`"用户偏好详细程度：detailed"`）、低质量候选 tab 恒空。
+
+排查落到 8 处根因，其中 2 处是 PR 合并后代码审查新发现的缺陷
+（编号 7 / 8），一并修掉。
+
+### 9.2 修复清单
+
+| # | 症状 / 根因 | 修复 | 涉及文件 |
+|---|---|---|---|
+| 1 | `detail_level` 枚举串号：`"详细"` 映射到 `detailed`，应为 `comprehensive` | 修 `detail_prefs` 映射表 | `backend/scheduler/evolution.py` |
+| 2 | recall 路径不更新 `accessed_at` / `access_count` → 固化任务的 `>=5` 永不触发 | `get_recent()` 命中后执行 `_touch_access()` | `backend/memory/episodic.py`、`backend/memory/semantic.py` |
+| 3 | `lifecycle.py` 硬编码 `memory_type="episodic"`，事件载荷与实际写入层不符（**仅 win7**） | 改用 `_resolve_layer_for_event()` | `backend/memory/lifecycle.py` |
+| 4 | `MemoryQualityScorer.should_delete` 无任何调用方 | 接入 `MemoryPruningTask` 的质量合并 + 低质量软失效两条路径 | `backend/scheduler/evolution.py` |
+| 5 | 低质量门槛过苛刻（`<0.3` 且 90 天未访问） | `LOW_QUALITY_THRESHOLD` 0.3 → **0.4**；`STALE_DAYS` 90 → **30** | `backend/memory/quality_scorer.py` |
+| 6 | LLM 不可用时进化任务仍标 `success`（假成功） | `BaseEvolutionTask._resolve_llm` 统一提权，无 LLM 写 `skipped_no_llm` | `backend/scheduler/evolution.py` |
+| 7 | **近重复组长选反**：`_rank_key` 数值项未取负，升序排序把最差的那条副本选成组长 | 数值项取负；`created_at` 经 `_as_millis` 归一后再比较 | `backend/memory/quality_scorer.py` |
+| 8 | **近重复整组被抹平**（仅 win7）：低质量软失效只保护"组内仅剩一条有效"者，组大于质量合并上限（100）时保护落空，组长连同剩余副本一起被废 | 规则 6 无条件跳过近重复组的组长 | `backend/scheduler/evolution.py` |
+
+### 9.3 两条修剪路径的分工
+
+`MemoryPruningTask` 里与记忆质量相关的两条规则必须分工明确，顺序也不能反：
+
+| 规则 | 动作 | 触发条件 | 组长待遇 |
+|---|---|---|---|
+| 5 质量合并 | 软删（`is_valid=0`）+ 清向量 | 质量分低 **且** 长期未访问 **且** 组内存在更优副本 | 永不删 |
+| 6 低质量软失效 | 软失效（`invalid_at` + `is_valid=0`） | 质量分低 **且** 长期未访问 | 跳过（见 9.4） |
+
+规则 5 必须**排在规则 6 之前**：合并按组判定、组长受保护；若先软失效，
+整组会被一起抹平，重复内容就此丢失。
+
+### 9.4 "是不是组长"不能用 `leaders.get(id) == id` 判定
+
+`find_duplicate_leaders` 把每条记忆映射到所在近重复组的组长，
+**没有近重复的记忆映射到自己**。因此：
+
+- `leaders.get(id) == id` 为真，可能是组长，**也可能是独条**；
+- 用它当"组长保护"判据 → 独条记忆永远不会被软失效，规则 6 形同虚设。
+
+正确判据是"**有没有别的记忆映射到它**"：
+
+```python
+group_leaders = {
+    leader for member, leader in leaders.items() if member != leader
+}
+```
+
+### 9.5 组的大小不该决定内容的生死
+
+缺陷 8 的具体机理：
+
+1. 组内 120 份近重复 → 规则 5 删满单次上限 `_PRUNE_QUALITY_DELETE_MAX = 100`
+   条副本后停手，组里还剩组长 + 19 份副本有效；
+2. 规则 6 的"仅剩一条有效"保护此时落空（有效成员是 20 条，不是 1 条）；
+3. 组长与剩余副本一起被软失效 → **整组内容从检索中消失**。
+
+而同样内容只有 3 份时，规则 5 删光副本、规则 6 保护唯一幸存者 → 留下 1 份。
+**同一份内容的生死取决于组的大小，而非内容本身的质量** —— 这是缺陷的实质。
+
+修法（规则 6 无条件跳过组长）后，任何规模的近重复组都会留下组长一份。
+
+### 9.6 时间戳归一
+
+`memories_episodic.created_at` 一律写毫秒，但历史遗留行可能是秒级。
+`_rank_key` 里若直接比较，秒级值（~1.8e9）永远小于毫秒值（~1.8e12），
+"更新鲜优先"就失效 —— 更新的那条反而被当成副本删掉。
+故比较前统一经 `scoring._as_millis` 归一（< 1e11 视为秒）。
+
+### 9.7 双分支差异
+
+| 特性 | main | release/win7 |
+|---|---|---|
+| `backend/memory/lifecycle.py` | ❌ 不存在（走 `adapters/out/memory/adapter.py` 的 `classify_memory_type("auto", ...)`，本就正确） | ✅ 存在，缺陷 3 在此修 |
+| 规则 6（低质量软失效） | ❌ 未实现（`evolution.py` 仅 2015 行，只有规则 5） | ✅ 已实现（2636 行） |
+| 缺陷 8（整组被抹平） | 不适用 | ✅ 在此修 |
+
+缺陷 7（组长方向反）两分支共有，两个分支都已修。
+
+### 9.8 验证
+
+```bash
+# main（Python 3.10）
+pytest backend/tests/unit/test_memory_quality_scorer.py \
+       backend/tests/unit/test_evolution_tasks.py \
+       backend/tests/integration/test_memory_quality_enrichment.py -q
+# 68 passed
+
+# release/win7（Python 3.8）
+pytest backend/tests/unit/test_memory_quality_scorer.py \
+       backend/tests/unit/test_evolution_tasks.py \
+       backend/tests/integration/test_memory_quality_pipeline.py \
+       backend/tests/integration/test_memory_quality_routes.py \
+       backend/tests/integration/test_memory_quality_enrichment.py -q
+# 108 passed
+```
+
+回归测试：
+
+- `test_duplicate_leader_is_the_best_copy` —— 组长 = 组内最优副本；
+- `test_duplicate_leader_prefers_fresher_when_importance_ties` —— 重要性持平时取更新鲜的；
+- `test_duplicate_leader_normalizes_second_level_timestamps` —— 秒级时间戳归一；
+- `test_duplicate_leader_maps_unique_memory_to_itself` —— 独条映射到自己（9.4 的前提）；
+- `test_quality_prune_never_wipes_whole_duplicate_group` —— 120 份近重复至少留一条（仅 win7）。
+
+---
+
+**文档版本**：v1.3
+**最后更新**：2026-11-24
 **维护者**：Sage 团队

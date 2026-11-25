@@ -21,6 +21,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
 
+from backend.memory.manager import classify_memory_type
+
 logger = logging.getLogger(__name__)
 
 # 注入 LLM 提取器的「已知事实」条数上限——太少去重不生效，太多撑爆 prompt。
@@ -314,7 +316,11 @@ class MemoryLifecycleManager:
                     MemoryWriteEvent(
                         memory_id=memory_id,
                         content=fact.get("content", ""),
-                        memory_type="episodic",
+                        memory_type=classify_memory_type(
+                            "auto",
+                            fact.get("importance", 5),
+                            fact.get("content", ""),
+                        ),
                         memory_category=fact.get("category", "project_fact"),
                         session_id=session_id,
                         turn_id=self._current_turn_id,

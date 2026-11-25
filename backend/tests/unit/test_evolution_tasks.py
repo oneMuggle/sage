@@ -264,6 +264,79 @@ class TestMemoryPruningLog:
         assert deleted == 0
         assert _fetch_evolution_logs(db, operation="prune") == []
 
+    async def test_quality_merge_drops_duplicates_keeps_leader(
+        self, setup_test_db
+    ):
+        """三份近重复记忆只删冗余副本，组长受保护"""
+        db = setup_test_db
+        # 120 天 → recency = 0.5^(120/60) = 0.25
+        # quality = 0.25*1.0 + 0.25*0.3 + 0.20*0.25 + 0 + 0 = 0.375 < 0.4 ✓
+        old = _now_ms() - 120 * MS_PER_DAY
+        same_content = "这是一条低质但重要性偏高的记忆内容，专门用来测试近重复"
+        # 三份一模一样、importance 中等、无 session → 不会被规则 2/3 删
+        ids = [
+            _insert_episodic(
+                db,
+                content=same_content,
+                importance=3,
+                access_count=0,
+                created_at=old,
+            )
+            for _ in range(3)
+        ]
+
+        deleted = await MemoryPruningTask(db=db).run_async()
+
+        # 两份副本被质量合并软删除（is_valid=0），组长保留（仍有效）
+        remaining_valid = [
+            mid for mid in ids if _fetch_episodic(db, mid)["is_valid"] == 1
+        ]
+        assert len(remaining_valid) == 1
+        leader_id = remaining_valid[0]
+        # 质量合并按条写审计日志
+        quality_logs = [
+            log
+            for log in _fetch_evolution_logs(db, operation="prune")
+            if log["reason"] == "memory_pruning:quality_merge"
+        ]
+        assert len(quality_logs) == 2
+        # 组长不出现在 quality_merge 日志里
+        assert leader_id not in {log["memory_id"] for log in quality_logs}
+        assert deleted == 2
+
+    async def test_quality_prune_never_wipes_whole_duplicate_group(
+        self, setup_test_db
+    ):
+        """近重复组必须留下至少一条 —— 不能整组消失。
+
+        质量合并有单次上限（``_PRUNE_QUALITY_DELETE_MAX``），超出后副本没
+        删完。此时若组长也走"低质量软失效"被废掉，整组内容就从检索里
+        消失 —— 组的大小成了决定内容生死的因素，而非内容本身的质量：
+        三份一样的低质记忆会留下组长一份，一百二十份却一条不剩。
+        """
+        db = setup_test_db
+        # 120 天 → recency = 0.5^(120/60) = 0.25
+        # quality = 0.25*1.0 + 0.25*0.3 + 0.20*0.25 + 0 + 0 = 0.375 < 0.4 ✓
+        old = _now_ms() - 120 * MS_PER_DAY
+        same_content = "这是一条低质但重要性偏高的记忆内容，专门用来测试近重复"
+        # 条数超过质量合并的单次上限（100），确保副本没被删完
+        ids = [
+            _insert_episodic(
+                db,
+                content=same_content,
+                importance=3,
+                access_count=0,
+                created_at=old,
+            )
+            for _ in range(120)
+        ]
+
+        await MemoryPruningTask(db=db).run_async()
+
+        remaining_valid = [
+            mid for mid in ids if _fetch_episodic(db, mid)["is_valid"] == 1
+        ]
+        assert remaining_valid, "整组近重复被清空，内容从检索中消失"
 
 class TestEvolutionLogBestEffort:
     """日志写入失败只 warning，不能让进化任务失败"""
@@ -330,8 +403,15 @@ class TestEvolutionLogBestEffort:
         assert _fetch_episodic(db, mid)["importance"] == 8
 
 
+class _FakeLLM:
+    """Test LLM stub."""
+
+    async def complete(self, prompt: str) -> str:
+        return "测试摘要：对话讨论了记忆系统"
+
+
 class TestDailySummaryMilliseconds:
-    """每日摘要按毫秒窗口筛选“今天有活动”的会话。"""
+    """每日摘要按毫秒窗口筛选"今天有活动"的会话。"""
 
     async def test_summarizes_session_active_today_and_dedupes_same_day(
         self, setup_test_db
@@ -363,7 +443,7 @@ class TestDailySummaryMilliseconds:
             )
         conn.commit()
 
-        task = DailySummaryTask(db=db)
+        task = DailySummaryTask(db=db, llm_client=_FakeLLM())
         processed = await task.run_async()
 
         assert processed == 1
@@ -380,6 +460,50 @@ class TestDailySummaryMilliseconds:
 
         # 同一会话当天重复执行（启动补跑/重启）不再生成第二条摘要
         assert await task.run_async() == 0
+
+    async def test_daily_summary_skips_when_llm_unavailable(self, setup_test_db):
+        """LLM 不可用时每日摘要跳过，不写关键词兜底摘要。"""
+        db = setup_test_db
+        now = _now_ms()
+        session_id = "sess-no-llm"
+        conn = db.get_connection()
+        conn.execute(
+            """
+            INSERT INTO sessions
+            (id, title, created_at, updated_at, last_message_at, message_count)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (session_id, "无 LLM 会话", now - 2 * MS_PER_DAY, now, now, 3),
+        )
+        for idx, (role, content) in enumerate(
+            [("user", "消息1"), ("assistant", "消息2"), ("user", "消息3")]
+        ):
+            conn.execute(
+                """
+                INSERT INTO messages (id, session_id, role, content, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (f"m-{idx}", session_id, role, content, now - 1000 + idx),
+            )
+        conn.commit()
+
+        # 不传 llm_client → _resolve_llm() 返回 None
+        processed = await DailySummaryTask(db=db).run_async()
+
+        assert processed == 0
+        # 不写兜底摘要
+        row = conn.execute(
+            "SELECT 1 FROM memories_episodic WHERE session_id = ?",
+            [session_id],
+        ).fetchone()
+        assert row is None
+        # 任务级进化日志标 skipped_no_llm
+        log_row = conn.execute(
+            "SELECT status FROM evolution_log WHERE evolution_type = 'daily_summary'"
+            " ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        assert log_row is not None
+        assert log_row["status"] == "skipped_no_llm"
 
 
 class TestMemoryConsolidationDecayMilliseconds:

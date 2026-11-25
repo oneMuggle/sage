@@ -545,6 +545,7 @@ class EpisodicMemory:
         session_id: Optional[str] = None,
         agent_id: Optional[str] = None,
         include_private: bool = True,
+        track_access: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         获取最近的记忆
@@ -554,6 +555,10 @@ class EpisodicMemory:
             session_id: 可选，按会话 ID 筛选
             agent_id: M3 当前专家（私有 ∪ 共享）；None 不限制
             include_private: 策略收窄——False 时仅返回共享行
+            track_access: 是否计入访问统计（access_count +1 / accessed_at）。
+                仅"记忆真正被使用"的调用方才应置 True（如注入 system prompt）；
+                管理视图浏览保持 False，避免污染质量分的 usage 维度。
+                见 :meth:`_touch_access_batch`。
 
         Returns:
             记忆列表
@@ -590,6 +595,11 @@ class EpisodicMemory:
                     memory["tags"] = []
             results.append(memory)
 
+        if track_access:
+            self._touch_access_batch(
+                [m["id"] for m in results if m.get("id")]
+            )
+
         return results
 
     def get_by_session(self, session_id: str, limit: int = 20) -> List[Dict[str, Any]]:
@@ -604,6 +614,15 @@ class EpisodicMemory:
             记忆列表
         """
         return self.get_recent(limit=limit, session_id=session_id)
+
+    def get_all(self, limit: int = 10000) -> List[Dict[str, Any]]:
+        """获取全部有效的情景记忆（按创建时间倒序）。
+
+        与 :meth:`get_recent` 的区别只是默认上限更大 —— 用于全库扫描
+        （如质量候选筛选），避免只取到最新 N 条而漏掉最陈旧的低质量行。
+        不计入访问统计。
+        """
+        return self.get_recent(limit=limit, track_access=False)
 
     def delete(self, memory_id: str) -> bool:
         """
@@ -774,6 +793,31 @@ class EpisodicMemory:
             (now, memory_id),
         )
 
+        conn.commit()
+
+    def _touch_access_batch(self, memory_ids: List[str]) -> None:
+        """批量更新访问统计（access_count + 1 / accessed_at = now）。
+
+        与 :meth:`_update_access` 的区别是一次 executemany + 一次 commit，
+        避免逐条 UPDATE 的写放大 —— 注入 system prompt 时会一次取多条。
+
+        Args:
+            memory_ids: 被使用的记忆 ID 列表
+        """
+        if not memory_ids:
+            return
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        now = int(time.time() * 1000)
+        cursor.executemany(
+            """
+            UPDATE memories_episodic
+            SET access_count = access_count + 1, accessed_at = ?
+            WHERE id = ?
+            """,
+            [(now, memory_id) for memory_id in memory_ids],
+        )
         conn.commit()
 
     def exists_by_content(self, content: str) -> bool:

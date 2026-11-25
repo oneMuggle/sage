@@ -45,6 +45,13 @@ CATEGORY = "user_pref"
 
 BAD_CONTENT = "嗯..."
 
+#: 与 ``BAD_CONTENT`` 字面不相似（字面相似度低于近重复阈值 0.85）。
+#:
+#: 用途：让"低质量 + 陈旧"的样本**不落在任何近重复组里**。内容字面高度
+#: 相似的一批记忆会组成近重复组，组内**组长受保护**（组长 = 组内最优
+#: 副本），质量清理只处理组外的低质量陈旧记忆。
+UNIQUE_BAD_CONTENT = "呃……"
+
 
 class PromptAwareLLM:
     """按提示词类型回话：整理操作用 ``ops_reply``，归纳请求用 ``summary``。
@@ -242,8 +249,15 @@ def _seed_prune_candidates(db: Database) -> dict:
         # 质量差 + 长期未访问 → 唯一应被软失效的行
         # importance=4 避免同时命中 importance<=1 的硬删除规则，
         # 保证这个用例只验证“质量分软失效”路径。
+        # 内容用 UNIQUE_BAD_CONTENT（与其它候选行字面不相似）：若与
+        # 其它行内容相同，它会成为近重复组的组长而受保护，永远不会被
+        # 软失效 —— 那样这个用例就测不到 prune_quality 路径了。
         "bad": _insert_row(
-            db, content=BAD_CONTENT, importance=4, created_at=stale, access_count=0
+            db,
+            content=UNIQUE_BAD_CONTENT,
+            importance=4,
+            created_at=stale,
+            access_count=0,
         ),
         # 同样写得差，但刚创建 → 保留（可能只是还没被检索到）
         "recent": _insert_row(
@@ -328,3 +342,29 @@ def test_prune_quality_is_idempotent(db):
         "SELECT COUNT(*) FROM memories_evolution_log WHERE operation = 'prune_quality'"
     ).fetchone()[0]
     assert logs == 1
+
+
+def test_prune_keeps_near_duplicate_group_leader(db):
+    """近重复组的组长不受质量清理影响，冗余副本被合并掉。
+
+    内容字面高度相似的一批记忆组成一个近重复组；组长 = 组内最优的一条
+    （importance / access_count / created_at / id 逐项比较）。质量清理
+    只处理"低质量 + 陈旧"的**副本**，组长永远保留 —— 否则整组内容会
+    一起消失，重复副本也就此丢失了知识。
+    """
+    stale = NOW_MS - 200 * DAY_MS
+    leader = _insert_row(
+        db, content=BAD_CONTENT, importance=6, created_at=stale, access_count=0
+    )
+    duplicate = _insert_row(
+        db, content=BAD_CONTENT, importance=2, created_at=stale, access_count=0
+    )
+
+    task = MemoryPruningTask(db=db)
+    task.run()
+
+    # 组长（importance 更高）即使质量分也低，仍然保留且不带失效时间
+    assert _row(db, leader)["is_valid"] == 1
+    assert _row(db, leader)["invalid_at"] is None
+    # 冗余副本被质量合并（软失效）
+    assert _row(db, duplicate)["is_valid"] == 0

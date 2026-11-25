@@ -19,6 +19,7 @@ from backend.memory.quality_scorer import (
     USAGE_SATURATION,
     WEIGHTS,
     MemoryQualityScorer,
+    find_duplicate_leaders,
 )
 
 pytestmark = pytest.mark.unit
@@ -252,3 +253,90 @@ def test_rank_lowest_orders_and_limits() -> None:
     ranked = _scorer().rank_lowest(rows, limit=2)
     assert [mid for mid, _score in ranked] == ["bad", "mid"]
     assert ranked[0][1] <= ranked[1][1]
+
+
+# ---------- 近重复分组 ----------
+
+
+def test_duplicate_leader_is_the_best_copy() -> None:
+    """组长 = 组内最优的一条（更重 / 更常访问 / 更新鲜）。"""
+    content = "用户在项目中强制要求所有 Python 代码使用 ruff 格式化"
+    rows = [
+        _mem(id="weak", content=content, importance=1, access_count=0),
+        _mem(id="best", content=content, importance=9, access_count=7),
+        _mem(id="mid", content=content, importance=5, access_count=2),
+    ]
+
+    leaders = find_duplicate_leaders(rows)
+
+    assert leaders["best"] == "best"
+    assert leaders["mid"] == "best"
+    assert leaders["weak"] == "best"
+
+
+def test_duplicate_leader_prefers_fresher_when_importance_ties() -> None:
+    """重要性 / 访问次数持平时，更新鲜的那条当组长。"""
+    content = "部署脚本需要先执行数据库迁移再启动服务"
+    rows = [
+        _mem(
+            id="older",
+            content=content,
+            importance=6,
+            access_count=3,
+            created_at=NOW_MS - 10 * DAY_MS,
+        ),
+        _mem(
+            id="newer",
+            content=content,
+            importance=6,
+            access_count=3,
+            created_at=NOW_MS,
+        ),
+    ]
+
+    leaders = find_duplicate_leaders(rows)
+
+    assert leaders["newer"] == "newer"
+    assert leaders["older"] == "newer"
+
+
+def test_duplicate_leader_normalizes_second_level_timestamps() -> None:
+    """遗留秒级 created_at 归一后才参与"更新鲜"比较。
+
+    不归一时秒级值(~1.8e9)永远小于毫秒值(~1.8e12)，更新鲜的那条反而
+    被当成副本删掉。
+    """
+    content = "备份策略按周轮换，保留最近四周的快照"
+    rows = [
+        _mem(
+            id="legacy_newer",
+            content=content,
+            importance=6,
+            access_count=3,
+            created_at=NOW_MS // 1000 + 3600,  # 秒级，且比下面那条更新
+        ),
+        _mem(
+            id="millis_older",
+            content=content,
+            importance=6,
+            access_count=3,
+            created_at=NOW_MS,
+        ),
+    ]
+
+    leaders = find_duplicate_leaders(rows)
+
+    assert leaders["legacy_newer"] == "legacy_newer"
+    assert leaders["millis_older"] == "legacy_newer"
+
+
+def test_duplicate_leader_maps_unique_memory_to_itself() -> None:
+    """没有近重复的记忆映射到自己 —— 它不是任何副本。"""
+    rows = [
+        _mem(id="a", content="用户偏好使用 Python 编写后端服务"),
+        _mem(id="b", content="项目发布日期是下周五"),
+    ]
+
+    leaders = find_duplicate_leaders(rows)
+
+    assert leaders == {"a": "a", "b": "b"}
