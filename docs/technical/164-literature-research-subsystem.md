@@ -209,7 +209,7 @@ wait_download(timeout_s=60) -> Optional[str]
 
 ### 3.5 交互式检索的边界
 
-- 验证码/滑块只报告不破解；`/dbItem/2` 会触发滑块，`/dbItem/3` 是当前可用入口。
+- 验证码/滑块只报告不破解；若入口页触发滑块，改用该站点 profile 中已验证可用的入口 URL。
 - 限速由 `profile.rate_limit` 声明，guidance 会把它传给 LLM；执行层不做强制节流，由使用方遵守。
 - 站点改版导致选择器失效时，先 `validate-profile` 与一次 dry-run 检索定位问题，必要时用 `draft-profile` 重新录制，不改 pipeline 代码。
 

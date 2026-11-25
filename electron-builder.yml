@@ -127,6 +127,9 @@ extraResources:
       - "technical/135-specialist-asset-hub.md"
       - "technical/139-specialist-dm-group-chat.md"
       - "technical/142-sage-guide-specialist.md"
+      # 示例站点 profile（供用户复制为自定义站点；仅是文档示例，不参与运行时
+      # SiteProfileStore 加载，也不进入 sage_docs 检索白名单）
+      - "templates/**/*"
   # 本地 AI 模型（OCR + Embedding）—— 由 scripts/download-models.sh 下载。
   # 打包态后端通过 SAGE_BUNDLED_MODELS_DIR 环境变量定位；用户如在
   # userData/models/ 放置了更新版本则优先使用用户版本。
