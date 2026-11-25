@@ -29,11 +29,7 @@ const typeLabels: Record<string, string> = {
   archive: '归档',
 };
 
-export function SkillEvolutionPanel({
-  proposals,
-  onApprove,
-  onReject,
-}: SkillEvolutionPanelProps) {
+export function SkillEvolutionPanel({ proposals, onApprove, onReject }: SkillEvolutionPanelProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   if (proposals.length === 0) {
@@ -80,9 +76,7 @@ export function SkillEvolutionPanel({
                     {typeLabels[proposal.evolution_type] || proposal.evolution_type}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-                  {proposal.reason}
-                </p>
+                <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{proposal.reason}</p>
                 {isExpanded && proposal.stats && (
                   <pre className="mt-2 rounded bg-gray-100 p-2 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-400">
                     {JSON.stringify(proposal.stats, null, 2)}
