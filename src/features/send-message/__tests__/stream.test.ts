@@ -65,6 +65,8 @@ describe('chatApi.chatStream (PR-6)', () => {
       apiKey: 'sk-test',
       apiUrl: 'https://api.test/v1',
       model: 'gpt-x',
+      // Task 5: 请求方指定的端点 id，缺省 null
+      endpointId: null,
       maxContext: 8192,
       temperature: 0.7,
       // PR-7a: 新增 3 个推理参数透传字段(默认 null)
@@ -105,6 +107,23 @@ describe('chatApi.chatStream (PR-6)', () => {
     // 3) 返回 streamId + cancel
     expect(result.streamId).toBe(streamId);
     expect(typeof result.cancel).toBe('function');
+  });
+
+  it('forwards endpointId to the backend body when provided', async () => {
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-ep' });
+    listenMock.mockResolvedValueOnce(vi.fn());
+
+    await chatApi.chatStream(
+      VALID_SESSION_ID,
+      'hi',
+      { onEvent: vi.fn() },
+      { model: 'gpt-x', endpointId: 'ep-1' },
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      'agent_chat_stream',
+      expect.objectContaining({ endpointId: 'ep-1' }),
+    );
   });
 
   it('dispatches AgentEvent to onEvent callback', async () => {

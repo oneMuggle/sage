@@ -19,7 +19,7 @@ export interface ProjectAdvisorCardProps {
   onDecomposeTask?: (action?: string, reason?: string | null) => void;
 }
 
-/** 健康分数 → 颜色（与 SEVERITY_TOKENS 调色对齐：emerald / amber / orange / rose） */
+/** 健康分数 → 颜色（与 SEVERITY_TOKENS 语义色对齐） */
 function scoreColor(score: number): string {
   if (score >= 80) return 'text-emerald-500';
   if (score >= 60) return 'text-amber-500';
