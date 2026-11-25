@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- feat(orchestration): 规划过程实时可见 — `plan_progress` 统一事件协议 + 气泡内 PlanningTimeline 时间线
+
+### Changed
+- perf(orchestration): 规划前哨小任务（模式/复杂度分类、澄清、侦察）默认关闭推理模型思考；任务拆解改为流式展示
+
 ### Added(office)
 - **文档版本一致性（F1/F2，方案 `docs/plans/2026-09-26_office-doc-revision.md`）**：新增
   `backend/office/revision.py`（内容哈希 revision、单文档进程内写锁、有界幂等台账）；
