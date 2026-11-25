@@ -15,6 +15,7 @@ import { usePluginNames } from '../../shared/lib/hooks/usePluginNames';
 import { useI18n } from '../../shared/lib/i18n';
 import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownChunks';
 import { findPluginToolOwner } from '../../shared/lib/permissionInsights';
+import { isInteractiveDiagram } from '../../shared/lib/richMedia';
 import type {
   BlockedAction,
   Message as MessageType,
@@ -41,6 +42,7 @@ import {
   ToolCallTitle,
 } from './MessageMarkdownParts';
 import { RetryBanner } from './RetryBanner';
+import { SvgDiagramViewer } from './SvgDiagramViewer';
 import { ThinkingDisplay } from './ThinkingDisplay';
 import { ToolGroupToggle } from './ToolGroupToggle';
 import { TruncationNotice } from './TruncationNotice';
@@ -397,6 +399,11 @@ function MessageComponent({
             {showToolCards &&
               toolCalls.map((tc, idx) => {
                 const hasImage = tc.metadata?.imageData;
+                // P1: richMedia 是 URL-only 引用；与 mediaRefs 同 id 的已在下方渲染，跳过避免双渲染
+                const mediaRefIds = new Set((tc.metadata?.mediaRefs ?? []).map((ref) => ref.id));
+                const extraRichMedia = (tc.metadata?.richMedia ?? []).filter(
+                  (media) => !mediaRefIds.has(media.id),
+                );
                 // right-panel R5: 写文件工具的内联 diff 卡片（展开懒加载,
                 // 点击面板按钮直达右侧变更 Tab）
                 const changePaths = message.session_id ? fileChangePaths(tc) : [];
@@ -443,6 +450,27 @@ function MessageComponent({
                             caption={`${ref.kind} — ${ref.source || tc.name}`}
                           />
                         ))}
+                      </div>
+                    )}
+                    {extraRichMedia.length > 0 && (
+                      <div className="px-2 pb-2">
+                        {extraRichMedia.map((media) =>
+                          isInteractiveDiagram(media) ? (
+                            <SvgDiagramViewer
+                              key={media.id}
+                              apiUrl={media.api_url}
+                              mimeType={media.mime_type}
+                              title={media.title ?? undefined}
+                            />
+                          ) : (
+                            <MediaAttachment
+                              key={media.id}
+                              url={media.api_url}
+                              mimeType={media.mime_type}
+                              caption={media.title ?? undefined}
+                            />
+                          ),
+                        )}
                       </div>
                     )}
                   </>

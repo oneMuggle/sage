@@ -2,16 +2,7 @@
 // 交互模型与 MermaidDiagram 同构：拖拽平移、Ctrl+滚轮缩放、双击复位、
 // 适应屏幕/实际大小、下载 PNG/SVG、全屏。区别在于对象是 <img>（不注入 HTML）。
 
-import {
-  Download,
-  Expand,
-  FileDown,
-  Maximize2,
-  RotateCcw,
-  X,
-  ZoomIn,
-  ZoomOut,
-} from 'lucide-react';
+import { Download, Expand, FileDown, Maximize2, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
