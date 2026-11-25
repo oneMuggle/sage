@@ -10,6 +10,7 @@ debug；包装器对 runner 的异常原样上抛，由调用方既有降级逻�
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -111,7 +112,7 @@ async def run_planning_stage(
         return int((time.monotonic() - started_at) * 1000)
 
     await emit_plan_progress(emit, stage=stage, status=STATUS_STARTED, text="")
-    task: "asyncio.Future[Any]" = asyncio.ensure_future(runner())
+    task: asyncio.Future[Any] = asyncio.ensure_future(runner())
     try:
         while True:
             done, _pending = await asyncio.wait({task}, timeout=interval)
@@ -135,6 +136,8 @@ async def run_planning_stage(
             )
     except asyncio.CancelledError:
         task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
         await emit_plan_progress(
             emit,
             stage=stage,

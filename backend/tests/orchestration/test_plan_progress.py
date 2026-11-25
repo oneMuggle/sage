@@ -1,4 +1,7 @@
 import asyncio
+import contextlib
+
+import pytest
 
 from backend.orchestration.plan_progress import (
     KIND_HEARTBEAT,
@@ -137,22 +140,19 @@ def test_run_planning_stage_emits_failed_and_reraises():
     async def runner():
         raise ValueError("boom")
 
-    try:
+    with pytest.raises(ValueError, match="boom"):
         asyncio.run(run_planning_stage(emit, stage="scout", runner=runner))
-    except ValueError as exc:
-        assert str(exc) == "boom"
-    else:
-        raise AssertionError("expected ValueError")
 
     assert events[-1]["plan_progress"]["status"] == STATUS_FAILED
     assert events[-1]["plan_progress"]["text"] == "boom"
 
 
 def test_run_planning_stage_cancels_inner_task_on_outer_cancel():
+    events = []
     cancelled = {"value": False}
 
     async def emit(event):
-        return None
+        events.append(event)
 
     async def runner():
         try:
@@ -169,17 +169,23 @@ def test_run_planning_stage_cancels_inner_task_on_outer_cancel():
         )
         await asyncio.sleep(0.03)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
     asyncio.run(scenario())
+    # (b) inner runner task actually ended cancelled
     assert cancelled["value"] is True
+    # (a) a failed event with text "已取消" was emitted for the stage
+    failed = [e for e in events if e["plan_progress"]["status"] == STATUS_FAILED]
+    assert failed
+    assert failed[-1]["plan_progress"]["text"] == "已取消"
 
 
 def test_stream_progress_emitter_throttles_and_flushes():
-    """D1 override: 3rd delta crosses char threshold (10 chars) so it flushes."""
+    """D1 override: 3rd delta crosses char threshold (10 chars) so it flushes.
+
+    Also covers the TIME-based flush branch with a small flush interval.
+    """
     events = []
 
     async def emit(event):
@@ -200,3 +206,26 @@ def test_stream_progress_emitter_throttles_and_flushes():
     kinds = [e["plan_progress"]["kind"] for e in events]
     assert texts == ["1234567890", "abcdefghij"]
     assert kinds == ["reasoning", "message"]
+
+    # --- TIME-based flush path: sub-threshold chars, interval elapsed ---
+    time_events = []
+
+    async def time_emit(event):
+        time_events.append(event)
+
+    async def time_scenario():
+        on_delta = make_stream_progress_emitter(
+            time_emit, stage="decompose", flush_chars=1000, flush_interval_s=0.05
+        )
+        # sub-threshold delta stays buffered (no char flush, interval not elapsed)
+        await on_delta("reasoning", "abc")
+        assert time_events == []
+        await asyncio.sleep(0.06)
+        # one more small delta flushes the buffer via the time path
+        await on_delta("reasoning", "def")
+
+    asyncio.run(time_scenario())
+
+    assert len(time_events) == 1
+    assert time_events[0]["plan_progress"]["text"] == "abcdef"
+    assert time_events[0]["plan_progress"]["kind"] == "reasoning"
