@@ -84,7 +84,7 @@
     "src/features/send-message/__tests__/useChat.streamingAndGates.test.ts": 962,
     "src/features/send-message/chatStreamStore.ts": 937,
     "src/features/send-message/useChat.ts": 1265,
-    "src/pages/Chat.tsx": 908,
+    "src/pages/Chat.tsx": 909,
     "src/pages/settings/settingsSearchEntries.ts": 872,
     "src/shared/api/demoInterceptors.ts": 814,
     "src/shared/api/memoryApi.ts": 962,
