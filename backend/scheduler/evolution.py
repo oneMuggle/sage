@@ -1331,7 +1331,7 @@ class SkillConsolidationTask(BaseEvolutionTask):
 
         pinned = self._pinned_names()
 
-        # M1: 注入相似度预筛服务
+        # M1 相似度预筛接入
         from backend.skills.similarity import get_similarity_service
 
         similarity_service = get_similarity_service()

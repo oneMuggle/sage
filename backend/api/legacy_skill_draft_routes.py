@@ -448,7 +448,7 @@ async def scan_skill_consolidation(auto_draft: bool = True, mode: str = "full"):
     pinned = store.get_pinned_names()
     skills = collect_active_skills(names=candidate_names)
 
-    # M1: 注入相似度预筛服务
+    # M1 相似度预筛接入
     from backend.skills.similarity import get_similarity_service
 
     similarity_service = get_similarity_service()
@@ -502,8 +502,8 @@ async def get_skill_scores():
     返回 [{name, overall, usage_freq, success_rate, freshness,
            description_quality, tier}, ...]
     """
-    from backend.skills.scoring import get_scoring_service
     from backend.skills.consolidator import collect_active_skills
+    from backend.skills.scoring import get_scoring_service
     from backend.skills.usage import get_usage_store
 
     scoring = get_scoring_service()
@@ -530,8 +530,8 @@ async def get_skill_scores():
 @router.get("/skills/{skill_name}/score")
 async def get_skill_score(skill_name: str):
     """获取单个技能的质量评分（M2）。"""
-    from backend.skills.scoring import get_scoring_service
     from backend.skills.consolidator import collect_active_skills
+    from backend.skills.scoring import get_scoring_service
     from backend.skills.usage import get_usage_store
 
     scoring = get_scoring_service()
@@ -572,8 +572,8 @@ async def get_skill_context():
     返回分层摘要（hot path 优先）+ 搜索冷路径技能的能力。
     用于注入 system prompt，控制在 token 预算内。
     """
-    from backend.skills.progressive_loader import get_progressive_loader
     from backend.skills.consolidator import collect_active_skills
+    from backend.skills.progressive_loader import get_progressive_loader
     from backend.skills.usage import get_usage_store
 
     loader = get_progressive_loader()
@@ -604,8 +604,8 @@ async def search_skills(query: str = "", top_k: int = 5):
 
     在所有技能（包括冷路径）中搜索匹配的技能。
     """
-    from backend.skills.progressive_loader import get_progressive_loader
     from backend.skills.consolidator import collect_active_skills
+    from backend.skills.progressive_loader import get_progressive_loader
 
     loader = get_progressive_loader()
     skills = collect_active_skills()
