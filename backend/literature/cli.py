@@ -2,8 +2,8 @@
 
 用法::
 
-    python -m backend.literature.cli init --root runs --topic 主题 --site xueshu789
-    python -m backend.literature.cli guidance --site xueshu789 --query 机器学习
+    python -m backend.literature.cli init --root runs --topic 主题 --site <site_id>
+    python -m backend.literature.cli guidance --site <site_id> --query 机器学习
     python -m backend.literature.cli record-papers --run runs/<id> --json papers.json
     python -m backend.literature.cli gate --run runs/<id>
     python -m backend.literature.cli export --run runs/<id>

@@ -142,9 +142,9 @@ def download_pdf(
 ) -> DownloadResult:
     """点击真实下载链接元素（selector 优先）。
 
-    xueshu789 等站点的 href 除 url 外还带站点需要的附加参数（如
-    ``&ddata=文件名|库|题名|库|hash``）；必须点击 DOM 元素本身，
-    不要用快照里可能截断的 URL 直连，否则服务端会报「参数错误」。
+    部分站点的 href 除 url 外还带站点需要的附加参数（如 ``&ddata=...``）；
+    必须点击 DOM 元素本身，不要用快照里可能截断的 URL 直连，
+    否则服务端会报「参数错误」。
     """
     if profile.pdf is None:
         return DownloadResult(None, False, ["站点未配置 pdf 下载"])
