@@ -10,13 +10,16 @@ import type {
   ConsolidationScanResult,
   ConsolidationSuggestion,
   DeleteSkillResult,
+  EvolutionCheckResult,
   Skill,
   SkillAuditResponse,
+  SkillContextResult,
   SkillExecuteRequest,
   SkillExecuteResult,
   SkillRollbackResult,
   SkillScore,
   SkillScoresResult,
+  SkillSearchResult,
 } from './types';
 import { handleApiError, withRetry } from './utils';
 
@@ -303,6 +306,76 @@ export const skillsApi = {
     return withRetry(async () => {
       try {
         return await invoke<SkillScore>('skill_score', { name });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  // ---- M3: 渐进式技能上下文 ----
+
+  /**
+   * 获取渐进式技能上下文（M3）。
+   *
+   * Backend: GET /api/v1/skills/context。
+   */
+  async getContext(): Promise<SkillContextResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<SkillContextResult>('skills_context');
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 搜索技能（M3 冷路径搜索）。
+   *
+   * Backend: POST /api/v1/skills/search?query=...&top_k=...
+   */
+  async searchSkills(query: string, topK = 5): Promise<SkillSearchResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<SkillSearchResult>('skills_search', { query, topK });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  // ---- M4: 进化检查与反馈 ----
+
+  /**
+   * 检查技能是否需要进化（M4）。
+   *
+   * Backend: POST /api/v1/skills/evolution/check?skill_name=...
+   */
+  async checkEvolution(skillName = ''): Promise<EvolutionCheckResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<EvolutionCheckResult>('skills_evolution_check', { skillName });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 记录技能执行反馈（M4）。
+   *
+   * Backend: POST /api/v1/skills/feedback。
+   */
+  async recordFeedback(feedback: {
+    skill_name: string;
+    success: boolean;
+    error?: string;
+    user_thumbs?: boolean;
+    token_cost?: number;
+  }): Promise<{ ok: boolean }> {
+    return withRetry(async () => {
+      try {
+        return await invoke<{ ok: boolean }>('skills_feedback', feedback);
       } catch (error) {
         throw handleApiError(error);
       }

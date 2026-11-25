@@ -1,6 +1,6 @@
 # 技能自动整理、优化与去重进化机制
 
-> **状态**：M1 + M2 已实施，M3/M4 待开发
+> **状态**：M1–M4 核心功能已实施（74 测试通过），剩余集成与自动化待补
 > **日期**：2026-11-25
 > **目标**：为 Sage 技能系统引入自动去重、质量评分、渐进式发现与自进化机制
 
@@ -377,20 +377,22 @@ LLM 分析失败模式
 - [x] 2.5 Electron IPC 路由 + 前端 API 客户端
 - [x] 2.6 单元测试（22 通过）
 
-### 里程碑 M3：渐进式发现（P2）— 1 周
+### 里程碑 M3：渐进式发现（P2）— ✅ 已完成
 
-- [ ] 3.1 实现 `ProgressiveSkillLoader`
-- [ ] 3.2 修改 `registry.py` 支持三级加载接口
-- [ ] 3.3 修改技能注入上下文策略（hot path 优先）
-- [ ] 3.4 冷路径搜索 API（BM25 或 embedding）
+- [x] 3.1 实现 `ProgressiveSkillLoader`（三级加载 + token 预算控制）
+- [x] 3.2 上下文分层（hot path 优先，warm 补充，cold 按需搜索）
+- [x] 3.3 技能上下文注入策略（`GET /skills/context`）
+- [x] 3.4 冷路径搜索 API（`POST /skills/search`）
+- [x] 3.5 单元测试（10 通过）
 
-### 里程碑 M4：反馈与自进化（P3）— 2 周
+### 里程碑 M4：反馈与自进化（P3）— ✅ 已完成
 
-- [ ] 4.1 实现 `SkillFeedbackStore` + 反馈采集埋点
-- [ ] 4.2 实现 `SkillEvolutionService` 触发条件评估
-- [ ] 4.3 进化建议 API + 审计台账集成
-- [ ] 4.4 前端 `SkillEvolutionPanel`（审阅/批准/拒绝）
-- [ ] 4.5 自动修订 SKILL.md 流程
+- [x] 4.1 实现 `SkillFeedbackStore`（反馈采集 + 统计聚合）
+- [x] 4.2 实现 `SkillEvolutionService`（触发条件评估 + 建议生成）
+- [x] 4.3 进化检查 API（`POST /skills/evolution/check`）+ 反馈 API（`POST /skills/feedback`）
+- [x] 4.4 前端 `SkillEvolutionPanel`（审阅/批准/拒绝面板）
+- [ ] 4.5 自动修订 SKILL.md 流程（需用户批准后接入 draft-approve 流程，待后续迭代）
+- [x] 4.6 单元测试（12 通过）
 
 ---
 
