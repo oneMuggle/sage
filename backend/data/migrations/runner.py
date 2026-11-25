@@ -36,6 +36,9 @@ from backend.data.migrations.v20_usage_run_id import _v20_usage_events_run_id
 from backend.data.migrations.v21_orch_tasks_composite_pk import (
     _v21_orch_tasks_composite_pk,
 )
+from backend.data.migrations.v22_rule_extraction_metadata import (
+    _v22_rule_extraction_metadata,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -603,6 +606,7 @@ register_migration(
 register_migration(19, "browser_actions", _v19_browser_actions)
 register_migration(20, "usage_events_run_id", _v20_usage_events_run_id)
 register_migration(21, "orch_tasks_composite_pk", _v21_orch_tasks_composite_pk)
+register_migration(22, "rule_extraction_metadata", _v22_rule_extraction_metadata)
 
 
 def ensure_version_table(conn: Any) -> None:

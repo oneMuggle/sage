@@ -33,6 +33,9 @@ export function ruleFromWire(wire: WireRule): Rule {
     aiPrompt: wire.ai_prompt ?? undefined,
     enabled: wire.enabled,
     groupId: wire.group_id,
+    structuredParams: wire.structured_params ?? undefined,
+    confidence: wire.confidence ?? undefined,
+    sourceExcerpt: wire.source_excerpt ?? undefined,
   };
 }
 
@@ -63,6 +66,9 @@ export function ruleFieldsToWire(fields: Partial<RuleFields>): WireRulePatch {
   if (fields.pattern !== undefined) wire.pattern = fields.pattern;
   if (fields.aiPrompt !== undefined) wire.ai_prompt = fields.aiPrompt;
   if (fields.enabled !== undefined) wire.enabled = fields.enabled;
+  if (fields.structuredParams !== undefined) wire.structured_params = fields.structuredParams;
+  if (fields.confidence !== undefined) wire.confidence = fields.confidence;
+  if (fields.sourceExcerpt !== undefined) wire.source_excerpt = fields.sourceExcerpt;
   return wire;
 }
 
@@ -96,6 +102,9 @@ export function rulePackToWire(pack: RulePack): WireRulePack {
         ai_prompt: rule.aiPrompt ?? null,
         enabled: rule.enabled,
         group_id: rule.groupId,
+        structured_params: rule.structuredParams ?? null,
+        confidence: rule.confidence ?? null,
+        source_excerpt: rule.sourceExcerpt ?? null,
       })),
       priority: group.priority,
       builtin: group.builtin,

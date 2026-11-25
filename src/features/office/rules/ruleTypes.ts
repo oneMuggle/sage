@@ -28,6 +28,9 @@ export interface Rule {
   aiPrompt?: string;
   enabled: boolean;
   groupId: string;
+  structuredParams?: Record<string, unknown>;
+  confidence?: number;
+  sourceExcerpt?: string;
 }
 
 /** Editable subset of a rule; `id` and `groupId` are owned by the container. */

@@ -10,14 +10,20 @@ import { backendRequest } from './backendRequest';
 import type {
   WireAuditRequest,
   WireAuditResult,
+  WireCommitRequest,
+  WireCommitResult,
   WireConflictResult,
   WireDeleteResult,
+  WireDraftExtractRequest,
+  WireDraftExtractResult,
   WireExportRequest,
   WireExtractRequest,
   WireExtractResult,
   WireGroupInput,
   WireGroupPatch,
   WireImportResult,
+  WireRefineRequest,
+  WireRefineResult,
   WireRule,
   WireRuleGroup,
   WireRuleInput,
@@ -85,6 +91,18 @@ export const officeRulesApi = {
 
   extractRules(input: WireExtractRequest): Promise<WireExtractResult> {
     return request(`${RULES_PREFIX}/extract`, { method: 'POST', body: input });
+  },
+
+  extractDraft(input: WireDraftExtractRequest): Promise<WireDraftExtractResult> {
+    return request(`${RULES_PREFIX}/extract/draft`, { method: 'POST', body: input });
+  },
+
+  commitRules(input: WireCommitRequest): Promise<WireCommitResult> {
+    return request(`${RULES_PREFIX}/extract/commit`, { method: 'POST', body: input });
+  },
+
+  refineRules(input: WireRefineRequest): Promise<WireRefineResult> {
+    return request(`${RULES_PREFIX}/refine`, { method: 'POST', body: input });
   },
 
   checkConflicts(ruleIds: string[]): Promise<WireConflictResult> {
