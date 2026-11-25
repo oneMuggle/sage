@@ -6,11 +6,13 @@ from backend.orchestration.planner import Planner
 class _FakeStreamingClient:
     def __init__(self):
         self.complete_calls = 0
+        self.stream_calls = 0
 
     async def chat_stream_events(self, messages):
+        self.stream_calls += 1
         yield ("reasoning_delta", "思考1")
         yield ("reasoning_delta", "思考2")
-        yield ("content_delta", '{"tasks": []}')
+        yield ("content_delta", '{"tasks": [')
         yield ("response", type("R", (), {"content": '{"tasks": []}'})())
 
     async def complete(self, prompt):
@@ -34,12 +36,13 @@ def test_stream_decomposition_collects_content_and_reports_deltas():
     result = asyncio.run(planner._stream_decomposition("prompt", progress))
     assert result == '{"tasks": []}'
     assert ("reasoning", "思考1") in seen
-    assert ("message", '{"tasks": []}') in seen
+    assert ("message", '{"tasks": [') in seen
     assert client.complete_calls == 0
 
 
 class _EmptyContentClient(_FakeStreamingClient):
     async def chat_stream_events(self, messages):
+        self.stream_calls += 1
         yield ("reasoning_delta", "只有思考")
 
 
@@ -65,4 +68,5 @@ def test_decompose_falls_back_to_complete_when_stream_empty(monkeypatch):
 
     tasks, _reasoning = asyncio.run(scenario())
     assert client.complete_calls == 1
+    assert client.stream_calls == 1
     assert isinstance(tasks, list)
