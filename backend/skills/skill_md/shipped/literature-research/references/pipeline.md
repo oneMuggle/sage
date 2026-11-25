@@ -9,7 +9,7 @@
 {
   "run_id": "20261121-093000",
   "topic": "大模型综述",
-  "site_id": "xueshu789",
+  "site_id": "<site_id>",
   "created_at": "2026-11-21T09:30:00+00:00",
   "status": "active"
 }
@@ -29,7 +29,7 @@
   "abstract": "……",
   "url": "https://example.org/paper",
   "doi": "10.1000/demo",
-  "source_site": "xueshu789",
+  "source_site": "<site_id>",
   "source_query": "机器学习 综述",
   "retrieved_at": "2026-11-21T09:35:00+00:00",
   "fulltext_path": "/path/to/paper.pdf",
@@ -262,20 +262,10 @@ search:
 `search_with_profile` 会依次尝试 `input_selectors`，命中后按 `submit_key`，
 等待 `wait_after_s` 再抓快照。真实浏览器通过 `SageToolDriver(sage.call)` 接入。
 
-## xueshu789 现状
+## 站点 profile 示例
 
-- profile：`backend/literature/sites/xueshu789.yaml`（`status: draft`，`version 0.2.0`）。
-- 已登录状态：首页 → `/dbList/1`；入口 `/dbItem/3` 可用，重定向到
-  `http://82.157.23.222:5888/kns8s/defaultresult/index`（「检索-中国知网」）。
-- `/dbItem/1` 代理报「出错啦」；`/dbItem/2` 触发知网滑块验证（需要人工完成）。
-- 搜索：输入框 placeholder 含「检索词」；Enter 提交，约 5 秒出结果。
-- 结果：题名/作者/来源链接均指向 `https://www.xueshu789.cc/doDownload?url=...`；
-  操作列「下载 / 原版阅读 / CNKI AI阅读」。
-- **下载已实测通过**：`a.downloadlink` 的真实 href 还带
-  `&ddata=<文件名>|<库>|<题名>|<库>|<hash>`；点击该元素会经
-  `oversea.cnki.net/docdown/fulltext/download` 落盘 PDF（实测 787KB / 26 页）。
-  不要用快照里截断的 `doDownload?url=...` 直连，缺少 `ddata` 会报「参数错误」；
-  下载完成后新标签可能显示「页面不存在」，以下载目录为准。
-- profile `status: ready`（针对 `/dbItem/3`）；`/dbItem/1` 代理错误、
-  `/dbItem/2` 仍会触发滑块验证。
-- 合规：仅本人账号/机构授权；不绕过付费墙；验证码/滑块交还用户。
+可复制的示例 profile 在 `docs/templates/literature-sites/`（不参与运行时加载）。
+启用：`cp docs/templates/literature-sites/<site>.yaml ~/.sage/literature_sites/`。
+`interactive` 模式字段（`entry_url` / `input_selectors` / `submit_key` / `wait_after_s`）
+的规范见 `backend/literature/README.md`；具体站点的选择器与实测要点写在该站点
+profile 的注释与模板 README 中，不要写进本数据契约文档。
