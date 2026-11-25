@@ -142,18 +142,9 @@ python -m backend.literature.cli export --run runs/<id> --style ieee
 - `home_url` 与渲染出的检索 URL 必须落在 `domains` 内（含子域名），防止
   profile 把请求指向任意主机。
 
-## xueshu789 已实测事实
+## 站点 profile 示例
 
-- 卡号 + 密码登录，成功后 URL 进入 `/dbList/`，标题不再包含「登录」。
-- `/dbItem/1` 代理报「出错啦」；`/dbItem/2` 触发知网滑块验证；`/dbItem/3` 可用，
-  重定向到 `http://82.157.23.222:5888/kns8s/defaultresult/index`（「检索-中国知网」）。
-- 搜索框 placeholder 含「检索词」；输入关键词后 Enter 提交，约 5 秒出结果。
-- 结果条目的题名/作者/来源链接均指向 `https://www.xueshu789.cc/doDownload?url=...`；
-  操作列有「下载 / 原版阅读 / CNKI AI阅读」。
-- **下载已实测通过**：`a.downloadlink` 的真实 href 还带
-  `&ddata=<文件名>|<库>|<题名>|<库>|<hash>`；点击该元素会经
-  `oversea.cnki.net/docdown/fulltext/download` 落盘 PDF（实测 787KB / 26 页）。
-  **不要**用快照里截断的 `doDownload?url=...` 直连，缺少 `ddata` 会报「参数错误」。
-- 下载完成后新标签可能显示 CNKI「页面不存在」，但 PDF 已落盘；以浏览器下载目录为准。
-- profile 对 `/dbItem/3` 已标记 `status: ready`；`/dbItem/1` 代理报错、`/dbItem/2`
-  仍会触发滑块验证。
+内建站点目录 `backend/literature/sites/` 保持中立（不携带具体站点）。示例 profile
+见 `docs/templates/literature-sites/`，复制到 `~/.sage/literature_sites/` 或
+`<项目>/.sage/literature_sites/` 后生效；加载优先级 builtin < 用户级 < 项目级。
+具体站点的选择器与实测要点写在该站点 profile 注释与模板 README 中。
