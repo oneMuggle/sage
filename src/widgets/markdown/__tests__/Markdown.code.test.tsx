@@ -26,9 +26,7 @@ vi.mock('../../chat/ShikiCodeBlock', () => ({
 }));
 
 vi.mock('../../chat/MermaidBlock', () => ({
-  MermaidBlock: ({ code }: { code: string }) => (
-    <div data-testid="mermaid-block">{code}</div>
-  ),
+  MermaidBlock: ({ code }: { code: string }) => <div data-testid="mermaid-block">{code}</div>,
 }));
 
 vi.mock('../../chat/MarkdownImage', () => ({
