@@ -101,9 +101,9 @@ class ComplexityClassifier:
         """
         try:
             # 惰性导入：llm_factory 读 settings DB，保持与 plan_preflight 同款装配路径
-            from backend.orchestration.llm_factory import build_llm_client_from_settings
+            from backend.orchestration.llm_factory import build_utility_llm_client
 
-            client = build_llm_client_from_settings()
+            client = build_utility_llm_client(task_type="classification")
             if client is None:
                 logger.info("complexity_classifier: 无 LLM 配置，降级为 medium")
                 return ComplexityClassification(
@@ -280,9 +280,9 @@ async def estimate_budget_level(
     from backend.utils.py_compat import TIMEOUT_ERRORS
 
     try:
-        from backend.orchestration.llm_factory import build_llm_client_from_settings
+        from backend.orchestration.llm_factory import build_utility_llm_client
 
-        client = build_llm_client_from_settings()
+        client = build_utility_llm_client(task_type="classification")
         if client is None:
             logger.info("estimate_budget_level: 无 LLM 配置，回落启发式")
             return None

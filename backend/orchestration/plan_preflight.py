@@ -216,12 +216,19 @@ async def run_plan_preflight(
             return None
 
         # 惰性导入：llm_factory 读 settings DB，保持与 Planner 同款装配路径。
-        from backend.orchestration.llm_factory import build_llm_client_from_settings
+        from backend.orchestration.llm_factory import (
+            build_llm_client_from_settings,
+            build_utility_llm_client,
+        )
 
         client = build_llm_client_from_settings()
         if client is None:
             logger.info("plan_preflight: 无 LLM 配置，跳过复杂度分类/澄清/侦察")
             return None
+
+        # 前哨小任务（澄清/侦察）默认关思考；侦察需要工具调用，故不带路由 overlay。
+        clarify_client = build_utility_llm_client(task_type="planning") or client
+        scout_client = build_utility_llm_client() or client
 
         result: Dict[str, Any] = {}
 
@@ -247,7 +254,7 @@ async def run_plan_preflight(
         clarifications = await run_planning_stage(
             emit,
             stage=PLAN_STAGE_CLARIFY,
-            runner=lambda: _clarify(client, message, emit),
+            runner=lambda: _clarify(clarify_client, message, emit),
             describe_result=lambda value: (
                 "无需澄清" if not value else f"收集到 {len(value)} 条澄清"
             ),
@@ -281,7 +288,7 @@ async def run_plan_preflight(
                         emit,
                         stage=PLAN_STAGE_SCOUT,
                         runner=lambda: _scout(
-                            client,
+                            scout_client,
                             message,
                             emit,
                             clarifications,
@@ -364,7 +371,7 @@ async def run_plan_preflight(
                     emit,
                     stage=PLAN_STAGE_SCOUT,
                     runner=lambda: _scout(
-                        client,
+                        scout_client,
                         message,
                         emit,
                         clarifications,

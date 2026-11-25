@@ -51,7 +51,8 @@ def _default_settings(**overrides) -> OrchSettings:
 def _enable(monkeypatch, client=None, **settings_overrides) -> None:
     """开启 preflight 的公共样板：env 总闸 + 隔离 settings/LLM 工厂读取。
 
-    ``client`` 非 None 时 patch ``build_llm_client_from_settings`` 返回它
+    ``client`` 非 None 时 patch ``build_llm_client_from_settings``（探活）
+    与 ``build_utility_llm_client``（拆分后的 clarify/scout 客户端）均返回它
     （``run_plan_preflight`` 内部经工厂自建 client，测试注入桩）。
     """
     monkeypatch.setenv("SAGE_ORCH_PLAN_PREFLIGHT", "1")
@@ -62,6 +63,9 @@ def _enable(monkeypatch, client=None, **settings_overrides) -> None:
         from backend.orchestration import llm_factory
 
         monkeypatch.setattr(llm_factory, "build_llm_client_from_settings", lambda: client)
+        monkeypatch.setattr(
+            llm_factory, "build_utility_llm_client", lambda task_type=None: client
+        )
 
 
 async def _collect_emit(events: list) -> None:

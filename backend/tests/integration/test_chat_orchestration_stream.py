@@ -28,7 +28,7 @@ def _mock_plan(agent_hints=("researcher", "writer")):
     async def）, 故 mock 必须是 async 函数。
     """
 
-    async def _decompose(message, context=None):
+    async def _decompose(message, context=None, progress=None):
         from backend.orchestration.models import Task
 
         return type(
@@ -427,7 +427,7 @@ async def test_task_plan_event_includes_depends_on():
         yield AgentEvent(state=AgentState.THINKING, iteration=0)
         yield AgentEvent(state=AgentState.DONE, iteration=0, content="done")
 
-    async def _decompose_with_deps(message, context=None):
+    async def _decompose_with_deps(message, context=None, progress=None):
         from backend.orchestration.models import Task
 
         return type(
@@ -669,7 +669,7 @@ async def test_multi_mode_passes_preflight_context_to_planner(monkeypatch):
         captured["preflight_session_id"] = session_id
         return preflight_context
 
-    async def _decompose_capture(message, context=None):
+    async def _decompose_capture(message, context=None, progress=None):
         captured["context"] = context
         return await inner_decompose(message, context)
 

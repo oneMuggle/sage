@@ -29,9 +29,11 @@ def _collect():
 def _patch_common(monkeypatch):
     """屏蔽外部依赖，只保留被测的接线逻辑。
 
-    ``plan_preflight`` 在函数体内惰性 import ``build_llm_client_from_settings``，
-    所以必须 patch ``llm_factory`` 模块属性而非 ``plan_preflight`` 上的名字；
-    ``classify_complexity`` 同理。
+    ``plan_preflight`` 在函数体内惰性 import ``build_llm_client_from_settings``
+    与 ``build_utility_llm_client``，所以必须 patch ``llm_factory`` 模块属性
+    而非 ``plan_preflight`` 上的名字；``classify_complexity`` 同理。
+    两个工厂均返回同一 fake（``_clarify``/``_scout`` 由测试另行 monkeypatch），
+    使 ``build_utility_llm_client(...) or client`` 的兜底解析到同一对象。
     """
     import backend.orchestration.complexity_classifier as classifier_module
     import backend.orchestration.llm_factory as llm_factory_module
@@ -44,6 +46,9 @@ def _patch_common(monkeypatch):
     )
     monkeypatch.setattr(
         llm_factory_module, "build_llm_client_from_settings", lambda: object()
+    )
+    monkeypatch.setattr(
+        llm_factory_module, "build_utility_llm_client", lambda task_type=None: object()
     )
     return classifier_module
 
