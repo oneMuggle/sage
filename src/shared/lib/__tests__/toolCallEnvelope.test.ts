@@ -74,3 +74,47 @@ describe('normalizeToolCallEnvelope（R19-W1 拦截信封归一化）', () => {
     expect(out.metadata?.blockReason).toBe('http_5xx');
   });
 });
+
+describe('normalizeToolCallEnvelope（P1 富媒体信封归一化）', () => {
+  it('lifts rich media envelope on history reload', () => {
+    const raw = JSON.stringify({
+      text: '渲染完成',
+      metadata: {
+        mediaRefs: [
+          { id: 'm1', kind: 'diagram', mime_type: 'image/svg+xml', api_url: '/api/v1/media/m1' },
+        ],
+        richMedia: [
+          {
+            id: 'm1',
+            kind: 'diagram',
+            mime_type: 'image/svg+xml',
+            api_url: '/api/v1/media/m1',
+            interactive: true,
+          },
+        ],
+      },
+    });
+    const out = normalizeToolCallEnvelope({
+      id: 't1',
+      name: 'mcp__drawio__render_diagram',
+      args: {},
+      result: raw,
+    });
+    expect(out.result).toBe('渲染完成');
+    expect(out.metadata?.richMedia?.[0].api_url).toBe('/api/v1/media/m1');
+    expect(out.metadata?.mediaRefs?.[0].id).toBe('m1');
+  });
+
+  it('falls back to raw result when envelope text is missing', () => {
+    const raw = envelope({
+      metadata: {
+        richMedia: [
+          { id: 'm1', kind: 'image', mime_type: 'image/png', api_url: '/api/v1/media/m1' },
+        ],
+      },
+    });
+    const out = normalizeToolCallEnvelope(tc(raw));
+    expect(out.result).toBe(raw);
+    expect(out.metadata?.richMedia?.[0].id).toBe('m1');
+  });
+});

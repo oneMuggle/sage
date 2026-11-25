@@ -3,8 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.api import mineru_routes
-from backend.domain.document_parse import MineruSettings
+from backend.api import external_service_routes, mineru_routes
 
 
 def _app() -> FastAPI:
@@ -14,7 +13,11 @@ def _app() -> FastAPI:
 
 
 def test_status_not_configured(monkeypatch) -> None:
-    monkeypatch.setattr(mineru_routes, "load_mineru_settings", lambda: MineruSettings())
+    monkeypatch.setattr(
+        external_service_routes,
+        "load_service_settings",
+        lambda spec: {"enabled": False, "baseUrl": "", "apiKey": ""},
+    )
     body = TestClient(_app()).get("/api/v1/mineru/status").json()
     assert body["configured"] is False
     assert body["hasApiKey"] is False
@@ -38,13 +41,13 @@ def test_status_probes_without_leaking_key(monkeypatch) -> None:
             }
 
     monkeypatch.setattr(
-        mineru_routes,
-        "load_mineru_settings",
-        lambda: MineruSettings(
-            enabled=True, base_url="http://m:8000", api_key="sk-synthetic"
-        ),
+        external_service_routes,
+        "load_service_settings",
+        lambda spec: {"enabled": True, "baseUrl": "http://m:8000", "apiKey": "sk-synthetic"},
     )
-    monkeypatch.setattr(mineru_routes, "MineruClient", FakeClient)
+    monkeypatch.setattr(
+        "backend.adapters.out.document_parse.mineru_client.MineruClient", FakeClient
+    )
     response = TestClient(_app()).get("/api/v1/mineru/status")
     assert "sk-synthetic" not in response.text
     body = response.json()

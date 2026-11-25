@@ -13,6 +13,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { resolveCodeFenceRenderer } from '../codeFenceRegistry';
 import { Markdown } from '../index';
 
 // Mock heavy deps to avoid lazy-loading shiki/mermaid in unit tests
@@ -25,9 +26,7 @@ vi.mock('../../chat/ShikiCodeBlock', () => ({
 }));
 
 vi.mock('../../chat/MermaidBlock', () => ({
-  MermaidBlock: ({ code }: { code: string }) => (
-    <div data-testid="mermaid-block">{code}</div>
-  ),
+  MermaidBlock: ({ code }: { code: string }) => <div data-testid="mermaid-block">{code}</div>,
 }));
 
 vi.mock('../../chat/MarkdownImage', () => ({
@@ -35,6 +34,16 @@ vi.mock('../../chat/MarkdownImage', () => ({
     <img data-testid="md-image" src={src} alt={alt ?? ''} />
   ),
 }));
+
+describe('code fence renderer registry', () => {
+  it('resolves mermaid and html case-insensitively, default otherwise', () => {
+    expect(resolveCodeFenceRenderer('mermaid')).toBe('mermaid');
+    expect(resolveCodeFenceRenderer('HTML')).toBe('html');
+    expect(resolveCodeFenceRenderer('  Mermaid ')).toBe('mermaid');
+    expect(resolveCodeFenceRenderer('python')).toBe('default');
+    expect(resolveCodeFenceRenderer(undefined)).toBe('default');
+  });
+});
 
 describe('Markdown — inline code', () => {
   it('renders <code> for inline backticks', () => {
