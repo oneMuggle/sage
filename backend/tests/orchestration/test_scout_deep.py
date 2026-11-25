@@ -269,3 +269,42 @@ async def test_research_handles_none_synthesis_gracefully() -> None:
         report = await research(topic="T", project_path=PROJECT_PATH)
 
     assert report.confidence == 0
+
+
+# ── 11. progress 透传 ─────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio()
+async def test_research_forwards_progress_to_deep_research() -> None:
+    """progress 回调应透传给 deep_research（进度上报入口）。"""
+    captured: dict = {}
+    fake_cfg = {"base_url": "", "api_key": "", "model": "x"}
+    fake_ctx = SimpleNamespace(llm_call=AsyncMock())
+    good_task = SimpleNamespace(
+        topic="T",
+        status="done",
+        synthesis="## 结果\n内容",
+        web_results=[],
+        queries=[],
+    )
+    fake_report = SimpleNamespace(findings=[], sources=[], confidence=0)
+
+    async def fake_deep_research(**kwargs):
+        captured.update(kwargs)
+        return good_task
+
+    async def on_progress(payload):
+        return None
+
+    p_cfg = patch("backend.orchestration.scout_deep.load_llm_config_from_settings", return_value=fake_cfg)
+    p_ctx = patch("backend.orchestration.scout_deep.make_llm_context", return_value=fake_ctx)
+    p_deep = patch("backend.orchestration.scout_deep.deep_research", fake_deep_research)
+    p_build = patch(
+        "backend.orchestration.scout_deep.build_report_from_research_task",
+        return_value=fake_report,
+    )
+    with p_cfg, p_ctx, p_deep, p_build:
+        await research(topic="T", project_path=PROJECT_PATH, progress=on_progress)
+
+    assert callable(captured.get("progress"))
+    assert captured.get("progress") is on_progress
