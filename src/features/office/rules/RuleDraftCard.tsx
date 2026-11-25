@@ -108,9 +108,9 @@ export function RuleDraftCard({ rule, onToggle, onUpdate, onRemove }: RuleDraftC
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{rule.name}</span>
-              <span className="text-[10px] text-muted font-mono">{rule.kind}</span>
+              <span className="text-ui-xs text-muted font-mono">{rule.kind}</span>
               <span
-                className={`rounded border px-1 py-0.5 text-[10px] ${CONFIDENCE_STYLES[level]}`}
+                className={`rounded border px-1 py-0.5 text-ui-xs ${CONFIDENCE_STYLES[level]}`}
               >
                 {Math.round(rule.confidence * 100)}%
               </span>
@@ -120,13 +120,13 @@ export function RuleDraftCard({ rule, onToggle, onUpdate, onRemove }: RuleDraftC
           <div className="mt-0.5 text-xs text-text-secondary">{formatParams(rule.params)}</div>
 
           {rule.sourceExcerpt && (
-            <div className="mt-1 text-[11px] text-muted italic truncate" title={rule.sourceExcerpt}>
+            <div className="mt-1 text-ui-2xs text-muted italic truncate" title={rule.sourceExcerpt}>
               来源：{rule.sourceExcerpt}
             </div>
           )}
 
           {rule.conflictGroup && (
-            <div className="mt-1 text-[11px] text-yellow-600">
+            <div className="mt-1 text-ui-2xs text-yellow-600">
               ⚠️ 与其他规则存在冲突（{rule.conflictGroup}）
             </div>
           )}
@@ -140,7 +140,7 @@ export function RuleDraftCard({ rule, onToggle, onUpdate, onRemove }: RuleDraftC
                 setEditName(rule.name);
                 setEditing(true);
               }}
-              className="rounded px-1.5 py-0.5 text-[11px] text-text-secondary hover:bg-surface-hover"
+              className="rounded px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
               title="编辑规则名称"
             >
               编辑
@@ -149,7 +149,7 @@ export function RuleDraftCard({ rule, onToggle, onUpdate, onRemove }: RuleDraftC
           <button
             type="button"
             onClick={() => onRemove(rule.tempId)}
-            className="rounded px-1.5 py-0.5 text-[11px] text-red-500 hover:bg-red-50"
+            className="rounded px-1.5 py-0.5 text-ui-2xs text-red-500 hover:bg-red-50"
             title="从草稿中删除"
           >
             删除

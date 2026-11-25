@@ -118,7 +118,7 @@ export function RuleExtractionDraft({ onCommitted }: RuleExtractionDraftProps) {
           <button
             type="button"
             onClick={handleClose}
-            className="rounded p-1 text-muted hover:bg-surface-hover"
+            className="rounded p-1 text-muted hover:bg-bg-hover"
             aria-label="关闭"
           >
             ✕
@@ -129,7 +129,7 @@ export function RuleExtractionDraft({ onCommitted }: RuleExtractionDraftProps) {
         {warnings.length > 0 && (
           <div className="border-b border-border bg-yellow-50/50 px-4 py-2">
             {warnings.map((w, i) => (
-              <div key={i} className="text-[11px] text-yellow-700">
+              <div key={i} className="text-ui-2xs text-yellow-700">
                 ⚠️ {w}
               </div>
             ))}
@@ -139,7 +139,7 @@ export function RuleExtractionDraft({ onCommitted }: RuleExtractionDraftProps) {
         {/* Error */}
         {error && (
           <div className="border-b border-border bg-red-50/50 px-4 py-2">
-            <div className="text-[11px] text-red-600">❌ {error}</div>
+            <div className="text-ui-2xs text-red-600">❌ {error}</div>
           </div>
         )}
 
@@ -228,7 +228,7 @@ export function RuleExtractionDraft({ onCommitted }: RuleExtractionDraftProps) {
               type="button"
               onClick={handleClose}
               disabled={committing}
-              className="rounded border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-hover"
+              className="rounded border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-bg-hover"
             >
               取消
             </button>

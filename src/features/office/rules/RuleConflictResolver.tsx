@@ -19,9 +19,7 @@ export function RuleConflictResolver({ conflicts, rules, onToggle }: RuleConflic
   return (
     <div className="space-y-2" data-testid="rule-conflict-resolver">
       {conflicts.map((conflict) => {
-        const conflictRules = rules.filter((r) =>
-          conflict.rule_ids.includes(r.tempId),
-        );
+        const conflictRules = rules.filter((r) => conflict.rule_ids.includes(r.tempId));
         if (conflictRules.length < 2) return null;
 
         return (
@@ -60,7 +58,7 @@ export function RuleConflictResolver({ conflicts, rules, onToggle }: RuleConflic
                 </label>
               ))}
             </div>
-            <div className="mt-1.5 text-[11px] text-yellow-700">
+            <div className="mt-1.5 text-ui-2xs text-yellow-700">
               请勾选保留的版本（可只保留一个）
             </div>
           </div>

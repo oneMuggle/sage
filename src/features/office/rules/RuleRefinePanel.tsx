@@ -137,14 +137,14 @@ export function RuleRefinePanel() {
     <div className="flex h-full flex-col" data-testid="rule-refine-panel">
       <div className="border-b border-border px-3 py-2">
         <div className="text-xs font-semibold">💬 AI 精炼</div>
-        <div className="text-[11px] text-muted">
+        <div className="text-ui-2xs text-muted">
           用自然语言增删改规则，每条建议需你确认后才会应用。
         </div>
       </div>
 
       <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto px-3 py-2">
         {entries.length === 0 && (
-          <div className="space-y-1 text-[11px] text-muted">
+          <div className="space-y-1 text-ui-2xs text-muted">
             <div>试试这些指令：</div>
             <div>· 加上：参考文献格式采用 GB/T 7714</div>
             <div>· 行间距改成 1.5 倍行距</div>
@@ -158,13 +158,13 @@ export function RuleRefinePanel() {
                 {entry.text}
               </div>
             ) : entry.role === 'system' ? (
-              <div className="rounded-md bg-red-50 px-2.5 py-1.5 text-[11px] text-red-600">
+              <div className="rounded-md bg-red-50 px-2.5 py-1.5 text-ui-2xs text-red-600">
                 {entry.text}
               </div>
             ) : (
               <div className="space-y-1.5">
                 {entry.text && (
-                  <div className="rounded-md bg-yellow-50 px-2.5 py-1.5 text-[11px] text-yellow-700">
+                  <div className="rounded-md bg-yellow-50 px-2.5 py-1.5 text-ui-2xs text-yellow-700">
                     ⚠️ {entry.text}
                   </div>
                 )}
@@ -176,7 +176,7 @@ export function RuleRefinePanel() {
                       <button
                         type="button"
                         onClick={() => acceptAll(entry.id)}
-                        className="text-[11px] text-primary hover:underline"
+                        className="text-ui-2xs text-primary hover:underline"
                       >
                         全部接受
                       </button>
@@ -202,7 +202,7 @@ export function RuleRefinePanel() {
           </div>
         ))}
         {busy && (
-          <div className="flex items-center gap-1.5 text-[11px] text-muted">
+          <div className="flex items-center gap-1.5 text-ui-2xs text-muted">
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
             AI 思考中...
           </div>

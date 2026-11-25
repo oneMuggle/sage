@@ -21,7 +21,7 @@ export interface RuleDiffCardProps {
 
 function ParamLine({ label, value }: { label: string; value: unknown }) {
   return (
-    <div className="flex gap-1 text-[11px]">
+    <div className="flex gap-1 text-ui-2xs">
       <span className="text-muted">{label}:</span>
       <span className="text-text">{String(value)}</span>
     </div>
@@ -58,7 +58,7 @@ export function RuleDiffCard({ action, currentRule, onAccept, onReject }: RuleDi
       <div className={`text-xs font-medium ${headerColor}`}>{header}</div>
 
       {action.explanation && (
-        <div className="mt-0.5 text-[11px] text-text-secondary">{action.explanation}</div>
+        <div className="mt-0.5 text-ui-2xs text-text-secondary">{action.explanation}</div>
       )}
 
       {isAdd && addedRule && (
@@ -69,7 +69,7 @@ export function RuleDiffCard({ action, currentRule, onAccept, onReject }: RuleDi
               <ParamLine key={k} label={k} value={v} />
             ))}
           {addedRule.description && (
-            <div className="text-[11px] text-muted">{addedRule.description}</div>
+            <div className="text-ui-2xs text-muted">{addedRule.description}</div>
           )}
         </div>
       )}
@@ -86,7 +86,7 @@ export function RuleDiffCard({ action, currentRule, onAccept, onReject }: RuleDi
         <div className="mt-1 space-y-1">
           {currentRule && <div className="text-xs font-medium">{currentRule.name}</div>}
           {patch.name !== undefined && (
-            <div className="text-[11px]">
+            <div className="text-ui-2xs">
               <span className="text-red-500 line-through">{currentRule?.name}</span>
               {' → '}
               <span className="text-green-700">{patch.name}</span>
@@ -96,7 +96,7 @@ export function RuleDiffCard({ action, currentRule, onAccept, onReject }: RuleDi
             Object.entries(patch.params).map(([k, v]) => {
               const before = currentRule?.params?.[k];
               return (
-                <div key={k} className="text-[11px]">
+                <div key={k} className="text-ui-2xs">
                   <span className="text-muted">{k}:</span>{' '}
                   <span className="text-red-500 line-through">{String(before ?? '(无)')}</span>
                   {' → '}
@@ -105,7 +105,7 @@ export function RuleDiffCard({ action, currentRule, onAccept, onReject }: RuleDi
               );
             })}
           {patch.severity !== undefined && currentRule && (
-            <div className="text-[11px]">
+            <div className="text-ui-2xs">
               <span className="text-muted">severity:</span>{' '}
               <span className="text-red-500 line-through">{currentRule.severity}</span>
               {' → '}
@@ -113,12 +113,12 @@ export function RuleDiffCard({ action, currentRule, onAccept, onReject }: RuleDi
             </div>
           )}
           {patch.ai_prompt !== undefined && (
-            <div className="text-[11px] text-text-secondary">
+            <div className="text-ui-2xs text-text-secondary">
               <span className="text-muted">ai_prompt:</span> {patch.ai_prompt}
             </div>
           )}
           {patch.description !== undefined && (
-            <div className="text-[11px] text-text-secondary">
+            <div className="text-ui-2xs text-text-secondary">
               <span className="text-muted">description:</span> {patch.description}
             </div>
           )}
@@ -129,14 +129,14 @@ export function RuleDiffCard({ action, currentRule, onAccept, onReject }: RuleDi
         <button
           type="button"
           onClick={onAccept}
-          className="rounded bg-green-600 px-2 py-0.5 text-[11px] text-white hover:bg-green-700"
+          className="rounded bg-green-600 px-2 py-0.5 text-ui-2xs text-white hover:bg-green-700"
         >
           接受
         </button>
         <button
           type="button"
           onClick={onReject}
-          className="rounded border border-border px-2 py-0.5 text-[11px] text-text-secondary hover:bg-surface-hover"
+          className="rounded border border-border px-2 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
         >
           拒绝
         </button>
