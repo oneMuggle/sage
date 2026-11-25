@@ -288,12 +288,19 @@ class TestProfileBackedAdapter:
         academic_adapters._DEFAULT_ADAPTERS.pop("demo", None)
 
 
-class TestShippedXueshu789Profile:
-    def test_shipped_profile_loads_and_matches_observed_facts(self):
+class TestTemplateXueshu789Profile:
+    """xueshu789 是示例模板（docs/templates），不是 builtin 产品配置。"""
+
+    def test_template_profile_loads_and_matches_observed_facts(self):
         from backend.literature.profile_store import ProfileRoot, SiteProfileStore
 
-        builtin = Path(__file__).resolve().parents[2] / "literature" / "sites"
-        store = SiteProfileStore([ProfileRoot(builtin, "builtin")])
+        template_dir = (
+            Path(__file__).resolve().parents[3]
+            / "docs"
+            / "templates"
+            / "literature-sites"
+        )
+        store = SiteProfileStore([ProfileRoot(template_dir, "template")])
         profile = store.get("xueshu789")
         assert profile.display_name == "学术资源站"
         assert "xueshu789.cc" in profile.domains
@@ -310,6 +317,14 @@ class TestShippedXueshu789Profile:
         assert profile.status == "ready"
         assert profile.last_verified_at == "2026-11-22"
         assert profile.compliance.default_enabled is False
+        assert profile.source_layer == "template"
+
+    def test_builtin_sites_dir_ships_no_concrete_sites(self):
+        from backend.literature.profile_store import ProfileRoot, SiteProfileStore
+
+        builtin = Path(__file__).resolve().parents[2] / "literature" / "sites"
+        store = SiteProfileStore([ProfileRoot(builtin, "builtin")])
+        assert store.list_ids() == []
 
 
 class TestInteractiveSearchProfile:

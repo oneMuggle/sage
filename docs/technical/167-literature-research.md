@@ -36,7 +36,7 @@ Sage 的文献研究能力由随包分发的 `literature-research` skill 驱动�
 | `backend/literature/rubric.py` | 四维确定性 rubric 评审 |
 | `backend/literature/recording.py` | 从页面观测生成 profile 草稿 |
 | `backend/literature/cli.py` | 本地调试 / skill 脚本调用的命令行入口 |
-| `backend/literature/sites/xueshu789.yaml` | 随包站点 profile |
+| `docs/templates/literature-sites/xueshu789.yaml` | 示例站点 profile（不自动加载，复制到用户目录后启用） |
 | `backend/skills/skill_md/shipped/literature-research/` | `SKILL.md` 与 `references/pipeline.md`（工作流与目录契约） |
 
 ### 1.2 运行目录
@@ -137,7 +137,7 @@ skill 侧不依赖 CLI 的字符串解析，而是在 `execute_code` 中直接�
 
 | 层 | 目录 | 优先级 |
 |---|---|---|
-| 内置 | `backend/literature/sites/*.yaml` | 最低 |
+| 内置 | `backend/literature/sites/*.yaml`（随包不携带具体站点） | 最低 |
 | 用户 | `~/.sage/literature_sites/*.yaml`（可用 `SAGE_LITERATURE_SITES_DIR` 覆盖） | 中 |
 | 项目 | `<cwd>/.sage/literature_sites/*.yaml` | 最高 |
 
@@ -239,7 +239,7 @@ YAML 并记录 warning，`get(site_id)` 命中无效 profile 时抛 `SiteProfile
 - `validate_pdf` 校验文件头 magic（默认 `%PDF-`）与文件名是否包含题名；
 - `forbid`（默认 `CAJ`）命中后缀时记错误。
 
-xueshu789 的下载链接真实 href 还带 `&ddata=文件名|库|题名|库|hash`，必须点击 DOM
+部分站点的下载链接真实 href 还带 `&ddata=文件名|库|题名|库|hash` 这类附加参数，必须点击 DOM
 元素本身，不能用快照里截断的 URL 直连，否则服务端报「参数错误」。
 
 合规边界固定在 skill 与 profile 中：仅使用本人账号或机构授权；不代填密码、不导出
