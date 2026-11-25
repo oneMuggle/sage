@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { applyOrchestrationEventToBoard } from '../orchestrationEvents';
 import { useChatStreamStore } from '../chatStreamStore';
+import { applyOrchestrationEventToBoard } from '../orchestrationEvents';
 
 describe('applyOrchestrationEventToBoard · plan_progress', () => {
   beforeEach(() => {

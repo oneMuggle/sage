@@ -41,6 +41,7 @@ import {
   ToolCallResult,
   ToolCallTitle,
 } from './MessageMarkdownParts';
+import { PlanningTimeline } from './PlanningTimeline';
 import { RetryBanner } from './RetryBanner';
 import { SvgDiagramViewer } from './SvgDiagramViewer';
 import { ThinkingDisplay } from './ThinkingDisplay';
@@ -369,6 +370,10 @@ function MessageComponent({
           hiddenToolCount={hidesToolCalls ? toolCalls.length : 0}
           onToggleResultDetail={() => setResultDetailExpanded((v) => !v)}
         />
+
+        {/* 2026-11-25: 规划过程实时可见 —— 内联在 assistant 气泡内，
+            位于思考面板之下、重试横幅之上。 */}
+        {isAssistant && <PlanningTimeline sessionId={message.session_id ?? null} />}
 
         {/* 2026-10-20: LLM 重试横幅 —— 置于思考面板之下、工具调用之上。
             重试期间气泡内仍是占位符，横幅承担"系统正在自动恢复"的告知职责。 */}

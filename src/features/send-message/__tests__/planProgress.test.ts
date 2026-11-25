@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import type { PlanProgressItem } from '../../../shared/api/types/chatAndEventTypes';
 import { agentStateToPhase, agentStateToText } from '../../../shared/lib/agentStateMapping';
 import { isPlanningActive, reducePlanProgress, type PlanStageState } from '../planProgress';
-import type { PlanProgressItem } from '../../../shared/api/types/chatAndEventTypes';
 
 function item(over: Partial<PlanProgressItem> = {}): PlanProgressItem {
   return {
