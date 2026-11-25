@@ -20,7 +20,7 @@ import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
     import pymupdf
@@ -80,6 +80,18 @@ from .pdf_images import (  # noqa: E402 — 放在常量区，保持阅读顺序
 #: (huge ruled grids, or dense line art misread as tables) are truncated
 #: here instead of ballooning the read result; the truncation is logged.
 MAX_TABLE_CELLS_PER_PAGE = 20_000
+
+# ── M6b: 无边框表格探测（仅探测，绝不产出正文）────────────────────
+# PyMuPDF 的 ``strategy="text"`` 按空白列对齐来猜表格，过于激进：
+# 普通散文会被打散成「每个词一列」的十几列假表格；真正的无边框表格
+# 只有几列、每格都很短。因此该策略**只作探测器**，命中条件是
+# 「≥2 行有内容 / 每行 ≥2 格 / 列数在合理范围 / 单元格都很短」，
+# 命中后交由 docling 等结构化后端兜底，而不是把猜测结果当作表格正文
+# 写进 markdown。
+BORDERLESS_PROBE_MIN_TEXT_CHARS = 40
+BORDERLESS_PROBE_MAX_CELL_CHARS = 40
+BORDERLESS_PROBE_MAX_COLS = 8
+BORDERLESS_PROBE_MAX_PAGES = 50
 
 #: CJK font for generated PDFs. The base-14 Helvetica has no CJK glyphs, so
 #: Chinese text would render as blanks. STSong-Light is the Adobe CID font
@@ -165,13 +177,25 @@ def _build_pdf_summary(
     )
 
 
-def _extract_page_tables(page: pymupdf.Page, *, page_number: int) -> List[List[List[str]]]:
-    """Extract text-layer tables from one page via PyMuPDF ``find_tables``.
+def _extract_page_tables_with_stats(
+    page: pymupdf.Page, *, page_number: int
+) -> Tuple[List[List[List[str]]], Dict[str, Any]]:
+    """Extract text-layer tables from one page plus per-page statistics.
 
     Round 2 R2a. ``find_tables`` detects ruled/lined tables; their cells come
     back as ``str`` or ``None`` (empty), and ``None`` is normalized to ``""``.
 
-    Guards:
+    The statistics describe *shape* rather than content — they feed the
+    complexity assessment in ``backend.office.extractors.tables``, which
+    decides whether a higher-fidelity backend should take over:
+
+    - ``null_cells`` counts cells PyMuPDF could not fill (merged cells and
+      missing grid positions both come back as ``None``);
+    - ``max_rows`` / ``max_cols`` describe the longest and widest table;
+    - ``truncated`` reports that the per-page cell cap kicked in;
+    - ``failed`` reports that table detection itself raised.
+
+    Guards (unchanged from R2a):
     - a page whose ``find_tables()`` raises is skipped entirely (logged), so
       one bad page cannot fail the whole read;
     - a table whose ``extract()`` raises is skipped (logged);
@@ -181,11 +205,21 @@ def _extract_page_tables(page: pymupdf.Page, *, page_number: int) -> List[List[L
     Scanned / image-only pages have no vector rules, so they yield ``[]`` —
     OCR remains a non-goal.
     """
+    stats: Dict[str, Any] = {
+        "table_count": 0,
+        "null_cells": 0,
+        "total_cells": 0,
+        "max_rows": 0,
+        "max_cols": 0,
+        "truncated": False,
+        "failed": False,
+    }
     try:
         table_finder = page.find_tables()
     except Exception:  # noqa: BLE001 — 单页识别失败不阻断整篇读取
         logger.warning("PDF table extraction failed on page %d; page skipped", page_number)
-        return []
+        stats["failed"] = True
+        return [], stats
 
     tables: List[List[List[str]]] = []
     cells_seen = 0
@@ -195,6 +229,7 @@ def _extract_page_tables(page: pymupdf.Page, *, page_number: int) -> List[List[L
             extracted_rows = table.extract()
         except Exception:  # noqa: BLE001 — 单个表格提取失败只跳过该表
             logger.warning("PDF table extraction failed on page %d; table skipped", page_number)
+            stats["failed"] = True
             continue
         rows: List[List[str]] = []
         for row in extracted_rows:
@@ -203,6 +238,8 @@ def _extract_page_tables(page: pymupdf.Page, *, page_number: int) -> List[List[L
                 if cells_seen >= MAX_TABLE_CELLS_PER_PAGE:
                     truncated = True
                     break
+                if cell is None:
+                    stats["null_cells"] += 1
                 row_cells.append(cell if cell else "")
                 cells_seen += 1
             if row_cells:
@@ -211,13 +248,77 @@ def _extract_page_tables(page: pymupdf.Page, *, page_number: int) -> List[List[L
                 break
         if rows:
             tables.append(rows)
+            stats["table_count"] += 1
+            stats["total_cells"] += sum(len(row) for row in rows)
+            stats["max_rows"] = max(stats["max_rows"], len(rows))
+            stats["max_cols"] = max(stats["max_cols"], *(len(row) for row in rows))
         if truncated:
             break
+    stats["truncated"] = truncated
     if truncated:
         logger.warning(
             "PDF table cells truncated at %d on page %d", MAX_TABLE_CELLS_PER_PAGE, page_number
         )
+    return tables, stats
+
+
+def _extract_page_tables(page: pymupdf.Page, *, page_number: int) -> List[List[List[str]]]:
+    """Extract text-layer tables from one page via PyMuPDF ``find_tables``.
+
+    Thin wrapper kept for ``backend.office.pdf_to_word``, which reuses the
+    ruled-table reader. See :func:`_extract_page_tables_with_stats` for the
+    guards and the per-page statistics.
+    """
+    tables, _stats = _extract_page_tables_with_stats(page, page_number=page_number)
     return tables
+
+
+def _probe_borderless_table(page: pymupdf.Page, *, page_number: int) -> bool:
+    """Detect — never extract — a possible borderless table on one page.
+
+    ``strategy="text"`` aligns columns by whitespace, which is far too
+    eager: ordinary prose gets shredded into one column per word (a 15-column
+    "table" of single words), while a real borderless table yields a handful
+    of short, filled columns. So the strategy is used as a *detector* only,
+    and a candidate must satisfy all of:
+
+    - at least two rows that actually carry text;
+    - every such row fills at least two cells;
+    - the column count stays within a human-plausible range — prose
+      fragmentation blows past it, a table does not;
+    - no cell exceeds the length threshold (a table cell is short, a prose
+      fragment that stayed a column is a whole clause).
+
+    The result is a hint for the caller (route to a structured backend);
+    the guessed grid is never written into the document body.
+    """
+    try:
+        finder = page.find_tables(strategy="text")
+    except Exception:  # noqa: BLE001 — 探测失败只是"没找到"，不阻断读取
+        return False
+    for table in finder.tables:
+        try:
+            rows = table.extract()
+        except Exception:  # noqa: BLE001 — 单个表格探测失败只跳过该表
+            continue
+        content_rows = [row for row in rows if any(cell for cell in row)]
+        if len(content_rows) < 2:
+            continue
+        filled_counts = [sum(1 for cell in row if cell) for row in content_rows]
+        if min(filled_counts) < 2:
+            continue
+        columns = max(filled_counts)
+        if columns > BORDERLESS_PROBE_MAX_COLS:
+            continue
+        longest = 0
+        for row in content_rows:
+            for cell in row:
+                if cell:
+                    longest = max(longest, len(cell))
+        if longest <= BORDERLESS_PROBE_MAX_CELL_CHARS:
+            logger.info("PDF borderless table candidate detected on page %d", page_number)
+            return True
+    return False
 
 
 def read_pdf(
@@ -230,11 +331,19 @@ def read_pdf(
     embed_image_data: bool = False,
     max_image_bytes: int = MAX_EMBEDDED_IMAGE_BYTES,
     max_total_image_bytes: int = MAX_TOTAL_EMBEDDED_IMAGE_BYTES,
+    probe_borderless_tables: bool = False,
 ) -> PdfReadResult:
     """Read a PDF file and extract text, tables, images, and metadata.
 
     Round 2 R2a: ``tables`` per page now comes from PyMuPDF ``find_tables``
     (text-layer ruled tables); scanned/image-only PDFs still report no tables.
+
+    M6b: ``table_diagnostics`` summarises the *shape* of the tables found
+    (cell counts, grid extremes, failures, borderless candidates) so the
+    caller can decide whether a higher-fidelity backend should take over.
+    ``probe_borderless_tables=True`` additionally runs the whitespace-alignment
+    detector on pages that yielded no ruled table; it only records *that* a
+    candidate exists — the guessed grid is never returned as table content.
 
     M6c: ``include_images`` 时按页提取内嵌图的**有界预览**。预算与上限在
     本函数内部强制执行（不依赖调用方自觉）：
@@ -286,6 +395,17 @@ def read_pdf(
     pages: List[PdfPageContent] = []
     # 跨页共享的图片提取状态（输出预算 + xref 缓存 + 跳过集合 + 计数）。
     image_state = ImageExtractionState(max(0, int(max_total_image_bytes)))
+    # M6b：表格形状诊断（跨页聚合），供复杂度判定使用。
+    diagnostics: Dict[str, Any] = {
+        "table_count": 0,
+        "null_cells": 0,
+        "total_cells": 0,
+        "max_rows": 0,
+        "max_cols": 0,
+        "truncated": False,
+        "failed_pages": 0,
+        "borderless_candidate_pages": [],
+    }
     try:
         for page_num in range(len(doc)):
             page = doc[page_num]
@@ -313,11 +433,32 @@ def read_pdf(
                     embed_image_data=embed_image_data,
                     max_image_bytes=max(0, int(max_image_bytes)),
                 )
+            page_tables, table_stats = _extract_page_tables_with_stats(
+                page, page_number=page_num + 1
+            )
+            diagnostics["table_count"] += int(table_stats["table_count"])
+            diagnostics["null_cells"] += int(table_stats["null_cells"])
+            diagnostics["total_cells"] += int(table_stats["total_cells"])
+            diagnostics["max_rows"] = max(diagnostics["max_rows"], table_stats["max_rows"])
+            diagnostics["max_cols"] = max(diagnostics["max_cols"], table_stats["max_cols"])
+            diagnostics["truncated"] = bool(diagnostics["truncated"] or table_stats["truncated"])
+            if table_stats["failed"]:
+                diagnostics["failed_pages"] += 1
+            # 无边框探测：只在「本页没有框线表格」且正文够长时做，且只探测
+            # 前若干页 —— 探测本身比框线识别贵，不能变成性能陷阱。
+            if (
+                probe_borderless_tables
+                and not page_tables
+                and page_num < BORDERLESS_PROBE_MAX_PAGES
+                and len(text.strip()) >= BORDERLESS_PROBE_MIN_TEXT_CHARS
+                and _probe_borderless_table(page, page_number=page_num + 1)
+            ):
+                diagnostics["borderless_candidate_pages"].append(page_num + 1)
             pages.append(
                 PdfPageContent(
                     page_number=page_num + 1,
                     text=text,
-                    tables=_extract_page_tables(page, page_number=page_num + 1),
+                    tables=page_tables,
                     images=page_images,
                     image_count=image_count,
                     images_omitted=max(0, image_count - len(page_images)),
@@ -337,6 +478,7 @@ def read_pdf(
         summary=summary,
         pages=pages,
         metadata=metadata,
+        table_diagnostics=diagnostics,
     )
 
 

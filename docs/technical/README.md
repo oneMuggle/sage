@@ -147,6 +147,7 @@
 | 171 | [会话模型覆盖与端点路由](./171-session-model-endpoint-routing.md) | 模型与凭据成对路由：会话覆盖重解析端点，前后端双保险 |
 | 172 | [渲染器 CSP 与高保真文档预览](./172-renderer-csp-high-fidelity-preview.md) | 生产 CSP 指令表 + dataUrlToBlob 本地解码，修复高保真预览 |
 | 173 | [对标改进循环 SOP](./173-parity-loop-sop.md) | 对标迭代闭环 SOP：步骤 / py38 兼容 / 验证矩阵 / 踩坑与红线 |
+| 174 | [Office 结构化提取与 PDF 复杂表格兜底](./174-office-extract-pdf-tables.md) | 提取适配器分层（测量/策略/适配/编排）+ 表格形状诊断（`table_diagnostics`）+ 无边框探测（列数判别式，只探测不产正文）+ 复杂度原因码 + 结构化后端兜底路由（auto/off/force，失败保留原结果） |
 ---
 
 ## 核心章节（基础架构）

@@ -312,6 +312,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 - [x] PDF 通用操作：合并/拆分/旋转/抽页/删页/水印/页码（`backend/office/pdf_ops.py`）
 - [x] PDF 读取补齐：页面图片返回（opt-in、单图 ≤1.5MB/总预算 20MB、`image_count`）+ 真 appearance flatten（旧版 PyMuPDF 回退只读位）
 - [x] PDF 复杂表格兜底（Docling/TableFormer 路线随可选后端；M6g）—— `extract_document` auto 模式候选链（docling → markitdown → light）逐条尝试，可选后端转换抛错自动回退到下一候选并在 warnings 记 `extractor_fallback`；`DoclingExtractor` 把 `document.tables` 单独输出为 `table` 块（anchor 含 `source=docling`），让 RAG/compare 能锚定到具体表格索引；`light` 的 PyMuPDF `find_tables` 仅识别有框线表格为已知限制
+- [x] PDF 复杂表格测量与兜底路由（M6b(c)）—— 测量层 `read_pdf` 输出 `table_diagnostics`（表格数 / 空单元 / 行列规模 / 失败页 / 无边框候选页），探测量与正文产出分离；无边框探测以 `find_tables(strategy="text")` 仅作**检测器**，候选须同时满足 ≥2 行有内容、每行 ≥2 个非空单元、列数 ≤`BORDERLESS_PROBE_MAX_COLS`（8，散文碎裂会远超此值故列数是判别式）、单元格 ≤`BORDERLESS_PROBE_MAX_CELL_CHARS`（40）—— 猜测出的网格**不写入正文**；复杂度原因码 6 个（`merged_cells` / `cell_cap_truncated` / `wide_table` / `tall_table` / `table_detection_failed` / `borderless_table_candidate`）；兜底路由 `table_fallback=auto|off|force`，结构化后端不可用或失败时保留 light 原结果并在 warnings 记 `table_fallback_*`；docling/markitdown 仅登记进 `backend/requirements-optional.txt`，不改 `requirements-py38.txt`
 - [x] `office_create` 的 pdf 枚举：明确拒绝并引导 `office_generate_pdf`（消除分派漂移）
 - [x] 工具面一致性：`office_delete` / `workspace_search` 覆盖 pdf/csv；Wiki 队列 PDF 路径
 - [x] `POST /office/extract`（统一提取）与 `POST /office/compare`（Word/Excel/PPT/PDF/CSV diff + Markdown 报告）
@@ -373,6 +374,25 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 > - 双分支：main PR #3232 + win7 PR #3233（cherry-pick 同步，无 Python 依赖变更）
 > - 限制：PPT 内嵌图片像素后端未提取 → 本批不渲染 PPT 图片缩略图
 
+> **实施记录（2026-11-23，M6b(c) PDF 复杂表格测量与兜底路由）**
+> - 新增：`backend/office/extractors/tables.py`（表格 Markdown 渲染 + 复杂度判定策略）
+> - 测量层：`read_pdf` 增 `table_diagnostics`（table_count / null_cells / max_rows / max_cols /
+>   truncated / failed_pages / borderless_candidate_pages）；`_extract_page_tables_with_stats`
+>   返回逐页统计，`_extract_page_tables` 保留为薄封装（`pdf_to_word` 依赖）
+> - 无边框探测：PyMuPDF `strategy="text"` **只作探测器**（判别式 = 列数 ≤8 + 每行 ≥2 格 +
+>   单元格 ≤40 字符）——散文会被切成十几列假表格，靠列数区分；探测结果只记页码，不进正文
+> - 复杂度判定：`assess_table_complexity` 产出 6 个稳定原因码（merged_cells / cell_cap_truncated /
+>   wide_table / tall_table / table_detection_failed / borderless_table_candidate）
+> - 兜底路由（`service.py`）：`ExtractRequest.table_fallback` = auto/off/force；auto 命中复杂表格时
+>   改用 docling 重解析一次；后端缺失或失败 → warning + **保留 light 结果**，整次提取不失败
+> - 结构化表格块：docling 后端产出 `type="table"` 块（真网格，含合并单元格空洞），light 后端
+>   对 PDF 也产出 table 块（anchor = page/table_index）
+> - 依赖：docling / markitdown 登记进 `backend/requirements-optional.txt`（注释态 + 为什么单独放），
+>   **不改** `requirements-py38.txt`（Win7 不装，py3.9/3.10+ 要求）
+> - 测试：unit 17（渲染 / 6 个原因码 / 合并表头 null_cells / 无边框探测对散文不误报 /
+>   light table 块 / 兜底 auto-off-force / 不可用 / 失败保留原结果）；Office 全量 1326 passed / 2 skipped；
+>   ruff / py38 兼容门禁 / architecture 棘轮 / silent-exception 棘轮绿
+
 > **实施记录（2026-11-23，M6d Excel 图表数值 + PPT 图片渲染）**
 > - PPT 读取：`read_ppt` / `OfficePptReadRequest` 新增 `include_images`（默认 False）、`max_images_per_slide`（默认 3，≤10）、`embed_image_data`（默认 False）；`PptSlideContent.images` + `images_omitted`
 > - 图片预算：单图原始 ≤1.125MB、全文档 ≤15MB、最多检查 500 张；跨页共享预算字典；超限计入 `images_omitted`；`include_images=False` 不枚举
@@ -405,7 +425,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 
 > **实施记录（2026-11-24，M6g PDF 复杂表格兜底）**
 > - `backend/office/extractors/service.py`：`_select_backend` → `_candidate_backends`（返回有序候选链）；`extract_document` 遍历候选，auto 模式下前一条失败则回退到下一条（`extractor_fallback` warning），最后一条失败归一为 `OfficeParseError`；显式 `backend=` 永不回退
-> - `backend/office/extractors/optional.py::DoclingExtractor.extract()`：新增 `document.tables` 迭代，每表 `export_to_markdown()` 输出为 `ExtractedBlock(type="table", anchor={"table_index": N, "source": "docling"})`；单表失败不阻断整篇
+> - `backend/office/extractors/optional.py::DoclingExtractor.extract()`：新增 `document.tables` 迭代，每表先走 `data.grid` / `export_to_dataframe()` 取**真网格**（合并单元格的空洞得以保留），取不到时回落 `export_to_markdown()`；输出为 `ExtractedBlock(type="table", anchor={"table_index": N, "source": "docling"[, "page": P]})`；单表失败只跳过该表，不阻断整篇；同遍统计 `table_diagnostics`（table_count / null_cells / total_cells / max_rows / max_cols）
 > - 测试：`test_extractors_m6b.py` 新增 3 例（auto 回退、最后候选失败归一、Docling 结构化表格块）
 > - 门禁：office 全量 1426 passed / 2 skipped；ruff / py38 兼容（0 违规）/ silent-exceptions（39/39）/ architecture 棘轮（exit=0，104 baselined）全绿
 
@@ -496,6 +516,7 @@ Render & Verify（新增）：soffice → PDF → PyMuPDF → 页面图 / VLM �
 | M6b 解析适配器 + 对比 + 工具面 | ✅ 后端 | 本轮提交 | unit 10 + 端点 3 + 工具面 44；全量 2274 passed |
 | M6c PDF 图片读取 + 真 flatten | ✅ | 本轮提交 | 80 PDF 相关测试（安全返工后）；architecture 棘轮绿 |
 | M6b 前端批次（对比入口 / 读侧 extras / chip 预览） | ✅ 前端 | `45adac67c` | main PR #3232 + win7 PR #3233；前端 100 文件 / 547 用例 |
+| M6b(c) PDF 复杂表格测量与兜底路由 | ✅ 后端 | 本轮提交 | 后端 unit 17；office 全量 1326 passed；ruff/py38/silent/architecture 绿 |
 | M6d Excel 图表数值 + PPT 图片渲染 | ✅ | 本轮提交 | 后端 unit 10 + 回归 1385；前端 7 新用例 / 回归 33；门禁绿 |
 | M6e Word 模板 Profile/填充前端入口 | ✅ | 本轮提交 | 前端 6 新用例 / 相关回归 32；tsc/eslint/prettier/architecture 绿 |
 | M6f Excel/PPT 基础规则审校 | ✅ | 本轮提交 | 后端 unit 6 + 端点 1；定向 pytest 47 passed；ruff/py38/silent/architecture 绿 |
