@@ -17,7 +17,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.orchestration.llm_factory import build_llm_client_from_settings
 from backend.orchestration.models import Task, Team
@@ -298,6 +298,7 @@ class Planner:
         self,
         request: str,
         context: Optional[Dict[str, Any]] = None,
+        progress: Optional[Callable[[str, str], Any]] = None,
     ) -> Plan:
         """
         Decompose a user request into a team of tasks.
@@ -326,7 +327,9 @@ class Planner:
 
         # Decompose using LLM or fallback to single-task decomposition.
         if self.llm_client is not None:
-            tasks, reasoning = await self._decompose_with_llm(request, context)
+            tasks, reasoning = await self._decompose_with_llm(
+                request, context, progress
+            )
         else:
             tasks, reasoning = self._simple_decompose(request)
 
@@ -476,15 +479,25 @@ class Planner:
         self,
         request: str,
         context: Optional[Dict[str, Any]] = None,
+        progress: Optional[Callable[[str, str], Any]] = None,
     ) -> Tuple[List[Dict[str, Any]], str]:
         """Decompose request via the LLM; any failure → single-task fallback."""
         prompt = self._build_decomposition_prompt(request, context)
 
-        try:
-            response = await self.llm_client.complete(prompt)
-        except Exception as exc:
-            logger.warning("Planner LLM call failed, falling back: %s", exc)
-            return self._simple_decompose(request)
+        response: Optional[str] = None
+        if progress is not None and hasattr(self.llm_client, "chat_stream_events"):
+            try:
+                response = await self._stream_decomposition(prompt, progress)
+            except Exception as exc:  # noqa: BLE001 — 流式失败回退非流式
+                logger.warning("Planner streaming failed, falling back: %s", exc)
+                response = None
+
+        if not response:
+            try:
+                response = await self.llm_client.complete(prompt)
+            except Exception as exc:
+                logger.warning("Planner LLM call failed, falling back: %s", exc)
+                return self._simple_decompose(request)
 
         if not response or not isinstance(response, str):
             return self._simple_decompose(request)
@@ -498,6 +511,26 @@ class Planner:
         if not tasks:
             return self._simple_decompose(request)
         return tasks, reasoning
+
+    async def _stream_decomposition(
+        self,
+        prompt: str,
+        progress: Callable[[str, str], Any],
+    ) -> str:
+        """流式拆解：把 reasoning/content delta 交给进度回调，返回终态内容。"""
+        messages = [{"role": "user", "content": prompt}]
+        content = ""
+        async for kind, payload in self.llm_client.chat_stream_events(messages):
+            if kind == "reasoning_delta" and payload:
+                await progress("reasoning", str(payload))
+            elif kind == "content_delta" and payload:
+                content += str(payload)
+                await progress("message", str(payload))
+            elif kind == "response":
+                final = getattr(payload, "content", None)
+                if final:
+                    content = str(final)
+        return content
 
     @staticmethod
     def _allow_deep_decomposition() -> bool:
