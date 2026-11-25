@@ -160,6 +160,11 @@ export interface InputCardProps {
 
   // Footer hint
   hint?: string;
+  /**
+   * 2026-11-25: 页脚状态插槽 —— 承载 ComposerStatusBar（用量统计 / 响应速度 /
+   * 上下文占用）。与 hint 互斥：statusSlot 存在时优先渲染它，hint 让位。
+   */
+  statusSlot?: React.ReactNode;
 
   /**
    * R17-C: 本会话已发送 user 消息（最近优先）。非空时，空输入按 ↑
@@ -214,6 +219,7 @@ function InputCardInner({
   orchModeBar,
   composerControls,
   hint,
+  statusSlot,
   inputHistory,
   focusRequest,
 }: InputCardProps) {
@@ -688,9 +694,11 @@ function InputCardInner({
         />
       )}
 
-      {(hint || value.length > CHAR_VISIBLE_THRESHOLD) && (
-        <div className="flex items-center justify-between text-ui-2xs text-muted mt-1.5 px-1">
-          <span className="flex-1 text-center">{hint}</span>
+      {(statusSlot || hint || value.length > CHAR_VISIBLE_THRESHOLD) && (
+        <div className="flex items-center justify-between gap-2 text-ui-2xs text-muted mt-1.5 px-1">
+          <div className="flex min-w-0 flex-1 items-center">
+            {statusSlot ?? (hint ? <span className="w-full text-center">{hint}</span> : null)}
+          </div>
           {value.length > CHAR_VISIBLE_THRESHOLD && (
             <span
               data-testid="chat-char-count"

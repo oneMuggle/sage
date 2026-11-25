@@ -5,16 +5,15 @@
 // last_prompt_tokens(上一轮请求 prompt = 当前上下文占用的最佳代理) +
 // last_context_breakdown(该次请求 prompt 的分类构成, 后端估算并按实报校准) +
 // last_model(经 catalog/用户设置解析出有效窗口)。
-// 刷新时机: 流结束跳变(后台会话跑完也刷新) + 60s 兜底轮询 + 外部 refreshKey。
+//
+// 2026-11-25 (composer 状态条下沉): 改为**受控**组件 —— 取数收敛到
+// hooks/useSessionUsage.ts(单次请求 + 流末刷新); 本组件只负责渲染,
+// 并按新位置调整弹层方向(placement)与水平对齐(align)。
 
 import { useEffect, useRef, useState } from 'react';
 
-import {
-  useChatStreamStore,
-  selectSessionSlots,
-} from '../../features/send-message/chatStreamStore';
-import type { ContextBreakdown, ContextSource } from '../../shared/api/usageApi';
-import { fetchSessionUsage, type SessionUsage } from '../../shared/api/usageApi';
+import type { ContextBreakdown, ContextSource, SessionUsage } from '../../shared/api/usageApi';
+import { useOptionalI18n } from '../../shared/lib/i18n';
 import { resolvedContextWindow } from '../../shared/lib/modelWindows';
 
 function formatTokens(total: number): string {
@@ -43,53 +42,22 @@ const CATEGORY_META: { key: string; label: string; color: string }[] = [
 ];
 
 interface ContextMeterProps {
-  sessionId: string | null;
-  /** 外部可触发刷新 (例如流结束后) */
-  refreshKey?: number;
+  /** 用量快照（由 useSessionUsage 提供）；null 表示尚无数据。 */
+  usage: SessionUsage | null;
+  /** 弹层展开方向：top = 位于锚点上方（输入框下方场景），bottom = 位于锚点下方。 */
   placement?: 'top' | 'bottom';
+  /** 弹层水平对齐：left = 左边缘对齐，right = 右边缘对齐（默认，锚点在右缘时用它避免溢出视口）。 */
+  align?: 'left' | 'right';
 }
 
-export function ContextMeter({ sessionId, refreshKey = 0, placement = 'top' }: ContextMeterProps) {
+export function ContextMeter({ usage, placement = 'top', align = 'right' }: ContextMeterProps) {
   const popoverPos = placement === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2';
-  const [usage, setUsage] = useState<SessionUsage | null>(null);
+  const popoverAnchor = align === 'left' ? 'left-0' : 'right-0';
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLSpanElement | null>(null);
-  // 流结束跳变检测: 本会话 streaming.messageId 非空 → null 时刷新用量
-  const streamingMessageId = useChatStreamStore(
-    (s) => selectSessionSlots(s, sessionId).streaming?.messageId ?? null,
-  );
-  const isIdle = streamingMessageId === null;
-  const prevStreamingIdRef = useRef<string | null>(null);
-
-  const load = (sid: string | null): void => {
-    if (!sid) {
-      setUsage(null);
-      return;
-    }
-    fetchSessionUsage(sid)
-      .then((u) => setUsage(u))
-      .catch(() => {
-        /* 静默: 指示器是增强信息 */
-      });
-  };
-
-  useEffect(() => {
-    load(sessionId);
-    if (!sessionId) return;
-    // 2026-11-05: 仅流式进行中才启用 60s 兜底轮询。流结束时下方 effect 已做
-    // 一次显式刷新;空闲会话不再持续产生无效请求。
-    if (isIdle) return;
-    const timer = window.setInterval(() => load(sessionId), 60_000);
-    return () => window.clearInterval(timer);
-  }, [sessionId, refreshKey, isIdle]);
-
-  useEffect(() => {
-    const prev = prevStreamingIdRef.current;
-    prevStreamingIdRef.current = streamingMessageId;
-    if (prev !== null && streamingMessageId === null && sessionId) {
-      load(sessionId);
-    }
-  }, [streamingMessageId, sessionId]);
+  // 可选 i18n：单测直接渲染（无 Provider）时回退中文文案。
+  const i18n = useOptionalI18n();
+  const contextLabel = i18n?.t('chat.status.context') ?? '上下文占用';
 
   // 弹层外点/Escape 关闭
   useEffect(() => {
@@ -108,7 +76,7 @@ export function ContextMeter({ sessionId, refreshKey = 0, placement = 'top' }: C
     };
   }, [open]);
 
-  if (!sessionId || !usage || usage.last_prompt_tokens == null) return null;
+  if (!usage || usage.last_prompt_tokens == null) return null;
 
   // 窗口解析: catalog 值优先; 后端已按用户 autoContext/maxContext 计算。
   const windowTokens = resolvedContextWindow(usage.effective_context_window);
@@ -152,12 +120,12 @@ export function ContextMeter({ sessionId, refreshKey = 0, placement = 'top' }: C
 
       {open && (
         <span
-          className={`absolute right-0 z-50 ${popoverPos} block w-80 rounded-lg border border-border bg-surface-overlay p-3 text-left shadow-xl backdrop-blur-sm`}
+          className={`absolute ${popoverAnchor} z-50 ${popoverPos} block w-80 rounded-lg border border-border bg-surface-overlay p-3 text-left shadow-xl backdrop-blur-sm`}
           data-testid="context-meter-popover"
         >
           <span className="mb-2 flex items-center justify-between gap-1.5">
             <span className="text-xs font-medium text-text">
-              上下文占用 {formatTokens(used)} / {formatTokens(windowTokens)} tokens（
+              {contextLabel} {formatTokens(used)} / {formatTokens(windowTokens)} tokens（
               {Math.round(pct * 100)}%）
               {usage.last_model ? ` · ${usage.last_model}` : ''}
             </span>

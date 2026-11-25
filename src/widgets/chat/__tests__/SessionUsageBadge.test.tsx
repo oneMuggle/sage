@@ -1,7 +1,9 @@
 // src/widgets/chat/__tests__/SessionUsageBadge.test.tsx
-// U14 会话用量徽章测试 — usageApi 全 mock。
-import { render, screen, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+// U14 会话用量徽章测试。
+// 2026-11-25 (composer 状态条下沉): 组件改为受控展示（usage prop），
+// 取数归 useSessionUsage hook —— 本测试不再 mock usageApi。
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
 
 import type { SessionUsage } from '../../../shared/api/usageApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
@@ -10,12 +12,6 @@ import {
   formatSessionUsageMarkdown,
   SessionUsageBadge,
 } from '../SessionUsageBadge';
-
-const mockFetch = vi.fn<(sessionId: string) => Promise<SessionUsage>>();
-
-vi.mock('../../../shared/api/usageApi', () => ({
-  fetchSessionUsage: (sessionId: string) => mockFetch(sessionId),
-}));
 
 /** U17 扩展字段后的完整 SessionUsage 夹具基座 */
 function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
@@ -43,28 +39,23 @@ function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
   };
 }
 
-// L8 PR-A (2026-09-09): SessionUsageBadge 启用 useI18n 拿 cache 标签,
-// 测试必须包 I18nProvider 否则 useI18n 抛 "must be used within I18nProvider"。
-function renderBadge(props: { sessionId: string | null; refreshKey?: number }) {
+// SessionUsageBadge 用 useI18n 拿标签，测试必须包 I18nProvider。
+function renderBadge(usage: SessionUsage | null) {
   return render(
     <I18nProvider defaultLocale="zh">
-      <SessionUsageBadge {...props} />
+      <SessionUsageBadge usage={usage} />
     </I18nProvider>,
   );
 }
 
 describe('SessionUsageBadge', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('renders nothing without a session', () => {
-    const { container } = renderBadge({ sessionId: null });
+  it('usage 为 null 时不渲染', () => {
+    const { container } = renderBadge(null);
     expect(container.querySelector('[data-testid="session-usage-badge"]')).toBeNull();
   });
 
-  it('shows token and cost when usage exists', async () => {
-    mockFetch.mockResolvedValue(
+  it('有用量时显示 token 与成本', () => {
+    renderBadge(
       usageFixture({
         requests: 5,
         prompt_tokens: 900,
@@ -73,24 +64,58 @@ describe('SessionUsageBadge', () => {
         estimated_cost_usd: 0.0123,
       }),
     );
-    renderBadge({ sessionId: 's1' });
-    await waitFor(() => {
-      expect(screen.getByTestId('session-usage-badge')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('session-usage-badge')).toBeInTheDocument();
     expect(screen.getByText(/1.0k tok/)).toBeInTheDocument();
     expect(screen.getByText(/· \$0\.0123/)).toBeInTheDocument();
   });
 
-  it('hides badge when session has no usage', async () => {
-    mockFetch.mockResolvedValue(usageFixture({}));
-    const { container } = renderBadge({ sessionId: 's1' });
-    await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith('s1');
-    });
+  it('会话尚无请求（requests 为 0）时不渲染', () => {
+    const { container } = renderBadge(usageFixture({}));
     expect(container.querySelector('[data-testid="session-usage-badge"]')).toBeNull();
   });
 
-  it('exports session usage as Markdown and JSON and copies via buttons', async () => {
+  it('点击徽章展开明细弹层，Esc 收起', () => {
+    renderBadge(
+      usageFixture({
+        requests: 3,
+        prompt_tokens: 1200,
+        completion_tokens: 300,
+        total_tokens: 1500,
+        estimated_cost_usd: 0.025,
+        avg_latency_ms: 2500,
+        p95_latency_ms: 4000,
+        max_latency_ms: 7000,
+      }),
+    );
+    expect(screen.queryByTestId('session-usage-popover')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('session-usage-badge'));
+    const popover = screen.getByTestId('session-usage-popover');
+    expect(popover.textContent).toContain('会话用量');
+    expect(popover.textContent).toContain('1500');
+    expect(popover.textContent).toContain('$0.0250');
+    expect(popover.textContent).toContain('平均 2.5s');
+    expect(popover.textContent).toContain('P95 4.0s');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('session-usage-popover')).not.toBeInTheDocument();
+  });
+
+  it('缓存交互存在时才显示命中率徽章', () => {
+    const { container, rerender } = renderBadge(
+      usageFixture({ requests: 1, total_tokens: 100, cache_read_tokens: 60, cache_hit_rate: 0.6 }),
+    );
+    expect(screen.getByTestId('session-cache-hit-rate').textContent).toContain('60%');
+
+    rerender(
+      <I18nProvider defaultLocale="zh">
+        <SessionUsageBadge usage={usageFixture({ requests: 1, total_tokens: 100 })} />
+      </I18nProvider>,
+    );
+    expect(container.querySelector('[data-testid="session-cache-hit-rate"]')).toBeNull();
+  });
+
+  it('导出会话用量 Markdown 与 JSON', () => {
     expect(formatSessionUsageMarkdown(null)).toContain('_暂无会话用量_');
     const sample = usageFixture({
       requests: 3,
@@ -107,11 +132,5 @@ describe('SessionUsageBadge', () => {
     expect(md).toContain('1.5k');
     const parsed = JSON.parse(formatSessionUsageJson(sample));
     expect(parsed.usage.total_tokens).toBe(1500);
-
-    mockFetch.mockResolvedValue(sample);
-    renderBadge({ sessionId: 's1' });
-    await waitFor(() => {
-      expect(screen.getByTestId('session-usage-badge')).toBeInTheDocument();
-    });
   });
 });
