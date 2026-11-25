@@ -306,6 +306,54 @@ export interface ConsolidationAcceptResult {
   missing: string[];
 }
 
+/** M2: 技能质量评分 — GET /skills/{name}/score。 */
+export interface SkillScore {
+  name: string;
+  overall: number;
+  usage_freq: number;
+  success_rate: number;
+  user_satisfaction: number;
+  freshness: number;
+  description_quality: number;
+  tier: 'hot' | 'warm' | 'cold';
+}
+
+/** M2: 批量评分结果 — GET /skills/scores。 */
+export interface SkillScoresResult {
+  scores: SkillScore[];
+}
+
+/** M3: 渐进式技能上下文 — GET /skills/context。 */
+export interface SkillContextResult {
+  initial_context: string;
+  hot_count: number;
+  warm_count: number;
+  cold_count: number;
+  estimated_tokens: number;
+}
+
+/** M3: 技能搜索结果 — POST /skills/search。 */
+export interface SkillSearchResult {
+  query: string;
+  results: Array<{ name: string; description: string }>;
+}
+
+/** M4: 进化建议 — POST /skills/evolution/check。 */
+export interface EvolutionProposal {
+  skill_name: string;
+  trigger: 'low_success_rate' | 'low_satisfaction' | 'high_token_cost' | 'frequent_merge';
+  evolution_type: 'revise_description' | 'revise_content' | 'merge' | 'archive';
+  reason: string;
+  stats: Record<string, unknown>;
+  created_at: number;
+}
+
+/** M4: 进化检查结果 — POST /skills/evolution/check。 */
+export interface EvolutionCheckResult {
+  proposals: EvolutionProposal[];
+  checked: number;
+}
+
 /**
  * P2-2 技能审计台账条目 — GET /skills/{name}/audit。
  *
