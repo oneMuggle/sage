@@ -11,10 +11,12 @@
     after_content, reason, created_at
 """
 
+import logging
 import time
 import uuid
 from types import SimpleNamespace
 
+import backend.scheduler.evolution as evolution_module
 from backend.memory.semantic import SemanticMemory
 from backend.scheduler.evolution import (
     DailySummaryTask,
@@ -303,6 +305,49 @@ class TestMemoryPruningLog:
         # 组长不出现在 quality_merge 日志里
         assert leader_id not in {log["memory_id"] for log in quality_logs}
         assert deleted == 2
+        # 与其它失效路径同口径：副本既置 is_valid=0 也写 invalid_at
+        for mid in ids:
+            if mid == leader_id:
+                assert _fetch_episodic(db, mid)["invalid_at"] is None
+            else:
+                assert _fetch_episodic(db, mid)["invalid_at"] is not None
+
+
+class TestPruneScanWindow:
+    """近重复分组窗口必须随 max_memories 放大，且超窗时告警。"""
+
+    def test_scan_limit_scales_with_max_memories(self, setup_test_db):
+        db = setup_test_db
+        floor = evolution_module._PRUNE_SCAN_MIN_ROWS
+        # 默认 max_memories=1000 → 窗口取 floor（2000），留两倍余量
+        assert MemoryPruningTask(db=db)._scan_limit() == floor
+        # max_memories 放大后窗口至少是其两倍，保证保留的记忆都在窗口内
+        big = MemoryPruningTask(db=db, config={"max_memories": floor})
+        assert big._scan_limit() >= 2 * floor
+
+    def test_load_prunable_rows_warns_when_exceeding_window(
+        self, setup_test_db, monkeypatch, caplog
+    ):
+        db = setup_test_db
+        # 窗口 = max(下限, 2*max_memories) → 3；插入 5 条，只应取最新 3 条
+        monkeypatch.setattr(evolution_module, "_PRUNE_SCAN_MIN_ROWS", 3)
+        task = MemoryPruningTask(db=db, config={"max_memories": 1})
+        base = _now_ms() - 10 * MS_PER_DAY
+        ids = [
+            _insert_episodic(db, content=f"窗口测试记忆{i}", created_at=base + i * 1000)
+            for i in range(5)
+        ]
+
+        with caplog.at_level(logging.WARNING):
+            rows = task._load_prunable_rows()
+
+        assert len(rows) == 3
+        # 最新在前：created_at 最大的三条
+        assert [r["id"] for r in rows] == [ids[4], ids[3], ids[2]]
+        assert any(
+            r.levelno == logging.WARNING and "扫描窗口" in r.getMessage()
+            for r in caplog.records
+        )
 
 class TestEvolutionLogBestEffort:
     """日志写入失败只 warning，不能让进化任务失败"""
