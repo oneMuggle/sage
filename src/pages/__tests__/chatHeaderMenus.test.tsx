@@ -6,6 +6,9 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../../widgets/chat/PermissionModeSwitch', () => ({
   PermissionModeSwitch: () => <div data-testid="permission-mode-stub" />,
 }));
+// 2026-11-25 (composer 状态条下沉): ContextMeter 已移出齿轮浮层。
+// 保留 stub 作为回归护栏 —— 若有人把 ContextMeter 重新引入浮层，下面的
+// 「不存在」断言会立刻失败。
 vi.mock('../../widgets/chat/ContextMeter', () => ({
   ContextMeter: () => <div data-testid="context-meter-stub" />,
 }));
@@ -79,13 +82,15 @@ describe('SessionSessionMenu — + 图标下拉菜单', () => {
 });
 
 describe('SessionSettingsMenu — 齿轮浮层', () => {
-  it('默认收起，点齿轮展开权限模式 + 上下文用量', () => {
+  it('默认收起，点齿轮只展开权限模式（上下文用量已下沉到 composer 状态条）', () => {
     render(<SessionSettingsMenu sessionId="sess-1" />);
     expect(screen.queryByTestId('session-settings-menu-dropdown')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('session-settings-menu-toggle'));
+    const dropdown = screen.getByTestId('session-settings-menu-dropdown');
     expect(screen.getByTestId('permission-mode-stub')).toBeInTheDocument();
-    expect(screen.getByTestId('context-meter-stub')).toBeInTheDocument();
+    expect(screen.queryByTestId('context-meter-stub')).not.toBeInTheDocument();
+    expect(dropdown.textContent).not.toContain('上下文用量');
   });
 
   it('Esc 收起浮层', () => {
