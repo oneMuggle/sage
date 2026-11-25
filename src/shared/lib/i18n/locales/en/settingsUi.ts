@@ -726,4 +726,7 @@ export const enSettingsUi = {
   'settings.mineru.enabled': 'Enabled',
   'settings.mineru.chat_attachment': 'Upgrade chat attachments in background',
   'settings.mineru.save': 'Save',
+  'settings.external_service.reachable': 'Server reachable (auth mode: {mode})',
+  'settings.external_service.unreachable': 'Server unreachable ({reason})',
+  'settings.external_service.save': 'Save',
 } as const;
