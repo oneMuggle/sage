@@ -3,11 +3,13 @@
 // UI 优化 2026-10-14: 收纳 PermissionModeSwitch + ContextMeter 到一个齿轮浮层。
 // 触发按钮为 Settings 图标（lucide-react），点击弹出浮层展示两个会话级设置。
 // 避免常态显示两个独立控件占用顶栏空间。
+//
+// 2026-11-25 (composer 状态条下沉): 上下文用量（ContextMeter）移入输入框下方
+// 的 ComposerStatusBar，本浮层只保留权限模式。
 
 import { Settings } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { ContextMeter } from '../../widgets/chat/ContextMeter';
 import { PermissionModeSwitch } from '../../widgets/chat/PermissionModeSwitch';
 
 interface SessionSettingsMenuProps {
@@ -57,11 +59,6 @@ export function SessionSettingsMenu({ sessionId }: SessionSettingsMenuProps) {
           <div>
             <div className="text-ui-2xs text-muted mb-1">权限模式</div>
             <PermissionModeSwitch sessionId={sessionId} placement="bottom" />
-          </div>
-          <div className="border-t border-border" aria-hidden />
-          <div>
-            <div className="text-ui-2xs text-muted mb-1">上下文用量</div>
-            <ContextMeter sessionId={sessionId} placement="bottom" />
           </div>
         </div>
       )}

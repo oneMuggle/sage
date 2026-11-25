@@ -540,6 +540,9 @@ export function useChat() {
         apiKey: sendEndpoint.apiKey,
         apiUrl: sendEndpoint.baseUrl,
         model: chatModelId || undefined,
+        // Task 5: 实际生效端点 id —— 用于后端上下文窗口解析与用量/端点归因，
+        // 会话级模型覆盖时尤其关键（否则会误用全局端点的窗口/账本）。
+        endpointId: sendEndpoint.id,
         // Task 7 (2026-10-28): 自动路由的任务类型。手动模式下不发送，
         // 保持既有 invoke body 逐字节不变。
         taskType: settings.routing?.mode === 'auto' ? getRoutingTaskType() : undefined,

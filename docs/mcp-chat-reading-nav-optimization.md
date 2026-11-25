@@ -4,7 +4,7 @@
 > 工作分支: `feat/chat-nav-quote-main`（worktree `.worktrees/feat-chat-nav-quote-main`）
 > 范围: 聊天主链路的「长会话阅读 → 定位 → 引用追问」体验（纯前端，零新依赖）。
 > 对齐: main 落地 → cherry-pick `release/win7`（见 §5）。
-> 前置阅读: `docs/plans/parity-loop-sop.md`（双分支交付 SOP）、
+> 前置阅读: `docs/technical/170-parity-loop-sop.md`（双分支交付 SOP）、
 > `docs/technical/47-git-worktree-workflow.md`、`.claude/CLAUDE.md`（双分支约束）。
 
 ---

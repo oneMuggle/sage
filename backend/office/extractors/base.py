@@ -40,6 +40,10 @@ class StructuredDocument(BaseModel):
     markdown: str
     blocks: List[ExtractedBlock] = Field(default_factory=list)
     warnings: List[Dict[str, str]] = Field(default_factory=list)
+    # M6b: 表格形状诊断（各后端可选填充）。键位见
+    # ``backend.office.extractors.tables.assess_table_complexity``。
+    # 空 dict 表示"没有表格"或"后端未提供诊断"，两种情况都不算复杂。
+    table_diagnostics: Dict[str, Any] = Field(default_factory=dict)
 
 
 @runtime_checkable

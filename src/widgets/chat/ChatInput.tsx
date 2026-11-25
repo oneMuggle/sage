@@ -1,5 +1,5 @@
 import { AlertTriangle, Info } from 'lucide-react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -31,6 +31,7 @@ import { useI18n } from '../../shared/lib/i18n';
 import { resolveVisionSupport } from '../../shared/lib/visionCapability';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
+import { ComposerStatusBar } from './ComposerStatusBar';
 import { ImageOcrPreview } from './ImageOcrPreview';
 import { InputCard, type InputCardProps, type KnowledgeDocType } from './InputCard';
 import { PdfOcrPreview, type PdfOcrTarget } from './PdfOcrPreview';
@@ -112,6 +113,13 @@ interface ChatInputProps extends Pick<InputCardProps, 'composerControls'> {
   /** UI-P0-1: 顶栏已渲染编排模式与新话题时，底部输入框不再重复渲染 */
   hideOrchModeBar?: boolean;
   hideNewTopic?: boolean;
+  /**
+   * 2026-11-25 (composer 状态条下沉): 当前会话是否还没有任何消息。
+   * - true（默认）→ 页脚显示引导语 hint「Sage 会记住你的项目信息…」
+   * - false        → 页脚改为会话状态条（用量 / 响应速度 / 上下文占用）
+   * 默认 true 保证未传此 prop 的既有调用方行为不变。
+   */
+  isEmptySession?: boolean;
 }
 
 function ChatInputInner({
@@ -132,6 +140,7 @@ function ChatInputInner({
   onOrchestrationModeChange,
   hideOrchModeBar = false,
   hideNewTopic = false,
+  isEmptySession = true,
 }: ChatInputProps) {
   const { t } = useI18n();
   const { settings } = useSettings();
@@ -168,6 +177,14 @@ function ChatInputInner({
   // sessionId is used by the AtFileMenu itself (via useOptionalWorkspaceContext);
   // expose on the closure so future tests can assert on it.
   const effectiveSessionId = workspaceContext?.sessionId ?? null;
+
+  // 2026-11-25 (composer 状态条下沉): 页脚状态条只在非空会话出现。
+  // useMemo 稳定元素引用 —— InputCard 是 memo 组件，流式期间 Chat 每 token
+  // 重渲染，内联 JSX 会击穿 memo 让整张输入卡跟着重渲染。
+  const statusSlot = useMemo(
+    () => (isEmptySession ? undefined : <ComposerStatusBar sessionId={effectiveSessionId} />),
+    [isEmptySession, effectiveSessionId],
+  );
 
   // 会话级模型覆盖可能把对话模型切到多模态/不同端点的模型；视觉能力
   // 判定必须跟随实际生效模型，否则会按全局模型误报「不支持视觉」。
@@ -965,7 +982,8 @@ function ChatInputInner({
             </div>
           )
         }
-        hint={t('chat.hint')}
+        hint={isEmptySession ? t('chat.hint') : undefined}
+        statusSlot={statusSlot}
         composerControls={composerControls}
       />
       {fillTarget != null && (

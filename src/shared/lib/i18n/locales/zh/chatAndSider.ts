@@ -159,6 +159,11 @@ export const zhChatAndSider = {
   'chat.welcome_sub': '开始一段新对话吧',
   'chat.hint':
     'Sage 会记住你的项目信息，无需重复说明上下文 · 支持 Markdown 语法 · 输入 / 呼出命令，@ 引用工作区文件',
+  // 2026-11-25 (composer 状态条下沉): 输入框下方状态条与明细弹层的文案
+  'chat.status.usage': '会话用量',
+  'chat.status.cacheHit': '缓存命中率',
+  'chat.status.latency': '响应速度',
+  'chat.status.context': '上下文占用',
   'chat.rag_citations_toggle': '附件检索溯源',
   'chat.rag_citations_count': '{n} 个片段命中注入',
   'chat.rag_citation_source': '来源',

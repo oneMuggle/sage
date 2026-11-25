@@ -362,6 +362,83 @@
 **LRU 回收**：`BrowserSessionManager.require()` 每次被工具调用时调用 `session.touch()` 更新
 `last_used_at`；`register()` 在超限时按 `last_used_at` 升序选择最久未用者关闭。跳过保留池槽位。
 
+## 知网 KNS 5.5 真机验收清单
+
+老版知网 KNS 5.5 / 内网镜像把检索结果放在 `<iframe id="iframeResult">` 或 `frameset/<frame>`
+内，必须靠 CDP 全帧巡检才能读到。下面 5 项是这条能力的验收判定标准，「自动化覆盖」指仓库内
+测试，「真机」指在真实知网站点 / 内网镜像上的手工确认。
+
+| # | 判定标准 | 自动化覆盖 | 真机状态 |
+|---|---|---|---|
+| 1 | 同源 `#iframeResult`：`browser_snapshot` 返回结果链接，元素带 `frame_url` | 集成测试的父页面同时挂同源 `#iframeResult` 与跨域 iframe，断言快照能读到结果元素；未对同源 frame 单独断言 | 未验证 |
+| 2 | 跨域子 frame fixture：快照返回结果文本与 ref | 集成测试用跨端口 iframe 覆盖，走真实 CDP 隔离世界（非 stub） | 未验证 |
+| 3 | frameset fixture：快照能读取 `<frame>` 内结果 | 集成测试覆盖，断言各 frame `state=scanned` | 未验证 |
+| 4 | 子 frame ref 点击进入详情；`#Page_next` 翻页后重新快照正常 | 只覆盖「跨域 frame 内按 ref 点击后详情页文本可被后续快照读到」；`#Page_next` 翻页后重拍未断言 | 未验证 |
+| 5 | 子 frame 域名被 block 时 snapshot 不读内容、interact 被拒 | 单测覆盖（`test_snapshot_skips_blocked_child_frame`、`test_interact_frame_ref_respects_blocked_frame`） | 未验证 |
+
+说明：
+
+- 集成测试文件为 `backend/tests/integration/test_browser_cross_frame_real.py`，只访问
+  `127.0.0.1` 上的本地 fixture（同源 iframe / 跨端口 iframe / frameset / 详情页），需要本机
+  装有 Chrome/Edge；没有浏览器时整体 skip。它不是知网线上的 E2E。
+- 5 项真机验收均待执行（计划清单未勾选）。手工步骤可复用 `cnki-research` 技能的
+  「旧版 KNS 5.5 / 内网镜像」小节：打开旧版结果页 → `browser_snapshot` 确认结果元素带
+  `frame_url` → 用 ref 点 `#Page_next` / 详情 → 重新 `browser_snapshot`；再把结果 frame 域名
+  block，确认快照不读其内容且 interact 返回 `site_blocked`。
+
+## 设置页浏览器列表的鉴权与加载失败处理
+
+设置页「网络 → 浏览器」区块（`src/pages/settings/BrowserSettingsSection.tsx`，由
+`src/pages/settings/NetworkTab.tsx` 挂载）负责列出可用浏览器并保存用户选择。它同时涉及
+鉴权和「加载失败」两类用户可见行为，实现契约如下。
+
+### 鉴权：必须走主进程中继
+
+- 列表与保存分别调用 `GET /api/v1/diagnostic/browser/list` 与
+  `PUT /api/v1/diagnostic/browser/path`。路由定义在 `backend/api/diagnostic_routes.py`
+  （router 前缀 `/diagnostic`，再以 `/api/v1` 挂载）。这些路径不在 `_PUBLIC_PATHS` 内，
+  受 `LocalAuthMiddleware`（`backend/api/local_auth.py`）保护：渲染层直接 `fetch` 且不带
+  授权头会得到 **401**，响应体为 `{"detail": "本地授权凭据无效或缺失"}`。
+- 前端客户端 `src/shared/api/browserSettingsClient.ts` 因此统一走 `requestJson`
+  （`src/shared/api/webAccessClient.ts`）：Electron 下经 `window.electronAPI.backendRequest`
+  → IPC `sage:backend-request`，由主进程解析真实后端端口并注入
+  `X-Sage-Local-Authorization: Bearer <本地 capability>`；浏览器 dev 走 Vite 代理；
+  网页模式用同源请求，token 从 `localStorage['sage_auth_token']` 读取（启动链接的
+  `?token=` 由 `index.html` 引导写入）后以 `Authorization: Bearer` 携带。新接入
+  `/api/v1/*` 的设置页客户端必须复用该函数，不要直接 `fetch`。
+- `PUT /browser/path` 接受空字符串（清除选择、回到自动发现）和 `(embedded)` 哨兵
+  （后端常量 `EMBEDDED_EXECUTABLE`，即「Sage 内置浏览器」选项）；非空且不是哨兵时必须指向
+  已存在的文件，否则返回 `{"success": false, "error": "文件不存在: <path>"}`。
+
+### 加载失败 ≠ 未发现浏览器
+
+组件把两种状态分开渲染：
+
+| 状态 | 触发条件 | 界面 |
+|---|---|---|
+| 加载失败 | `fetchBrowserList()` / `fetchBrowserConfig()` 任一 reject（两者并行加载） | 错误块（`data-testid="browser-load-error"`）：文案 `settings.network.browser.load_failed`「浏览器列表加载失败，请重试。」+ 具体错误详情 +「重试」按钮（`data-testid="browser-retry"`）；同时 toast 同一文案 |
+| 未发现 | 请求成功但 `browsers.length === 0` 且 `!embeddedAvailable` | 空态文案 `settings.network.browser.none_found`「未发现可用浏览器。请安装 Chrome/Edge 或使用 SAGE_BROWSER_PATH 环境变量指定路径。」 |
+| 正常 | 其余 | 浏览器列表（名称 + 大版本 + 路径）；桌面端具备内置浏览器能力时，在列表末尾追加「Sage 内置浏览器」选项 |
+
+加载期间显示「正在扫描可用浏览器…」。关键点：**后端请求失败时不再退化成
+「未发现可用浏览器」**——空态只在后端明确返回空列表、且没有内置浏览器可用时才出现，
+避免用户把鉴权 / 网络故障误判成「没装浏览器」。
+
+### 浏览器选择优先级
+
+后端 `discover_browser_executable()`（`backend/tools/browser_cdp.py`）的查找顺序，
+`launch_browser()` 的启动分支与之保持一致：
+
+1. 环境变量 `SAGE_BROWSER_PATH`（其次 `SAGE_FIREFOX_PATH`），且路径须存在——运维 / CI / 排障用；
+2. 设置键 `browser_path`（本页保存的路径；`(embedded)` 哨兵表示内置浏览器）；
+3. Sage 内置浏览器（仅桌面端注入 `SAGE_EMBEDDED_BROWSER=1` + 端口 + 令牌时可用）；
+4. 平台扫描：Windows 依次查 `Program Files` / `Program Files (x86)` / `LocalAppData`，再查 PATH；
+   POSIX 查 PATH 中的 Chromium 系，最后回退 Firefox。
+
+因此用户在本页显式选中的真实浏览器**优先于**内置浏览器；`SAGE_EMBEDDED_BROWSER` 只作为
+「未选择或显式选择内置」时的兜底，不会覆盖用户配置的路径。`browser_path` 指向的文件若已
+不存在，`_get_user_browser_path()` 的 `is_file()` 校验会忽略它并回落到下一级。
+
 ## 已知限制
 
 | 限制 | 现状 / 影响 |
@@ -391,4 +468,5 @@
 | Agent | `backend/agents/profiles.py`、`backend/domain/tool_names.py`、`backend/core/legacy/agent.py`（视觉兜底） |
 | 桌面 | `electron/agentBrowserBridge.ts`、`electron/main.ts` |
 | 前端 | `src/features/browser/BrowserPanel.tsx`、`src/features/right-panel/rightPanelStore.ts`、`src/pages/settings/BrowserUseSection.tsx`、`src/shared/api/browserControlClient.ts`、`src/shared/lib/i18n/locales/zh/chatAndSider.ts` |
-| 测试 | `backend/tests/unit/test_browser_tool.py`、`test_browser_observe.py`、`test_browser_control.py`、`test_browser_safety.py`、`test_browser_action_repo.py`、`backend/tests/api/test_browser_use_routes.py`、`electron/__tests__/agentBrowserBridge.test.ts`、`src/features/browser/__tests__/BrowserPanel.test.tsx`、`src/pages/settings/__tests__/BrowserUseSection.test.tsx` |
+| 设置页浏览器选择 | `src/pages/settings/BrowserSettingsSection.tsx`、`src/pages/settings/NetworkTab.tsx`、`src/shared/api/browserSettingsClient.ts`、`src/shared/api/webAccessClient.ts`、`backend/api/diagnostic_routes.py`、`backend/api/local_auth.py` |
+| 测试 | `backend/tests/unit/test_browser_tool.py`、`test_browser_observe.py`、`test_browser_control.py`、`test_browser_safety.py`、`test_browser_action_repo.py`、`test_browser_frames.py`、`backend/tests/integration/test_browser_cross_frame_real.py`、`backend/tests/api/test_browser_use_routes.py`、`electron/__tests__/agentBrowserBridge.test.ts`、`src/features/browser/__tests__/BrowserPanel.test.tsx`、`src/pages/settings/__tests__/BrowserUseSection.test.tsx` |

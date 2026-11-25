@@ -810,6 +810,7 @@ export function Chat() {
             onOrchestrationModeChange={setOrchMode}
             hideOrchModeBar
             hideNewTopic
+            isEmptySession={messages.length === 0}
           />
           {/* Phase 3 (2026-09-25): 底部终端面板（VS Code 风格），Ctrl+` 切换 */}
           <TerminalPanel />

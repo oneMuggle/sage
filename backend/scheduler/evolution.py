@@ -41,9 +41,14 @@ _EVOLUTION_TASK_TIMEOUT_S = float(
     os.environ.get("SAGE_EVOLUTION_TASK_TIMEOUT_S", "1800")
 )
 
-#: 质量合并的扫描上限 —— 库更大时只扫最新的这么多条。
-#: 独特性是两两比较，扫描量按平方增长，宁可少扫也不让夜间任务跑超时。
-_PRUNE_SCAN_MAX_ROWS = 2000
+#: 近重复分组单次评估的条数下限 —— 实际上限取
+#: ``max(此值, 2 * max_memories)``。
+#:
+#: 分组是 O(n²)，扫描量按平方增长；下限保证常规库（max_memories 默认
+#: 1000）留出两倍余量，让修剪保留的记忆一定落在分组窗口内、认得自己的
+#: 组长。窗口一旦装不下全部有效行，``_load_prunable_rows`` 会记录告警 ——
+#: 此时窗口外的最优副本可能失去组长保护。
+_PRUNE_SCAN_MIN_ROWS = 2000
 
 #: 单次质量合并最多删除多少条 —— 宁可分多次跑，也不一次清空。
 _PRUNE_QUALITY_DELETE_MAX = 100
@@ -362,13 +367,15 @@ class MemoryPruningTask(BaseEvolutionTask):
     功能:
     1. 删除 expires_at < now 的记忆
     2. 删除 importance<=1 且 30天未访问的记忆
-    3. 超过上限(1000条)时删除最旧最不重要的
-    4. 质量合并 —— 删除"低质 + 陈旧 + 存在更优副本"的冗余记忆
+    3. 删除低价值孤儿记忆（importance<=3 且长期未访问）
+    4. 超过上限(默认1000条)时删除最旧最不重要的
+    5. 质量合并 —— 删除"低质 + 陈旧 + 存在更优副本"的冗余记忆
 
-    **近重复保护**：第 2/3/4 条只看 importance / access_count / created_at，
-    三份内容完全一样的记忆会被三条规则一视同仁地删光 —— 知识随之消失。
+    **近重复保护**：第 2-5 条只看 importance / access_count / created_at，
+    几份内容完全一样的记忆会被这些规则一视同仁地删光 —— 知识随之消失。
     因此先做一次近重复分组（字符二元组 Jaccard），每组挑出最优的一条当
-    "组长"，组长不被任何规则删除，冗余副本才允许被清理。
+    "组长"，组长不被任何规则删除，冗余副本才允许被清理。分组只覆盖
+    ``_load_prunable_rows`` 的扫描窗口，故窗口需容纳全部有效行。
     """
 
     def __init__(self, db=None, memory_manager=None, config: dict = None):
@@ -380,21 +387,49 @@ class MemoryPruningTask(BaseEvolutionTask):
     # 近重复分组
     # ------------------------------------------------------------------ #
 
+    def _scan_limit(self) -> int:
+        """近重复分组单次能评估多少条。
+
+        下限 ``_PRUNE_SCAN_MIN_ROWS``，并随 ``max_memories`` 放大到它的两倍：
+        修剪后保留的记忆一定在窗口内，否则最新的一批副本可能落在窗口外、
+        认不出自己的组长而被连坐删除。分组是 O(n²)，两倍余量足够常规库，
+        真超了由 :meth:`_load_prunable_rows` 告警。
+        """
+        return max(_PRUNE_SCAN_MIN_ROWS, 2 * int(self.max_memories))
+
     def _load_prunable_rows(self) -> List[Dict]:
-        """载入待评估的情景记忆行（有效 + 非 environment 标签）。"""
+        """载入待评估的情景记忆行（有效 + 非 environment 标签）。
+
+        扫描窗口见 :meth:`_scan_limit`。有效行超过窗口时只取最新的若干条
+        并记录告警 —— 窗口外的最优副本将失去组长保护。
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT id, content, importance, access_count, created_at, accessed_at
-            FROM memories_episodic
+        base_where = """
             WHERE is_valid = 1
               AND invalid_at IS NULL
               AND COALESCE(tags, '') NOT LIKE '%environment%'
+        """
+        limit = self._scan_limit()
+        cursor.execute(f"SELECT COUNT(*) FROM memories_episodic {base_where}")
+        total = cursor.fetchone()[0] or 0
+        if total > limit:
+            logger.warning(
+                "有效情景记忆 %d 条超过近重复分组扫描窗口 %d，本次只评估最新的 "
+                "%d 条；窗口外的最优副本可能失去组长保护",
+                total,
+                limit,
+                limit,
+            )
+        cursor.execute(
+            f"""
+            SELECT id, content, importance, access_count, created_at, accessed_at, tags
+            FROM memories_episodic
+            {base_where}
             ORDER BY created_at DESC
             LIMIT ?
             """,
-            [_PRUNE_SCAN_MAX_ROWS],
+            [limit],
         )
         return [dict(row) for row in cursor.fetchall()]
 
@@ -412,18 +447,22 @@ class MemoryPruningTask(BaseEvolutionTask):
     # 质量合并
     # ------------------------------------------------------------------ #
 
-    def _prune_low_quality(self, rows: List[Dict], leaders: Dict[str, str]) -> int:
+    def _prune_low_quality(
+        self, rows: List[Dict], leaders: Dict[str, str], now_ts: int
+    ) -> int:
         """删除"低质 + 陈旧 + 有更优副本"的冗余记忆。
 
         判定用 :class:`MemoryQualityScorer`（质量分 < 阈值且长期未访问），
         再叠加近重复约束：**只删副本，从不删组长** —— 一组近重复里最优的
         那条永远留着，所以知识不会因为合并而丢失。
 
-        软删除（is_valid=0）+ 清向量，可恢复、可审计。
+        软删除（``invalid_at`` + ``is_valid=0``，与其它失效路径同口径）+ 清
+        向量，可恢复、可审计。
 
         Args:
             rows: 待评估的情景记忆行
             leaders: 记忆 id → 所在近重复组的组长 id
+            now_ts: 失效时间（毫秒），由调用方统一取，保证同批一致
 
         Returns:
             实际删除条数
@@ -458,10 +497,10 @@ class MemoryPruningTask(BaseEvolutionTask):
             cursor.execute(
                 """
                 UPDATE memories_episodic
-                SET is_valid = 0
-                WHERE id = ? AND is_valid = 1
+                SET invalid_at = ?, is_valid = 0
+                WHERE id = ? AND is_valid = 1 AND invalid_at IS NULL
                 """,
-                (memory_id,),
+                (now_ts, memory_id),
             )
             if cursor.rowcount <= 0:
                 # 已被前面的规则硬删除
@@ -640,7 +679,7 @@ class MemoryPruningTask(BaseEvolutionTask):
 
         # 6. 质量合并 —— 删掉"低质 + 陈旧 + 有更优副本"的冗余记忆。
         #    放在最后：前面的规则已经清掉的行不必再评一次分。
-        quality_deleted = self._prune_low_quality(prunable_rows, leaders)
+        quality_deleted = self._prune_low_quality(prunable_rows, leaders, now_ts)
         total_deleted += quality_deleted
 
         # D1 (P6): 向量库补偿式对账 —— 上面的批量 DELETE 只写主表,
