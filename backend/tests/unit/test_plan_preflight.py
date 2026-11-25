@@ -311,7 +311,7 @@ async def test_scout_facts_injected_and_truncated(monkeypatch):
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
 
-    async def fake_scout_agent(client, goal, max_iterations):
+    async def fake_scout_agent(client, goal, max_iterations, emit=None):
         assert "工作区调研任务" in goal  # 侦察目标含用户 message
         return "f" * (plan_preflight.SCOUT_FACTS_MAX_CHARS + 100)
 
@@ -349,7 +349,7 @@ async def test_scout_timeout_degrades(monkeypatch):
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
 
-    async def slow_scout(client, goal, max_iterations):
+    async def slow_scout(client, goal, max_iterations, emit=None):
         await asyncio.sleep(5)
         return "too late"
 
@@ -367,7 +367,7 @@ async def test_scout_failure_degrades(monkeypatch):
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
 
-    async def broken_scout(client, goal, max_iterations):
+    async def broken_scout(client, goal, max_iterations, emit=None):
         raise RuntimeError("scout crashed")
 
     monkeypatch.setattr(plan_preflight, "_run_scout_agent", broken_scout)
@@ -551,7 +551,7 @@ async def test_complex_empty_scout_deep_falls_back_to_scout_lite(monkeypatch):
     monkeypatch.setattr(scout_deep, "research", _empty_research)
     scout_calls = {"n": 0}
 
-    async def _fake_scout_agent(_client, _goal, max_iterations=4):
+    async def _fake_scout_agent(_client, _goal, max_iterations=4, emit=None):
         scout_calls["n"] += 1
         return "1. 工作区含 backend/auth 目录"
 

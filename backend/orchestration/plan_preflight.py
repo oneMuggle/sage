@@ -33,10 +33,16 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from backend.orchestration.orch_settings import load_orch_settings
 from backend.orchestration.plan_progress import (
+    KIND_MESSAGE,
+    KIND_THINKING,
+    KIND_TOOL_CALL,
+    KIND_TOOL_RESULT,
     PLAN_STAGE_CLARIFY,
     PLAN_STAGE_COMPLEXITY_CLASSIFY,
     PLAN_STAGE_SCOUT,
     PLAN_STAGE_SCOUT_DEEP,
+    STATUS_PROGRESS,
+    emit_plan_progress,
     emit_planning_skipped,
     run_planning_stage,
 )
@@ -298,6 +304,13 @@ async def run_plan_preflight(
                                 topic=message,
                                 project_path=_resolve_preflight_workspace(session_id),
                                 settings=settings,
+                                progress=lambda payload: emit_plan_progress(
+                                    emit,
+                                    stage=PLAN_STAGE_SCOUT_DEEP,
+                                    status=STATUS_PROGRESS,
+                                    kind=KIND_MESSAGE,
+                                    text=str(payload.get("text", "")),
+                                ),
                             ),
                             timeout=scout_deep.SCOUT_DEEP_TIMEOUT_S,
                         ),
@@ -464,6 +477,34 @@ def _parse_clarify_response(raw: Any) -> List[Dict[str, Any]]:
     return valid
 
 
+def _tool_name(tool_call: Any) -> str:
+    if isinstance(tool_call, dict):
+        name = tool_call.get("name")
+        return str(name) if name else ""
+    return str(getattr(tool_call, "name", "") or "")
+
+
+def _scout_event_to_progress(event: Any) -> Optional[Dict[str, str]]:
+    """把侦察子代理事件映射为一条 plan_progress 载荷；无需展示返回 None。"""
+    state = getattr(event, "state", None)
+    state_value = getattr(state, "value", state)
+    if state_value == "thinking":
+        text = (
+            getattr(event, "reasoning", "") or getattr(event, "content", "") or ""
+        ).strip()
+        if text:
+            return {"kind": KIND_THINKING, "text": text[:500]}
+        return None
+    if state_value == "acting":
+        name = _tool_name(getattr(event, "tool_call", None))
+        if name:
+            return {"kind": KIND_TOOL_CALL, "text": name}
+        return None
+    if state_value == "observing" and getattr(event, "tool_result", None):
+        return {"kind": KIND_TOOL_RESULT, "text": "工具返回结果"}
+    return None
+
+
 async def _scout(
     client: Any,
     message: str,
@@ -481,7 +522,7 @@ async def _scout(
 
     try:
         facts = await asyncio.wait_for(
-            _run_scout_agent(client, goal, max_iterations), timeout=_scout_timeout_s()
+            _run_scout_agent(client, goal, max_iterations, emit=emit), timeout=_scout_timeout_s()
         )
     except TIMEOUT_ERRORS:
         logger.warning(
@@ -495,7 +536,10 @@ async def _scout(
 
 
 async def _run_scout_agent(
-    client: Any, goal: str, max_iterations: int = SCOUT_MAX_ITERATIONS
+    client: Any,
+    goal: str,
+    max_iterations: int = SCOUT_MAX_ITERATIONS,
+    emit: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
 ) -> str:
     """驱动只读侦察子代理到完成，返回最终答案文本。
 
@@ -537,6 +581,15 @@ async def _run_scout_agent(
         async for event in subagent.run_loop(messages, max_iterations=max_iterations):
             state = getattr(event, "state", None)
             state_value = getattr(state, "value", state)
+            mapped = _scout_event_to_progress(event)
+            if mapped is not None:
+                await emit_plan_progress(
+                    emit,
+                    stage=PLAN_STAGE_SCOUT,
+                    status=STATUS_PROGRESS,
+                    kind=mapped["kind"],
+                    text=mapped["text"],
+                )
             if state_value == "done":
                 answer = event.content or ""
                 break

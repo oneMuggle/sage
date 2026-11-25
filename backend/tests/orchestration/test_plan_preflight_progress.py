@@ -102,3 +102,24 @@ def test_medium_task_wraps_scout(monkeypatch):
         and e["plan_progress"]["status"] == "done"
     ]
     assert scout_done, events
+
+
+def test_scout_event_to_progress_maps_thinking_and_tool():
+    from backend.orchestration.plan_preflight import _scout_event_to_progress
+
+    class _Event:
+        def __init__(self, state, **kwargs):
+            self.state = state
+            self.__dict__.update(kwargs)
+
+    assert _scout_event_to_progress(_Event("thinking", reasoning="分析中")) == {
+        "kind": "thinking",
+        "text": "分析中",
+    }
+    assert _scout_event_to_progress(
+        _Event("acting", tool_call={"name": "read_file"})
+    ) == {"kind": "tool_call", "text": "read_file"}
+    assert _scout_event_to_progress(
+        _Event("observing", tool_result={"ok": True})
+    ) == {"kind": "tool_result", "text": "工具返回结果"}
+    assert _scout_event_to_progress(_Event("done", content="x")) is None
