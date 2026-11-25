@@ -36,6 +36,11 @@ class PdfReadResult(BaseModel):
     summary: OfficeDocumentSummary
     pages: List[PdfPageContent]
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    # M6b: 表格形状诊断 —— 只描述「表格长什么样」，不含单元格正文。
+    # 键位：table_count / null_cells / total_cells / max_rows / max_cols /
+    # truncated / failed_pages / borderless_candidate_pages（1-based 页码）。
+    # 调用方用它判断是否需要换更保真的后端重新解析。
+    table_diagnostics: Dict[str, Any] = Field(default_factory=dict)
 
 
 class PdfReadRequest(BaseModel):
