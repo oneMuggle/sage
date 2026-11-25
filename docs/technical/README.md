@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 技术文档总览。本目录包含核心章节（01-14 基础架构）与 15-162 横切专题，后者聚焦质量门禁、可观测性、架构约束等。当前专题编号为 15-162；本索引以目录中的实际文件为准。
+> Sage 技术文档总览。本目录包含核心章节（01-14 基础架构）与 15-170 横切专题，后者聚焦质量门禁、可观测性、架构约束等。当前专题编号为 15-170；本索引以目录中的实际文件为准。
 
 ---
 
@@ -106,7 +106,7 @@
 | 126 | [Playbook 文档导入与分享链接](./126-playbook-import-share.md) | Word/PDF/MD/PPTX → 解析 → LLM/确定性草案预览 → 确认绑定（`POST /playbooks/import/document` 只预览不写库）+ `playbook_shares` token 分享链路（只读 / 默认 7 天 / 过期 410）+ HashRouter 落地页 `/share/playbook/{token}` 导入或存库 + 术语去技术化（L1–L4 → 规则） |
 | 127 | [端点思考参数透传](./127-reasoning-params-passthrough.md) | per-endpoint `reasoningEffort`/`thinkingBudget` 九节点链路：表单 → 前后端双白名单 → useChat → relay snake 往返 → llm_client 上游请求体；值域语义（null/0/-1）+ 契约测试反漂移 |
 | 128 | [默认本地时区](./128-timezone-default-local.md) | 日志/趋势/调度/前端渲染统一本地时区，失败回退 Asia/Shanghai (+08:00)；`localtime` 解析链（`tzlocal` → `astimezone()` 偏移 → 固定 +08:00）+ naive/aware 防御 + APScheduler `timezone=` + `formatLocalTime` 封装 |
-| 129 | [工作区绑定跳过机制](./129-workspace-binding-skip.md) | 新会话页"不绑定项目"语义贯穿前后端：`skip_workspace_binding` API 字段 + 解析链跳过 + 主流应用对标 |
+| 129 | [默认工作区解析与项目绑定跳过](./129-workspace-binding-skip.md) | `~/Sage/` 默认工作区解析链（project→session→偏好→detected→默认）+ `skip_workspace_binding` 绑定默认目录语义 + fail-open + 工具根目录契约 |
 | 130 | [侧边栏 Git 面板上下文对齐](./130-sidebar-git-context.md) | 左栏 Git 面板与右栏变更 Tab 绑定同一目录（会话 workspace 优先，最近项目兜底）+ 非 git 空状态显示检查路径；`git status --porcelain=v1 -z -b` 共享解析器（`backend/tools/git_status_parser.py`）供 GitStatusTool 与 `GET /git/status` 共用 |
 | 131 | [聊天附件链路](./131-attachment-pipeline.md) | MediaStore sidecar 元数据 + 后缀回退表与上传 allowlist 同口径；R37 注入带 name/type + 逐附件 `ok/skipped/error` 状态双出口（`attachments_processed` 事件 + `client_meta.attachments_status` 落库）；`extract_attachment_text` 统一分发表覆盖 pdf/docx/xlsx/pptx（修复 xlsx 被当 UTF-8 解码的回归）；`useFileUpload` 预检状态机 + 气泡附件卡片 + 整页拖放共享 hook；上传错误三层透传（后端 4xx/5xx + `error_code` → 主进程抛真实文案 → 前端 reason），UTF-8→GBK→GB18030 解码回退，无点文件名白名单，校验前移零孤儿 |
 | 132 | [会话标题生成机制](./132-session-title-generation.md) | 标题 LLM 生成流程 / `title_attempts` 计数器 / 启动回补调度器 / 专用标题模型配置 |
@@ -141,6 +141,13 @@
 | 161 | [Word 样式模板](./161-word-style-template.md) | 样式画像（按级字体/精确行距/题注/表格文字）+ 命名预设（公文/论文/报告）+ 参考文档（reference.docx）+ 规则包→样式画像转换 + 已有文档批量套用样式 |
 | 162 | [MinerU 文档解析](./162-mineru-document-parse.md) | 可插拔解析引擎 / async API 客户端 / 质量路由 / 缓存 / 双阶段附件 |
 | 163 | [Office 结构化提取与 PDF 复杂表格兜底](./163-office-extract-pdf-tables.md) | 提取适配器分层（测量/策略/适配/编排）+ 表格形状诊断（`table_diagnostics`）+ 无边框探测（列数判别式，只探测不产正文）+ 复杂度原因码 + 结构化后端兜底路由（auto/off/force，失败保留原结果） |
+| 164 | [文献研究子系统](./164-literature-research-subsystem.md) | 声明式站点画像 / 交互检索 / 核验报告 / 导出 |
+| 165 | [智能体编排对标](./165-agent-orchestration-parity.md) | 子代理派发、过程落盘脱敏、失败重规划、统一运行目录、成本账本、复合主键 |
+| 166 | [待办 AI 原生](./166-todo-ai-native.md) | 待办的数据模型、工具、提醒、视图与全文检索 |
+| 167 | [压缩包只读预览](./167-archive-file-preview.md) | 压缩包目录 / 条目读取 + 预览 entry + 限额防穿越 |
+| 168 | [会话模型与端点路由](./168-session-model-endpoint-routing.md) | 模型与凭据成对路由：会话覆盖重解析端点，前后端双保险 |
+| 169 | [渲染器 CSP 与高保真预览](./169-renderer-csp.md) | 生产 CSP 指令表 + dataUrlToBlob 本地解码，修复高保真预览 |
+| 170 | [对标迭代 SOP](./170-parity-loop-sop.md) | 对标迭代闭环 SOP：步骤 / py38 兼容 / 验证矩阵 / 踩坑与红线 |
 ---
 
 ## 核心章节（基础架构）
@@ -169,7 +176,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 基础架构   | 本目录 01-14                                                |
-| 横切关注点 | 本目录 15-162                                               |
+| 横切关注点 | 本目录 15-170                                               |
 
 ---
 

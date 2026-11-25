@@ -366,3 +366,169 @@ function mapBackendItem(raw: ReviewItemRaw): ReviewItem {
 - **PDF 全文**：Zotero FTS 改为附件 itemID 优先，父条目 legacy fallback。
 - **剩余观察项**：真实 Zotero 库手工验证、Win7 实机 reparse/HNSW 验证。
 
+---
+
+## 9. LLM 任务路由与设置
+
+Wiki 的 LLM 交互层按**任务类型**路由到不同模型、按 provider 适配推理模式，并在生成时注入 `purpose.md` / `schema.md`；同时提供 `raw/sources/` 自动监听与 `wiki/log.md` 操作日志。项目级设置存储在 `.llm-wiki/settings.json`，通过 `GET/PUT /wiki/settings` 读写。
+
+### 9.1 数据模型与持久化
+
+**位置**：`backend/wiki/settings.py`（经 `backend/wiki/__init__.py` 导出）
+
+```python
+@dataclass
+class TaskRoutingConfig:
+    chat_model: Optional[str] = None       # None → 使用全局默认模型
+    ingest_model: Optional[str] = None
+    research_model: Optional[str] = None
+
+@dataclass
+class ReasoningConfig:
+    chat_mode: str = "auto"                # chat / research 共用
+    ingest_mode: str = "off"               # ingest 默认关闭，避免空内容
+
+@dataclass
+class WikiSettings:
+    task_routing: TaskRoutingConfig
+    reasoning: ReasoningConfig
+```
+
+- **存储路径**：`<project_root>/.llm-wiki/settings.json`，每个项目独立。
+- **写入**：`save_settings()` 先写 `settings.json.tmp`，再用 `Path.replace()` 原子替换。
+- **读取**：`load_settings()` 文件缺失、JSON 损坏或字段类型异常时一律回退到 `WikiSettings()` 默认值（记 warning，不抛错）；`from_dict` 忽略未知字段。
+
+### 9.2 任务路由判定
+
+**位置**：`backend/wiki/settings.py` + `backend/wiki/llm_context.py`
+
+```python
+def resolve_model_for_task(settings, task, default_model):
+    mapping = {
+        "chat": settings.task_routing.chat_model,
+        "ingest": settings.task_routing.ingest_model,
+        "research": settings.task_routing.research_model,
+    }
+    return mapping.get(task) or default_model
+```
+
+`llm_context.make_task_llm_context(base_url, api_key, default_model, project_root, task, provider="", timeout=1800)` 是路由入口：加载项目设置 → 解析任务模型 → 选择推理模式 → 构建 `LLMContext`。
+
+- 任务名：`chat` / `ingest` / `research`；未识别或未配置模型时落到全局 `default_model`。
+- 推理模式：`task == "ingest"` 用 `ingest_mode`，**其余任务（含 `research`）都用 `chat_mode`**。
+- 调用点（`backend/api/wiki_routes.py`）：ingest 流式路由用 `task="ingest"`、chat 路由用 `task="chat"`、research 路由用 `task="research"`，research 的自动 ingest 分支再用 `task="ingest"`。
+- 路由后模型写入 `ctx.model`，回填到 `IngestConfig.llm_model` / `ChatConfig.llm_model`。
+
+**provider 推断**：调用方不显式传 `provider` 时，`infer_provider(base_url)` 按 URL 关键字推断（顺序敏感）：`anthropic` → `anthropic`，`generativelanguage`/`googleapis` → `google`，`deepseek` → `deepseek`，`ollama`/`11434` → `ollama`，`openai` → `openai`；无法识别返回空串。
+
+### 9.3 Provider 推理模式适配
+
+**位置**：`backend/wiki/reasoning.py`（参考 `llm_wiki` 的 reasoning-capabilities）
+
+| provider | 支持模式 | 注入的请求参数 |
+|----------|----------|----------------|
+| `openai` | `auto` `low` `medium` `high` | `reasoning_effort = mode` |
+| `anthropic` | `auto` `low` `medium` `high` `max` | `thinking = {"type": "enabled", "budget_tokens": budget}` |
+| `google` | `auto` `low` `medium` `high` `max` | `thinking_config = {"thinking_budget": budget}` |
+| `deepseek` | `auto` `high` `max` | `reasoning_effort = mode` |
+| `ollama` | `auto` `low` `medium` `high` `max` | `reasoning_effort = mode` |
+
+- **token 预算**：`low=1024` / `medium=4096` / `high=10000` / `max=20000`，未知模式默认 4096。
+- `apply_reasoning_to_request(body, provider, mode)`：`off` / `auto` 直接返回不改请求体；provider 不支持该 mode 时 `normalize_mode` 降级为 `auto`（等价于不注入）后再处理。
+- 任务默认值：`INGEST_DEFAULT_MODE = "off"`、`CHAT_DEFAULT_MODE = "auto"`（与 `ReasoningConfig` 默认一致）。
+- 接入点：`make_llm_context()` 内 `_chat_body()` 仅在 `reasoning_mode` 非空时调用适配函数，非流式/流式请求共用同一份 body 构造。
+
+### 9.4 purpose.md / schema.md 注入
+
+**文件约定**（由 `backend/wiki/wiki_templates.py` 初始化）：
+
+```
+<project_root>/
+  purpose.md       # 项目目的：目标 / 关键问题 / 范围
+  wiki/schema.md   # 页面结构规范
+```
+
+**读取**：`backend/wiki/ingest.py` 的 `_read_wiki_context(project_root)` 返回 `(purpose, schema)`：
+
+- 分别读取根目录 `purpose.md` 与 `wiki/schema.md`；
+- 经 `secure_read_file_bounded(project_root, path, MAX_CONTEXT_CHARS * 4)` 读取，UTF-8 `errors="replace"`，截断到 `MAX_CONTEXT_CHARS = 4000` 字符；
+- 文件缺失、越界或读取失败时返回空串，不阻断 ingest。
+
+**注入点**：Step 1（分析）与 Step 2（写作）都会注入。
+
+- `analyze_source()` → `format_step1_prompt(content, purpose=..., schema=...)`
+- `generate_pages()` → `format_step2_prompt(..., purpose=..., schema=...)`
+
+**Prompt 模板**（`backend/wiki/llm_prompts.py`）：`STEP1_ANALYZE` / `STEP2_WRITE` 首句后带 `{purpose_section}{schema_section}` 占位符；`_context_sections()` 生成：
+
+```
+"\n\n项目目的:\n<purpose>"
+"\n\n页面结构规范:\n<schema>"
+```
+
+空值时该段为空串。文件内容通过 `str.format` 的**参数值**内插（而非再次格式化），因此正文中的花括号不会被当作模板解析。
+
+### 9.5 Source 目录监听
+
+**位置**：`backend/wiki/source_watcher.py`（依赖 `watchdog`，`backend/requirements.txt` 固定 `watchdog==4.0.2`）
+
+- 启动监听 `raw/sources/`（`recursive=False`，目录不存在则创建）；`watchdog` 未安装时 `create_observer()` 返回 `None`，整体降级为 no-op。
+- `_SourceHandler`：
+  - `on_created`：跳过目录和以 `.` 开头的隐藏文件，调用 `IngestQueue(project_root).add("raw/sources/<name>")` 入队；
+  - `on_deleted`：调用 `lifecycle.cascade_delete_source("raw/sources/<name>")`，级联删除引用页、清理向量与死链、更新 `index.md`；
+  - 回调内的异常仅记 warning，不中断监听线程。
+- **生命周期**：`queue_daemon._start_source_watchers()` 为所有已初始化项目（存在 `.llm-wiki` 目录）创建 `SourceWatcher`，并复用**单个共享 `Observer`**（多项目一个线程）；`_stop_source_watchers()` 先逐个注销监听再停 Observer。
+- **集成**：`run_queue_daemon(poll_seconds=60, watch_sources=True)` 在 `backend/main.py` lifespan 中作为 `wiki-queue-daemon` 任务启动；守护进程每轮扫描有 pending 任务的项目，批量上限 `BATCH_LIMIT = 5`，与手动「处理队列」共享 `queue_process_lock`。
+
+### 9.6 操作日志
+
+**位置**：`backend/wiki/operation_log.py` → `<project_root>/wiki/log.md`
+
+格式为确定性、可解析的单行文本：
+
+```markdown
+- [2026-11-14T10:30:00Z] ingest: raw/sources/paper.pdf -> wiki/sources/paper.md
+- [2026-11-14T10:35:12Z] delete: raw/sources/paper.pdf -> ['wiki/sources/paper.md']
+- [2026-11-14T11:00:00Z] rename: wiki/sources/a.md -> wiki/sources/b.md
+```
+
+- 追加写，时间戳为 UTC `%Y-%m-%dT%H:%M:%SZ`；写失败只记 warning，不影响主流程。
+- **写入点**：
+  - `ingest`：`ingest.py` 的非流式 `ingest_source` 与流式 `ingest_source_stream` 完成写盘后各写一条；
+  - `delete`：`lifecycle.cascade_delete_source`（含 watcher 触发的级联删除）；
+  - `rename`：文件重命名路由 `backend/api/wiki_routes.py`。
+
+### 9.7 设置读写端点
+
+路由前缀 `/wiki`，挂载到 `/api/v1`，即完整路径 `/api/v1/wiki/settings`。
+
+| Method | Path | 请求 / 响应 |
+|--------|------|-------------|
+| GET | `/wiki/settings?project_path=...` | 返回 `{task_routing: {...}, reasoning: {...}}`；无配置文件时返回默认值 |
+| PUT | `/wiki/settings` | body：`project_path` + `task_routing{chat_model,ingest_model,research_model}` + `reasoning{chat_mode,ingest_mode}`；保存后返回同一结构 |
+
+- **请求模型**：`TaskRoutingPayload`（三个 `Optional[str]`）、`ReasoningPayload`（默认 `chat_mode="auto"`、`ingest_mode="off"`）、`WikiSettingsPayload`（含 `project_path`）。
+- **校验**：`chat_mode` / `ingest_mode` 必须属于 `{auto, off, low, medium, high, max}`，否则 `400`。
+- **鉴权（两层）**：外层 `LocalAuthMiddleware` 要求 `Authorization: Bearer ${SAGE_LOCAL_AUTH_TOKEN}`；路由内 `authorize_registered_project()` 校验项目根：路径无效 `400`，不在 recents ∪ projects 注册表中 `403`（异常一律 fail-closed 视为未登记）。
+
+### 9.8 前端
+
+- **类型**（`src/shared/types/wiki.ts`）：`ReasoningMode`、`WikiTaskRouting`、`WikiReasoningSettings`、`WikiProjectSettings`，以及默认值常量 `DEFAULT_WIKI_SETTINGS`（`chat/ingest/research` 均为 `null`，`chat_mode="auto"`、`ingest_mode="off"`）。
+- **API 客户端**（`src/shared/api-client/wiki.ts`）：`getWikiSettings(projectPath)` 走 `GET /wiki/settings`；`updateWikiSettings(projectPath, {task_routing, reasoning})` 走 `PUT /wiki/settings`。
+- **Store**（`src/entities/wiki/settings-store.ts`）：`useWikiSettingsStore` 维护 `settings` / `loadedProjectPath` / `isLoading` / `isSaving` / `error`，暴露 `loadSettings` / `saveSettings` / `reset`。
+- **UI**（`src/widgets/wiki/WikiSettingsDialog.tsx`）：三行模型输入（对话 / 入库 / 研究）＋ 两个推理模式下拉（选项 `auto/off/low/medium/high/max`），由 `WikiToolbar` 打开；打开时按当前项目拉取设置，保存成功后同步本地草稿。
+
+### 9.9 测试
+
+**后端单元**：
+
+- `backend/tests/unit/wiki/test_settings.py`（默认值 / 往返持久化 / 损坏回退 / 未知字段 / 任务路由解析）
+- `backend/tests/unit/wiki/test_reasoning.py`（能力表 / 归一化 / 各 provider 参数注入 / 预算映射）
+- `backend/tests/unit/wiki/test_source_watcher.py`（watchdog 降级 / 入队 / 级联删除 / 共享 Observer 生命周期）
+- `backend/tests/unit/wiki/test_operation_log.py`（行格式 / 追加 / 不可写路径不抛错）
+- `backend/tests/unit/wiki/test_llm_prompts.py`（purpose/schema 注入 / 花括号安全）
+
+**后端路由**：`backend/tests/unit/api/test_wiki_routes.py` 的 Settings 段（默认值、PUT 持久化、非法模式 400、GET-after-PUT 回显）。
+
+**前端**：`src/entities/wiki/__tests__/settings-store.test.ts`。
+

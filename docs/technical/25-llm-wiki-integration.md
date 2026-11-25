@@ -982,3 +982,57 @@ _🎉 PR-8 完成。本文档随 Phase 实施滚动更新,最终更新于 Phase 
   `win_reparse_io.write_file_reparse_safe`（CREATE_NEW + 句柄复核），
   修复 Windows 上 ingest/导入/队列必然失败的问题。
 
+## 2026-11-15：导入失败错误契约 + 可选嵌入与自适应维度
+
+### 导入失败的错误契约
+
+`POST /api/v1/wiki/ingest/stream` 的 `failed` 事件（`backend/wiki/ingest.py::ingest_source_stream`）遵循固定契约：**`message` 恒为字符串，错误分类放在独立的 `code` 字段**。
+
+| 字段      | 类型   | 取值                                                                              |
+| --------- | ------ | --------------------------------------------------------------------------------- |
+| `stage`   | string | `failed`                                                                          |
+| `percent` | number | `0`                                                                               |
+| `message` | string | `Wiki 导入失败`；异常携带上游 HTTP 状态时为 `Wiki 导入失败（LLM 请求返回 HTTP {status}）` |
+| `code`    | string | `wiki_ingest_failed`（常量 `INGEST_STREAM_ERROR_CODE`）                            |
+
+- `emit(stage, percent, message=None, **extra)` 把附加字段合并进 `data`；异常分支为 `emit("failed", 0, _stream_failure_message(e), code=INGEST_STREAM_ERROR_CODE)`，随后 `raise` 让上层 FastAPI 关闭流。
+- `_stream_failure_message(exc)` 只从 `exc.response.status_code` 取整数状态码拼进文案，不输出响应体、URL query 或 `Authorization`，避免泄露请求内容与凭据。
+- 历史实现曾把 `{code, message}` 对象塞进 `message`，`WikiIngestProgress` 直接渲染会抛出 React `Objects are not valid as a React child` 使页面崩溃；当前契约与回归测试（`backend/tests/integration/test_ingest_stream.py`）都断言 `message` 为字符串、`code` 为 `wiki_ingest_failed`。
+- 目前后端只发出 `wiki_ingest_failed` 一个错误码；前端把 `code` 声明为可选字符串，便于后续扩展。
+
+前端（`src/features/wiki/useWikiIngest.ts`）：
+
+- `IngestProgress` 为 `{ stage: string; percent: number; message?: string | null; code?: string }`，`error` 状态类型为 `string | null`。
+- `normalizeIngestProgress(payload)` 统一收敛 payload：`message` 为字符串则保留；为对象时取其中字符串 `message`（兼容旧后端），并把对象里的 `code` 提升为顶层 `code`；`stage` 缺失回落 `unknown`，`percent` 非有限数回落 `0`。
+- `useWikiIngest` 的失败态取 `p.message || '导入失败'`（`cancelled` 为 `导入已取消`），监听器与 `broadcast` 都走归一化，确保下游只拿到字符串。
+- `src/widgets/wiki/WikiIngestProgress.tsx` 仅在字符串上渲染：失败块输出 `导入失败: {error}`，进行中行输出 `— {progress.message}`。
+
+> 关联修复：渲染层 `GET /api/v1/settings` 返回的 `endpoint.apiKey` 被 `redact_secrets` 置空，localStorage 缓存丢失/换机后 wiki 请求会带空 key 打上游 401。`backend/api/wiki_credentials.py::resolve_llm_api_key(base_url, provided_key)` 在 key 为空时按去尾 `/` 且大小写不敏感的 `baseUrl` 从 `app_settings` 兜底解析真实 key（非空 key 原样透传，读取异常降级为空串，不记录 key）。`/ingest/stream`、`/chat/stream`、`/research` 三个入口都接入了该兜底，失败事件里的 401 摘要因此对应真实上游状态。
+
+### 可选嵌入与自适应向量维度
+
+嵌入在 Wiki 中是可选能力（对齐 llm_wiki）：未配置 `modelSelections.embeddingModel` 时导入照常完成，只是不产生向量；已配置但调用/解析/写库失败同样非致命，只记录日志并跳过向量化。
+
+**配置来源与前端门控**
+
+| 位置                                                                  | 行为                                                                                                                                                              |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/widgets/wiki/SourcesView.tsx::handleIngest`                      | 聊天模型仍必填（缺失时 `toast.error` 并中止）；`embeddingModel` 未配置时 `toast.info('未配置嵌入模型，本次导入将跳过向量化（可在设置 → 模型选择中配置）')` 后继续导入，`embedBaseUrl/embedApiKey/embedModel` 整组传空串（避免只带 base/key 不带 model 的半配置） |
+| `src/widgets/wiki/WikiChat.tsx::send`                                 | 向量检索端点/模型取 `embeddingModel`；未配置时三个 `embed*` 传空串，后端检索自动降级为 token 搜索，不阻塞问答                                                                 |
+| `backend/api/wiki_routes.py::IngestRequest` / `ChatRequest`           | `embed_base_url` / `embed_api_key` / `embed_model` 均默认 `""`，调用方可完全省略；`llm_*` 仍必填                                                                    |
+| `backend/wiki/queue_worker.py::process_pending`                       | 只有 LLM 配置缺失才返回 `LLM 模型未配置`；embedding 缺失仅记 info 日志，队列照常处理（跳过向量化）                                                                    |
+
+**后端行为（`backend/wiki/ingest.py`）**
+
+- `embed_pages(...) -> Optional[int]`：`embed_base_url` 与 `embed_model` 任一为空即跳过（`logger.info`，返回 `None`）；否则分块 → 调嵌入接口 → 写库。返回实际写入维度，跳过或失败返回 `None`，同步 `ingest_source` 与流式 `ingest_source_stream` 共用同一实现。
+- 嵌入请求异常、响应为空、各向量维度不一致、写库异常都被捕获：记 warning 后返回 `None`，**不中断导入**。
+- 进度文案区分真实状态：未配置时 embedding 阶段显示「跳过嵌入（未配置嵌入模型）」；已配置但失败时追加一条 85% 的「嵌入失败，已跳过（详见后端日志）」。
+
+**维度自适应与存储重置**
+
+- 解析响应时 `parse_embed_response(body, 0)`（`expected_dim=0` 表示不校验），实际维度取 `len(vectors[0])`，因此 1024 维模型（如 bge-m3）可直接写入，不再要求 1536 维。
+- `_store_page_vectors` 先用 `read_stored_dim(vectors.json)` 读既有维度；与本次响应维度不同则记 warning 并删除 `vectors.json`（JSON 后端），再按新维度 `open_vector_store(project_root, dim)` 重建。向量是派生数据，wiki 页面本身不受影响，但切换嵌入模型后旧页面需重新导入才能恢复向量检索。
+- HNSW 后端（`SAGE_WIKI_VECTOR_BACKEND=hnsw`）加载旧索引失败（含维度不匹配）时在 `vectorstore_hnsw.py` 内部记 warning 并重建空索引，不向调用方抛错。
+- 聊天检索（`backend/wiki/chat.py::_build_chat_context`）同样不预设维度：嵌入查询后按 `len(query_vec)` 打开向量库；维度与既有库不一致时打开失败，被外层 `try/except` 吞掉并降级为纯 token 检索。
+- `DEFAULT_EMBED_DIM = 1536` 仍作为 `IngestConfig` / `ChatConfig` 的字段默认值存在，但既不参与响应校验（`expected_dim=0`），也不决定写库维度（取响应长度），`build_embed_request` 也不使用该字段——即旧版「维度硬约束 1536」已废弃，该常量仅保留为名义默认值。
+

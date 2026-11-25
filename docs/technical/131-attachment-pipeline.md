@@ -423,7 +423,75 @@ M6 实测：7 个文件上传（5 成功 + 2 失败），磁盘文件数 `before
 | 后端单测 | `backend/tests/unit/test_chat_attachment_text.py` | 旧 HTTP 200 断言同步到新状态码契约（422 / 415 + `error_code`） |
 | 主进程单测 | `electron/__tests__/mediaIpc.test.ts` | 后端返回 4xx + `{error, error_code}` 时 reject 抛真实文案；200 + `{error}` 的兼容分支 |
 
-## 12. 未完成项（后续 PR）
+## 12. 标识符与扩展名校验（2026-11-15）
+
+### 12.1 media_id 字符集校验（堵 glob 注入）
+
+`MediaStore.load()` / `delete()` 把调用方传入的 `media_id` 直接拼进
+`rglob(f"{media_id}.*")` 的 glob 模式。未校验时 `media_id="*"` 会让
+`rglob("*.*")` 命中媒体根下任意附件 —— 读路径可越权读取、删路径可批量删除。
+媒体 id 可由用户侧的 `attachment_media_ids`、`/chat/attachments/{id}/text` 等入口传入，
+因此必须在 store 层兜底。
+
+`backend/services/multimodal/media_store.py`：
+
+```python
+#: Media id 由 save() 生成的 12 位十六进制；这里放宽到 path_safety 同款字符集，
+#: 兼容历史数据，同时挡住 glob 元字符（* ? [ ]）与路径分隔符。
+_MEDIA_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _is_valid_media_id(media_id: str) -> bool:
+    return bool(media_id) and bool(_MEDIA_ID_RE.fullmatch(media_id))
+```
+
+`load()` / `delete()` 入口先过 `_is_valid_media_id()`，非法 id 分别返回 `None` / `False`
+（不抛异常、不落盘、不触碰任何文件）。`save()` 自生成的 id 是 `uuid4().hex[:12]`
+（12 位十六进制），天然落在该字符集内。
+
+`GET /api/v1/media/{media_id}`（`backend/api/media_routes.py`）另有更严格的
+`^[0-9a-f]{12}$` 校验，非法 id 直接 404。
+
+回归测试：`backend/tests/unit/test_media_store.py` 的
+`test_load_rejects_glob_media_id` / `test_delete_rejects_glob_media_id` 覆盖
+`*`、`../*`、`[*]` 三种越权尝试。
+
+### 12.2 上传扩展名格式校验
+
+`backend/api/chat_attachment_routes.py` 在解析出扩展名后、进入白名单判定前，先做格式校验：
+
+```python
+#: 扩展名只允许小写字母数字，防止拼进 MediaStore 文件名时带入路径/glob 字符。
+_ATTACHMENT_EXT_RE = re.compile(r"^[a-z0-9]{1,16}$")
+```
+
+不匹配 → 415 `unsupported_type`（文案「无效的文件扩展名」）。扩展名最终要拼进
+`<id>.<ext>` 文件名，故必须先挡掉路径分隔符（`/`、`\`）、glob 元字符与超长串。
+校验位于 `store.save()` 之前，失败不留盘（与 §11.5 的校验前移一致）。
+
+无点文件名（`makefile` / `dockerfile`）以文件名本身作为伪扩展名参与同一校验，
+两者均只含小写字母，天然通过。
+
+前端不维护同一条正则：`preflightAttachment()` 对扩展名做**白名单集合判定**
+（`CHAT_DOCUMENT_EXTENSIONS` + `CHAT_NO_EXT_FILENAMES`）。白名单全部条目均满足
+`[a-z0-9]{1,16}`，因此前端放行的扩展名必然通过后端校验 —— 两端口径一致，
+实现方式不同（前端集合判定、后端正则兜底）。
+
+## 13. 未完成项（后续 PR）
+
+### 13.1 已知未覆盖的能力（2026-11-15）
+
+格式扩展范围（§4.2、§11）内明确未做、留待后续的能力：
+
+| 项 | 现状 |
+| --- | --- |
+| 旧版 `.doc` / `.xls` / `.ppt` 的 soffice 转换 | 聊天附件白名单（`ALLOWED_TEXT_EXTENSIONS` / `EXTRACTABLE_DOC_EXTENSIONS`）不含旧格式，上传直接 415。Office 工作台导入已有 `backend/office/legacy_import.py`（`convert_legacy_import`，soffice 转 docx/xlsx/pptx，50MB / 120s 上限），但未接入聊天附件上传。 |
+| 扫描件 OCR | PDF 纯图页有 OCR 兜底（`backend/office/ocr.py`，`SAGE_OCR=1` 或设置页开关，默认关闭）及上传后的后台 MinerU 富化（`_schedule_mineru_enrichment`，仅 `ext == "pdf"`，需 MinerU 已启用并配置）；纯图片 PPTX（无文字层）仍返回 `empty_text`，没有逐页 OCR。 |
+| 工作区文件选择器 | 附件来源只有系统文件对话框 / 拖放 / 粘贴，没有「从当前工作区目录树选文件加入附件」的入口。`@` 引用是另一条链路（`backend/chat/attachment_resolver.py`），不产出 media_id。 |
+| 附件限额配置化 | `MAX_ATTACHMENT_SIZE`（25MB）/ `MAX_ATTACHMENT_COUNT`（10）在后端 `chat_attachment_routes.py` 与前端 `chatAttachmentFormats.ts` 均为硬编码常量，不读设置。 |
+| 统一 `DocumentExtractor` 注册表 | `backend/office/extractors/` 已有 `DocumentExtractor` Protocol + 注册表（`register_extractor` / `get_extractor`），但目前只服务 Office 生命周期路由；聊天附件（`backend/services/attachment_extract.py`）、`@` 引用（`attachment_resolver.py`）、知识库导入（`backend/wiki/file_parser.py`）仍各自维护提取逻辑，尚未收敛到同一注册表。 |
+
+### 13.2 其他未完成项
 
 | 项 | 内容 |
 | --- | --- |
