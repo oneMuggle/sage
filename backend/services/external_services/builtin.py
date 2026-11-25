@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
-
 from backend.domain.document_parse import (
     DEFAULT_MAX_UPLOAD_MB,
     DEFAULT_MIN_QUALITY,
@@ -13,26 +11,8 @@ from backend.domain.document_parse import (
 from backend.services.external_services.registry import register_service
 from backend.services.external_services.spec import EnvBinding, ExternalServiceSpec, SecretField
 
-
-def _as_float(value: Any, default: float) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-async def _probe_mineru(values: Dict[str, Any]) -> Dict[str, Any]:
-    # 惰性导入：探活只在状态查询时触发，避免注册表加载拖入 httpx 依赖链。
-    from backend.adapters.out.document_parse.mineru_client import MineruClient
-
-    client = MineruClient(
-        base_url=str(values.get("baseUrl") or ""),
-        api_key=str(values.get("apiKey") or ""),
-        timeout_seconds=_as_float(values.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS),
-    )
-    return await client.probe()
-
-
+# 探活实现在装配处注入（backend/api/mineru_routes.py）：
+# 本模块被 backend.data.settings_repo 间接导入，不能触达 adapters 层。
 MINERU_SPEC = ExternalServiceSpec(
     name="mineru",
     preference_key="mineru_service",
@@ -64,7 +44,7 @@ MINERU_SPEC = ExternalServiceSpec(
         EnvBinding("timeoutSeconds", "SAGE_MINERU_TIMEOUT_SECONDS"),
     ],
     secret_fields=[SecretField("apiKey", "mineru:api_key")],
-    probe=_probe_mineru,
+    probe=None,
 )
 
 register_service(MINERU_SPEC)

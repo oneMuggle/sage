@@ -6,15 +6,17 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter
 
 from backend.services.external_services.settings import load_service_settings
-from backend.services.external_services.spec import ExternalServiceSpec
+from backend.services.external_services.spec import ExternalServiceSpec, ProbeFn
 
 
-async def build_service_status(spec: ExternalServiceSpec) -> Dict[str, Any]:
+async def build_service_status(
+    spec: ExternalServiceSpec, probe: Optional[ProbeFn] = None
+) -> Dict[str, Any]:
     """按 spec 读取配置并可选探活，返回不含密钥的状态字典。"""
     values = load_service_settings(spec)
     base_url = str(values.get("baseUrl") or "").strip()
@@ -29,10 +31,11 @@ async def build_service_status(spec: ExternalServiceSpec) -> Dict[str, Any]:
     if not base_url:
         body["reason"] = "not_configured"
         return body
-    if spec.probe is None:
+    active_probe = probe if probe is not None else spec.probe
+    if active_probe is None:
         return body
     try:
-        info = await spec.probe(values)
+        info = await active_probe(values)
     except Exception as exc:  # noqa: BLE001 — 探活失败必须转成可读状态
         body["error"] = str(exc) or exc.__class__.__name__
         return body
@@ -46,13 +49,15 @@ async def build_service_status(spec: ExternalServiceSpec) -> Dict[str, Any]:
     return body
 
 
-def build_external_service_router(spec: ExternalServiceSpec) -> APIRouter:
+def build_external_service_router(
+    spec: ExternalServiceSpec, probe: Optional[ProbeFn] = None
+) -> APIRouter:
     """为单个服务装配 ``/<api_prefix>/status`` 路由。"""
     prefix = f"/{spec.api_prefix or spec.name}"
     router = APIRouter(prefix=prefix, tags=[spec.name])
 
     @router.get("/status")
     async def service_status() -> Dict[str, Any]:
-        return await build_service_status(spec)
+        return await build_service_status(spec, probe)
 
     return router

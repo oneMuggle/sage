@@ -186,9 +186,15 @@ ExternalServiceSpec(
     aliases={"baseUrl": ["base_url"], ...},  # 规范键 ← 历史键回退
     env_bindings=[EnvBinding("baseUrl", "SAGE_MINERU_BASE_URL"), ...],
     secret_fields=[SecretField("apiKey", "mineru:api_key")],
-    probe=_probe_mineru,                 # async (values) -> status dict
+    probe=None,                          # 探活函数在装配处注入，见下
 )
 ```
+
+> `builtin.py` 被 `backend.data.settings_repo` 间接导入，一旦引用 `backend.adapters.*`
+> 就会破坏六边形分层（import-linter 的 `hexagonal-architecture` 契约）。
+> 因此探活实现在 `backend/api/mineru_routes.py`（api 层允许依赖 adapters）编写，
+> 由 `build_external_service_router(spec, probe=...)` 注入；`spec.probe` 字段保留，
+> 供测试与纯声明式场景使用。
 
 - `registry.py`：`register_service` / `get_service(name)` / `get_by_preference_key(key)` /
   `all_services()`；内置声明在 `builtin.py` 顶层注册（惰性导入避免循环依赖）。
@@ -226,7 +232,8 @@ interface ExternalServiceUiSpec {
 ### 新增一个自部署服务（照抄清单）
 
 1. **后端**：实现协议客户端 / MCP server；
-2. `builtin.py` 追加 `ExternalServiceSpec`（defaults、aliases、env_bindings、secret_fields、probe）；
+2. `builtin.py` 追加 `ExternalServiceSpec`（defaults、aliases、env_bindings、secret_fields）；
+   探活函数写在 api 层并随 `build_external_service_router(spec, probe=...)` 注入；
 3. `backend/main.py` 装配 `build_external_service_router(get_service("<name>"))`；
 4. **前端**：在 `settingsClient.ts` 的 `PreferenceKey` 增加 preferences 键；
 5. 写一张 spec + `<ExternalServiceCard spec={spec} />` 包装组件并挂到设置页。
