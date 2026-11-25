@@ -426,11 +426,13 @@ git commit -m "docs(literature-research): 工作流参数化为 <site_id>，xues
 
 ---
 
-### Task 4: 收敛 references/pipeline.md 与 backend README
+### Task 4: 收敛 references/pipeline.md、backend README 与产品文档
 
 **Files:**
 - Modify: `backend/skills/skill_md/shipped/literature-research/references/pipeline.md`
 - Modify: `backend/literature/README.md`
+- Modify: `docs/technical/164-literature-research-subsystem.md`
+- Modify: `docs/user-manual/55-literature-research.md`
 
 - [ ] **Step 1: pipeline.md 示例 id 改占位符（line 12、32）**
 
@@ -464,19 +466,48 @@ profile 的注释与模板 README 中，不要写进本数据契约文档。
 具体站点的选择器与实测要点写在该站点 profile 注释与模板 README 中。
 ```
 
-- [ ] **Step 4: 验证两份文档正文无 xueshu789 残留（示例路径除外）**
+- [ ] **Step 3b: 产品文档去掉「内置 xueshu789」表述**
+
+`docs/technical/164-literature-research-subsystem.md`：
+
+- line 38 表格行：`| builtin | `backend/literature/sites/` | 随包发布，目前只有 `xueshu789.yaml` |`
+  → `| builtin | `backend/literature/sites/` | 随包发布；保持中立，不携带具体站点（示例见 `docs/templates/literature-sites/`） |`
+- §2.6 标题 `### 2.6 xueshu789 内置 profile 的实测事实` → `### 2.6 示例 profile：浏览器登录 + 检索 + PDF 下载（xueshu789）`
+- §2.6 首句 ``backend/literature/sites/xueshu789.yaml` 当前是 `status: ready`…``
+  → ``docs/templates/literature-sites/xueshu789.yaml`（示例模板，不自动加载；复制到 `~/.sage/literature_sites/` 后启用）当前是 `status: ready`…``
+  （该节其余「实测结论」保留——它是示例模板的实测要点，价值不变）
+- line 208 `xueshu789 的 `&ddata=` 坑就是这一层设计的直接原因，见 §2.6。` → `部分站点的 `&ddata=` 附加参数坑就是这一层设计的直接原因，见 §2.6。`
+- 附录表格 line 388 `| `backend/literature/sites/xueshu789.yaml` | 内置站点 profile |`
+  → `| `docs/templates/literature-sites/xueshu789.yaml` | 示例站点 profile（不自动加载） |`
+
+`docs/user-manual/55-literature-research.md`：
+
+- line 9 `目前内置“学术资源站（xueshu789）”，也可以用你自建的站点配置。`
+  → `使用你自己配置的站点（在 `~/.sage/literature_sites/` 放置站点配置，示例模板见 `docs/templates/literature-sites/`）。`
+- line 28 `用哪个站点`：`默认学术资源站（xueshu789）。` → ``使用你已配置的站点（示例模板见 `docs/templates/literature-sites/`）。``（其后「第三方站点默认关闭…」保留）
+- line 159 FAQ `答：内置“学术资源站（xueshu789）”，并支持你自建站点配置；`
+  → `答：支持你自建/配置的站点（在 `~/.sage/literature_sites/` 放置站点配置，示例模板见 `docs/templates/literature-sites/`）；`
+
+- [ ] **Step 4: 验证四份文档正文无 xueshu789 残留（示例路径/示例节除外）**
 
 Run:
 ```bash
-grep -n "xueshu789\|dbItem\|ddata\|学术资源站" backend/skills/skill_md/shipped/literature-research/references/pipeline.md backend/literature/README.md
+grep -n "xueshu789\|dbItem\|ddata\|学术资源站" \
+  backend/skills/skill_md/shipped/literature-research/references/pipeline.md \
+  backend/literature/README.md \
+  docs/technical/164-literature-research-subsystem.md \
+  docs/user-manual/55-literature-research.md
 ```
-Expected: 无命中（模板路径指向 `docs/templates/literature-sites/`，不含具体站点名）。
+Expected: pipeline.md / backend README 无命中；164 与 55 仅允许出现在「示例 profile」段落（§2.6 标题与说明、示例路径 `docs/templates/literature-sites/`），不再有「内置」措辞。人工确认。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/skills/skill_md/shipped/literature-research/references/pipeline.md backend/literature/README.md
-git commit -m "docs(literature): 站点示例从数据契约/README 收敛到 docs/templates"
+git add backend/skills/skill_md/shipped/literature-research/references/pipeline.md \
+  backend/literature/README.md \
+  docs/technical/164-literature-research-subsystem.md \
+  docs/user-manual/55-literature-research.md
+git commit -m "docs(literature): 站点示例收敛到 docs/templates，产品文档去除内置站点表述"
 ```
 
 ---
@@ -555,8 +586,10 @@ Expected: 只剩允许的引用位置：
 - `docs/templates/literature-sites/xueshu789.yaml`（示例文件本体）
 - `docs/templates/literature-sites/README.md`（示例说明）
 - `backend/tests/unit/test_literature_site_profiles.py`（模板测试，允许）
+- `backend/tests/unit/test_literature_pipeline.py`（测试数据字面量，自包含，允许；见 Step 2）
+- `docs/technical/164-literature-research-subsystem.md`、`docs/user-manual/55-literature-research.md`（仅「示例 profile」段落，Task 4 已改为示例措辞）
 - `docs/plans/2026-11-25-xueshu789-site-decoupling.md`（本计划）
-- 可能残留：`backend/tests/unit/test_literature_pipeline.py`（若用 xueshu789 作 site_id 字面量，属测试数据，可保留或改 `demo`，见 Step 2）
+- `docs/plans/2026-11-21_literature-research-paper-pipeline.md`（历史计划，不在本次范围）
 - `backend/logs/*.log`（历史日志，不管）
 
 不允许出现在：`backend/literature/`(除 sites/README)、`backend/skills/skill_md/shipped/literature-research/`（除附录示例文件名）。
