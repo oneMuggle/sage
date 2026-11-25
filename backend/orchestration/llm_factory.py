@@ -276,6 +276,64 @@ def build_llm_client_from_settings() -> Optional[Any]:
         return None
 
 
+def _apply_utility_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """为规划前哨小任务关掉思考（不改动入参）。"""
+    out = dict(cfg)
+    out["reasoning_effort"] = "low"
+    out["thinking_budget"] = 0
+    return out
+
+
+def build_utility_llm_client(task_type: str = "classification") -> Optional[Any]:
+    """构建规划前哨（模式/复杂度分类、澄清）专用客户端。
+
+    与 ``build_llm_client_from_settings`` 的差异：
+    1. 应用按用途路由（``routing.mode == "auto"`` 时才生效）；
+    2. 默认关思考 —— 二分类/澄清无需长推理，可省数十秒。
+    """
+    cfg = load_llm_config_from_settings()
+    if cfg is None:
+        return None
+    try:
+        cfg = apply_auto_routing_overlay(cfg, task_type=task_type)
+        from backend.core.legacy.llm_client import LLMClient, LLMConfig
+
+        return LLMClient(LLMConfig(**_apply_utility_overrides(cfg)))
+    except Exception as exc:  # noqa: BLE001 — 构造失败按无配置降级
+        logger.warning("llm_factory: failed to build utility LLMClient: %s", exc)
+        return None
+
+
+async def complete_utility(
+    prompt: str,
+    *,
+    task_type: str = "classification",
+    llm_client: Any = None,
+) -> str:
+    """前哨小任务统一入口：注入优先，否则 utility 客户端。
+
+    未注入时若调用失败，回退一次"不带思考参数"的普通客户端 —— 覆盖
+    上游拒绝 ``reasoning_effort`` 的兼容场景。注入客户端失败直接上抛，
+    避免测试/调用方被双重请求。
+    """
+    client = llm_client if llm_client is not None else build_utility_llm_client(task_type)
+    if client is None:
+        raise RuntimeError("no usable LLM endpoint configured")
+    try:
+        return await client.complete(prompt)
+    except Exception as exc:  # noqa: BLE001 — 仅对配置拒绝做一次回退
+        if llm_client is not None:
+            raise
+        logger.warning(
+            "llm_factory: utility LLM call failed, retrying without thinking overrides: %s",
+            exc,
+        )
+        fallback = build_llm_client_from_settings()
+        if fallback is None:
+            raise
+        return await fallback.complete(prompt)
+
+
 def build_httpx_adapter_from_settings() -> Optional[Any]:
     """Build an ``HttpxLLMAdapter`` bound to the persisted endpoint, or ``None``.
 
