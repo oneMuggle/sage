@@ -488,12 +488,12 @@ def _scout_event_to_progress(event: Any) -> Optional[Dict[str, str]]:
     """把侦察子代理事件映射为一条 plan_progress 载荷；无需展示返回 None。"""
     state = getattr(event, "state", None)
     state_value = getattr(state, "value", state)
-    if state_value == "thinking":
+    if state_value in ("thinking", "reasoning", "reasoning_delta"):
         text = (
             getattr(event, "reasoning", "") or getattr(event, "content", "") or ""
         ).strip()
         if text:
-            return {"kind": KIND_THINKING, "text": text[:500]}
+            return {"kind": KIND_THINKING, "text": text}
         return None
     if state_value == "acting":
         name = _tool_name(getattr(event, "tool_call", None))

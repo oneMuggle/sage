@@ -1,5 +1,12 @@
 import asyncio
+import types
 
+from backend.core.legacy.agent_state import (
+    AgentEvent,
+    AgentState,
+    ToolCallRequest,
+    ToolCallResult,
+)
 from backend.orchestration import plan_preflight
 from backend.orchestration.complexity_classifier import ComplexityClassification
 
@@ -107,19 +114,84 @@ def test_medium_task_wraps_scout(monkeypatch):
 def test_scout_event_to_progress_maps_thinking_and_tool():
     from backend.orchestration.plan_preflight import _scout_event_to_progress
 
-    class _Event:
-        def __init__(self, state, **kwargs):
-            self.state = state
-            self.__dict__.update(kwargs)
-
-    assert _scout_event_to_progress(_Event("thinking", reasoning="分析中")) == {
-        "kind": "thinking",
-        "text": "分析中",
-    }
     assert _scout_event_to_progress(
-        _Event("acting", tool_call={"name": "read_file"})
+        AgentEvent(state=AgentState.REASONING, reasoning="分析中")
+    ) == {"kind": "thinking", "text": "分析中"}
+    assert _scout_event_to_progress(
+        AgentEvent(state=AgentState.REASONING_DELTA, reasoning="增量")
+    ) == {"kind": "thinking", "text": "增量"}
+    # THINKING 是裸阶段标记（无 reasoning/content），不应产生进度条目
+    assert _scout_event_to_progress(AgentEvent(state=AgentState.THINKING)) is None
+    assert _scout_event_to_progress(
+        AgentEvent(
+            state=AgentState.ACTING,
+            tool_call=ToolCallRequest(id="1", name="read_file", arguments={}),
+        )
     ) == {"kind": "tool_call", "text": "read_file"}
     assert _scout_event_to_progress(
-        _Event("observing", tool_result={"ok": True})
+        AgentEvent(
+            state=AgentState.OBSERVING,
+            tool_result=ToolCallResult(tool_call_id="1", content="ok"),
+        )
     ) == {"kind": "tool_result", "text": "工具返回结果"}
-    assert _scout_event_to_progress(_Event("done", content="x")) is None
+    assert _scout_event_to_progress(
+        AgentEvent(state=AgentState.DONE, content="x")
+    ) is None
+
+
+def test_run_scout_agent_emits_thinking_and_tool_progress(monkeypatch):
+    """_run_scout_agent 把子代理 thinking/tool 事件作为 plan_progress 透出。"""
+    import backend.core.legacy.agent as agent_module
+    import backend.tools.agent_tool as agent_tool_module
+
+    class _FakeSageAgent:
+        def __init__(self, bare=False):
+            self.tool_registry = None
+            self._owned_workspace_root = None
+            self.llm_client = None
+
+        async def run_loop(self, messages, max_iterations=3):
+            yield AgentEvent(state=AgentState.REASONING, reasoning="分析中")
+            yield AgentEvent(
+                state=AgentState.ACTING,
+                tool_call=ToolCallRequest(id="1", name="read_file", arguments={}),
+            )
+            yield AgentEvent(
+                state=AgentState.OBSERVING,
+                tool_result=ToolCallResult(tool_call_id="1", content="ok"),
+            )
+            yield AgentEvent(state=AgentState.DONE, content="最终答案")
+
+    monkeypatch.setattr(agent_module, "SageAgent", _FakeSageAgent)
+    monkeypatch.setattr(
+        agent_tool_module,
+        "build_readonly_tool_registry",
+        lambda: types.SimpleNamespace(_owned_workspace_root=None),
+    )
+    monkeypatch.setattr(
+        agent_tool_module, "_cleanup_subagent_workspace", lambda *a, **k: None
+    )
+
+    collected = []
+
+    async def emit(envelope):
+        collected.append(envelope)
+
+    answer = asyncio.run(
+        plan_preflight._run_scout_agent(object(), "goal", emit=emit)
+    )
+
+    assert answer == "最终答案"
+    progresses = [
+        e["plan_progress"] for e in collected if e["state"] == "plan_progress"
+    ]
+    assert all(
+        p["stage"] == "scout" and p["status"] == "progress" for p in progresses
+    )
+    assert any(
+        p["kind"] == "thinking" and p["text"] == "分析中" for p in progresses
+    )
+    assert any(
+        p["kind"] == "tool_call" and p["text"] == "read_file" for p in progresses
+    )
+
