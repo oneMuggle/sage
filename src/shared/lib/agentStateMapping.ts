@@ -109,6 +109,9 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'iteration_checkpoint': // 2026-10-31: 动态预算检查点由 toast/状态条提示,不进气泡占位
     case 'topic_shifted': // Task 10 (2026-09-17): 自动话题切换事件,segment 边界进 store,不进消息气泡占位
     case 'orch_preflight': // Round 3 (2026-09-19): 前置阶段由任务板区域指示条展示,不进消息气泡占位
+    case 'plan_progress':
+      // 2026-11-25: 规划进度由气泡内 PlanningTimeline 渲染,不进占位文本
+      return null;
     case 'retry': // 2026-10-20: LLM 重试事件 — 提示由 Message.tsx 的 RetryBanner 承载,不进气泡占位文本
     case 'heartbeat': // 2026-10-26: 重试退避心跳 — 只喂前端 watchdog,不渲染任何 UI
     case 'plan_execution_mode': // 2026-10-28 Plan Mode 增强: 执行模式推荐进 store,不进气泡占位
@@ -174,6 +177,9 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'topic_shifted': // Task 10 (2026-09-17): 自动话题切换事件,segment 边界进 store,无独立 UI 阶段
     case 'context_pressure': // TM2 (DSH 对标 R11): 水位徽章自渲染,无独立 UI 阶段
     case 'orch_preflight': // Round 3 (2026-09-19): 前置阶段由任务板区域指示条展示
+    case 'plan_progress':
+      // 2026-11-25: 规划进度由气泡内 PlanningTimeline 渲染,无独立阶段指示
+      return null;
     case 'plan_execution_mode': // 2026-10-28 Plan Mode 增强: 执行模式推荐进 store,无独立 UI 阶段
     case 'research_complete': // 2026-10-28 Plan Mode 增强 Phase 2: 调研报告进 store,无独立 UI 阶段
     case 'awaiting_step_confirm': // 2026-10-28 Plan Mode 增强 Phase 3: 步骤确认由 StepConfirmDialog 承载,无独立 UI 阶段

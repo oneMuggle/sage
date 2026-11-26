@@ -25,6 +25,18 @@ import { maybeAutoOpenArtifactPanel } from '../right-panel/rightPanelStore';
 import { mergeLiveEvent, useChatStreamStore } from './chatStreamStore';
 import type { TaskBoardState } from './chatStreamStore';
 
+// Task 4 把 AgentEvent.phase 合并为子代理阶段 ∪ 前置阶段的并集，直接透传给
+// setPreflightPhase 无法收窄到 5 字面量。用成员守卫收窄。
+function isPreflightPhase(v: unknown): v is NonNullable<AgentEvent['preflight_phase']> {
+  return (
+    v === 'clarify' ||
+    v === 'scout' ||
+    v === 'complexity_classify' ||
+    v === 'execution_mode_classify' ||
+    v === 'scout_deep'
+  );
+}
+
 export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): boolean {
   const board = useChatStreamStore.getState();
 
@@ -37,10 +49,20 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
     return true;
   }
 
+  // 2026-11-25: 统一规划进度 → 气泡内 PlanningTimeline 槽位。
+  if (evt.state === 'plan_progress' && evt.plan_progress) {
+    board.setPlanProgress(sid, evt.plan_progress);
+    return true;
+  }
+
   // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）——先于
   // task_plan 到达时任务板尚不存在，写独立槽位供指示条消费。
-  if (evt.state === 'orch_preflight' && evt.preflight_phase) {
-    board.setPreflightPhase(sid, evt.preflight_phase);
+  // 2026-11-25: 后端实际发的是 `phase`，前端历史上只读 `preflight_phase`
+  // 导致指示条从不渲染；两者都读。
+  const preflightPhase =
+    evt.preflight_phase ?? (isPreflightPhase(evt.phase) ? evt.phase : undefined);
+  if (evt.state === 'orch_preflight' && preflightPhase) {
+    board.setPreflightPhase(sid, preflightPhase);
     return true;
   }
 
