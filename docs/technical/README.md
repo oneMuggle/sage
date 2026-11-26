@@ -153,6 +153,7 @@
 | 177 | [技能整理优化与去重进化机制](./177-skill-evolution.md) | 结构化去重（embedding + TF-IDF 降级）+ 5 维质量评分与 hot/warm/cold 分层 + 三级渐进式加载（token 预算）+ 执行反馈自进化（建议 → 人工批准） |
 | 178 | [自部署服务通用化（P0–P2）](./178-selfhosted-service-framework.md) | DrawIO 激活（MCP → pool → Puppeteer）；统一富媒体契约（MediaStore + `/api/v1/media` + SVG 交互查看器）；声明式服务注册（Spec/SecretBox/状态路由/通用卡片） |
 | 179 | [编排规划可见性（plan_progress）](./179-planning-visibility.md) | 统一 `plan_progress` 事件族（6 阶段 × 5 状态 × 8 类型）+ `run_planning_stage` 心跳包装 + 前端 `PlanningTimeline` 实时时间线 + 小前置任务走 utility 客户端关闭思考 |
+| 180 | [端点优先级故障转移](./180-endpoint-failover.md) | 优先级端点链 + 可重试/认证错误自动切换 + 健康状态机与冷却 + 后台轻量探测 failback（默认关闭） |
 ---
 
 ## 核心章节（基础架构）

@@ -158,6 +158,13 @@ export const zhSettingsUi = {
   'settings.endpoints.save': '保存',
   'settings.endpoints.test_connection': '测试连接',
   'settings.endpoints.testing': '测试中...',
+  // 2026-11-26: 端点故障转移
+  'settings.endpoints.failover.section': '故障转移',
+  'settings.endpoints.failover.probe_interval': '探测间隔（分钟）',
+  'settings.endpoints.failover.cooldown': '冷却期（秒）',
+  'settings.endpoints.failover.threshold': '失败阈值',
+  'settings.endpoints.failover.hint':
+    '开启后当前端点失败会自动切换到下一个优先级端点；流式回答已开始输出时不会中途切换。',
   'settings.endpoints.title': '端点配置',
   'settings.knowledge.auto_checkpoint_desc':
     '每轮对话开始前为绑定的工作区创建检查点，可在变更面板一键回滚（默认开）。只有保存确认后生效。',

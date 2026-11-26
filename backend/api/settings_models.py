@@ -114,6 +114,8 @@ class EndpointPayload(BaseModel):
     # 2026-09-18 (端点限额): 可选 {dailyTokens, monthlyBudgetUsd};
     # 值校验下沉到 canonicalizer validate_quota.
     quota: Optional[dict] = None
+    # 2026-11-26: 故障转移优先级（1 = 最高）。值校验下沉到 canonicalizer。
+    priority: Optional[int] = None  # noqa: N815
 
 
 # --------------------------------------------------------------------------
@@ -178,6 +180,11 @@ class SettingsPayload(BaseModel):
     # ----- 会话标题专用模型 (2026-10-27) -----
     # 模型 id 字符串；留空表示回退到聊天模型。后端 title_generator 读取。
     titleModelId: Optional[str] = None  # noqa: N815
+
+    # ----- 端点故障转移 (2026-11-26) -----
+    # 子键: enabled / probeIntervalMs / cooldownMs / consecutiveFailThreshold。
+    # 白名单与值域校验下沉到 canonicalizer validate_settings_shape。
+    failover: Optional[dict] = None
 
     # ----- Legacy fields (兼容旧客户端, 不写入存储) -----
     api_base_url: Optional[str] = None
@@ -252,6 +259,11 @@ class LegacySettingsPayload(BaseModel):
     # ----- 会话标题专用模型 (2026-10-27) -----
     # 模型 id 字符串；留空表示回退到聊天模型。后端 title_generator 读取。
     titleModelId: Optional[str] = None  # noqa: N815
+
+    # ----- 端点故障转移 (2026-11-26) -----
+    # 子键: enabled / probeIntervalMs / cooldownMs / consecutiveFailThreshold。
+    # 白名单与值域校验下沉到 canonicalizer validate_settings_shape。
+    failover: Optional[dict] = None
 
     # ----- Legacy fields (deprecated, 兼容旧客户端, 不写入存储) -----
     api_base_url: Optional[str] = None

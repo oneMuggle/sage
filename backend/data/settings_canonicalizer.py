@@ -177,6 +177,9 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         # 值为模型 id 字符串；留空表示回退到聊天模型。后端
         # title_model_factory.load_title_llm_config() 读取此键。
         "titleModelId",
+        # 2026-11-26: 端点优先级故障转移配置段（默认关闭）。
+        # llm_factory.attach_endpoint_chain / endpoint_probe 函数式读取。
+        "failover",
     }
 )
 LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
@@ -212,6 +215,8 @@ LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
         "apiKeyUpdatedAt",
         # 2026-09-18 (端点限额): 可选嵌套配额对象 {dailyTokens, monthlyBudgetUsd}.
         "quota",
+        # 2026-11-26: 故障转移优先级（1 = 最高）。缺省/非法视为未排序。
+        "priority",
     }
 )
 # EndpointConfig.quota 子层白名单 (2026-09-18). 值语义校验见 validate_quota.
@@ -221,6 +226,20 @@ LEGAL_QUOTA_KEYS: FrozenSet[str] = frozenset(
         "monthlyBudgetUsd",
     }
 )
+# 2026-11-26: 端点故障转移配置段。端点链构建与后台探测共用这套默认值。
+LEGAL_FAILOVER_KEYS: FrozenSet[str] = frozenset(
+    {
+        "enabled",
+        "probeIntervalMs",
+        "cooldownMs",
+        "consecutiveFailThreshold",
+    }
+)
+FAILOVER_INT_RANGES = {
+    "probeIntervalMs": (30_000, 86_400_000),
+    "cooldownMs": (5_000, 3_600_000),
+    "consecutiveFailThreshold": (1, 10),
+}
 LEGAL_MODEL_SELECTION_KEYS: FrozenSet[str] = frozenset(
     {
         "endpointId",
@@ -356,6 +375,11 @@ def validate_settings_shape(settings: dict) -> None:
                 f"unknown endpoint field {bad_ep[0]!r} at endpoints[{i}]; "
                 f"allowed: {sorted(LEGAL_ENDPOINT_KEYS)}"
             )
+        priority = ep.get("priority")
+        if priority is not None and (
+            isinstance(priority, bool) or not isinstance(priority, int) or priority < 1
+        ):
+            raise ValueError(f"endpoints[{i}].priority must be a positive integer")
         discovered_models = ep.get("discoveredModels")
         if discovered_models is not None and not isinstance(discovered_models, list):
             raise ValueError(f"endpoints[{i}].discoveredModels must be a list")
@@ -435,6 +459,25 @@ def validate_settings_shape(settings: dict) -> None:
             f"unknown routing field {bad_routing[0]!r}; "
             f"allowed: {sorted(LEGAL_ROUTING_KEYS)}"
         )
+
+    failover = settings.get("failover")
+    if failover is not None and not isinstance(failover, dict):
+        raise ValueError("failover is not a dict")
+    failover = failover or {}
+    bad_failover = [k for k in failover if k not in LEGAL_FAILOVER_KEYS]
+    if bad_failover:
+        raise ValueError(
+            f"unknown failover field {bad_failover[0]!r}; "
+            f"allowed: {sorted(LEGAL_FAILOVER_KEYS)}"
+        )
+    if "enabled" in failover and not isinstance(failover["enabled"], bool):
+        raise ValueError("failover.enabled must be a boolean")
+    for key, (lo, hi) in FAILOVER_INT_RANGES.items():
+        if key not in failover:
+            continue
+        value = failover[key]
+        if isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
+            raise ValueError(f"failover.{key} must be an integer in [{lo}, {hi}]")
 
 
 # Credential names are matched against a normalized spelling so legacy
