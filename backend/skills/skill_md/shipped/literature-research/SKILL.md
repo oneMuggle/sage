@@ -102,6 +102,29 @@ print(obs.snapshot[:3000])
 真实链接还带额外参数（如 `&ddata=`），截断直连会报错；点击后
 `browser_downloads` 等待并校验 `%PDF-` 与题名。部分站点下载完成后新标签
 可能显示错误页，以浏览器下载目录为准。
+
+**下载单篇（推荐用 helper，不要手点站点弹窗——`window.open` 弹窗对工具不可见）：**
+
+```python
+from pathlib import Path
+from backend.literature.profile_store import get_default_store
+from backend.literature.search import download_pdf
+from backend.literature.sage_driver import SageToolDriver
+
+profile = get_default_store().get("<site_id>")
+res = download_pdf(
+    profile, SageToolDriver(sage.call), expected_title="论文题名",
+    dest_dir=Path("<run_dir>/pdf"),
+    entry_selector="table.result-table-list tbody tr:nth-child(1) a.downloadlink",
+)
+print(res.ok, res.path, res.errors)
+```
+
+- profile 声明 `pdf.interstitial` 时，helper 会：读取该行元素完整 href（含
+  `&ddata=`）→ 新标签打开下载入口 → 等中间页跳转 → 按 `host_fallbacks` 逐个
+  重写主机（原域最后兜底）→ 等下载并校验 `%PDF-` 与题名；成功后关闭标签。
+- 无 `interstitial` 配置的站点仍走原「点击入口」路径（`download_pdf` 自动选择）。
+- 失败时把 `res.errors` 反馈给用户，不要反复重试。
 3. 从 snapshot 解析文献列表为 JSON；每条必须有 `paper_key`（DOI / arXiv ID /
    站点导出 ID / 规范化标题+作者+年份）与 `title`。
 4. 用 `execute_code` 记录：
