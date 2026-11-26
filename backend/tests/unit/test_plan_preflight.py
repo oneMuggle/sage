@@ -175,10 +175,12 @@ async def test_clarify_full_loop_collects_answer(monkeypatch):
     assert "最终交付什么格式" in clarifications[0]
     assert "Markdown 文档" in clarifications[0]
 
-    states = [e["state"] for e in events]
     # 2026-10-28: 新增复杂度分类事件在澄清之前
-    assert states[0] == "orch_preflight"
-    assert events[0]["phase"] == "complexity_classify"
+    # 2026-11-25: 复杂度分类现在还会先发 plan_progress 事件，粗粒度
+    # orch_preflight 事件仍在但在其之后；按 phase 定位而非按位置。
+    complexity_events = [e for e in events if e.get("phase") == "complexity_classify"]
+    assert complexity_events, events
+    assert complexity_events[0]["state"] == "orch_preflight"
     # 找到 clarify 事件
     clarify_events = [e for e in events if e.get("phase") == "clarify"]
     assert len(clarify_events) == 1

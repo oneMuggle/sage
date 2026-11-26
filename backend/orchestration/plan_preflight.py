@@ -32,6 +32,14 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from backend.orchestration.orch_settings import load_orch_settings
+from backend.orchestration.plan_progress import (
+    PLAN_STAGE_CLARIFY,
+    PLAN_STAGE_COMPLEXITY_CLASSIFY,
+    PLAN_STAGE_SCOUT,
+    PLAN_STAGE_SCOUT_DEEP,
+    emit_planning_skipped,
+    run_planning_stage,
+)
 from backend.services.question_gate import QuestionRequest, get_question_gate
 from backend.tools.ask_user_tool import render_answer_result, validate_ask_user_args
 from backend.utils.py_compat import TIMEOUT_ERRORS
@@ -214,7 +222,12 @@ async def run_plan_preflight(
         # === 复杂度分类（2026-10-28 新增） ===
         from backend.orchestration.complexity_classifier import classify_complexity
 
-        classification = await classify_complexity(message)
+        classification = await run_planning_stage(
+            emit,
+            stage=PLAN_STAGE_COMPLEXITY_CLASSIFY,
+            runner=lambda: classify_complexity(message),
+            describe_result=lambda value: getattr(value, "complexity", ""),
+        )
         result["complexity"] = classification.to_dict()
         await _emit(
             emit,
@@ -225,7 +238,14 @@ async def run_plan_preflight(
             },
         )
 
-        clarifications = await _clarify(client, message, emit)
+        clarifications = await run_planning_stage(
+            emit,
+            stage=PLAN_STAGE_CLARIFY,
+            runner=lambda: _clarify(client, message, emit),
+            describe_result=lambda value: (
+                "无需澄清" if not value else f"收集到 {len(value)} 条澄清"
+            ),
+        )
         if clarifications:
             result["clarifications"] = clarifications
 
@@ -233,6 +253,11 @@ async def run_plan_preflight(
         if settings.plan_scout_enabled:
             if classification.complexity == "simple":
                 # simple → 跳过 scout
+                await emit_planning_skipped(
+                    emit,
+                    stages=[PLAN_STAGE_SCOUT, PLAN_STAGE_SCOUT_DEEP],
+                    reason="简单任务无需事实侦察",
+                )
                 logger.info("plan_preflight: complexity=simple，跳过 scout")
             elif classification.complexity == "complex":
                 # complex → scout_deep（Phase 2: 2026-10-28）
@@ -246,27 +271,41 @@ async def run_plan_preflight(
 
                 async def _fallback_scout_lite() -> None:
                     """scout_deep 不可用 → 回落轻量侦察（保留既有行为）。"""
-                    facts = await _scout(
-                        client,
-                        message,
+                    facts = await run_planning_stage(
                         emit,
-                        clarifications,
-                        max_iterations=settings.max_scout_iterations,
+                        stage=PLAN_STAGE_SCOUT,
+                        runner=lambda: _scout(
+                            client,
+                            message,
+                            emit,
+                            clarifications,
+                            max_iterations=settings.max_scout_iterations,
+                        ),
+                        describe_result=lambda value: (
+                            "已收集事实" if value else "未收集到事实"
+                        ),
                     )
                     if facts:
                         result["scout_facts"] = facts
 
                 report = None
                 try:
-                    report = await asyncio.wait_for(
-                        scout_deep.research(
-                            topic=message,
-                            project_path=_resolve_preflight_workspace(session_id),
-                            settings=settings,
+                    report = await run_planning_stage(
+                        emit,
+                        stage=PLAN_STAGE_SCOUT_DEEP,
+                        runner=lambda: asyncio.wait_for(
+                            scout_deep.research(
+                                topic=message,
+                                project_path=_resolve_preflight_workspace(session_id),
+                                settings=settings,
+                            ),
+                            timeout=scout_deep.SCOUT_DEEP_TIMEOUT_S,
                         ),
-                        # 深度调研（3-5 次搜索 + 综合）远超 scout_lite 墙钟，
-                        # 用 scout_deep 自己的预算而非 _scout_timeout_s()。
-                        timeout=scout_deep.SCOUT_DEEP_TIMEOUT_S,
+                        describe_result=lambda value: (
+                            "调研无结果"
+                            if value is None
+                            else f"调研完成 confidence={getattr(value, 'confidence', 0)}"
+                        ),
                     )
                 except TIMEOUT_ERRORS:
                     logger.warning(
@@ -308,12 +347,19 @@ async def run_plan_preflight(
                     await _fallback_scout_lite()
             else:
                 # medium → scout_lite（现有逻辑）
-                facts = await _scout(
-                    client,
-                    message,
+                facts = await run_planning_stage(
                     emit,
-                    clarifications,
-                    max_iterations=settings.max_scout_iterations,
+                    stage=PLAN_STAGE_SCOUT,
+                    runner=lambda: _scout(
+                        client,
+                        message,
+                        emit,
+                        clarifications,
+                        max_iterations=settings.max_scout_iterations,
+                    ),
+                    describe_result=lambda value: (
+                        "已收集事实" if value else "未收集到事实"
+                    ),
                 )
                 if facts:
                     result["scout_facts"] = facts

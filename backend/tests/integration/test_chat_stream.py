@@ -131,9 +131,14 @@ async def test_chat_stream_attach_streams_ndjson_events():
             # 逐个入队 (逐字流式效果)。所以 events 是 [thinking, acting, observing,
             # content_delta*, done]。
             # TM2 (DSH 对标 R11): 事件首个可能是 context_pressure（producer
-            # 装配请求后、进入 agent loop 前推送的水位计量）—— 过滤后再断言
-            # ReAct 事件序。
-            core_events = [e for e in events if e["state"] != "context_pressure"]
+            # 装配请求后、进入 agent loop 前推送的水位计量）。
+            # 规划可见性: 进入 ReAct 循环前还会先来一批 plan_progress 事件
+            # (mode/complexity/scout 等阶段) —— 一并过滤后再断言 ReAct 事件序。
+            core_events = [
+                e
+                for e in events
+                if e["state"] not in ("context_pressure", "plan_progress")
+            ]
             cp_events = [e for e in events if e["state"] == "context_pressure"]
             for e in cp_events:
                 cp = e["context_pressure"]["pressure"]
