@@ -84,6 +84,21 @@ class DetailSpec:
 
 
 @dataclass(frozen=True)
+class PdfInterstitialSpec:
+    """下载中间页声明：入口先落到「准备中」页、随后再跳最终下载地址的站点。
+
+    ``url_contains`` 用于在标签页 URL 中识别中间页/最终跳转地址；
+    ``host_fallbacks`` 是在最终地址上依次替换主机的回退列表（原域放最后兜底）。
+    """
+
+    url_contains: Tuple[str, ...] = ()
+    host_fallbacks: Tuple[str, ...] = ()
+    tab_timeout_s: float = 6.0
+    sleep_after_open_s: float = 2.5
+    attempt_timeout_s: float = 15.0
+
+
+@dataclass(frozen=True)
 class PdfSpec:
     entry_selector: Optional[str] = None
     entry_text: Optional[str] = None
@@ -91,6 +106,7 @@ class PdfSpec:
     magic: str = "%PDF-"
     title_match: bool = True
     post_click_wait_s: float = 0.0
+    interstitial: Optional[PdfInterstitialSpec] = None
     note: Optional[str] = None
 
 
@@ -255,6 +271,24 @@ def _parse_login(raw: Any) -> LoginSpec:
     )
 
 
+def _parse_pdf_interstitial(raw: Any) -> Optional[PdfInterstitialSpec]:
+    if raw is None:
+        return None
+    data = _require_dict(raw, "pdf.interstitial")
+    url_contains = _str_tuple(data.get("url_contains"), "pdf.interstitial.url_contains")
+    if not url_contains:
+        raise SiteProfileError("pdf.interstitial.url_contains 不能为空")
+    return PdfInterstitialSpec(
+        url_contains=url_contains,
+        host_fallbacks=_str_tuple(
+            data.get("host_fallbacks"), "pdf.interstitial.host_fallbacks"
+        ),
+        tab_timeout_s=float(data.get("tab_timeout_s", 6.0)),
+        sleep_after_open_s=float(data.get("sleep_after_open_s", 2.5)),
+        attempt_timeout_s=float(data.get("attempt_timeout_s", 15.0)),
+    )
+
+
 def _parse_pdf(raw: Any) -> Optional[PdfSpec]:
     if raw is None:
         return None
@@ -275,6 +309,7 @@ def _parse_pdf(raw: Any) -> Optional[PdfSpec]:
         magic=_require_str(validate.get("magic"), "pdf.validate.magic") or "%PDF-",
         title_match=bool(validate.get("title_match", True)),
         post_click_wait_s=float(data.get("post_click_wait_s", 0.0)),
+        interstitial=_parse_pdf_interstitial(data.get("interstitial")),
         note=_optional_str(data.get("note"), "pdf.note"),
     )
 
