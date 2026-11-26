@@ -22,6 +22,7 @@ import { MarkdownImage } from '../chat/MarkdownImage';
 import { MermaidBlock } from '../chat/MermaidBlock';
 import { ShikiCodeBlock } from '../chat/ShikiCodeBlock';
 
+import { resolveCodeFenceRenderer } from './codeFenceRegistry';
 import { isLocalFilePathHref, safeDecodeUri } from './links';
 import { extractHeadings, headingIdForLine, type RawHeading } from './outline';
 import { useMdI18n } from './useMdI18n';
@@ -175,13 +176,14 @@ export function createMarkdownComponents(opts: MarkdownComponentsOptions): Compo
       const stripped = codeString.replace(/\n$/, '');
 
       if (useRichBlocks) {
-        if (language === 'mermaid') {
-          return <MermaidBlock code={stripped} />;
+        switch (resolveCodeFenceRenderer(language)) {
+          case 'mermaid':
+            return <MermaidBlock code={stripped} />;
+          case 'html':
+            return <HtmlCodeBlock code={stripped} />;
+          default:
+            return <ShikiCodeBlock language={language}>{stripped}</ShikiCodeBlock>;
         }
-        if (language === 'html') {
-          return <HtmlCodeBlock code={stripped} />;
-        }
-        return <ShikiCodeBlock language={language}>{stripped}</ShikiCodeBlock>;
       }
 
       return (

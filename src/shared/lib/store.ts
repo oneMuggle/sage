@@ -7,6 +7,7 @@ export type { MessageSource } from '../api/types';
 import { clientLogger } from '../log/client';
 
 import { markBootStageOnce } from './bootStages';
+import type { RichMediaRef } from './richMedia';
 import { sortSessions } from './sessionOrder';
 import { suppressStartupSessionRestore } from './startupRestoreGuard';
 
@@ -88,6 +89,9 @@ export interface ToolCall {
       source?: string;
     }>;
     apiUrls?: string[];
+    /** P1 (2026-11-25): 富媒体引用（URL-only），供统一渲染器消费；
+     *  SVG/图表 interactive=true 时走可交互查看器。 */
+    richMedia?: RichMediaRef[];
     /** R19-W1: 网页访问拦截原因枚举（antibot_cf | antibot_other | login_wall |
      *  http_4xx | http_5xx | timeout | dns | render | generic）。
      *  存在时 chat 流渲染拦截卡片而非原始结果文本。 */

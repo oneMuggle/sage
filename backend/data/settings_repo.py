@@ -177,11 +177,15 @@ class SettingsRepository:
             from backend.services.secret_box import unwrap_search_config_json
 
             value = unwrap_search_config_json(value)
-        # MinerU 文档解析: mineru_service.apiKey 字段级静态解密(同法)
-        if key == "mineru_service" and value is not None:
-            from backend.services.secret_box import unwrap_mineru_service_json
+        # 外部服务配置(mineru_service 等): 按 spec.secret_fields 字段级静态解密。
+        if value is not None:
+            from backend.services.external_services.registry import get_by_preference_key
 
-            value = unwrap_mineru_service_json(value)
+            spec = get_by_preference_key(key)
+            if spec is not None and spec.secret_fields:
+                from backend.services.secret_box import unwrap_service_json
+
+                value = unwrap_service_json(spec, value)
         return value
 
     def get_json(self, key: str) -> Optional[Any]:
@@ -213,11 +217,15 @@ class SettingsRepository:
             from backend.services.secret_box import wrap_search_config_json
 
             value = wrap_search_config_json(value)
-        # MinerU 文档解析: mineru_service.apiKey 写侧自动包裹(幂等, 已 enc: 跳过)
-        if key == "mineru_service" and value is not None:
-            from backend.services.secret_box import wrap_mineru_service_json
+        # 外部服务配置: 按 spec.secret_fields 字段级静态加密(幂等, 已 enc: 跳过)。
+        if value is not None:
+            from backend.services.external_services.registry import get_by_preference_key
 
-            value = wrap_mineru_service_json(value)
+            spec = get_by_preference_key(key)
+            if spec is not None and spec.secret_fields:
+                from backend.services.secret_box import wrap_service_json
+
+                value = wrap_service_json(spec, value)
         now = int(time.time() * 1000)
         conn = self._conn()
         existing = conn.execute("SELECT key FROM preferences WHERE key = ?", (key,)).fetchone()

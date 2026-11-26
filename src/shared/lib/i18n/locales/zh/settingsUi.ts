@@ -685,4 +685,7 @@ export const zhSettingsUi = {
   'settings.mineru.enabled': '启用',
   'settings.mineru.chat_attachment': '聊天附件后台升级',
   'settings.mineru.save': '保存',
+  'settings.external_service.reachable': '服务可达（鉴权模式：{mode}）',
+  'settings.external_service.unreachable': '服务不可达（{reason}）',
+  'settings.external_service.save': '保存',
 } as const;

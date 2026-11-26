@@ -1,41 +1,35 @@
-"""MinerU 服务状态路由（只暴露 hasApiKey，绝不回显密钥）。"""
+"""MinerU 服务状态路由：委托通用 spec 驱动构建器（只暴露 hasApiKey，绝不回显密钥）。"""
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Any, Dict
 
-from backend.adapters.out.document_parse.mineru_client import MineruClient
-from backend.services.document_parse.config import load_mineru_settings
+from backend.api.external_service_routes import build_external_service_router
+from backend.domain.document_parse import DEFAULT_TIMEOUT_SECONDS
+from backend.services.external_services.registry import get_service
 
-router = APIRouter(prefix="/mineru", tags=["mineru"])
+_spec = get_service("mineru")
+if _spec is None:  # pragma: no cover - 内置注册表恒有 mineru
+    raise RuntimeError("mineru spec 未注册")
 
 
-@router.get("/status")
-async def mineru_status() -> dict:
-    settings = load_mineru_settings()
-    body = {
-        "configured": settings.configured,
-        "enabled": settings.enabled,
-        "hasApiKey": bool(settings.api_key),
-        "reachable": False,
-        "serverAuthMode": "unknown",
-        "serverTiers": None,
-        "serverVersion": None,
-        "reason": "",
-    }
-    if not settings.configured:
-        body["reason"] = "not_configured"
-        return body
-    info = await MineruClient(
-        settings.base_url,
-        api_key=settings.api_key,
-        timeout_seconds=min(settings.timeout_seconds, 10.0),
-    ).probe()
-    body.update(
-        reachable=bool(info.get("reachable")),
-        serverAuthMode=info.get("serverAuthMode", "unknown"),
-        serverTiers=info.get("serverTiers"),
-        serverVersion=info.get("serverVersion"),
-        reason=info.get("reason", ""),
+def _as_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+async def _probe_mineru(values: Dict[str, Any]) -> Dict[str, Any]:
+    # 函数内导入：保持测试对 mineru_client.MineruClient 的打桩点有效。
+    from backend.adapters.out.document_parse.mineru_client import MineruClient
+
+    client = MineruClient(
+        base_url=str(values.get("baseUrl") or ""),
+        api_key=str(values.get("apiKey") or ""),
+        timeout_seconds=_as_float(values.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS),
     )
-    return body
+    return await client.probe()
+
+
+router = build_external_service_router(_spec, probe=_probe_mineru)
