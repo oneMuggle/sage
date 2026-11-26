@@ -412,6 +412,28 @@ def _retry_started_info_from_event(
     return merged
 
 
+def _failover_retry_info(event: Any) -> Dict[str, Any]:
+    """2026-11-26: FailoverEvent → 前端 retry_info 载荷。
+
+    复用 ``state=retry`` 通道（kind=failover），前端 RetryBanner 据 kind
+    渲染"已自动切换到端点 X"，不显示倒计时/尝试点。
+    """
+    return {
+        "kind": "failover",
+        "attempt": 0,
+        "max_attempts": 0,
+        "error_type": getattr(event, "reason", "unknown"),
+        "error_message": "",
+        "delay": 0,
+        "from_endpoint": getattr(event, "from_endpoint", None),
+        "to_endpoint": getattr(event, "to_endpoint", None),
+        "from_endpoint_name": getattr(event, "from_endpoint_name", None),
+        "to_endpoint_name": getattr(event, "to_endpoint_name", None),
+        "hop_index": getattr(event, "hop_index", 0),
+        "total_hops": getattr(event, "total_hops", 0),
+    }
+
+
 def _retry_events_to_agent_events(
     retry_events: List[RetryEvent], iteration: int, agent_id: str
 ) -> List[AgentEvent]:
@@ -2596,6 +2618,15 @@ class SageAgent:
                                             retry_info=_retry_started_info_from_event(
                                                 payload, last_retry_info
                                             ),
+                                            agent_id=self.agent_id,
+                                        )
+                                    elif evt_kind == "failover":
+                                        # 2026-11-26: 端点故障转移。复用 RETRY
+                                        # 状态通道下发 retry_info.kind=failover。
+                                        yield AgentEvent(
+                                            state=AgentState.RETRY,
+                                            iteration=i,
+                                            retry_info=_failover_retry_info(payload),
                                             agent_id=self.agent_id,
                                         )
                                     elif evt_kind == "heartbeat":

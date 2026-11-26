@@ -753,6 +753,17 @@ export interface RetryInfo {
   attempt_timeout_s?: number;
   /** 2026-11-03: 事件来源（如 compaction = 会话压缩触发的后台调用） */
   source?: string;
+  /**
+   * 2026-11-26: failover = 端点自动切换提示（无倒计时/尝试次数语义）。
+   * 缺省按普通 retry 处理。
+   */
+  kind?: 'retry' | 'failover';
+  from_endpoint?: string | null;
+  to_endpoint?: string | null;
+  from_endpoint_name?: string | null;
+  to_endpoint_name?: string | null;
+  hop_index?: number;
+  total_hops?: number;
 }
 
 // ==================== 统一规划进度事件 (2026-11-25) ====================

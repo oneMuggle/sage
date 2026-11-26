@@ -107,6 +107,30 @@ export function RetryBanner({ info }: RetryBannerProps) {
   // 叠加本地计时后数字才真正"在走"，用户才能判断系统没卡死。
   const liveElapsed = info.elapsed_s != null ? info.elapsed_s + attemptElapsed : null;
 
+  // 2026-11-26: 端点故障转移提示 —— 无倒计时/尝试次数语义，单独形态渲染。
+  if (info.kind === 'failover') {
+    const from = info.from_endpoint_name || info.from_endpoint || '主端点';
+    const to = info.to_endpoint_name || info.to_endpoint || '备用端点';
+    return (
+      <div
+        data-testid="failover-banner"
+        role="status"
+        aria-live="polite"
+        className="flex flex-wrap items-center gap-2 px-3 py-1.5 my-2 rounded-radius-sm border text-xs bg-warning/10 border-warning/30"
+      >
+        <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 text-warning" />
+        <span className="font-medium text-warning">
+          {t('chat.retry.failover_switched').replace('{to}', to)}
+        </span>
+        <span className="text-muted">
+          {t('chat.retry.failover_reason')
+            .replace('{from}', from)
+            .replace('{reason}', reason)}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid="retry-banner"
