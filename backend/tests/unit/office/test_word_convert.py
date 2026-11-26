@@ -167,3 +167,66 @@ def test_convert_endpoint_delegates(
 
     assert response["ok"] is True
     assert response["output_path"] == str(tmp_path / "legacy.docx")
+
+
+def test_convert_libreoffice_failure_returns_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(word_convert, "_locate_soffice", lambda: "/usr/bin/soffice")
+
+    def failing_run(cmd, capture_output=False, check=False, timeout=None):
+        return subprocess.CompletedProcess(cmd, 1, b"", b"boom")
+
+    monkeypatch.setattr(word_convert.subprocess, "run", failing_run)
+    source = tmp_path / "old.doc"
+    source.write_bytes(b"legacy")
+
+    result = word_convert.convert_word(source, tmp_path, target_format="docx")
+
+    assert result.ok is False
+    assert "boom" in (result.error or "")
+
+
+def test_convert_falls_back_to_word_com(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import types
+
+    monkeypatch.setattr(word_convert, "_locate_soffice", lambda: None)
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    class FakeDocument:
+        def SaveAs2(self, path, FileFormat):  # noqa: N802, N803 — COM 参数名
+            Path(path).write_bytes(b"com-converted")
+
+        def Close(self, SaveChanges=False):  # noqa: N802, N803 — COM 参数名
+            return None
+
+    class FakeDocuments:
+        def Open(self, path, ReadOnly=False):  # noqa: N802, N803 — COM 参数名
+            return FakeDocument()
+
+    class FakeWord:
+        def __init__(self) -> None:
+            self.Visible = False
+            self.DisplayAlerts = 0
+            self.Documents = FakeDocuments()
+
+        def Quit(self) -> None:  # noqa: N802 — COM 方法名
+            return None
+
+    client = types.ModuleType("win32com.client")
+    client.DispatchEx = lambda name: FakeWord()  # noqa: E731
+    win32com = types.ModuleType("win32com")
+    win32com.client = client
+    monkeypatch.setitem(sys.modules, "win32com", win32com)
+    monkeypatch.setitem(sys.modules, "win32com.client", client)
+
+    source = tmp_path / "old.doc"
+    source.write_bytes(b"legacy")
+
+    result = word_convert.convert_word(source, tmp_path, target_format="docx")
+
+    assert result.ok is True
+    assert result.method == "word_com"
+    assert (tmp_path / "old.docx").read_bytes() == b"com-converted"
