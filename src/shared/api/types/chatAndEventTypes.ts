@@ -417,6 +417,9 @@ export type AgentState =
   // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）,
   // 载荷见 AgentEvent.preflight_phase。先于 task_plan 到达。
   | 'orch_preflight'
+  // 2026-11-25: 统一规划进度事件（分类/澄清/侦察/拆解细粒度进度）,
+  // 载荷见 AgentEvent.plan_progress；气泡内由 PlanningTimeline 渲染。
+  | 'plan_progress'
   // right-panel R5 (2026-09-19): 写文件工具落盘后经活跃流推送的变更信号,
   // 前端据此防抖刷新右侧变更列表,载荷见 AgentEvent.change。
   | 'workspace_changed'
@@ -752,6 +755,41 @@ export interface RetryInfo {
   source?: string;
 }
 
+// ==================== 统一规划进度事件 (2026-11-25) ====================
+
+/** 规划流水线阶段（后端 plan_progress 事件的 stage）。 */
+export type PlanProgressStage =
+  | 'mode_classify'
+  | 'complexity_classify'
+  | 'clarify'
+  | 'scout'
+  | 'scout_deep'
+  | 'decompose';
+
+/** 单阶段状态（后端 plan_progress 事件的 status）。 */
+export type PlanProgressStatus = 'started' | 'progress' | 'done' | 'skipped' | 'failed';
+
+/** 进度条目类别（后端 plan_progress 事件的 kind）。 */
+export type PlanProgressKind =
+  | 'message'
+  | 'thinking'
+  | 'tool_call'
+  | 'tool_result'
+  | 'reasoning'
+  | 'heartbeat'
+  | 'skip_reason'
+  | 'error';
+
+/** 统一规划进度条目（state === 'plan_progress' 时的载荷）。 */
+export interface PlanProgressItem {
+  stage: PlanProgressStage;
+  status: PlanProgressStatus;
+  kind: PlanProgressKind;
+  text: string;
+  detail?: Record<string, unknown>;
+  elapsed_ms?: number;
+}
+
 /** 流式聊天事件 (NDJSON 协议的一行) */
 export interface AgentEvent {
   state: AgentState;
@@ -785,7 +823,14 @@ export interface AgentEvent {
   subtype?: string;
   title?: string;
   // Round 3 (2026-09-19): state === 'orch_preflight' 时的阶段载荷。
-  preflight_phase?: 'clarify' | 'scout' | 'complexity_classify' | 'execution_mode_classify';
+  preflight_phase?:
+    | 'clarify'
+    | 'scout'
+    | 'complexity_classify'
+    | 'execution_mode_classify'
+    | 'scout_deep';
+  /** 2026-11-25: 统一规划进度事件（state === 'plan_progress'）。 */
+  plan_progress?: PlanProgressItem;
   // 2026-10-28: Plan Mode 增强 — 复杂度分类结果。
   complexity?: 'simple' | 'medium' | 'complex';
   // 2026-10-28: Plan Mode 增强 — 执行模式分类结果。
@@ -843,7 +888,15 @@ export interface AgentEvent {
   reason?: string;
   // live-events P0 (2026-09-06): subagent_event 镜像字段(收敛类型见
   // SubagentLiveEvent,这里保持宽松 AgentEvent 可直接 cast)。
-  phase?: SubagentEventPhase;
+  // 2026-11-25: 同一字段也承载 orch_preflight 事件的真实阶段名（后端用 phase
+  // 而非 preflight_phase，读取时优先 preflight_phase），故扩为并集。
+  phase?:
+    | SubagentEventPhase
+    | 'clarify'
+    | 'scout'
+    | 'complexity_classify'
+    | 'execution_mode_classify'
+    | 'scout_deep';
   live_step?: string;
   tool_name?: string | null;
   args_summary?: string | null;

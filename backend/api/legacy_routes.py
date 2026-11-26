@@ -909,20 +909,50 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             #          （复杂任务必出 task_plan + 必注册工具 — 硬约束 1）
             from backend.orchestration.llm_factory import (
                 build_llm_client_from_settings,
+                build_utility_llm_client,
+            )
+            from backend.orchestration.plan_progress import (
+                PLAN_STAGE_CLARIFY,
+                PLAN_STAGE_COMPLEXITY_CLASSIFY,
+                PLAN_STAGE_DECOMPOSE,
+                PLAN_STAGE_MODE_CLASSIFY,
+                PLAN_STAGE_SCOUT,
+                PLAN_STAGE_SCOUT_DEEP,
+                emit_planning_skipped,
+                make_stream_progress_emitter,
+                run_planning_stage,
             )
 
             # A10 (2026-08-14): plan_override 非空 → 视为 force_multi，跳过语义判定。
             if data.plan_mode:
                 # PM1: 计划模式与编排互斥 —— 主对话内只读调研。
                 mode = "single"
+                await emit_planning_skipped(
+                    entry.queue.put,
+                    stages=[PLAN_STAGE_MODE_CLASSIFY],
+                    reason="计划模式跳过编排判定",
+                )
             elif data.plan_override:
                 mode = "multi"
+                await emit_planning_skipped(
+                    entry.queue.put,
+                    stages=[PLAN_STAGE_MODE_CLASSIFY],
+                    reason="沿用既有计划，跳过编排判定",
+                )
             else:
                 try:
-                    mode = await _classify_orchestration_mode(
-                        data.message,
-                        data.orchestration_mode or "auto",
-                        llm_client=build_llm_client_from_settings(),
+                    mode = await run_planning_stage(
+                        entry.queue.put,
+                        stage=PLAN_STAGE_MODE_CLASSIFY,
+                        runner=lambda: _classify_orchestration_mode(
+                            data.message,
+                            data.orchestration_mode or "auto",
+                            llm_client=build_utility_llm_client(task_type="classification")
+                            or build_llm_client_from_settings(),
+                        ),
+                        describe_result=lambda value: (
+                            "多智能体编排" if value == "multi" else "单智能体执行"
+                        ),
                     )
                 except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
                     logger.warning("编排语义判定失败，降级 single: %s", exc)
@@ -950,6 +980,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 直接透传，不重枚举；run_id 复用 resume 返回的 new_run_id。
                     plan_tasks = data.plan_override
                     run_id = data.run_id or f"orch-{uuid.uuid4()}"
+                    # 沿用既有计划时拆解阶段不执行；显式推 skipped 事件，
+                    # 避免前端规划时间线停在「等待」态。
+                    await emit_planning_skipped(
+                        entry.queue.put,
+                        stages=[PLAN_STAGE_DECOMPOSE],
+                        reason="沿用既有计划，跳过拆解",
+                    )
                 else:
                     # P2-8 (2026-08-14): orchestration_mode=template:<id> → 确定性模板拆解。
                     orchestration_mode = data.orchestration_mode or "auto"
@@ -960,11 +997,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     )
                     try:
                         if template_id is not None:
-                            plan = await Planner(
-                                task_registry=TaskRegistry(),
-                                team_registry=TeamRegistry(),
-                                llm_client=build_llm_client_from_settings(),
-                            ).decompose_from_template(template_id, data.message)
+                            plan = await run_planning_stage(
+                                entry.queue.put,
+                                stage=PLAN_STAGE_DECOMPOSE,
+                                runner=lambda: Planner(
+                                    task_registry=TaskRegistry(),
+                                    team_registry=TeamRegistry(),
+                                    llm_client=build_llm_client_from_settings(),
+                                ).decompose_from_template(template_id, data.message),
+                                describe_result=lambda value: (
+                                    f"模板拆解为 {len(getattr(value, 'tasks', []) or [])} 个任务"
+                                ),
+                            )
                         else:
                             # 计划前置 (2026-09-19, docs/plans/2026-09-19_
                             # orch-plan-preflight-plan.md): 拆解前先澄清需求
@@ -988,11 +1032,25 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     _level = _complexity_info.get("complexity")
                                     if isinstance(_level, str):
                                         preflight_complexity = _level
-                            plan = await Planner(
-                                task_registry=TaskRegistry(),
-                                team_registry=TeamRegistry(),
-                                llm_client=build_llm_client_from_settings(),
-                            ).decompose_request(data.message, context=preflight_context)
+                            decompose_progress = make_stream_progress_emitter(
+                                entry.queue.put, stage=PLAN_STAGE_DECOMPOSE
+                            )
+                            plan = await run_planning_stage(
+                                entry.queue.put,
+                                stage=PLAN_STAGE_DECOMPOSE,
+                                runner=lambda: Planner(
+                                    task_registry=TaskRegistry(),
+                                    team_registry=TeamRegistry(),
+                                    llm_client=build_llm_client_from_settings(),
+                                ).decompose_request(
+                                    data.message,
+                                    context=preflight_context,
+                                    progress=decompose_progress,
+                                ),
+                                describe_result=lambda value: (
+                                    f"拆解为 {len(getattr(value, 'tasks', []) or [])} 个任务"
+                                ),
+                            )
                         plan_tasks = list(plan.tasks if plan else [])
                     except Exception as exc:  # noqa: BLE001 — 模板/规划失败降级 single
                         if template_id is not None:
@@ -1306,6 +1364,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         if dispatcher is not None:
                             dispatcher.total_tasks = len(plan_items)
                     system_content += build_orch_plan_block(plan_items)
+            else:
+                await emit_planning_skipped(
+                    entry.queue.put,
+                    stages=[
+                        PLAN_STAGE_COMPLEXITY_CLASSIFY,
+                        PLAN_STAGE_CLARIFY,
+                        PLAN_STAGE_SCOUT,
+                        PLAN_STAGE_SCOUT_DEEP,
+                        PLAN_STAGE_DECOMPOSE,
+                    ],
+                    reason="单智能体执行，无需编排拆解",
+                )
             try:
                 from backend.core.diagram_prompt import (
                     DIAGRAM_TOOL_PROMPT,

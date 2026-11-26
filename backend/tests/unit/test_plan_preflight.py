@@ -52,7 +52,8 @@ def _default_settings(**overrides) -> OrchSettings:
 def _enable(monkeypatch, client=None, **settings_overrides) -> None:
     """开启 preflight 的公共样板：env 总闸 + 隔离 settings/LLM 工厂读取。
 
-    ``client`` 非 None 时 patch ``build_llm_client_from_settings`` 返回它
+    ``client`` 非 None 时 patch ``build_llm_client_from_settings``（探活）
+    与 ``build_utility_llm_client``（拆分后的 clarify/scout 客户端）均返回它
     （``run_plan_preflight`` 内部经工厂自建 client，测试注入桩）。
     """
     monkeypatch.setenv("SAGE_ORCH_PLAN_PREFLIGHT", "1")
@@ -63,6 +64,9 @@ def _enable(monkeypatch, client=None, **settings_overrides) -> None:
         from backend.orchestration import llm_factory
 
         monkeypatch.setattr(llm_factory, "build_llm_client_from_settings", lambda: client)
+        monkeypatch.setattr(
+            llm_factory, "build_utility_llm_client", lambda task_type=None: client
+        )
 
 
 async def _collect_emit(events: list) -> None:
@@ -175,10 +179,12 @@ async def test_clarify_full_loop_collects_answer(monkeypatch):
     assert "最终交付什么格式" in clarifications[0]
     assert "Markdown 文档" in clarifications[0]
 
-    states = [e["state"] for e in events]
     # 2026-10-28: 新增复杂度分类事件在澄清之前
-    assert states[0] == "orch_preflight"
-    assert events[0]["phase"] == "complexity_classify"
+    # 2026-11-25: 复杂度分类现在还会先发 plan_progress 事件，粗粒度
+    # orch_preflight 事件仍在但在其之后；按 phase 定位而非按位置。
+    complexity_events = [e for e in events if e.get("phase") == "complexity_classify"]
+    assert complexity_events, events
+    assert complexity_events[0]["state"] == "orch_preflight"
     # 找到 clarify 事件
     clarify_events = [e for e in events if e.get("phase") == "clarify"]
     assert len(clarify_events) == 1
@@ -189,7 +195,10 @@ async def test_clarify_full_loop_collects_answer(monkeypatch):
 
 @pytest.mark.asyncio()
 async def test_clarify_not_needed_skips_questions(monkeypatch):
-    client = FakeLLM(json.dumps({"need_clarify": False, "questions": []}))
+    client = FakeLLM(
+        json.dumps({"complexity": "medium", "research_needed": False, "reasoning": "test"}),
+        json.dumps({"need_clarify": False, "questions": []}),
+    )
     _enable(monkeypatch, client=client, plan_scout_enabled=False)
     monkeypatch.setattr(
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
@@ -310,7 +319,7 @@ async def test_scout_facts_injected_and_truncated(monkeypatch):
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
 
-    async def fake_scout_agent(client, goal, max_iterations):
+    async def fake_scout_agent(client, goal, max_iterations, emit=None):
         assert "工作区调研任务" in goal  # 侦察目标含用户 message
         return "f" * (plan_preflight.SCOUT_FACTS_MAX_CHARS + 100)
 
@@ -348,7 +357,7 @@ async def test_scout_timeout_degrades(monkeypatch):
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
 
-    async def slow_scout(client, goal, max_iterations):
+    async def slow_scout(client, goal, max_iterations, emit=None):
         await asyncio.sleep(5)
         return "too late"
 
@@ -366,7 +375,7 @@ async def test_scout_failure_degrades(monkeypatch):
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
 
-    async def broken_scout(client, goal, max_iterations):
+    async def broken_scout(client, goal, max_iterations, emit=None):
         raise RuntimeError("scout crashed")
 
     monkeypatch.setattr(plan_preflight, "_run_scout_agent", broken_scout)
@@ -462,7 +471,9 @@ async def test_max_scout_iterations_from_settings_flows_to_scout(monkeypatch):
 
     captured: dict = {}
 
-    async def fake_scout(client, message, emit, clarifications, max_iterations=4):
+    async def fake_scout(
+        client, message, emit, clarifications, max_iterations=4, fallback_client=None
+    ):
         captured["max_iterations"] = max_iterations
         return "facts"
 
@@ -550,7 +561,7 @@ async def test_complex_empty_scout_deep_falls_back_to_scout_lite(monkeypatch):
     monkeypatch.setattr(scout_deep, "research", _empty_research)
     scout_calls = {"n": 0}
 
-    async def _fake_scout_agent(_client, _goal, max_iterations=4):
+    async def _fake_scout_agent(_client, _goal, max_iterations=4, emit=None):
         scout_calls["n"] += 1
         return "1. 工作区含 backend/auth 目录"
 

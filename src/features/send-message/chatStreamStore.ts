@@ -39,10 +39,12 @@ import type {
   TodoItem,
 } from '../../shared/api';
 import type { AttachmentEmbedConfig } from '../../shared/api/attachmentRagConfig';
+import type { PlanProgressItem } from '../../shared/api/types/chatAndEventTypes';
 import type { ResearchReport, StepConfirmInfo } from '../../shared/api/types/planModeTypes';
 import type { Message, ToolCall } from '../../shared/lib/store';
 
 import type { DeliveryMode } from './deliveryMode';
+import { reducePlanProgress, type PlanStageState } from './planProgress';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
 /**
@@ -258,7 +260,18 @@ export interface SessionStreamSlots {
    * 先于 task_plan 到达时任务板还不存在，故独立于 TaskBoardState 存槽位；
    * task_plan 初始化 / finishStream 兜底时清空。
    */
-  preflightPhase: 'clarify' | 'scout' | 'complexity_classify' | 'execution_mode_classify' | null;
+  preflightPhase:
+    | 'clarify'
+    | 'scout'
+    | 'scout_deep'
+    | 'complexity_classify'
+    | 'execution_mode_classify'
+    | null;
+  /**
+   * 2026-11-25: 统一规划进度时间线。每次 plan_progress 事件由 reducer
+   * 合并入对应阶段；startStream 重置。null = 本轮尚无进度事件。
+   */
+  planProgress: PlanStageState[] | null;
   /**
    * 2026-10-28 (Plan Mode 增强): 计划模式收尾时后端分类器给出的执行模式推荐。
    * 在 DONE 之前随 `plan_execution_mode` 事件到达，供 PlanApprovalBar 做
@@ -319,6 +332,7 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   completedSteps: [],
   shiftInfo: null,
   preflightPhase: null,
+  planProgress: null,
   executionModeRecommendation: null,
   researchReport: null,
   stepConfirm: null,
@@ -395,8 +409,16 @@ interface ChatStreamStoreState {
   /** Round 3 (2026-09-19): 写入/清空编排拆解前置阶段指示。 */
   setPreflightPhase: (
     sessionId: string,
-    phase: 'clarify' | 'scout' | 'complexity_classify' | 'execution_mode_classify' | null,
+    phase:
+      | 'clarify'
+      | 'scout'
+      | 'scout_deep'
+      | 'complexity_classify'
+      | 'execution_mode_classify'
+      | null,
   ) => void;
+  /** 2026-11-25: 合并一条 plan_progress 到会话的规划时间线。 */
+  setPlanProgress: (sessionId: string, item: PlanProgressItem) => void;
   /**
    * 2026-10-28 (Plan Mode 增强): 写入/清空计划模式的执行模式推荐。
    * 由 `plan_execution_mode` 事件驱动（该事件在 DONE 之前到达）。
@@ -529,6 +551,10 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
         stepConfirm: null,
         // 2026-11-05 M5: 新一轮清掉上一轮的动态预算检查点提示
         budgetCheckpoint: null,
+        // 2026-11-25: 新一轮清掉上一轮的规划进度与前置阶段指示 —— 二者都是
+        // 本轮规划过程的瞬态；preflightPhase 此前遗漏重置，会跨轮残留。
+        planProgress: null,
+        preflightPhase: null,
       }),
     })),
 
@@ -657,6 +683,9 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
           iterationOffset: nextOffset,
           // M5: run 收尾后延长提示失去意义（不再有进行中的迭代），随流一起清掉
           budgetCheckpoint: null,
+          // 2026-11-25: run 收尾后规划时间线的瞬态进度随之清空 —— 此前只在
+          // startStream 重置，导致上一轮时间线在历史气泡里残留。
+          planProgress: null,
         }),
       };
     }),
@@ -678,6 +707,16 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
 
   setPreflightPhase: (sessionId, phase) =>
     set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { preflightPhase: phase }) })),
+
+  setPlanProgress: (sessionId, item) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      return {
+        sessions: writeSlots(prev.sessions, sessionId, {
+          planProgress: reducePlanProgress(slots.planProgress, item),
+        }),
+      };
+    }),
 
   setExecutionModeRecommendation: (sessionId, recommendation) =>
     set((prev) => ({

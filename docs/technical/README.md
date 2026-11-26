@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-178；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-179；本索引以目录中的实际文件为准。
 
 
 ## 章节目录
@@ -152,6 +152,7 @@
 | 176 | [规则抽取草稿审阅 + AI 精炼](./176-rule-extraction-draft.md) | 抽取结果先预览再落库（置信度色标 + 冲突并排对比）+ 侧栏对话式 AI 精炼（自然语言 → add/modify/delete diff 卡片 + 逐条接受）+ 草稿 zustand 状态（localStorage 持久化 + 恢复横幅）+ 置信度筛选/批量选择 + 手动添加 + 追加已有组同名跳过 + v22 迁移新增结构化元数据列 |
 | 177 | [技能整理优化与去重进化机制](./177-skill-evolution.md) | 结构化去重（embedding + TF-IDF 降级）+ 5 维质量评分与 hot/warm/cold 分层 + 三级渐进式加载（token 预算）+ 执行反馈自进化（建议 → 人工批准） |
 | 178 | [自部署服务通用化（P0–P2）](./178-selfhosted-service-framework.md) | DrawIO 激活（MCP → pool → Puppeteer）；统一富媒体契约（MediaStore + `/api/v1/media` + SVG 交互查看器）；声明式服务注册（Spec/SecretBox/状态路由/通用卡片） |
+| 179 | [编排规划可见性（plan_progress）](./179-planning-visibility.md) | 统一 `plan_progress` 事件族（6 阶段 × 5 状态 × 8 类型）+ `run_planning_stage` 心跳包装 + 前端 `PlanningTimeline` 实时时间线 + 小前置任务走 utility 客户端关闭思考 |
 ---
 
 ## 核心章节（基础架构）
@@ -180,7 +181,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 基础架构   | 本目录 01-14                                                |
-| 横切关注点 | 本目录 15-178                                               |
+| 横切关注点 | 本目录 15-179                                               |
 ---
 
 _本目录文档命名规则：`XX-topic-name.md`（XX 为两位数字，topic-name 为 kebab-case）。_
