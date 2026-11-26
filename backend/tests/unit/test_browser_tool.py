@@ -830,6 +830,44 @@ def test_interact_validation(stubbed):
     assert tool.execute(action="click", text="x", bogus=1).success is False
 
 
+def test_interact_attr_returns_attribute_value(stubbed):
+    stubbed.results.append(
+        {
+            "result": {
+                "value": {
+                    "ok": True,
+                    "info": "https://www.xueshu789.cc/doDownload?url=x&ddata=y",
+                }
+            }
+        }
+    )
+    result = _tool(BrowserInteractTool).execute(
+        action="attr", selector="a.downloadlink", name="href", browser_id="b1"
+    )
+    assert result.success is True
+    assert result.content["info"].startswith("https://www.xueshu789.cc/doDownload")
+    expression = stubbed.calls[0]["params"]["expression"]
+    assert "getAttribute" in expression
+    assert "href" in expression
+
+
+def test_interact_attr_defaults_to_href(stubbed):
+    stubbed.results.append({"result": {"value": {"ok": True, "info": "https://x/a"}}})
+    result = _tool(BrowserInteractTool).execute(
+        action="attr", selector="a.link", browser_id="b1"
+    )
+    assert result.success is True
+    expression = stubbed.calls[0]["params"]["expression"]
+    assert "href" in expression
+
+
+def test_interact_attr_requires_locator(stubbed):
+    result = _tool(BrowserInteractTool).execute(action="attr", browser_id="b1")
+    assert result.success is False
+    assert "attr 需要 ref 或 selector" in result.error
+
+
+
 def test_interact_happy_paths(stubbed):
     tool = _tool(BrowserInteractTool)
     stubbed.results.append({"result": {"value": {"ok": True, "info": "BUTTON 登录"}}})
