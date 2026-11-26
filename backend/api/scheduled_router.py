@@ -245,6 +245,28 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
             "run": launched.get("run"),
         }
 
+    @router.post("/scheduled/evolution/{name}/cancel")
+    def cancel_evolution_task(
+        name: str, svc: SchedulerService = Depends(service_dep)
+    ) -> Dict[str, Any]:
+        """请求取消正在运行的进化任务（协作式，幂等）。
+
+        只置注册表取消标志，任务在阶段边界 / LLM 组间响应；
+        未在运行时 ``cancelled=false``，快照原样返回。
+        """
+        if name not in svc.get_evolution_task_names():
+            raise HTTPException(
+                status_code=404,
+                detail={"type": "task_not_found", "message": f"evolution task '{name}' not registered"},
+            )
+        snapshot = svc.cancel_evolution_task(name)
+        cancelled = bool(
+            snapshot
+            and snapshot.get("state") == "running"
+            and snapshot.get("cancel_requested")
+        )
+        return {"name": name, "ok": True, "cancelled": cancelled, "run": snapshot}
+
     # ---------- desktop notifications (2026-11-05) ----------
     # Electron 主进程每 15s 轮询本端点,把排空的通知转成 OS 通知。
     # 两类来源共用同一个消费节奏:定时任务触发/失败 + 待办提醒。

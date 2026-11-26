@@ -23,7 +23,7 @@ from backend.memory.manager import MemoryManager
 from backend.memory.scoring import composite_score, rank_by_composite
 from backend.memory.semantic import SemanticMemory
 from backend.memory.working import WorkingMemory
-from backend.scheduler.evolution import MemoryReflectionTask
+from backend.scheduler.evolution import EvolutionTaskCancelled, MemoryReflectionTask
 from backend.tests.conftest import ensure_session
 
 pytestmark = pytest.mark.unit
@@ -381,3 +381,46 @@ def test_progress_reporter_failure_is_swallowed(db: Database, manager: MemoryMan
     task.set_progress_reporter(_boom)
     stats = task.run()
     assert stats["scanned"] == 1  # 任务正常完成，异常被吞掉
+
+
+# ============================ 协作式取消 ============================
+
+
+def test_reflection_honours_cancel_request(db: Database, manager: MemoryManager):
+    """启动检查点即取消：抛出取消信号，且不写 evolution_log（取消不是失败）。"""
+    _save_epi(manager, F1)
+    task = MemoryReflectionTask(db=db, memory_manager=manager, llm_client=None)
+    task.set_cancel_check(lambda: True)
+
+    with pytest.raises(EvolutionTaskCancelled):
+        task.run()
+
+    row = (
+        db.get_connection()
+        .execute(
+            "SELECT status FROM evolution_log WHERE evolution_type='memory_reflection' "
+            "ORDER BY rowid DESC LIMIT 1"
+        )
+        .fetchone()
+    )
+    assert row is None
+
+
+def test_reflection_cancels_between_llm_groups(db: Database, manager: MemoryManager):
+    """检查点序列：启动 / collect 后 / dedupe 后 / LLM 每组前 —— 任一命中即停。"""
+    _save_epi(manager, F3)
+    _save_epi(manager, F4)
+    task = MemoryReflectionTask(db=db, memory_manager=manager, llm_client=_FakeLLM("[]"))
+
+    calls = {"n": 0}
+
+    def _checker() -> bool:
+        calls["n"] += 1
+        # 前三次检查放行（start / group 后 / dedupe 后），LLM 组前检查时取消
+        return calls["n"] >= 4
+
+    task.set_cancel_check(_checker)
+
+    with pytest.raises(EvolutionTaskCancelled):
+        task.run()
+    assert calls["n"] >= 4

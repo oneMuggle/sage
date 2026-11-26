@@ -26,6 +26,7 @@ from typing import Any, Dict, Optional
 STATE_RUNNING = "running"
 STATE_SUCCEEDED = "succeeded"
 STATE_FAILED = "failed"
+STATE_CANCELLED = "cancelled"
 
 #: 进度回调签名：``(phase, phase_label, extra)``。
 #: ``extra`` 为增量指标字典（如 llm_done / llm_total），由注册表合并进 progress。
@@ -83,6 +84,7 @@ class EvolutionRunRegistry:
                 "duration_ms": None,
                 "result": None,
                 "error": None,
+                "cancel_requested": False,
             }
             return run_id
 
@@ -113,27 +115,56 @@ class EvolutionRunRegistry:
                 merged.update(progress)
                 current["progress"] = merged
 
+    def request_cancel(self, name: str) -> bool:
+        """请求取消当前运行；无 running 时返回 False（幂等）。
+
+        只是置协作标志 —— 任务在自己的检查点（阶段边界 / LLM 组间）响应，
+        单次进行中的 LLM 调用不会被强行中断。
+        """
+        with self._lock:
+            current = self._runs.get(name)
+            if current is None or current.get("state") != STATE_RUNNING:
+                return False
+            current["cancel_requested"] = True
+            return True
+
+    def is_cancel_requested(self, name: str, run_id: str) -> bool:
+        """执行线程检查点：当前 run 是否已被请求取消。"""
+        with self._lock:
+            current = self._runs.get(name)
+            return bool(
+                current
+                and current.get("run_id") == run_id
+                and current.get("state") == STATE_RUNNING
+                and current.get("cancel_requested")
+            )
+
     def finish(
         self,
         name: str,
         run_id: str,
         result: Any = None,
         error: Optional[str] = None,
+        cancelled: bool = False,
     ) -> None:
-        """写终态；无异常视为 succeeded，``result`` 统一序列化。"""
+        """写终态；``cancelled`` 优先于 error；无异常视为 succeeded。"""
         with self._lock:
             current = self._runs.get(name)
             if current is None or current.get("run_id") != run_id:
                 return
             now = _now_ms()
             started = int(current.get("started_at") or now)
-            current["state"] = STATE_FAILED if error else STATE_SUCCEEDED
+            if cancelled:
+                current["state"] = STATE_CANCELLED
+                current["phase_label"] = "已取消"
+            else:
+                current["state"] = STATE_FAILED if error else STATE_SUCCEEDED
+                current["phase_label"] = "失败" if error else "完成"
             current["finished_at"] = now
             current["duration_ms"] = max(0, now - started)
             current["result"] = serialize_evolution_result(result)
-            current["error"] = error
+            current["error"] = None if cancelled else error
             current["phase"] = "done"
-            current["phase_label"] = "完成" if error is None else "失败"
 
     def is_running(self, name: str) -> bool:
         with self._lock:

@@ -336,6 +336,7 @@
     "save_memory": { "method": "POST", "path": "/api/v1/memory/save" },
     "scheduled_create_task": { "method": "POST", "path": "/api/v1/scheduled/tasks" },
     "scheduled_delete_task": { "method": "DELETE", "path": "/api/v1/scheduled/tasks/{id}" },
+    "scheduled_evolution_cancel": { "method": "POST", "path": "/api/v1/scheduled/evolution/{name}/cancel" },
     "scheduled_evolution_run": { "method": "POST", "path": "/api/v1/scheduled/evolution/{name}/run" },
     "scheduled_evolution_tasks": { "method": "GET", "path": "/api/v1/scheduled/evolution/tasks" },
     "scheduled_list_tasks": { "method": "GET", "path": "/api/v1/scheduled/tasks" },

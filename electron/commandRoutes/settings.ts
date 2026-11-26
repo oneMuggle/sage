@@ -229,6 +229,11 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/scheduled/evolution/${encodeURIComponent(String(a.name))}/run`,
   },
+  // 2026-11-26 P1: 协作式取消（任务在阶段边界 / LLM 组间响应）。
+  scheduled_evolution_cancel: {
+    method: 'POST',
+    path: (a) => `/api/v1/scheduled/evolution/${encodeURIComponent(String(a.name))}/cancel`,
+  },
 
   // todo subsystem (personal todolist)
   todo_list: {
