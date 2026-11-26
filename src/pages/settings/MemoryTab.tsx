@@ -59,9 +59,7 @@ export function MemoryTab() {
   const [selecting, setSelecting] = useState(false);
   // R17-B / 2026-11-26: 记忆固化触发与结果由全局 store 派生 ——
   // 设置页切 tab 或去聊天页再回来，按钮仍显示运行中，结果不丢。
-  const consolidationRun = useEvolutionRunStore(
-    (state) => state.runs.memory_consolidation ?? null,
-  );
+  const consolidationRun = useEvolutionRunStore((state) => state.runs.memory_consolidation ?? null);
   const triggerEvolutionRun = useEvolutionRunStore((state) => state.trigger);
   const consolidating = consolidationRun?.state === 'running';
   const consolidationResult =

@@ -153,9 +153,7 @@ const RunningProgress: React.FC<{ run: EvolutionRunSnapshot }> = ({ run }) => {
           })}
         </ol>
       )}
-      {!isReflection && scanned > 0 && (
-        <p className="mt-1.5 text-muted">已扫描 {scanned} 条记忆</p>
-      )}
+      {!isReflection && scanned > 0 && <p className="mt-1.5 text-muted">已扫描 {scanned} 条记忆</p>}
     </div>
   );
 };
@@ -234,16 +232,17 @@ export const EvolutionPanel: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center gap-3 p-8">
         <div className="text-sm text-danger">加载进化日志失败：{error}</div>
-        <button onClick={() => void fetchLogs()} className="text-sm text-primary hover:text-primary-hover">
+        <button
+          onClick={() => void fetchLogs()}
+          className="text-sm text-primary hover:text-primary-hover"
+        >
           重试
         </button>
       </div>
     );
   }
 
-  const finishedSummary = latestFinished
-    ? formatEvolutionRunResult(latestFinished.result)
-    : null;
+  const finishedSummary = latestFinished ? formatEvolutionRunResult(latestFinished.result) : null;
 
   return (
     <div className="space-y-6">

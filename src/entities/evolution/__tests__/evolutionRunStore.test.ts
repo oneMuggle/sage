@@ -148,9 +148,9 @@ describe('useEvolutionRunStore', () => {
   it('trigger 启动失败时抛错（ok=false）', async () => {
     invokeMock.mockResolvedValue({ ok: false, detail: 'task not registered' });
 
-    await expect(
-      useEvolutionRunStore.getState().trigger('memory_reflection'),
-    ).rejects.toThrow('task not registered');
+    await expect(useEvolutionRunStore.getState().trigger('memory_reflection')).rejects.toThrow(
+      'task not registered',
+    );
   });
 
   it('连续 3 次轮询失败后停止轮询', async () => {
