@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import re
 import time
 from dataclasses import dataclass, field
@@ -147,8 +148,8 @@ def _candidate_download_urls(url: str, hosts: List[str]) -> List[str]:
     """按回退主机生成候选 URL（回退主机在前，原域最后兜底）。"""
     parts = urlsplit(url)
     candidates: List[str] = []
-    for host in hosts:
-        host = str(host or "").strip()
+    for raw_host in hosts:
+        host = str(raw_host or "").strip()
         if not host:
             continue
         candidate = urlunsplit(
@@ -185,13 +186,11 @@ def _close_tab_quietly(driver: BrowserDriver, tab_id: str) -> None:
     closer = getattr(driver, "close_tab", None)
     if closer is None or not tab_id:
         return
-    try:
+    with contextlib.suppress(Exception):
         closer(tab_id)
-    except Exception:  # noqa: BLE001 — 清理失败不影响下载结果
-        pass
 
 
-def _download_via_interstitial(
+def _download_via_interstitial(  # noqa: PLR0911 — 能力缺失/失败路径各自独立早退
     profile: SiteProfile,
     driver: BrowserDriver,
     expected_title: str,
@@ -237,10 +236,9 @@ def _download_via_interstitial(
     for index, candidate in enumerate(candidates):
         if target_tab:
             driver.focus_tab(target_tab)
-        try:
+        # 附件下载会中断导航（ERR_ABORTED），异常不阻断后续等下载
+        with contextlib.suppress(Exception):
             driver.navigate(candidate)
-        except Exception:  # noqa: BLE001 — 附件下载会中断导航（ERR_ABORTED），继续等下载
-            pass
         last = index == len(candidates) - 1
         wait_s = timeout_s if last else min(timeout_s, inter.attempt_timeout_s)
         downloaded = driver.wait_download(timeout_s=wait_s)

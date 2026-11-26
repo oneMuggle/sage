@@ -396,8 +396,11 @@ class TestTemplateXueshu789Profile:
         assert profile.pdf.entry_selector == "a.downloadlink"
         assert profile.pdf.entry_text == "下载"
         assert profile.pdf.post_click_wait_s == 8.0
+        assert profile.pdf.interstitial is not None
+        assert "cnki.net/docdown" in profile.pdf.interstitial.url_contains
+        assert profile.pdf.interstitial.host_fallbacks == ("kns.cnki.net",)
         assert profile.status == "ready"
-        assert profile.last_verified_at == "2026-11-22"
+        assert profile.last_verified_at == "2026-11-26"
         assert profile.compliance.default_enabled is False
         assert profile.source_layer == "template"
 
