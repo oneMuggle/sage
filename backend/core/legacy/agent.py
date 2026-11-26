@@ -50,6 +50,7 @@ from backend.core.legacy.iteration_ceiling import (
     plan_ceiling,
 )
 from backend.core.legacy.llm_client import (
+    FailoverEvent,
     LLMClient,
     LLMConfig,
     LLMResponse,
@@ -410,6 +411,28 @@ def _retry_started_info_from_event(
         }
     )
     return merged
+
+
+def _failover_retry_info(event: Any) -> Dict[str, Any]:
+    """2026-11-26: FailoverEvent → 前端 retry_info 载荷。
+
+    复用 ``state=retry`` 通道（kind=failover），前端 RetryBanner 据 kind
+    渲染"已自动切换到端点 X"，不显示倒计时/尝试点。
+    """
+    return {
+        "kind": "failover",
+        "attempt": 0,
+        "max_attempts": 0,
+        "error_type": getattr(event, "reason", "unknown"),
+        "error_message": "",
+        "delay": 0,
+        "from_endpoint": getattr(event, "from_endpoint", None),
+        "to_endpoint": getattr(event, "to_endpoint", None),
+        "from_endpoint_name": getattr(event, "from_endpoint_name", None),
+        "to_endpoint_name": getattr(event, "to_endpoint_name", None),
+        "hop_index": getattr(event, "hop_index", 0),
+        "total_hops": getattr(event, "total_hops", 0),
+    }
 
 
 def _retry_events_to_agent_events(
@@ -2598,6 +2621,15 @@ class SageAgent:
                                             ),
                                             agent_id=self.agent_id,
                                         )
+                                    elif evt_kind == "failover":
+                                        # 2026-11-26: 端点故障转移。复用 RETRY
+                                        # 状态通道下发 retry_info.kind=failover。
+                                        yield AgentEvent(
+                                            state=AgentState.RETRY,
+                                            iteration=i,
+                                            retry_info=_failover_retry_info(payload),
+                                            agent_id=self.agent_id,
+                                        )
                                     elif evt_kind == "heartbeat":
                                         # 2026-10-26: 重试退避等待期间 llm_client
                                         # 每 5s 发一次心跳。转发给前端喂 watchdog,
@@ -2642,22 +2674,57 @@ class SageAgent:
                             # 成功还是最终失败，都要在返回/抛出前补发——否则
                             # "重试耗尽后失败"的会话完全看不到重试发生过。
                             pending_retries: List[RetryEvent] = []
+                            # 2026-11-26: 端点切换事件同样先暂存，成功/失败前补发。
+                            pending_failovers: List[FailoverEvent] = []
+                            chat_kwargs: Dict[str, Any] = {
+                                "retry_callback": pending_retries.append,
+                                "failover_callback": pending_failovers.append,
+                            }
                             try:
-                                response = await self.llm_client.chat(
-                                    messages,
-                                    tools=available_tools or None,
-                                    retry_callback=pending_retries.append,
-                                )
+                                try:
+                                    response = await self.llm_client.chat(
+                                        messages,
+                                        tools=available_tools or None,
+                                        **chat_kwargs,
+                                    )
+                                except TypeError as type_exc:
+                                    # 兼容仅实现旧签名的测试替身/注入客户端：
+                                    # 参数绑定阶段即抛错，去掉新 kwarg 重试一次。
+                                    if (
+                                        "failover_callback" not in str(type_exc)
+                                        or "failover_callback" not in chat_kwargs
+                                    ):
+                                        raise
+                                    chat_kwargs.pop("failover_callback")
+                                    response = await self.llm_client.chat(
+                                        messages,
+                                        tools=available_tools or None,
+                                        **chat_kwargs,
+                                    )
                             except LLMError:
                                 for retry_evt in _retry_events_to_agent_events(
                                     pending_retries, i, self.agent_id
                                 ):
                                     yield retry_evt
+                                for fov in pending_failovers:
+                                    yield AgentEvent(
+                                        state=AgentState.RETRY,
+                                        iteration=i,
+                                        retry_info=_failover_retry_info(fov),
+                                        agent_id=self.agent_id,
+                                    )
                                 raise
                             for retry_evt in _retry_events_to_agent_events(
                                 pending_retries, i, self.agent_id
                             ):
                                 yield retry_evt
+                            for fov in pending_failovers:
+                                yield AgentEvent(
+                                    state=AgentState.RETRY,
+                                    iteration=i,
+                                    retry_info=_failover_retry_info(fov),
+                                    agent_id=self.agent_id,
+                                )
                             # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
                             # 这允许前端展示 LLM 的思考/推理过程。
                             # 2026-11-03: 若流式阶段已下发过增量（首个 content

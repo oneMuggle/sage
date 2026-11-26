@@ -466,6 +466,139 @@ def find_endpoint_for_model(model_id: str) -> Optional[Dict[str, Any]]:
     return candidates[0]
 
 
+def _protocol_to_provider(protocol: str) -> str:
+    """端点协议 → LLMConfig.provider（与 load_llm_config_for_chat 的历史映射一致）。"""
+    return (
+        "ollama"
+        if protocol == "ollama"
+        else "anthropic"
+        if protocol == "anthropic"
+        else "gemini"
+        if protocol == "gemini"
+        else "custom"
+    )
+
+
+def _resolve_hop_model(endpoint: Dict[str, Any], current_model: Optional[str]) -> Optional[str]:
+    """目标端点的模型：同名优先 → modelId → 第一个发现模型 → None（跳过）。"""
+    discovered = endpoint.get("discoveredModels") or []
+    if current_model and isinstance(discovered, list):
+        for model in discovered:
+            if isinstance(model, dict) and model.get("id") == current_model:
+                return current_model
+    model_id = endpoint.get("modelId")
+    if isinstance(model_id, str) and model_id.strip():
+        return model_id.strip()
+    if isinstance(discovered, list) and discovered and isinstance(discovered[0], dict):
+        first = discovered[0].get("id")
+        if isinstance(first, str) and first.strip():
+            return first.strip()
+    return None
+
+
+def build_endpoint_chain(
+    endpoints: List[Dict[str, Any]],
+    *,
+    primary_endpoint_id: Optional[str],
+    primary_model: Optional[str],
+    fallback_model: Optional[str] = None,
+    health: Optional[Any] = None,
+) -> List[Any]:
+    """按优先级构建故障转移链（``EndpointHop`` 列表）。
+
+    排序：可用端点 → 主端点（可用时）→ 优先级升序 → 原数组顺序；
+    冷却期内的 failed 端点排到最后作为兜底。无模型可解析的端点跳过。
+    """
+    from backend.core.legacy.llm_client import EndpointHop
+
+    if health is None:
+        from backend.services.endpoint_health import get_health_registry
+
+        health = get_health_registry()
+
+    candidates: List[Tuple[Tuple[int, int, int, int], Dict[str, Any], str, bool, str, Any]] = []
+    for index, ep in enumerate(endpoints or []):
+        if not isinstance(ep, dict):
+            continue
+        protocol = ep.get("protocol") or "openai-compatible"
+        if protocol not in _SUPPORTED_PROTOCOLS or not ep.get("baseUrl"):
+            continue
+        if not _endpoint_has_required_api_key(ep, protocol=protocol):
+            continue
+        model = _resolve_hop_model(ep, primary_model)
+        if not model:
+            continue
+        endpoint_id = ep.get("id")
+        is_primary = bool(primary_endpoint_id) and endpoint_id == primary_endpoint_id
+        available = health.is_available(endpoint_id)
+        priority = ep.get("priority")
+        priority_key = (
+            priority
+            if isinstance(priority, int) and not isinstance(priority, bool) and priority > 0
+            else 10**6
+        )
+        sort_key = (0 if available else 1, 0 if is_primary else 1, priority_key, index)
+        candidates.append((sort_key, ep, model, is_primary, protocol, endpoint_id))
+
+    candidates.sort(key=lambda item: item[0])
+    chain = []
+    for _key, ep, model, is_primary, protocol, endpoint_id in candidates:
+        chain.append(
+            EndpointHop(
+                endpoint_id=endpoint_id if isinstance(endpoint_id, str) else None,
+                endpoint_name=ep.get("name") if isinstance(ep.get("name"), str) else None,
+                base_url=ep["baseUrl"],
+                api_key=ep.get("apiKey") or "",
+                provider=_protocol_to_provider(protocol),
+                model=model,
+                fallback_model=fallback_model if is_primary else None,
+                reasoning_effort=ep.get("reasoningEffort"),
+                thinking_budget=ep.get("thinkingBudget"),
+            )
+        )
+    return chain
+
+
+def attach_endpoint_chain(cfg: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """failover 开启且有效端点 > 1 时，把 ``endpoint_chain`` 注入 cfg。
+
+    任何异常（设置损坏/DB 不可用）都原样返回 cfg，保证聊天不受影响。
+    """
+    if not isinstance(cfg, dict):
+        return cfg
+    try:
+        from backend.data.settings_canonicalizer import to_camel
+        from backend.data.settings_repo import SettingsRepository
+        from backend.services.endpoint_health import get_health_registry, load_failover_config
+
+        if not load_failover_config().enabled:
+            return cfg
+        raw = SettingsRepository().get_json("app_settings")
+        settings = to_camel(raw) if isinstance(raw, dict) else {}
+        # fallback_model 偏好由调用方（如流式 producer）在 load 之后注入；
+        # 构链发生在 load 内，需要自行兜底读取（仅接受非空字符串）。
+        fallback_model = cfg.get("fallback_model")
+        if not isinstance(fallback_model, str) or not fallback_model.strip():
+            try:
+                pref = SettingsRepository().get("fallback_model")
+            except Exception:  # noqa: BLE001 — 偏好读取失败不阻断构链
+                pref = None
+            fallback_model = pref if isinstance(pref, str) and pref.strip() else None
+        chain = build_endpoint_chain(
+            settings.get("endpoints") or [],
+            primary_endpoint_id=cfg.get("endpoint_id"),
+            primary_model=cfg.get("model"),
+            fallback_model=fallback_model,
+            health=get_health_registry(),
+        )
+        if len(chain) <= 1:
+            return cfg
+        return {**cfg, "endpoint_chain": chain}
+    except Exception as exc:  # noqa: BLE001 — failover 是可选增强，失败即降级
+        logger.debug("llm_factory: endpoint chain unavailable: %s", exc)
+        return cfg
+
+
 def resolve_chat_model(
     session_id: Optional[str], profile_model: Optional[str] = None
 ) -> Optional[str]:
@@ -611,9 +744,11 @@ def load_llm_config_for_chat(
     profile_value = _clamp_max_output_tokens(profile_max_tokens)
     if profile_value is not None and profile_value != _PROFILE_MAX_TOKENS_PLACEHOLDER:
         merged["max_tokens"] = profile_value
-    return apply_auto_routing_overlay(
+    merged = apply_auto_routing_overlay(
         merged, task_type=task_type, session_id=session_id, profile_model=profile_model
     )
+    # 2026-11-26: failover 开启时附加优先级端点链（关闭时原样返回）。
+    return attach_endpoint_chain(merged)
 
 
 # ---------------------------------------------------------------------------
