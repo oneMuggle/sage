@@ -190,6 +190,26 @@ class RetryAttemptStartedEvent:
     budget_remaining_s: Optional[float] = None
 
 
+@dataclass(frozen=True)
+class EndpointHop:
+    """2026-11-26: 故障转移链中的一跳（一个端点的请求参数快照）。
+
+    由 ``llm_factory.build_endpoint_chain`` 按优先级构建，注入
+    ``LLMConfig.endpoint_chain``。无链时 LLMClient 按 config 构造单跳，
+    行为与历史完全一致。
+    """
+
+    endpoint_id: Optional[str] = None
+    endpoint_name: Optional[str] = None
+    base_url: str = ""
+    api_key: str = ""
+    provider: str = "openai"
+    model: str = ""
+    fallback_model: Optional[str] = None
+    reasoning_effort: Optional[str] = None
+    thinking_budget: Optional[int] = None
+
+
 def _retry_budget_exhausted_error(
     llm_err: LLMError,
     attempt: int,
