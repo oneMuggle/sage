@@ -351,7 +351,7 @@
 
 | 端点 | 用途 |
 |---|---|
-| `GET /api/v1/browser/status` | 返回 `{active, max, lruEvict, sessions: [{id, name, browser_type, last_used_at}, ...]}`。`sessions` 过滤掉保留渲染池 |
+| `GET /api/v1/browser/status` | 返回 `{active, max, lruEvict, sessions: [{id, name, browser_type, last_used_at, owner, busy}, ...]}`。`sessions` 过滤掉保留渲染池 |
 | `PATCH /api/v1/browser/{id}` | 重命名会话；`body = {name: str}` |
 | `GET /api/v1/browser/config` / `PATCH /api/v1/browser/config` | 读取 / 写入 `browser_config` JSON 字段（含 `maxSessions` / `lruEvict`） |
 
@@ -361,6 +361,30 @@
 
 **LRU 回收**：`BrowserSessionManager.require()` 每次被工具调用时调用 `session.touch()` 更新
 `last_used_at`；`register()` 在超限时按 `last_used_at` 升序选择最久未用者关闭。跳过保留池槽位。
+
+## 多会话归属与租约（2026-11-26）
+
+浏览器资源以**聊天会话**（`ToolExecutionContext.session_id`）为归属单位，而非仅按 `browser_id`：
+
+- **归属解析**：`BrowserSession.owner` 记录启动实例的会话 id。`browser_*` 不传 `browser_id` 时按
+  「本会话自有实例 → 用户共享标签页（`external`）→ 报错」解析，不再回退到其他会话的实例；
+  显式传入其他会话的 `browser_id` 会被拒绝（`external` 共享标签页除外）。`browser_navigate`
+  在当前会话没有可用浏览器时自动拉起一个自有实例。
+- **无归属调用方**：REST 设置页、web_fetch 渲染池、无 `ToolExecutionContext` 的旧调用方保持
+  旧语义（external 优先 / 唯一实例免传 id）。
+- **执行租约**：浏览器工具执行期间 `lease_count += 1`（`@_leased` 装饰器 + `_resolve_session`
+  登记，作用域退出统一释放）。`register()` 的上限/LRU 淘汰与渲染池让位会跳过租用中的实例；
+  所有实例都在使用时报可读错误，不会终止 in-flight 操作。
+- **持久 profile 互斥**：归属启动（`owner` 非空）时登记 profile 目录占用；显式命名被其他
+  会话占用时报错，隐式默认名自动后缀 `default-2..-10`；实例终止时释放占用。
+- **Firefox 单实例**：调试端口固定 9229，启动前检查存活 Firefox 实例并给出明确错误。
+- **审计归因**：`browser_action_log.conversation_id` 写入当前会话 id（此前恒为 NULL）。
+- **落盘隔离**：未绑定工作区时下载落到 `data/browser-downloads/<browser_id>/`；截图缺省
+  文件名带 `browser_id`。
+
+已知限制（P1 计划）：内嵌浏览器（Electron）所有窗口仍共享
+`persist:sage-agent-browser` 分区，cookie/localStorage 跨会话；前端「唯一存活会话 /
+无过滤待确认」回退、下载事件广播与渲染池并发 cookie 注入尚未按会话隔离。
 
 ## 知网 KNS 5.5 真机验收清单
 
