@@ -382,9 +382,15 @@
 - **落盘隔离**：未绑定工作区时下载落到 `data/browser-downloads/<browser_id>/`；截图缺省
   文件名带 `browser_id`。
 
-已知限制（P1 计划）：内嵌浏览器（Electron）所有窗口仍共享
-`persist:sage-agent-browser` 分区，cookie/localStorage 跨会话；前端「唯一存活会话 /
-无过滤待确认」回退、下载事件广播与渲染池并发 cookie 注入尚未按会话隔离。
+**P1（2026-11-26）**：前端浏览器面板按 `owner` 只展示/控制本对话名下实例，
+不再认领「唯一存活会话」或回退到无过滤待确认列表；内嵌浏览器下载按
+`browser_id` 路由事件并分目录落盘；渲染池凭据注入按实例串行；`external`
+共享标签页动作全局串行（等待上限 120s）。`/browser/status.sessions[]` 增加
+`owner` / `busy` 字段。
+
+已知限制（P2 计划）：内嵌浏览器（Electron）所有窗口仍共享
+`persist:sage-agent-browser` 分区，cookie/localStorage 跨会话；确认项服务端
+仍按 `browser_id` 隔离（未按 conversation 二次校验）；并行多账号实例池。
 
 ## 知网 KNS 5.5 真机验收清单
 

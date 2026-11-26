@@ -905,6 +905,7 @@ export const zhChatAndSider = {
   'settings.network.browser.panel_hint': '点按实例可绑定到当前会话',
   'settings.network.browser.panel_bind': '绑定',
   'settings.network.browser.panel_bound': '已绑定',
+  'settings.network.browser.panel_owned_by_other': '其他对话',
   'settings.network.browser.panel_rename': '重命名',
   'settings.network.browser.panel_last_used': '最近使用',
   'settings.network.browser.rename_saved': '已重命名',

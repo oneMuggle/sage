@@ -120,6 +120,8 @@ export function BrowserSessionStatus() {
             <ul className="space-y-1">
               {status.sessions.map((session) => {
                 const isBound = boundSessionId === session.id;
+                const canBind = !session.owner || session.owner === currentSessionId;
+                const ownedByOther = Boolean(session.owner && session.owner !== currentSessionId);
                 const displayName = session.name || session.id.slice(0, 8);
                 return (
                   <li
@@ -161,12 +163,14 @@ export function BrowserSessionStatus() {
                       </button>
                       <button
                         type="button"
-                        disabled={!currentSessionId || isBound}
+                        disabled={!currentSessionId || isBound || !canBind}
                         onClick={() => bind(session.id)}
                         title={
                           isBound
                             ? t('settings.network.browser.panel_bound')
-                            : t('settings.network.browser.panel_bind')
+                            : ownedByOther
+                              ? t('settings.network.browser.panel_owned_by_other')
+                              : t('settings.network.browser.panel_bind')
                         }
                         className="p-1 rounded-radius-sm text-muted hover:bg-bg-hover hover:text-text disabled:opacity-40 transition-colors"
                         data-testid={`browser-session-bind-${session.id}`}
@@ -174,6 +178,11 @@ export function BrowserSessionStatus() {
                         <Check className={`w-3 h-3 ${isBound ? 'text-primary' : ''}`} />
                       </button>
                     </div>
+                    {ownedByOther && (
+                      <div className="text-xs text-warning mt-0.5">
+                        {t('settings.network.browser.panel_owned_by_other')}
+                      </div>
+                    )}
                     <div className="text-xs text-muted mt-0.5">
                       {t('settings.network.browser.panel_last_used')}: {session.last_used_at || '—'}
                     </div>

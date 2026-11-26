@@ -30,6 +30,14 @@ vi.mock('../../../shared/api/browserControlClient', () => ({
   fetchBrowserAudit: controlMocks.fetchBrowserAudit,
 }));
 
+const statusMocks = vi.hoisted(() => ({
+  fetchBrowserStatus: vi.fn(),
+}));
+
+vi.mock('../../../shared/api/browserSettingsClient', () => ({
+  fetchBrowserStatus: statusMocks.fetchBrowserStatus,
+}));
+
 const panel = {
   show: vi.fn(async () => ({ ok: true })),
   hide: vi.fn(async () => ({ ok: true })),
@@ -145,6 +153,13 @@ beforeEach(() => {
   });
   controlMocks.fetchBrowserControlSessions.mockReset();
   controlMocks.fetchBrowserControlSessions.mockResolvedValue([]);
+  statusMocks.fetchBrowserStatus.mockReset();
+  statusMocks.fetchBrowserStatus.mockResolvedValue({
+    active: 0,
+    max: 4,
+    lruEvict: false,
+    sessions: [],
+  });
   controlMocks.setBrowserControl.mockReset();
   controlMocks.setBrowserControl.mockImplementation(async (id: string, action: string) => ({
     session_id: id,
@@ -370,19 +385,35 @@ describe('BrowserPanel M4 安全确认', () => {
 });
 
 describe('BrowserPanel 最终修复波（C1b/C1c/C2）', () => {
-  it('纯字符串失败结果按前缀显示徽章，并通过存活会话恢复控制按钮', async () => {
-    controlMocks.fetchBrowserControlSessions.mockResolvedValue([
-      { session_id: 's1', state: 'agent', alive: true, browser_type: 'chrome', headless: false },
-    ]);
+  it('纯字符串失败结果按前缀显示徽章，并通过本对话名下实例恢复控制按钮', async () => {
+    statusMocks.fetchBrowserStatus.mockResolvedValue({
+      active: 1,
+      max: 4,
+      lruEvict: false,
+      sessions: [
+        {
+          id: 's1',
+          name: '',
+          last_used_at: '',
+          alive: true,
+          persistent: false,
+          profile_name: '',
+          owner: 'conv1',
+        },
+      ],
+    });
     installElectronApi(panel);
-    renderPanel([
-      {
-        id: 'plain-1',
-        name: 'browser_navigate',
-        args: { url: 'https://example.com/' },
-        result: 'needs_confirmation: c1 访问站点 example.com（请在右栏浏览器面板确认）',
-      },
-    ]);
+    renderPanel(
+      [
+        {
+          id: 'plain-1',
+          name: 'browser_navigate',
+          args: { url: 'https://example.com/' },
+          result: 'needs_confirmation: c1 访问站点 example.com（请在右栏浏览器面板确认）',
+        },
+      ],
+      'conv1',
+    );
 
     expect(screen.getByText('等待确认')).toBeTruthy();
     await waitFor(() =>
@@ -390,8 +421,53 @@ describe('BrowserPanel 最终修复波（C1b/C1c/C2）', () => {
     );
   });
 
+  it('不认领其他对话名下的唯一存活实例与其确认项', async () => {
+    statusMocks.fetchBrowserStatus.mockResolvedValue({
+      active: 1,
+      max: 4,
+      lruEvict: false,
+      sessions: [
+        {
+          id: 'other-session',
+          name: '',
+          last_used_at: '',
+          alive: true,
+          persistent: false,
+          profile_name: '',
+          owner: 'conv2',
+        },
+      ],
+    });
+    controlMocks.fetchPendingConfirmations.mockResolvedValue([pendingConfirmation()]);
+    installElectronApi(panel);
+    renderPanel([], 'conv1');
+
+    await waitFor(() => expect(statusMocks.fetchBrowserStatus).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(controlMocks.fetchBrowserControl).not.toHaveBeenCalledWith('other-session'),
+    );
+    expect(controlMocks.fetchPendingConfirmations).not.toHaveBeenCalledWith('other-session');
+    expect(screen.queryByTestId('browser-confirm-bar')).toBeNull();
+  });
+
   it('finalizeStep + resetToolCalls 后时间线与待确认项仍保留', async () => {
     controlMocks.fetchPendingConfirmations.mockResolvedValue([pendingConfirmation()]);
+    statusMocks.fetchBrowserStatus.mockResolvedValue({
+      active: 1,
+      max: 4,
+      lruEvict: false,
+      sessions: [
+        {
+          id: 's1',
+          name: '',
+          last_used_at: '',
+          alive: true,
+          persistent: false,
+          profile_name: '',
+          owner: 'conv1',
+        },
+      ],
+    });
     installElectronApi(panel);
     const persistedCall = browserToolCall(
       'browser_navigate',

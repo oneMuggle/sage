@@ -25,6 +25,8 @@ interface SessionSeed {
   id: string;
   name: string;
   last_used_at?: string;
+  owner?: string;
+  busy?: boolean;
 }
 
 function makeStatus(
@@ -193,6 +195,17 @@ describe('BrowserSessionStatus', () => {
         (screen.getByTestId('browser-session-bind-sess-one-aaaa') as HTMLButtonElement).disabled,
       ).toBe(true),
     );
+  });
+
+  it('disables binding for sessions owned by another conversation', async () => {
+    apiMocks.fetchBrowserStatus.mockResolvedValue(
+      makeStatus({ sessions: [{ id: 'sess-other', name: '他人', owner: 'conv-2' }] }),
+    );
+    renderStatus();
+    await openPanel();
+    const button = screen.getByTestId('browser-session-bind-sess-other') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(screen.getByText('其他对话')).toBeTruthy();
   });
 
   it('disables binding when no conversation is selected', async () => {

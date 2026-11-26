@@ -45,6 +45,7 @@ from .browser_cdp import (
     RESERVED_BROWSER_ID,
     BrowserCDPError,
     BrowserSession,
+    BrowserType,
     _list_page_targets,
     browser_downloads_root,
     cdp_command,
@@ -170,39 +171,55 @@ def _current_owner() -> str:
 #: 当前工具调用的租约作用域栈（executor 线程内有效）。
 _lease_local = threading.local()
 
+#: external 共享标签页的全局动作锁：用户日常浏览器只有一个页面，两个会话的
+#: browser_* 必须串行，避免交错导航/点击产生"你点一半我换页"的错乱。
+_EXTERNAL_ACTION_LOCK = threading.Lock()
+_EXTERNAL_LOCK_TIMEOUT_SECONDS = 120.0
+
 
 @contextlib.contextmanager
 def _browser_lease_scope():
-    """工具执行作用域：退出时统一释放本作用域内登记的会话租约。"""
+    """工具执行作用域：退出时逆序释放 external 锁与会话租约。"""
     stack = getattr(_lease_local, "stack", None)
     if stack is None:
         stack = []
         _lease_local.stack = stack
-    acquired: List[BrowserSession] = []
+    acquired: List[Tuple[str, Any]] = []
     stack.append(acquired)
     try:
         yield
     finally:
         stack.pop()
         release = getattr(get_browser_manager(), "release_lease", None)
-        if release is not None:
-            for session in acquired:
-                release(session)
+        for kind, item in reversed(acquired):
+            if kind == "lease" and release is not None:
+                release(item)
+            elif kind == "external":
+                item.release()
 
 
 def _lease_session(session: BrowserSession) -> None:
-    """在活动租约作用域内登记一次使用（无作用域时静默跳过）。"""
+    """在活动租约作用域内登记一次使用（无作用域时静默跳过）。
+
+    external 共享标签页额外获取全局动作锁：其他会话正在操作时最多等待
+    ``_EXTERNAL_LOCK_TIMEOUT_SECONDS``，超时给出可读错误而不是静默交错。
+    """
     stack = getattr(_lease_local, "stack", None)
     if not stack:
         return
     acquired = stack[-1]
-    if any(item is session for item in acquired):
+    if any(kind == "lease" and item is session for kind, item in acquired):
         return
     acquire = getattr(get_browser_manager(), "acquire_lease", None)
-    if acquire is None:
-        return
-    acquire(session)
-    acquired.append(session)
+    if acquire is not None:
+        acquire(session)
+        acquired.append(("lease", session))
+    if getattr(session, "browser_type", None) == BrowserType.EXTERNAL:
+        if any(kind == "external" for kind, _item in acquired):
+            return
+        if not _EXTERNAL_ACTION_LOCK.acquire(timeout=_EXTERNAL_LOCK_TIMEOUT_SECONDS):
+            raise BrowserCDPError("共享标签页正被另一个会话操作，请稍后重试")
+        acquired.append(("external", _EXTERNAL_ACTION_LOCK))
 
 
 def _leased(fn):
