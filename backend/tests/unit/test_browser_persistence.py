@@ -86,7 +86,7 @@ class TestLaunchToolPersistence:
     def test_launch_persistent_wires_download_behavior(self, tmp_path, monkeypatch):
         captured: Dict[str, Any] = {}
 
-        def _fake_launch(headless, browser_id=None, persistent=False, profile_name="default"):
+        def _fake_launch(headless, browser_id=None, persistent=False, profile_name=None, owner=""):
             captured["persistent"] = persistent
             captured["profile_name"] = profile_name
             session = _session(tmp_path, persistent)
@@ -119,7 +119,7 @@ class TestLaunchToolPersistence:
         db_path = tmp_path / "appdata" / "sage.db"
         monkeypatch.setenv("SAGE_DB_PATH", str(db_path))
 
-        def _fake_launch(headless, browser_id=None, persistent=False, profile_name="default"):
+        def _fake_launch(headless, browser_id=None, persistent=False, profile_name=None, owner=""):
             return _session(tmp_path, persistent)
 
         calls: List[Dict[str, Any]] = []
@@ -134,7 +134,7 @@ class TestLaunchToolPersistence:
         result = tool.execute()
 
         assert result.success is True
-        expected = str(tmp_path / "appdata" / "browser-downloads")
+        expected = str(tmp_path / "appdata" / "browser-downloads" / "b1")
         download_call = next(
             c for c in calls if c["method"] == "Browser.setDownloadBehavior"
         )
@@ -142,7 +142,7 @@ class TestLaunchToolPersistence:
         assert result.content["download_dir"] == expected
 
     def test_launch_survives_download_behavior_failure(self, tmp_path, monkeypatch):
-        def _fake_launch(headless, browser_id=None, persistent=False, profile_name="default"):
+        def _fake_launch(headless, browser_id=None, persistent=False, profile_name=None, owner=""):
             return _session(tmp_path, persistent)
 
         def _fake_cdp(session_, method, params=None, target_id=None):
@@ -214,7 +214,7 @@ class TestRenderPoolPersistence:
     def test_acquire_persistent_when_configured(self, monkeypatch):
         launched: Dict[str, Any] = {}
 
-        def _fake_launch(headless, browser_id=None, persistent=False, profile_name="default"):
+        def _fake_launch(headless, browser_id=None, persistent=False, profile_name=None, owner=""):
             launched.update(
                 {"headless": headless, "browser_id": browser_id, "persistent": persistent, "profile_name": profile_name}
             )
@@ -233,7 +233,7 @@ class TestRenderPoolPersistence:
     def test_acquire_temp_when_not_configured(self, monkeypatch):
         launched: Dict[str, Any] = {}
 
-        def _fake_launch(headless, browser_id=None, persistent=False, profile_name="default"):
+        def _fake_launch(headless, browser_id=None, persistent=False, profile_name=None, owner=""):
             launched["persistent"] = persistent
             return SimpleNamespace(browser_id=RENDER_POOL_ID, is_alive=lambda: True)
 
