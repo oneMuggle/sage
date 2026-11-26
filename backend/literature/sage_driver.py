@@ -36,8 +36,8 @@ class SageToolDriver:
             return parsed if isinstance(parsed, dict) else {"value": parsed}
         return {"value": value}
 
-    def _tool(self, name: str, **kwargs: Any) -> Any:
-        return self._call(name, **kwargs)
+    def _tool(self, tool_name: str, **kwargs: Any) -> Any:
+        return self._call(tool_name, **kwargs)
 
     def navigate(self, url: str, wait_for: str = "") -> str:
         args: Dict[str, Any] = {"url": url}
@@ -120,6 +120,35 @@ class SageToolDriver:
 
     def current_title(self) -> str:
         return self._title
+
+    def element_attr(self, selector: str, name: str = "href") -> str:
+        """读取元素属性（如下载链接的完整 href，含站点签名参数）。"""
+        self._ensure_browser()
+        data = self._as_dict(
+            self._tool(
+                "browser_interact", action="attr", selector=selector, attr_name=name
+            )
+        )
+        return str(data.get("info") or "")
+
+    def tabs(self) -> List[Dict[str, Any]]:
+        """列出当前浏览器会话的标签页（tab_id / url / title / active）。"""
+        data = self._as_dict(self._tool("browser_tabs", action="list"))
+        return [tab for tab in (data.get("tabs") or []) if isinstance(tab, dict)]
+
+    def open_tab(self, url: str) -> str:
+        """新开标签页并设为活动页，返回 tab_id（拿不到时为空串）。"""
+        data = self._as_dict(self._tool("browser_tabs", action="create", url=url))
+        self._browser_ready = True
+        return str(data.get("tab_id") or "")
+
+    def focus_tab(self, tab_id: str) -> None:
+        if tab_id:
+            self._tool("browser_tabs", action="switch", tab_id=tab_id)
+
+    def close_tab(self, tab_id: str) -> None:
+        if tab_id:
+            self._tool("browser_tabs", action="close", tab_id=tab_id)
 
     def wait_download(self, timeout_s: float = 60) -> Optional[str]:
         data = self._as_dict(
