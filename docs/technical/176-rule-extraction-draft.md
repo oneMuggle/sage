@@ -117,12 +117,25 @@ RulesSubtabs.tsx          「从本文档抽取」→ extractDraft() → 打开�
             └─ RuleDiffCard.tsx    add 绿 + / modify 红删绿增 / delete 红 −
                                    / explain 纯文本；逐条 接受/拒绝 + 全部接受
 
-ruleDraftStore.ts (zustand)
+ruleDraftStore.ts (zustand + persist)
   rules: DraftRule[]（selected 默认 = confidence ≥ 0.5，dirty 标记已编辑）
   applyRefineAction() 把已接受的 add/modify/delete 原子应用到草稿
+  localStorage 持久化（key `sage-rule-draft-v1`，仅 rules/conflicts/warnings/
+  sourceName/workspacePath；isOpen/loading/error 不持久化 → 刷新后面板不弹，
+  规则页显示「继续编辑上次草稿」横幅，用户主动恢复）
 ```
 
-提交时前端把草稿映射为 `CommitRuleItem`（含 structured_params/confidence/source_excerpt），成功后 bump `reloadKey` 并聚焦新组。
+提交时前端把草稿映射为 `CommitRuleItem`（含 structured_params/confidence/source_excerpt），成功后 bump `reloadKey` 并聚焦新组。面板打开时并行拉取已有规则组列表，Footer 的「提交到」选择器可指定追加目标：同名规则自动跳过（merge 预览显示"将新增 N 条，跳过 M 条同名"），`确认落盘` 按钮计数随之调整为实际新增数。
+
+### 5.1 Phase 3 增强（同一面板内）
+
+| 功能 | 实现 |
+|------|------|
+| 置信度筛选 | 工具栏下拉（全部/高≥0.8/中0.5-0.8/低<0.5），仅影响列表展示 |
+| 批量选择 | 全选 / 全不选 / 仅选高置信度（`selectByConfidence(0.8)`） |
+| 手动添加规则 | 行内表单（名称必填 + severity + 说明），`addRule()` 以 confidence=1.0、来源"手动添加"入草稿 |
+| 每条规则 AI 修改 | RuleDraftCard 的「AI 修改」把预填指令（`修改规则「X」：`）写入 store `pendingInstruction`，右侧精炼面板消费后聚焦输入框 |
+| 提交到已有组 | `target_group_id` + 同名跳过合并预览（不做覆盖/更新，避免误改已有规则） |
 
 ---
 
@@ -130,10 +143,11 @@ ruleDraftStore.ts (zustand)
 
 | 决策 | 理由 |
 |------|------|
-| 草稿只在前端内存（zustand），不做服务端草稿 | 单次审阅会话通常几分钟内完成；避免草稿生命周期/清理问题。页面刷新会丢失草稿（Phase 3 可加 localStorage） |
+| 草稿持久化到 localStorage、不做服务端草稿 | 避免草稿生命周期/清理问题；刷新/重启不丢未完成审阅。持久化范围排除 isOpen（刷新后不弹窗，用横幅提示恢复） |
 | commit 未包事务 | SQLite 本地单用户，部分失败概率低；失败时 toast 报错、组保留可手动清理。后续可加整组回滚 |
-| 提交默认新建组（`target_group_id` 已支持但前端未用） | 增量合并到已有组的 diff UI 属 Phase 3 |
-| AI 精炼走全局侧栏而非每条规则的快捷菜单 | 自然语言指令天然面向整个规则集（"去掉页边距相关的规则"），全局对话更贴合；逐条快捷菜单留作后续增强 |
+| 追加到已有组时同名跳过（不覆盖） | 覆盖会静默改写用户已有规则；跳过 + 预览计数最保守可预期，覆盖/更新留作显式操作 |
+| AI 精炼同时提供全局侧栏与逐条快捷入口 | 全局对话处理跨规则指令（"去掉页边距相关的规则"）；逐条「AI 修改」只预填指令、仍走同一对话，逻辑不分叉 |
+| 手动添加规则 confidence=1.0 | 用户亲自编写即最高可信度；"仅选高置信度"批量操作天然包含手动规则 |
 | 新增字段全部可空 | 旧数据无需回填，规则包导入导出保持向后兼容（`parseRulePack` 忽略未知字段） |
 
 ---
@@ -145,13 +159,14 @@ ruleDraftStore.ts (zustand)
 | `backend/tests/unit/office/test_rule_refine_llm.py` | 解析容错（markdown 围栏）、temp_id/patch 校验、add 默认值、LLM 失败/解析失败降级 |
 | `backend/tests/integration/test_rules_routes.py` | draft 不落库、commit 持久化 metadata、追加到已有组、404、refine 503/动作校验 |
 | `src/features/office/rules/__tests__/RuleRefinePanel.test.tsx` | 指令→diff→接受应用/拒绝不变 |
-| `src/features/office/rules/__tests__/RulesSubtabs.test.tsx` | 抽取打开草稿、低置信度默认不选、提交仅含选中项、错误展示、加载态 |
+| `src/features/office/rules/__tests__/RulesSubtabs.test.tsx` | 抽取打开草稿、低置信度默认不选、提交仅含选中项、错误展示、加载态、持久化草稿恢复横幅 |
+| `src/features/office/rules/__tests__/RuleExtractionDraft.phase3.test.tsx` | 置信度筛选、仅选高置信度、手动添加规则、已有组同名跳过合并预览与提交载荷 |
 
 ---
 
-## 8. 后续（Phase 3）
+## 8. 已知限制
 
-- 抽取到已有规则组 + diff 合并 UI
-- 草稿 localStorage 持久化
-- 每条规则的「AI 修改」快捷菜单
-- 手动添加规则表单
+- 追加到已有组按**规则名**判重（改名后视为新规则）；不做规则内容的深度 diff
+- 筛选项只影响展示，不改变选中状态（配合"仅选高置信度"使用）
+- 精炼对话历史不持久化（刷新后仅草稿数据保留）
+- i18n：新增面板文案为中文硬编码，未接入 zh/en 字典
