@@ -1680,6 +1680,11 @@ _WEB_DIST_PATH = Path(
 )
 
 if is_web_mode():
+    # Windows 注册表可能把 .js 登记为 text/plain，浏览器会按规范拒绝执行
+    # <script type="module">；必须先覆盖 MIME 再挂载静态目录，否则整页白屏。
+    from backend.api.web_static import register_web_static_mime_types
+
+    register_web_static_mime_types()
     if _WEB_DIST_PATH.exists():
         from fastapi.staticfiles import StaticFiles
 
