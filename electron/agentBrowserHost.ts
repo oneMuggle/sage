@@ -34,7 +34,12 @@ function wrapWindow(win: BrowserWindow): BridgeWindow {
   };
 }
 
-function createWindow(partitionSession: Electron.Session, visible: boolean): BridgeWindow {
+function createWindow(
+  partitionSession: Electron.Session,
+  visible: boolean,
+  session?: string,
+  sessionsByWebContents?: Map<number, string>,
+): BridgeWindow {
   const win = new BrowserWindow({
     show: visible,
     width: 1280,
@@ -48,6 +53,11 @@ function createWindow(partitionSession: Electron.Session, visible: boolean): Bri
       partition: AGENT_BROWSER_PARTITION,
     },
   });
+  if (session && sessionsByWebContents) {
+    const webContentsId = win.webContents.id;
+    sessionsByWebContents.set(webContentsId, session);
+    win.on('closed', () => sessionsByWebContents.delete(webContentsId));
+  }
   try {
     const ua = plainChromeUa(win.webContents.getUserAgent());
     partitionSession.setUserAgent(ua);
@@ -89,25 +99,37 @@ export async function startAgentBrowserHost(): Promise<AgentBrowserBridgeHandle 
     partitionSession.setPermissionRequestHandler((_wc, _permission, callback) => {
       callback(false);
     });
-    let downloadDir = '';
+    /** 下载目录按浏览器实例（session）隔离；最后设置值作为无映射兜底。 */
+    const downloadDirs = new Map<string, string>();
+    let lastDownloadDir = '';
+    /** webContents.id → 后端 browser_id（下载事件反查所属实例）。 */
+    const sessionByWebContents = new Map<number, string>();
     const bridgeSession: BridgeSession = {
       cookies: partitionSession.cookies as unknown as BridgeSession['cookies'],
-      setDownloadPath: (path: string) => {
-        downloadDir = path;
+      setDownloadPath: (path: string, sessionId?: string) => {
+        lastDownloadDir = path;
+        if (sessionId) downloadDirs.set(sessionId, path);
       },
     };
     const handle = await startAgentBrowserBridge({
-      createWindow: (visible: boolean) => createWindow(partitionSession, visible),
+      createWindow: (visible: boolean, sessionId?: string) =>
+        createWindow(partitionSession, visible, sessionId, sessionByWebContents),
       getSession: () => bridgeSession,
       randomId: () => randomBytes(8).toString('hex'),
       log: (message: string) => logger.debug(message),
       onDownload: (handler) => {
-        partitionSession.on('will-download', (_event, item) => {
+        partitionSession.on('will-download', (_event, item, webContents) => {
           // Electron 默认会弹保存对话框（隐藏/受控窗口下无人可点 → 下载卡死）。
-          // 后端通常已通过 Browser.setDownloadBehavior 指定目录；若尚未设置
-          // （例如 navigate 自动拉起后后端漏调），兜底写入系统下载目录，
-          // 任何情况下都不允许弹对话框。
-          const saveDir = downloadDir || app.getPath('downloads');
+          // 后端每个实例通过 Browser.setDownloadBehavior 指定目录；按触发下载的
+          // webContents 反查实例，落到该实例目录；未映射（如弹窗子窗口）用最后
+          // 一次设置的目录兜底，任何情况下都不允许弹对话框。
+          const sessionId = webContents
+            ? sessionByWebContents.get(webContents.id)
+            : undefined;
+          const saveDir =
+            (sessionId ? downloadDirs.get(sessionId) : undefined) ||
+            lastDownloadDir ||
+            app.getPath('downloads');
           try {
             item.setSavePath(join(saveDir, basename(item.getFilename())));
           } catch {
@@ -115,7 +137,7 @@ export async function startAgentBrowserHost(): Promise<AgentBrowserBridgeHandle 
           }
           const guid = randomBytes(8).toString('hex');
           const emit = (method: string, extra: Record<string, unknown>): void => {
-            handler(method, { guid, ...extra });
+            handler(method, { guid, ...extra }, sessionId);
           };
           emit('Browser.downloadWillBegin', {
             url: item.getURL(),
