@@ -164,6 +164,12 @@ export const enSettingsUi = {
   'settings.endpoints.save': 'Save',
   'settings.endpoints.test_connection': 'Test connection',
   'settings.endpoints.testing': 'Testing...',
+  'settings.endpoints.failover.section': 'Failover',
+  'settings.endpoints.failover.probe_interval': 'Probe interval (min)',
+  'settings.endpoints.failover.cooldown': 'Cooldown (s)',
+  'settings.endpoints.failover.threshold': 'Failure threshold',
+  'settings.endpoints.failover.hint':
+    'When enabled, a failing endpoint automatically switches to the next priority endpoint. Streaming responses that already started are not switched mid-stream.',
   'settings.endpoints.title': 'Endpoint configuration',
   'settings.knowledge.auto_checkpoint_desc':
     'Creates a checkpoint of the bound workspace before each turn, restorable from the changes panel (on by default). Takes effect only after saving.',

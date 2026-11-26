@@ -26,6 +26,9 @@ export const retryBannerZh = {
   'chat.retry.attempt_elapsed': '本次已等待 {seconds} 秒',
   'chat.retry.attempt_timeout': '单次上限 {seconds} 秒',
   'chat.retry.source.compaction': '正在压缩上下文',
+  // 2026-11-26: 端点故障转移提示（kind=failover，无倒计时语义）
+  'chat.retry.failover_switched': '已自动切换到端点「{to}」',
+  'chat.retry.failover_reason': '{from} 失败：{reason}',
 } as const;
 
 export const retryBannerEn: Record<keyof typeof retryBannerZh, string> = {
@@ -46,6 +49,8 @@ export const retryBannerEn: Record<keyof typeof retryBannerZh, string> = {
   'chat.retry.attempt_elapsed': 'This attempt {seconds}s',
   'chat.retry.attempt_timeout': 'Attempt limit {seconds}s',
   'chat.retry.source.compaction': 'Compacting context',
+  'chat.retry.failover_switched': 'Automatically switched to endpoint "{to}"',
+  'chat.retry.failover_reason': '{from} failed: {reason}',
 };
 
 export function formatRetryBannerI18nSummary(): string {
