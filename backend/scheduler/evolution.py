@@ -12,7 +12,7 @@ import os
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from backend.data.database import get_database
 from backend.memory.episodic import sync_fts_row_for_id
@@ -54,6 +54,11 @@ _PRUNE_SCAN_MIN_ROWS = 2000
 _PRUNE_QUALITY_DELETE_MAX = 100
 
 
+#: 阶段进度回调：``(phase, phase_label, extra)``，由执行器注入；
+#: extra 是增量指标（如 llm_done / llm_total），合并进运行快照的 progress。
+ProgressReporter = Callable[[str, str, Dict[str, Any]], None]
+
+
 class BaseEvolutionTask:
     """进化任务基类"""
 
@@ -65,10 +70,25 @@ class BaseEvolutionTask:
         self.memory_manager = memory_manager
         self._llm_cache = None
         self._llm_cache_resolved = False
+        self._progress_reporter: Optional[ProgressReporter] = None
 
     async def run_async(self):
         """异步执行任务（子类实现）"""
         raise NotImplementedError
+
+    def set_progress_reporter(self, reporter: Optional[ProgressReporter]) -> None:
+        """注入/清除阶段进度回调（执行器调用，None 表示清除）。"""
+        self._progress_reporter = reporter
+
+    def _report_progress(self, phase: str, label: str, **extra: Any) -> None:
+        """上报阶段进度。旁路语义：无回调或回调异常都静默，绝不打断任务。"""
+        reporter = self._progress_reporter
+        if reporter is None:
+            return
+        try:
+            reporter(phase, label, extra)
+        except Exception:  # noqa: BLE001 — 进度上报失败不影响任务结果
+            logger.debug("进化任务进度上报失败", exc_info=True)
 
     def _resolve_llm(self):
         """解析 LLM 客户端（注入优先，settings 兜底）。不可用返回 None。
@@ -1725,6 +1745,11 @@ class MemoryReflectionTask(BaseEvolutionTask):
         llm = self._resolve_llm()
         if llm is None:
             return stats
+        # 只有 ≥2 条的分组才会真正送模型；进度分母按此计，避免展示空转。
+        eligible = sum(1 for rows in groups.values() if len(rows) >= 2)
+        done = 0
+        if eligible:
+            self._report_progress("llm", "LLM 合并", llm_done=0, llm_total=eligible)
         for (scope, project_key), rows in groups.items():
             if len(rows) < 2:
                 continue
@@ -1746,6 +1771,15 @@ class MemoryReflectionTask(BaseEvolutionTask):
             content = await self._chat(llm, prompt)
             for op_obj in self._parse_ops(content):
                 self._apply_llm_op(op_obj, sample, (scope, project_key), stats)
+            done += 1
+            self._report_progress(
+                "llm",
+                "LLM 合并",
+                llm_done=done,
+                llm_total=eligible,
+                merged=stats["merged"],
+                invalidated=stats["invalidated"],
+            )
         return stats
 
     def _apply_llm_op(
@@ -1914,10 +1948,19 @@ class MemoryReflectionTask(BaseEvolutionTask):
             stats["scanned"] = len(rows)
             if backlog_cursor is not None:
                 stats["reflection_backlog_cursor_ms"] = backlog_cursor
+            self._report_progress(
+                "collect",
+                "扫描记忆",
+                scanned=stats["scanned"],
+                recent_scanned=stats.get("recent_scanned", 0),
+                backlog_scanned=stats.get("backlog_scanned", 0),
+            )
             groups = self._group_by_attribution(rows)
+            self._report_progress("group", "按归属分组", groups=len(groups))
 
             deduped_ids = set(self._heuristic_dedupe(groups))
             stats["deduped"] = len(deduped_ids)
+            self._report_progress("dedupe", "启发式去重", deduped=stats["deduped"])
             if deduped_ids:
                 # 已失效行不再送 LLM（避免对同一批内容重复出 MERGE 操作）
                 groups = {
@@ -1925,6 +1968,7 @@ class MemoryReflectionTask(BaseEvolutionTask):
                     for key, v in groups.items()
                 }
             llm_stats = await self._run_llm_ops(groups)
+            self._report_progress("finalize", "写入结果")
             stats["merged"] = llm_stats["merged"]
             stats["invalidated"] = llm_stats["invalidated"]
             stats["llm_available"] = self._resolve_llm() is not None

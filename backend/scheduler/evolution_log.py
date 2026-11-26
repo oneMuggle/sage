@@ -17,6 +17,7 @@ best-effort 语义沿用既有先例（``evolution._write_evolution_log``）：�
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import time
@@ -24,6 +25,23 @@ import uuid
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+#: 当前运行的触发来源。执行器（SchedulerService）在 task.run() 期间设置，
+#: 任务内部调用 record_evolution_log 不显式传 trigger_type 时读取它 ——
+#: 手动触发的日志才能正确记为 manual，而不是一律 scheduled。
+_CURRENT_TRIGGER: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "evolution_trigger_type", default="scheduled"
+)
+
+
+def set_evolution_trigger(trigger: str) -> contextvars.Token[str]:
+    """设置当前线程/协程上下文的触发来源，返回供 reset 的 token。"""
+    return _CURRENT_TRIGGER.set(trigger or "scheduled")
+
+
+def reset_evolution_trigger(token: contextvars.Token[str]) -> None:
+    _CURRENT_TRIGGER.reset(token)
+
 
 # evolution_log.status 的取值域
 STATUS_SUCCESS = "success"
@@ -78,7 +96,7 @@ def record_evolution_log(
     error_message: Optional[str] = None,
     before_state: Optional[str] = None,
     after_state: Optional[str] = None,
-    trigger_type: str = "scheduled",
+    trigger_type: Optional[str] = None,
     trigger_condition: Optional[str] = None,
     duration_ms: Optional[int] = None,
     metrics: Optional[Dict[str, Any]] = None,
@@ -93,7 +111,8 @@ def record_evolution_log(
         error_message: 失败原因
         before_state: 变更前状态描述
         after_state: 变更后状态描述
-        trigger_type: scheduled / manual / threshold
+        trigger_type: scheduled / manual / threshold；缺省读当前执行
+            上下文（手动触发运行时由执行器置为 manual）
         trigger_condition: 触发条件描述
         duration_ms: 任务耗时（毫秒）
         metrics: 量化指标（JSON 序列化后存入 metrics_json）
@@ -104,6 +123,7 @@ def record_evolution_log(
     metrics_json = _serialize_metrics(metrics)
     log_id = str(uuid.uuid4())
     now_ts = int(time.time())
+    resolved_trigger = trigger_type or _CURRENT_TRIGGER.get()
     try:
         conn = db.get_connection()
         conn.execute(
@@ -122,7 +142,7 @@ def record_evolution_log(
                 error_message,
                 before_state,
                 after_state,
-                trigger_type,
+                resolved_trigger,
                 trigger_condition,
                 duration_ms,
                 metrics_json,

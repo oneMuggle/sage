@@ -340,3 +340,44 @@ def test_reflection_backlog_scans_older_memories_and_advances_cursor(
         ).fetchall()
     }
     assert scanned_ids == set(ids)
+
+
+# ============================ 阶段进度上报 ============================
+
+
+def test_reflection_reports_phase_progress(db: Database, manager: MemoryManager):
+    """阶段序列：collect → group → dedupe → llm(0/N,1/N) → finalize。"""
+    m1 = _save_epi(manager, F3)
+    m2 = _save_epi(manager, F4)
+    base = NOW_MS - 2 * 86_400_000
+    _set_created(db, "memories_episodic", m1, base)
+    _set_created(db, "memories_episodic", m2, base + 86_400_000)
+
+    events: list = []
+    task = MemoryReflectionTask(
+        db=db, memory_manager=manager, llm_client=_FakeLLM("[]")
+    )
+    task.set_progress_reporter(
+        lambda phase, label, extra: events.append((phase, label, dict(extra)))
+    )
+    task.run()
+
+    phases = [e[0] for e in events]
+    assert phases == ["collect", "group", "dedupe", "llm", "llm", "finalize"]
+    llm_reports = [e for e in events if e[0] == "llm"]
+    assert llm_reports[0][2]["llm_total"] == 1
+    assert llm_reports[0][2]["llm_done"] == 0
+    assert llm_reports[1][2]["llm_done"] == 1
+
+
+def test_progress_reporter_failure_is_swallowed(db: Database, manager: MemoryManager):
+    """上报回调异常是旁路，绝不打断任务。"""
+
+    def _boom(phase, label, extra):  # noqa: ANN001 — 回调签名由执行器注入
+        raise RuntimeError("ui gone")
+
+    _save_epi(manager, F5)
+    task = MemoryReflectionTask(db=db, memory_manager=manager, llm_client=None)
+    task.set_progress_reporter(_boom)
+    stats = task.run()
+    assert stats["scanned"] == 1  # 任务正常完成，异常被吞掉
