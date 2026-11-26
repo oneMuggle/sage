@@ -50,6 +50,7 @@ from backend.core.legacy.iteration_ceiling import (
     plan_ceiling,
 )
 from backend.core.legacy.llm_client import (
+    FailoverEvent,
     LLMClient,
     LLMConfig,
     LLMResponse,
@@ -2673,22 +2674,39 @@ class SageAgent:
                             # 成功还是最终失败，都要在返回/抛出前补发——否则
                             # "重试耗尽后失败"的会话完全看不到重试发生过。
                             pending_retries: List[RetryEvent] = []
+                            # 2026-11-26: 端点切换事件同样先暂存，成功/失败前补发。
+                            pending_failovers: List[FailoverEvent] = []
                             try:
                                 response = await self.llm_client.chat(
                                     messages,
                                     tools=available_tools or None,
                                     retry_callback=pending_retries.append,
+                                    failover_callback=pending_failovers.append,
                                 )
                             except LLMError:
                                 for retry_evt in _retry_events_to_agent_events(
                                     pending_retries, i, self.agent_id
                                 ):
                                     yield retry_evt
+                                for fov in pending_failovers:
+                                    yield AgentEvent(
+                                        state=AgentState.RETRY,
+                                        iteration=i,
+                                        retry_info=_failover_retry_info(fov),
+                                        agent_id=self.agent_id,
+                                    )
                                 raise
                             for retry_evt in _retry_events_to_agent_events(
                                 pending_retries, i, self.agent_id
                             ):
                                 yield retry_evt
+                            for fov in pending_failovers:
+                                yield AgentEvent(
+                                    state=AgentState.RETRY,
+                                    iteration=i,
+                                    retry_info=_failover_retry_info(fov),
+                                    agent_id=self.agent_id,
+                                )
                             # 如果 LLM 返回了 reasoning_content，yield REASONING 事件
                             # 这允许前端展示 LLM 的思考/推理过程。
                             # 2026-11-03: 若流式阶段已下发过增量（首个 content

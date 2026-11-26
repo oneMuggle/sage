@@ -132,6 +132,17 @@ async def run_endpoint_probe_loop(stop_event: Optional[asyncio.Event] = None) ->
             remaining -= chunk
 
 
+def _log_probe_task_exit(task: asyncio.Task) -> None:
+    """探测任务意外退出时留下可见日志（取消属正常路径，静默）。"""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error("endpoint-probe task exited unexpectedly: %s", exc, exc_info=exc)
+
+
 def start_endpoint_probe_task() -> asyncio.Task:
     """lifespan 启动钩子：返回后台探测任务（调用方负责 cancel）。"""
-    return asyncio.create_task(run_endpoint_probe_loop(), name="endpoint-probe")
+    task = asyncio.create_task(run_endpoint_probe_loop(), name="endpoint-probe")
+    task.add_done_callback(_log_probe_task_exit)
+    return task

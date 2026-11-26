@@ -818,13 +818,24 @@ class LLMClient:
             )
         ]
 
+    def _hop_matches_config(self, hop: EndpointHop) -> bool:
+        """该 hop 是否就是 config 指向的主端点（可复用 ``_get_client``）。
+
+        2026-11-26: 主端点冷却时会被构链后移，``chain[0]`` 可能是备用端点；
+        此时必须按 hop 自身凭据建客户端，否则 URL/key 与 body.model 错配。
+        """
+        if hop.endpoint_id and self.config.endpoint_id:
+            return hop.endpoint_id == self.config.endpoint_id
+        return hop.base_url.rstrip("/") == self.config.base_url.rstrip("/")
+
     def _get_client_for_hop(self, hop: EndpointHop) -> httpx.AsyncClient:
         """非主跳的 HTTP 客户端（按 hop 的 base_url/api_key 构建并缓存）。"""
-        key = hop.endpoint_id or hop.base_url
+        key = f"{hop.endpoint_id or ''}::{hop.base_url}"
         cached = self._hop_clients.get(key)
         if cached is not None and not cached.is_closed:
             return cached
         headers: Dict[str, str] = {"Content-Type": "application/json"}
+        headers.update(self.config.extra_headers)
         if self.config.use_proxy:
             backend = (self.config.backend_url or "http://127.0.0.1:8765").rstrip("/")
             client_base_url = f"{backend}/api/v1/llm"
@@ -838,7 +849,6 @@ class LLMClient:
                 client_base_url = client_base_url[: -len("/v1")]
         if hop.api_key:
             headers["Authorization"] = f"Bearer {hop.api_key}"
-        headers.update(self.config.extra_headers)
         client = httpx.AsyncClient(
             base_url=client_base_url,
             headers=headers,
@@ -946,8 +956,12 @@ class LLMClient:
         hop_errors: List[str] = []
         while True:
             hop = hops[hop_index]
+            # 仅当 hop 就是 config 主端点时才复用 _get_client；主端点冷却被
+            # 后移等场景下 chain[0] 可能是备用端点，必须按 hop 凭据建客户端。
             client = (
-                self._get_client() if hop_index == 0 else self._get_client_for_hop(hop)
+                self._get_client()
+                if hop_index == 0 and self._hop_matches_config(hop)
+                else self._get_client_for_hop(hop)
             )
             body = self._build_request_body(
                 hop, messages, tools, tool_choice, stream=False, include_usage=False
@@ -1348,11 +1362,14 @@ class LLMClient:
         # 第二轮 C1: 首字延迟 / 总耗时计时（含重试等待与跨端点切换，即用户实际等待的时间）
         stream_started = time.monotonic()
         first_token_at: Optional[float] = None
-        last_llm_err: Optional[LLMError] = None
         while True:
             hop = hops[hop_index]
+            # 仅当 hop 就是 config 主端点时才复用 _get_client；主端点冷却被
+            # 后移等场景下 chain[0] 可能是备用端点，必须按 hop 凭据建客户端。
             client = (
-                self._get_client() if hop_index == 0 else self._get_client_for_hop(hop)
+                self._get_client()
+                if hop_index == 0 and self._hop_matches_config(hop)
+                else self._get_client_for_hop(hop)
             )
             body = self._build_request_body(
                 hop, messages, tools, tool_choice, stream=True, include_usage=True
@@ -1380,6 +1397,10 @@ class LLMClient:
             # 2026-11-03: 预算现在计入在途请求耗时；记录上一次失败，供"预算不足以
             # 再发起一次尝试"时保留原始错误类型/状态码。
             has_failed_once = False
+            # 2026-11-26: 与非流式同口径 —— 每跳各自享有一份重试预算
+            #（stream_started 仅用于耗时/首字延迟指标，不参与预算）。
+            retry_started = _retry_now()
+            last_llm_err = None
             hop_failed = False
             try:
                 while True:
@@ -1388,7 +1409,7 @@ class LLMClient:
                     # 预算约束 —— 否则 180s 预算下仍可能多等一个完整超时（实测 86s）。
                     attempt_timeout = dynamic_timeout
                     if total_budget > 0 and has_failed_once:
-                        elapsed_now = _retry_now() - stream_started
+                        elapsed_now = _retry_now() - retry_started
                         remaining_now = total_budget - elapsed_now
                         if has_failed_once:
                             if remaining_now <= _LLM_RETRY_MIN_ATTEMPT_S:
@@ -1509,7 +1530,7 @@ class LLMClient:
                             delay = _retry_backoff_seconds(
                                 llm_err, attempt, base_delay, max_delay
                             )
-                            elapsed_now = _retry_now() - stream_started
+                            elapsed_now = _retry_now() - retry_started
                             budget_remaining: Optional[float] = None
                             next_attempt_timeout: Optional[float] = None
                             if total_budget > 0:

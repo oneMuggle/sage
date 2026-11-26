@@ -99,10 +99,14 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
       ...DEFAULT_ENDPOINT,
       id: crypto.randomUUID(),
       name: t('settings.endpoints.new_name'),
-      // 2026-11-26: 新端点追加到优先级末尾。
-      priority: settings.endpoints.length + 1,
     };
-    updateSettings({ endpoints: [...settings.endpoints, newEndpoint] });
+    // 2026-11-26: 追加并统一重排 priority 1..N —— 旧端点可能没有 priority，
+    // 只给新端点赋值会让「UI 顺序」与「故障转移链排序」不一致。
+    const appended = [...settings.endpoints, newEndpoint].map((ep, i) => ({
+      ...ep,
+      priority: i + 1,
+    }));
+    updateSettings({ endpoints: appended });
     setEditingId(newEndpoint.id);
     setEditForm({
       name: t('settings.endpoints.new_name'),

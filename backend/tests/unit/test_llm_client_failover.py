@@ -82,6 +82,37 @@ HOP2 = EndpointHop(
 
 
 @pytest.mark.asyncio()
+async def test_first_hop_uses_chain_endpoint_credentials_when_primary_cooling():
+    """HIGH 回归：chain[0] 不是 config 端点时，必须用 hop 的客户端/凭据。"""
+    backup_hop = EndpointHop(
+        endpoint_id="ep2",
+        base_url="http://backup",
+        api_key="k2",
+        provider="openai",
+        model="m1",
+    )
+    client = LLMClient(
+        LLMConfig(
+            provider="openai",
+            api_key="k1",
+            base_url="http://primary",
+            model="m1",
+            endpoint_id="ep1",
+            endpoint_chain=[backup_hop],
+        )
+    )
+    primary_http, backup = AsyncMock(), AsyncMock()
+    backup.post = AsyncMock(return_value=_ok("m1"))
+    with patch.object(client, "_get_client", return_value=primary_http), patch.object(
+        client, "_get_client_for_hop", return_value=backup
+    ):
+        response = await client.chat([{"role": "user", "content": "hi"}])
+    assert response.content == "ok"
+    assert primary_http.post.await_count == 0
+    assert backup.post.await_count == 1
+
+
+@pytest.mark.asyncio()
 async def test_rate_limited_primary_fails_over_to_next_endpoint():
     client = _client([HOP2])
     primary, backup = AsyncMock(), AsyncMock()
@@ -223,6 +254,46 @@ def _stream_ok(lines):
             return False
 
     return _Ctx()
+
+
+@pytest.mark.asyncio()
+async def test_stream_first_hop_uses_hop_client_when_chain_head_is_backup():
+    backup_hop = EndpointHop(
+        endpoint_id="ep2",
+        base_url="http://backup",
+        api_key="k2",
+        provider="openai",
+        model="m1",
+    )
+    client = LLMClient(
+        LLMConfig(
+            provider="openai",
+            api_key="k1",
+            base_url="http://primary",
+            model="m1",
+            endpoint_id="ep1",
+            endpoint_chain=[backup_hop],
+        )
+    )
+    primary, backup = AsyncMock(), AsyncMock()
+    backup.stream = Mock(
+        return_value=_stream_ok(
+            [
+                'data: {"model":"m1","choices":[{"delta":{"content":"ok"}}]}',
+                "data: [DONE]",
+            ]
+        )
+    )
+    events = []
+    with patch.object(client, "_get_client", return_value=primary), patch.object(
+        client, "_get_client_for_hop", return_value=backup
+    ):
+        async for event in client.chat_stream_events(
+            [{"role": "user", "content": "hi"}]
+        ):
+            events.append(event)
+    assert ("content_delta", "ok") in events
+    assert primary.stream.call_count == 0
 
 
 @pytest.mark.asyncio()
