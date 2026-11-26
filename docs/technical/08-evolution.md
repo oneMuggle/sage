@@ -600,4 +600,70 @@ async def get_evolution_history(limit: int = 50) -> List[dict]:
 
 ---
 
+## 8.7 手动维护任务与运行状态可见性
+
+> 2026-11 新增。解决「立即整理记忆」执行中无进度、切页后按钮状态重置、可重复触发并发执行的问题。
+
+### 8.7.1 问题与设计
+
+此前 `POST /api/v1/scheduled/evolution/{name}/run` 为同步端点，`task.run()` 在请求线程内联执行
+（wall-clock 上限 30 分钟，`SAGE_EVOLUTION_TASK_TIMEOUT_S`），仅在结束时写一条 `evolution_log`；
+前端运行态是 `EvolutionPanel` 组件本地 `useState`，设置页只渲染当前 tab，切 tab/离开页面即卸载组件 → 状态归零。
+任务本身不会因前端放弃等待而取消（Electron 主进程 fetch 与 FastAPI 线程池均继续），
+但 UI 与任务失联，按钮恢复可点会造成并发重复执行（APScheduler `max_instances=1` 只约束 cron 触发的实例）。
+
+设计原则（job-owned, not view-owned）：
+
+- 任务所有权归服务端：进程内 `EvolutionRunRegistry` 是运行状态唯一来源；
+- 单一状态源 + 可重入恢复：前端任何页面挂载即拉取快照恢复；
+- 阶段级进度：任务在阶段边界上报；
+- 幂等 / 互斥：同一任务运行中再次触发幂等 attach，不产生第二个实例。
+
+### 8.7.2 后端实现
+
+| 组件 | 位置 | 职责 |
+| --- | --- | --- |
+| `EvolutionRunRegistry` | `backend/scheduler/evolution_run_registry.py` | 每任务一条快照（running/succeeded/failed）；begin 互斥；update 仅认当前 run_id（旧 run 迟到上报隔离）；finish 归一化 result；线程锁保护；进程重启清空（任务随进程终止，无悬空 running） |
+| `run_evolution_task` | `backend/scheduler/evolution_runner.py` | 手动 / cron / 补跑共用执行包装：注入进度回调、登记终态、contextvar 传递 trigger_type |
+| `launch_evolution_task` / `get_evolution_runs` | `backend/services/scheduler.py` | 异步启动（daemon 线程）与快照读取 |
+| 阶段上报 | `backend/scheduler/evolution.py` | `BaseEvolutionTask._report_progress`（旁路，异常不打断任务）；`MemoryReflectionTask` 五阶段：collect → group → dedupe → llm（k/N）→ finalize |
+| trigger_type | `backend/scheduler/evolution_log.py` | `record_evolution_log` 缺省读 contextvar，手动触发运行期间写 `manual` |
+
+API 契约：
+
+```
+GET  /api/v1/scheduled/evolution/tasks
+     → {tasks: [{name, job_id, run}]}
+POST /api/v1/scheduled/evolution/{name}/run   (202)
+     → {name, ok, started, run}
+     started=false 表示该任务已在运行，本次请求幂等 attach 到当前 run
+```
+
+`run` 快照字段：`run_id / name / state(running|succeeded|failed) / trigger / phase /
+phase_label / progress{} / started_at（epoch 毫秒） / finished_at / duration_ms / result / error`。
+
+补跑（`evolution_maintenance`）先查 `is_running` 跳过在跑任务，避免撞互斥被误记为失败；
+`services/scheduler.py` 保持 800 行架构棘轮内（执行包装抽到独立模块）。
+
+### 8.7.3 前端实现
+
+- `src/entities/evolution/evolutionRunStore.ts`：zustand store，轮询
+  `scheduled_evolution_tasks`（1200ms，仅在存在 running 时启动，全部结束停止，连续 3 次失败停止）；
+  running → 终态转换 toast 一次；轮询在 store 层，组件卸载不丢状态。
+- `EvolutionPanel`：按钮显示「整理中 · 当前阶段」，阶段清单
+  （扫描记忆 → 分组 → 去重 → LLM 合并 k/N → 写入结果）+ 已耗时；
+  完成后展示统计摘要并立即刷新最近执行记录；挂载时重入恢复。
+- `MemoryTab` 的「立即固化」共用同一 store（按钮态与结果均派生）。
+- `memoryApi.runEvolutionTask` 为异步触发语义（返回 `{started, run}`），结果经快照轮询获取。
+
+### 8.7.4 测试
+
+- 后端：注册表互斥 / 迟到上报隔离 / 终态与 result 序列化；API 异步契约
+  （202、running 快照、already_running attach 同一 run_id、失败终态、404/503）；
+  反思任务阶段序列与回调异常吞掉。
+- 前端：store 映射 / 轮询启停 / 连续失败停止 / 完成提示一次；
+  组件卸载再挂载恢复运行中状态。
+
+---
+
 _文档版本: v1.0_

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { memoryApi } from '../../shared/api';
+import { useEvolutionRunStore } from '../../entities/evolution/evolutionRunStore';
 import { invoke } from '../../shared/api/desktopInvoke';
 import { useI18n } from '../../shared/lib/i18n';
 
@@ -57,21 +57,13 @@ export function MemoryTab() {
     semantic: boolean;
   } | null>(null);
   const [selecting, setSelecting] = useState(false);
-  // R17-B: 记忆固化手动触发
-  const [consolidating, setConsolidating] = useState(false);
-  const [consolidationResult, setConsolidationResult] = useState<{
-    promoted: number;
-    decayed: number;
-    total: number;
-  } | null>(null);
-  // 卸载守卫:异步回调不触碰已卸载组件的 state(避免 "setState on unmounted" 警告)
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  // R17-B / 2026-11-26: 记忆固化触发与结果由全局 store 派生 ——
+  // 设置页切 tab 或去聊天页再回来，按钮仍显示运行中，结果不丢。
+  const consolidationRun = useEvolutionRunStore((state) => state.runs.memory_consolidation ?? null);
+  const triggerEvolutionRun = useEvolutionRunStore((state) => state.trigger);
+  const consolidating = consolidationRun?.state === 'running';
+  const consolidationResult =
+    consolidationRun?.state === 'succeeded' ? consolidationRun.result : null;
 
   const loadEmbedderStatus = useCallback(async () => {
     try {
@@ -422,43 +414,30 @@ export function MemoryTab() {
             data-testid="memory-consolidation-run"
             disabled={consolidating}
             onClick={() => {
-              setConsolidating(true);
-              setConsolidationResult(null);
-              void memoryApi
-                .runConsolidation()
-                .then((result) => {
-                  if (!mountedRef.current) return;
-                  setConsolidationResult(result);
-                  toast.success(
-                    t('settings.memory.consolidation_complete')
-                      .replace('{promoted}', String(result.promoted))
-                      .replace('{decayed}', String(result.decayed)),
-                  );
-                })
-                .catch((err: unknown) => {
-                  if (!mountedRef.current) return;
-                  toast.error(
-                    t('settings.memory.consolidation_failed').replace(
-                      '{error}',
-                      String(err instanceof Error ? err.message : String(err)),
-                    ),
-                  );
-                })
-                .finally(() => {
-                  if (mountedRef.current) setConsolidating(false);
-                });
+              void triggerEvolutionRun('memory_consolidation').catch((err: unknown) => {
+                toast.error(
+                  t('settings.memory.consolidation_failed').replace(
+                    '{error}',
+                    String(err instanceof Error ? err.message : String(err)),
+                  ),
+                );
+              });
             }}
             className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
           >
-            {consolidating ? t('settings.memory.consolidating') : t('settings.memory.run_now')}
+            {consolidating
+              ? `${t('settings.memory.consolidating')}${
+                  consolidationRun?.phase_label ? ` · ${consolidationRun.phase_label}` : ''
+                }`
+              : t('settings.memory.run_now')}
           </button>
         </SettingRow>
         {consolidationResult && (
           <p className="text-xs text-text-secondary mt-2" data-testid="memory-consolidation-result">
             {t('settings.memory.last_consolidation')
-              .replace('{promoted}', String(consolidationResult.promoted))
-              .replace('{decayed}', String(consolidationResult.decayed))
-              .replace('{total}', String(consolidationResult.total))}
+              .replace('{promoted}', String(Number(consolidationResult.promoted) || 0))
+              .replace('{decayed}', String(Number(consolidationResult.decayed) || 0))
+              .replace('{total}', String(Number(consolidationResult.total) || 0))}
           </p>
         )}
       </section>

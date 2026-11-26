@@ -115,6 +115,22 @@ def _latest_completed_log(db: Any, name: str) -> Optional[Dict[str, Any]]:
     return {"status": row["status"], "created_at": row["created_at"]}
 
 
+def _evolution_task_running(name: str) -> bool:
+    """该任务是否已有运行在跑（手动触发 / cron）。
+
+    补跑与手动触发共用同一运行注册表（互斥）；命中时跳过本轮补跑，
+    否则 run_evolution_task_now 因互斥返回 None 会被误记为失败。
+    """
+    try:
+        from backend.scheduler.evolution_run_registry import (
+            get_evolution_run_registry,
+        )
+
+        return get_evolution_run_registry().is_running(name)
+    except Exception:  # noqa: BLE001 — 注册表不可用时按未运行处理，不阻断补跑
+        return False
+
+
 def compute_overdue_tasks(
     db: Any,
     scheduler_service: Any,
@@ -192,6 +208,9 @@ def run_overdue_tasks(
             if max_tasks is not None and len(executed) >= max_tasks:
                 break
             if name in _running:
+                continue
+            if _evolution_task_running(name):
+                logger.info("evolution maintenance: 任务 %s 正在运行，跳过补跑", name)
                 continue
             if name in HEAVY_TASKS:
                 try:

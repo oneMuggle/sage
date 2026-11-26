@@ -57,6 +57,18 @@ logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 
+
+def _run_evolution_task(
+    name: str, task: Any, trigger: str = "scheduled", run_id: str = ""
+) -> Optional[Dict[str, Any]]:
+    """进化任务执行包装（定义见 backend.scheduler.evolution_runner）。
+
+    延迟导入：services 模块加载时不拖入 scheduler 包（含 evolution 任务类）。
+    """
+    from backend.scheduler.evolution_runner import run_evolution_task
+
+    return run_evolution_task(name, task, trigger=trigger, run_id=run_id)
+
 #: Undrained desktop notifications are capped so a missing consumer cannot leak memory.
 MAX_PENDING_NOTIFICATIONS = 100
 
@@ -375,20 +387,59 @@ class SchedulerService:
         return True
 
     def run_evolution_task_now(self, name: str) -> Optional[Dict[str, Any]]:
-        """同步运行一个 evolution 任务并返回其统计结果(手动触发 API 用, R17-B)。
+        """同步运行一个 evolution 任务并返回其统计结果(补跑/运维用)。
 
         与 trigger_evolution_task 的区别:任务返回值(如 MemoryConsolidationTask
         的 {promoted, decayed, total})透传给调用方,而不是只进日志。
         未注册返回 None;任务内部异常记日志后返回 None(与 _fire_evolution 语义一致)。
+        同任务已有运行在跑时返回 None（互斥，避免并发实例）。
         """
         task = self._evolution_tasks.get(name)
         if task is None:
             return None
-        try:
-            return task.run()
-        except Exception:
-            logger.exception("Evolution task %s failed", name)
+        return _run_evolution_task(name, task, trigger="catch_up")
+
+    def launch_evolution_task(
+        self, name: str, trigger: str = "manual"
+    ) -> Optional[Dict[str, Any]]:
+        """异步启动一个 evolution 任务（手动触发 API 用）。
+
+        立即返回 ``{"run": snapshot, "started": bool}``：任务已在运行时不
+        重复启动，``started=False`` 且 ``run`` 为当前运行快照（幂等 attach）。
+        未注册返回 None。
+        """
+        task = self._evolution_tasks.get(name)
+        if task is None:
             return None
+        from backend.scheduler.evolution_run_registry import (  # noqa: PLC0415 — 避免包级导入拖慢启动
+            get_evolution_run_registry,
+        )
+
+        registry = get_evolution_run_registry()
+        run_id = registry.begin(name, trigger)
+        if run_id is None:
+            return {"run": registry.snapshot(name), "started": False}
+        threading.Thread(
+            target=_run_evolution_task,
+            args=(name, task, trigger, run_id),
+            name=f"evolution-run-{name}",
+            daemon=True,
+        ).start()
+        return {"run": registry.snapshot(name), "started": True}
+
+    def get_evolution_runs(self) -> Dict[str, Dict[str, Any]]:
+        """各已注册进化任务的最近运行快照（running / 终态）。"""
+        from backend.scheduler.evolution_run_registry import (  # noqa: PLC0415
+            get_evolution_run_registry,
+        )
+
+        registry = get_evolution_run_registry()
+        runs: Dict[str, Dict[str, Any]] = {}
+        for name in self._evolution_tasks:
+            snapshot = registry.snapshot(name)
+            if snapshot is not None:
+                runs[name] = snapshot
+        return runs
 
     def get_evolution_task_names(self) -> List[str]:
         """已注册的 evolution 任务名列表。"""
@@ -396,11 +447,7 @@ class SchedulerService:
 
     def _fire_evolution(self, name: str, task: "BaseEvolutionTask") -> None:  # noqa: UP037
         """APScheduler 触发的实际执行函数。"""
-        try:
-            result = task.run()
-            logger.info("Evolution task %s completed: %s", name, result)
-        except Exception:
-            logger.exception("Evolution task %s failed", name)
+        _run_evolution_task(name, task, trigger="scheduled")
 
     def start(self) -> None:
         if not self._scheduler.running:

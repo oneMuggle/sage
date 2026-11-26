@@ -24,9 +24,8 @@ import { invoke } from './desktopInvoke';
 import type {
   BatchDeleteResponse,
   EvolutionTaskName,
-  EvolutionTaskRunResult,
+  EvolutionTaskTriggerResult,
   Memory,
-  MemoryConsolidationResult,
   MemoryListResponse,
   MemoryPromoteResult,
   MemoryQualityCandidate,
@@ -284,14 +283,22 @@ function coerceSummariesListResponse(raw: unknown): MemorySummariesListResponse 
   };
 }
 
-async function runEvolutionTaskRequest(name: EvolutionTaskName): Promise<EvolutionTaskRunResult> {
+async function triggerEvolutionTaskRequest(
+  name: EvolutionTaskName,
+): Promise<EvolutionTaskTriggerResult> {
   try {
     const raw = await invoke<unknown>('scheduled_evolution_run', { name });
     const body = (raw ?? {}) as Record<string, unknown>;
     if (body.ok === false) {
-      throw new Error(typeof body.detail === 'string' ? body.detail : `${name} 任务执行失败`);
+      throw new Error(typeof body.detail === 'string' ? body.detail : `${name} 任务启动失败`);
     }
-    return { name, result: (body.result ?? {}) as Record<string, unknown> };
+    return {
+      name,
+      ok: true,
+      // 后端 202 异步契约：started=false 表示已在运行，本次幂等 attach
+      started: body.started !== false,
+      run: (body.run ?? null) as EvolutionTaskTriggerResult['run'],
+    };
   } catch (error) {
     throw handleApiError(error);
   }
@@ -555,28 +562,15 @@ export const memoryApi = {
   /**
    * 立即触发任意进化维护任务（reflection / pruning / consolidation 等）。
    *
+   * 2026-11-26 起为**异步触发**语义：立即返回运行快照，进度与结果经
+   * `scheduled_evolution_tasks` 轮询（见 evolutionRunStore）。
+   * `started=false` 表示该任务已在运行，本次请求幂等 attach 到当前 run。
+   *
    * 刻意**不走 withRetry**：手动触发的重任务是用户主动行为，失败后自动重跑
    * 既是重复开销也违背“立即执行”的语义；失败原因由调用方 toast 引导。
    */
-  async runEvolutionTask(name: EvolutionTaskName): Promise<EvolutionTaskRunResult> {
-    return runEvolutionTaskRequest(name);
-  },
-
-  /**
-   * R17-B: 立即触发记忆固化（evolution/memory_consolidation）。
-   *
-   * 刻意**不走 withRetry**：手动触发的重任务是用户主动行为，失败后自动重跑
-   * 既是重复开销也违背"立即固化"的语义；失败原因由调用方 toast 引导。
-   * 返回任务统计 `{promoted, decayed, total}`；`ok=false` 表示任务执行失败
-   * （如 memory manager 未装配）。
-   */
-  async runConsolidation(): Promise<MemoryConsolidationResult> {
-    const { result } = await runEvolutionTaskRequest('memory_consolidation');
-    return {
-      promoted: Number(result.promoted) || 0,
-      decayed: Number(result.decayed) || 0,
-      total: Number(result.total) || 0,
-    };
+  async runEvolutionTask(name: EvolutionTaskName): Promise<EvolutionTaskTriggerResult> {
+    return triggerEvolutionTaskRequest(name);
   },
 
   // ---- 对标 S2 (2026-09-13): 写入台账 / 撤销 / 用户画像 ------------------
