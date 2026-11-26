@@ -1,8 +1,66 @@
 """Tests for web mode static file serving (Task 2)."""
 
 import importlib
+import mimetypes
 
 from fastapi.testclient import TestClient
+
+_WEB_MIME_SUFFIXES = (".js", ".mjs", ".css")
+
+
+def _snapshot_web_mime_types() -> dict:
+    return {suffix: mimetypes.guess_type("x" + suffix)[0] for suffix in _WEB_MIME_SUFFIXES}
+
+
+def _restore_web_mime_types(snapshot: dict) -> None:
+    for suffix, mime_type in snapshot.items():
+        if mime_type:
+            mimetypes.add_type(mime_type, suffix)
+
+
+def test_register_web_static_mime_types_overrides_polluted_mapping():
+    """Windows 注册表把 .js 登记为 text/plain 时，注册后必须回到标准 MIME。"""
+    from backend.api.web_static import register_web_static_mime_types
+
+    snapshot = _snapshot_web_mime_types()
+    mimetypes.add_type("text/plain", ".js")
+    try:
+        assert mimetypes.guess_type("main.js")[0] == "text/plain"
+
+        register_web_static_mime_types()
+
+        assert mimetypes.guess_type("main.js")[0] == "text/javascript"
+        assert mimetypes.guess_type("chunk.mjs")[0] == "text/javascript"
+        assert mimetypes.guess_type("index.css")[0] == "text/css"
+    finally:
+        _restore_web_mime_types(snapshot)
+
+
+def test_serves_js_with_javascript_mime_when_registry_mapping_is_polluted(
+    monkeypatch, tmp_path
+):
+    """回归：注册表 .js→text/plain 时，入口 chunk 仍应以 JS MIME 下发。"""
+    dist_web = tmp_path / "dist-web"
+    assets = dist_web / "assets"
+    assets.mkdir(parents=True)
+    (dist_web / "index.html").write_text("<html><body>Sage Web</body></html>")
+    (assets / "main-test.js").write_text("console.log('sage');")
+
+    snapshot = _snapshot_web_mime_types()
+    mimetypes.add_type("text/plain", ".js")
+    try:
+        monkeypatch.setenv("SAGE_WEB_MODE", "1")
+        monkeypatch.setenv("SAGE_WEB_DIST_PATH", str(dist_web))
+
+        import backend.main
+        importlib.reload(backend.main)
+
+        client = TestClient(backend.main.app)
+        response = client.get("/assets/main-test.js")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/javascript")
+    finally:
+        _restore_web_mime_types(snapshot)
 
 
 def test_serves_index_html_in_web_mode(monkeypatch, tmp_path):

@@ -73,6 +73,14 @@ if is_web_mode():
 - 环境变量 `SAGE_WEB_DIST_PATH` 可覆盖默认路径（用于测试）
 - `html=True` 启用 SPA fallback（未知路径返回 index.html）
 
+> 2026-11-26：Windows 上 Python `mimetypes` 初始化会读取注册表中按扩展名
+> 登记的 Content Type。内网机器常见 `.js` 被历史软件登记为 `text/plain`，
+> Starlette 会据此把入口 chunk 以 `Content-Type: text/plain` 下发，浏览器
+> 按规范拒绝执行 `<script type="module">`，表现为 8 秒后显示"当前浏览器
+> 无法加载 Sage"（浏览器控制台报"使用了不允许的 MIME 类型"）。现在挂载前
+> 调用 `register_web_static_mime_types()`（`backend/api/web_static.py`）
+> 强制 `.js/.mjs/.css` 的标准 MIME，覆盖注册表值。
+
 ### 3.3 认证扩展（Task 3）
 
 `backend/api/local_auth.py` 扩展：
