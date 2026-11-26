@@ -8,17 +8,12 @@ import { useMemo, useState } from 'react';
 import { getProtocolOptions } from '../../entities/endpoint/providerRegistry';
 import { bindDiscoveredModels } from '../../entities/model-catalog/api';
 import {
-  TOKEN_UNITS,
-  TOKEN_UNIT_MULTIPLIERS,
-  deriveTokenInput,
   formatTokens,
-  type TokenUnit,
 } from '../../entities/setting/contextPresets';
 import {
   DEFAULT_ENDPOINT,
   type EndpointConfig,
   type EndpointProtocol,
-  type EndpointQuota,
 } from '../../entities/setting/types';
 import {
   type ConnectionTestResult,
@@ -26,9 +21,13 @@ import {
   probeModel,
   testEndpointConnection,
 } from '../../features/manage-endpoints/api';
-import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { useEndpointHealth } from '../../features/manage-endpoints/useEndpointHealth';
+import { useI18n } from '../../shared/lib/i18n';
 
 import type { EndpointsTabProps } from './components';
+import { ProbeStatusDisplay, QuotaEditor } from './components/EndpointEditors';
+import { EndpointFailoverSection } from './components/EndpointFailoverSection';
+import { moveEndpoint } from './endpointPriority';
 
 // Task 1 (2026-08-23): 协议下拉选项 — 与后端 canonicalizer / EndpointProtocol 类型对齐.
 // A2 (providerRegistry): 改为从注册表读取，不再硬编码。
@@ -85,6 +84,8 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [probingId, setProbingId] = useState<string | null>(null);
   const [probeResults, setProbeResults] = useState<Record<string, ProbeResult>>({});
+  // 2026-11-26: 故障转移开启时才轮询端点健康（关闭时零请求）。
+  const health = useEndpointHealth(settings.failover?.enabled === true);
   // A2: 从 providerRegistry 读取协议选项（替代原硬编码常量）
   const PROTOCOL_OPTIONS = useMemo(() => getProtocolOptions(), []);
 
@@ -100,6 +101,8 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
       ...DEFAULT_ENDPOINT,
       id: crypto.randomUUID(),
       name: t('settings.endpoints.new_name'),
+      // 2026-11-26: 新端点追加到优先级末尾。
+      priority: settings.endpoints.length + 1,
     };
     updateSettings({ endpoints: [...settings.endpoints, newEndpoint] });
     setEditingId(newEndpoint.id);
@@ -203,13 +206,16 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
         </button>
       </div>
 
+      {/* 2026-11-26: 故障转移总开关与探测参数（默认关闭）。 */}
+      <EndpointFailoverSection settings={settings} updateSettings={updateSettings} />
+
       {settings.endpoints.length === 0 && (
         <div className="text-center text-muted py-8 text-sm">
           {t('settings.endpoints.empty_hint')}
         </div>
       )}
 
-      {settings.endpoints.map((ep) => {
+      {settings.endpoints.map((ep, index) => {
         const isEditing = editingId === ep.id;
         const form = isEditing ? editForm : {};
         const name = form.name ?? ep.name;
@@ -232,6 +238,26 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
           <div key={ep.id} className="p-4 border rounded-radius-sm bg-surface">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
+                {/* 2026-11-26: 故障转移优先级 + 健康状态点 */}
+                <span className="text-[11px] px-1.5 py-0.5 rounded bg-bg-muted text-muted font-mono">
+                  P{ep.priority ?? '—'}
+                </span>
+                {health[ep.id] && (
+                  <span
+                    data-testid={`endpoint-health-${ep.id}`}
+                    className={clsx(
+                      'w-2 h-2 rounded-full flex-shrink-0',
+                      health[ep.id].status === 'healthy' && 'bg-green-500',
+                      health[ep.id].status === 'degraded' && 'bg-amber-500',
+                      health[ep.id].status === 'failed' && 'bg-red-500',
+                    )}
+                    title={`${health[ep.id].status}${
+                      health[ep.id].lastFailureReason
+                        ? ` · ${health[ep.id].lastFailureReason}`
+                        : ''
+                    }`}
+                  />
+                )}
                 <span className="text-sm font-medium text-text">{name}</span>
                 {discoveredModels.length > 0 && (
                   <span className="text-[11px] text-muted">
@@ -243,6 +269,25 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                 )}
               </div>
               <div className="flex items-center gap-1.5">
+                {/* 2026-11-26: 上移/下移并重排 priority 1..N */}
+                <button
+                  disabled={index === 0}
+                  onClick={() => updateSettings({ endpoints: moveEndpoint(settings.endpoints, index, -1) })}
+                  className="text-xs text-muted hover:text-text transition-colors disabled:opacity-30"
+                  data-testid={`endpoint-up-${ep.id}`}
+                  aria-label="Move endpoint up"
+                >
+                  ↑
+                </button>
+                <button
+                  disabled={index === settings.endpoints.length - 1}
+                  onClick={() => updateSettings({ endpoints: moveEndpoint(settings.endpoints, index, 1) })}
+                  className="text-xs text-muted hover:text-text transition-colors disabled:opacity-30"
+                  data-testid={`endpoint-down-${ep.id}`}
+                  aria-label="Move endpoint down"
+                >
+                  ↓
+                </button>
                 {!isEditing && (
                   <button
                     onClick={() => {
@@ -591,81 +636,6 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
   );
 }
 
-/**
- * Render probe status and metadata below the endpoint info.
- *
- * Displays:
- * - status badge (success / unsupported / error)
- * - metadata (native context, architecture, quantization) when available
- * - error message when probe failed
- */
-function ProbeStatusDisplay({ result }: { result: ProbeResult }) {
-  const { t } = useI18n();
-  const statusConfig: Record<
-    ProbeResult['status'],
-    { labelKey: TranslationKey; color: string; bg: string }
-  > = {
-    success: {
-      labelKey: 'settings.endpoints.probe_status.success',
-      color: 'text-green-600',
-      bg: 'bg-green-50',
-    },
-    unsupported: {
-      labelKey: 'settings.endpoints.probe_status.unsupported',
-      color: 'text-yellow-600',
-      bg: 'bg-yellow-50',
-    },
-    error: {
-      labelKey: 'settings.endpoints.probe_status.error',
-      color: 'text-red-600',
-      bg: 'bg-red-50',
-    },
-  };
-
-  const config = statusConfig[result.status];
-
-  return (
-    <div className={clsx('mt-2 px-2 py-1.5 rounded-radius-sm text-[11px]', config.bg)}>
-      <span className={clsx('font-medium', config.color)}>{t(config.labelKey)}</span>
-      {result.adapter !== 'unknown' && (
-        <span className="text-muted ml-2">
-          {t('settings.endpoints.result.adapter')}: {result.adapter}
-        </span>
-      )}
-      {result.status === 'success' && result.data && (
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-muted">
-          {result.data.native != null && (
-            <span>
-              {t('settings.endpoints.result.context_native')}: {result.data.native.toLocaleString()}
-            </span>
-          )}
-          {result.data.service != null && (
-            <span>
-              {t('settings.endpoints.result.context_service')}:{' '}
-              {result.data.service.toLocaleString()}
-            </span>
-          )}
-          {result.data.architecture && (
-            <span>
-              {t('settings.endpoints.result.architecture')}: {result.data.architecture}
-            </span>
-          )}
-          {result.data.quantization && (
-            <span>
-              {t('settings.endpoints.result.quantization')}: {result.data.quantization}
-            </span>
-          )}
-        </div>
-      )}
-      {result.status === 'error' && result.error && (
-        <div className="mt-0.5 text-red-500">{result.error}</div>
-      )}
-      {result.status === 'unsupported' && result.error && (
-        <div className="mt-0.5 text-yellow-600">{result.error}</div>
-      )}
-    </div>
-  );
-}
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function auditEndpointsTabGovernance(): {
@@ -682,97 +652,4 @@ export function auditEndpointsTabGovernance(): {
     supportsEndpointProbeStatusDisplay: true,
     compliant: true,
   };
-}
-/**
- * P0-B (2026-09-18): 端点限额编辑区 — 日 token 限额 (数值 + tokens/K/M 单位)
- * 与月预算 (USD)。留空 = 不限额; 仅驱动用量面板的进度与预警, 不做请求侧熔断。
- */
-function QuotaEditor({
-  quota,
-  onChange,
-}: {
-  quota: EndpointQuota;
-  onChange: (q: EndpointQuota) => void;
-}) {
-  const { t } = useI18n();
-  const derive = (n: number | undefined) => (n ? deriveTokenInput(n) : null);
-  const [tokensText, setTokensText] = useState(() => derive(quota.dailyTokens)?.text ?? '');
-  const [tokenUnit, setTokenUnit] = useState<TokenUnit>(
-    () => derive(quota.dailyTokens)?.unit ?? 'K',
-  );
-  const [budgetText, setBudgetText] = useState(() =>
-    quota.monthlyBudgetUsd ? String(quota.monthlyBudgetUsd) : '',
-  );
-
-  const commit = (next: { text: string; unit: TokenUnit; budget: string }) => {
-    const tokens = Number(next.text) * TOKEN_UNIT_MULTIPLIERS[next.unit];
-    const budget = Number(next.budget);
-    onChange({
-      ...(Number.isFinite(tokens) && tokens > 0 ? { dailyTokens: Math.round(tokens) } : {}),
-      ...(Number.isFinite(budget) && budget > 0 ? { monthlyBudgetUsd: budget } : {}),
-    });
-  };
-
-  const inputCls =
-    'px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text';
-
-  return (
-    <div
-      className="pt-3 border-t border-dashed border-border space-y-2"
-      data-testid="endpoint-quota-editor"
-    >
-      <label className="text-xs text-muted block">{t('settings.endpoints.quota.section')}</label>
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted w-20">
-          {t('settings.endpoints.quota.daily_tokens')}
-        </span>
-        <input
-          type="number"
-          min={0}
-          aria-label={t('settings.endpoints.quota.aria_daily_tokens')}
-          value={tokensText}
-          placeholder={t('settings.endpoints.quota.unlimited')}
-          onChange={(e) => {
-            setTokensText(e.target.value);
-            commit({ text: e.target.value, unit: tokenUnit, budget: budgetText });
-          }}
-          className={`${inputCls} w-24`}
-        />
-        <select
-          aria-label={t('settings.endpoints.quota.aria_daily_unit')}
-          value={tokenUnit}
-          onChange={(e) => {
-            const unit = e.target.value as TokenUnit;
-            setTokenUnit(unit);
-            commit({ text: tokensText, unit, budget: budgetText });
-          }}
-          className={inputCls}
-        >
-          {TOKEN_UNITS.map((u) => (
-            <option key={u.value} value={u.value}>
-              {u.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted w-20">
-          {t('settings.endpoints.quota.monthly_budget')}
-        </span>
-        <input
-          type="number"
-          min={0}
-          step={0.5}
-          aria-label={t('settings.endpoints.quota.aria_budget')}
-          value={budgetText}
-          placeholder={t('settings.endpoints.quota.unlimited')}
-          onChange={(e) => {
-            setBudgetText(e.target.value);
-            commit({ text: tokensText, unit: tokenUnit, budget: e.target.value });
-          }}
-          className={`${inputCls} w-24`}
-        />
-      </div>
-    </div>
-  );
 }
