@@ -57,3 +57,32 @@ class TestBackgroundNotificationQueue:
         a = get_background_notification_queue()
         b = get_background_notification_queue()
         assert a is b
+
+
+class TestEvolutionNotifications:
+    """2026-11-26 P1: 手动触发的进化任务终态通知。"""
+
+    def test_push_evolution_success_item_shape(self) -> None:
+        q = BackgroundNotificationQueue()
+        q.push_evolution("memory_reflection", "记忆整理", "succeeded", "deduped: 2")
+        item = q.drain()[0]
+        assert item["kind"] == "evolution_task"
+        assert item["task_name"] == "memory_reflection"
+        assert item["status"] == "succeeded"
+        assert item["title"] == "✅ 记忆整理完成"
+        assert item["body"] == "deduped: 2"
+        assert item["created_at"]
+
+    def test_push_evolution_cancelled_and_failed_titles(self) -> None:
+        q = BackgroundNotificationQueue()
+        q.push_evolution("memory_reflection", "记忆整理", "cancelled", "")
+        q.push_evolution("memory_pruning", "记忆修剪", "failed", "boom")
+        items = q.drain()
+        assert items[0]["title"] == "⏹ 记忆整理已取消"
+        assert items[1]["title"] == "❌ 记忆修剪失败"
+        assert items[1]["body"] == "boom"
+
+    def test_push_evolution_truncates_body(self) -> None:
+        q = BackgroundNotificationQueue()
+        q.push_evolution("memory_pruning", "记忆修剪", "succeeded", "x" * 500)
+        assert len(q.drain()[0]["body"]) == 200

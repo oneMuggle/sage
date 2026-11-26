@@ -148,6 +148,42 @@ class TestEvolutionRunApi:
         finished = _wait_for_state(client, "memory_consolidation", "succeeded")
         assert finished["result"] == {"total": 4}
 
+    def test_cancel_running_task_sets_flag(
+        self, scheduler: SchedulerService, client: TestClient
+    ) -> None:
+        gate = threading.Event()
+        task = _register(scheduler)
+        task.run.side_effect = lambda: (gate.wait(5), {"total": 1})[1]
+
+        client.post("/api/v1/scheduled/evolution/memory_consolidation/run")
+        r = client.post("/api/v1/scheduled/evolution/memory_consolidation/cancel")
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert body["cancelled"] is True
+        assert body["run"]["cancel_requested"] is True
+
+        gate.set()
+        _wait_for_state(client, "memory_consolidation", "succeeded")
+
+    def test_cancel_when_not_running_is_noop(
+        self, scheduler: SchedulerService, client: TestClient
+    ) -> None:
+        _register(scheduler)
+
+        r = client.post("/api/v1/scheduled/evolution/memory_consolidation/cancel")
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["cancelled"] is False
+        assert body["run"] is None
+
+    def test_cancel_unknown_task_is_404(self, client: TestClient) -> None:
+        r = client.post("/api/v1/scheduled/evolution/no_such_task/cancel")
+        assert r.status_code == 404
+        assert r.json()["detail"]["type"] == "task_not_found"
+
     def test_run_unknown_task_is_404(self, client: TestClient) -> None:
         r = client.post("/api/v1/scheduled/evolution/no_such_task/run")
         assert r.status_code == 404
