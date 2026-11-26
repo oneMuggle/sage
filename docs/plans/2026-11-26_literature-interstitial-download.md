@@ -1,6 +1,6 @@
 # 文献下载中间页主机回退（xueshu789 oversea→kns）实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) 或 superpowers:executing-plans 按任务执行；步骤用 `- [ ]` 复选框跟踪。
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) 或 superpowers:executing-plans 按任务执行；步骤用 `- [x]` 复选框跟踪。
 
 **Goal:** 修复 xueshu789 文献「下载」断链：站点下载中间页把最终地址写死为 `oversea.cnki.net`（国内库内容 404），需要 profile 驱动的「中间页识别 + 主机回退」下载路径，使文献调研流水线能真实下载 PDF。
 
@@ -59,7 +59,7 @@
   - `PdfInterstitialSpec(url_contains: Tuple[str, ...] = (), host_fallbacks: Tuple[str, ...] = (), tab_timeout_s: float = 6.0, sleep_after_open_s: float = 2.5, attempt_timeout_s: float = 15.0)`
   - `PdfSpec.interstitial: Optional[PdfInterstitialSpec] = None`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `backend/tests/unit/test_literature_site_profiles.py` 的 `TestProfileModel` 类中追加：
 
@@ -101,7 +101,7 @@
         assert profile_from_dict(_raw_profile()).pdf.interstitial is None
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_literature_site_profiles.py -q -k interstitial
@@ -109,7 +109,7 @@
 
 预期：4 个用例 FAIL（`PdfSpec` 无 `interstitial` 属性 / 解析不识别）。
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 `backend/literature/models.py`，在 `PdfSpec` 定义之前新增 dataclass，并给 `PdfSpec` 加字段：
 
@@ -176,7 +176,7 @@ def _parse_pdf_interstitial(raw: Any) -> Optional[PdfInterstitialSpec]:
     )
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_literature_site_profiles.py -q
@@ -184,7 +184,7 @@ def _parse_pdf_interstitial(raw: Any) -> Optional[PdfInterstitialSpec]:
 
 预期：全部 PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/literature/models.py backend/tests/unit/test_literature_site_profiles.py
@@ -202,7 +202,7 @@ git commit -m "feat(literature): profile 支持 pdf.interstitial 中间页声明
 **Interfaces:**
 - Produces: `browser_interact(action="attr", selector="...", name="href")` → `ToolResult.content["info"]` 为属性值（字符串，截断 4000 字符）；元素不存在/属性不存在/选择器非法时 `success=False`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `backend/tests/unit/test_browser_tool.py` 的交互测试区追加：
 
@@ -244,7 +244,7 @@ def test_interact_attr_requires_locator(stubbed):
     assert "attr 需要 ref 或 selector" in result.error
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_browser_tool.py -q -k "interact_attr"
@@ -252,7 +252,7 @@ def test_interact_attr_requires_locator(stubbed):
 
 预期：FAIL（`attr` 不在 `_VALID_ACTIONS`）。
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 3a. `_VALID_ACTIONS` 追加 `"attr"`：
 
@@ -338,7 +338,7 @@ def _js_attr_selector(selector: str, name: str) -> str:
 
 并在 `_build_interact_expression(...)` 调用点补传 `name=name`。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_browser_tool.py -q
@@ -346,7 +346,7 @@ def _js_attr_selector(selector: str, name: str) -> str:
 
 预期：全部 PASS（含既有用例）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/tools/browser_tool.py backend/tests/unit/test_browser_tool.py
@@ -370,7 +370,7 @@ git commit -m "feat(browser): browser_interact 支持只读 attr 动作读取元
   - `focus_tab(tab_id: str) -> None`
   - `close_tab(tab_id: str) -> None`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `backend/tests/unit/test_literature_pipeline.py` 的 `TestSageDriver`（若无则新建类）中追加：
 
@@ -424,7 +424,7 @@ class TestSageDriverTabs:
         assert call.calls[-1] == ("browser_tabs", {"action": "close", "tab_id": "t9"})
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_literature_pipeline.py -q -k "TestSageDriverTabs"
@@ -432,7 +432,7 @@ class TestSageDriverTabs:
 
 预期：FAIL（方法不存在）。
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 `backend/literature/sage_driver.py` 在 `wait_download` 之前追加：
 
@@ -463,13 +463,13 @@ class TestSageDriverTabs:
             self._tool("browser_tabs", action="close", tab_id=tab_id)
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_literature_pipeline.py -q -k "TestSageDriver"
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/literature/sage_driver.py backend/tests/unit/test_literature_pipeline.py
@@ -490,7 +490,7 @@ git commit -m "feat(literature): 驱动新增 attr/标签页能力"
   - `download_pdf(profile, driver, expected_title, dest_dir, timeout_s=60, *, entry_url="", entry_selector="") -> DownloadResult`
   - 内部辅助：`_candidate_download_urls(url, hosts) -> List[str]`（先回退主机、后原域）、`_find_interstitial_tab(driver, inter, timeout_s)`、`_close_tab_quietly(driver, tab_id)`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `backend/tests/unit/test_literature_pipeline.py` 的 `TestBrowserSearch` 中追加（并在文件里定义 `_InterstitialDriver`）：
 
@@ -609,7 +609,7 @@ class _InterstitialDriver(_FakeDriver):
         assert len(urls) == 3
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_literature_pipeline.py -q -k "interstitial or candidate_urls"
@@ -617,7 +617,7 @@ class _InterstitialDriver(_FakeDriver):
 
 预期：FAIL（`_candidate_download_urls` 不存在；`download_pdf` 忽略 interstitial）。
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 `backend/literature/search.py`：
 
@@ -815,7 +815,7 @@ class BrowserDriver(Protocol):
     ...
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_literature_pipeline.py -q
@@ -823,7 +823,7 @@ class BrowserDriver(Protocol):
 
 预期：全部 PASS（含既有 click 路径用例）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/literature/search.py backend/tests/unit/test_literature_pipeline.py
@@ -841,7 +841,7 @@ git commit -m "feat(literature): download_pdf 支持中间页主机回退下载"
 - Modify: `docs/technical/164-literature-research-subsystem.md`（字段表 + §3.4）
 - Test: `backend/tests/unit/test_literature_site_profiles.py`（如已有加载真实模板的用例，一并断言）
 
-- [ ] **Step 1: 更新模板**
+- [x] **Step 1: 更新模板**
 
 `docs/templates/literature-sites/xueshu789.yaml` 的 `pdf` 段追加：
 
@@ -872,13 +872,13 @@ pdf:
 
 并把 `version: "0.3.1"` → `version: "0.4.0"`、`last_verified_at: "2026-11-26"`。
 
-- [ ] **Step 2: 文档补充**
+- [x] **Step 2: 文档补充**
 
 - `docs/templates/literature-sites/README.md`：在 pdf 字段说明处加 `interstitial` 五个子字段（`url_contains` 必填 / `host_fallbacks` / `tab_timeout_s` / `sleep_after_open_s` / `attempt_timeout_s`）与"何时使用"（入口先跳中间页再跳最终地址、最终地址主机可能错误）。
 - `backend/literature/README.md` §3.4：追加一段"中间页下载"流程说明（与本文档 Architecture 段一致），并在限制节说明"浏览器标签页由 `browser_tabs create` 打开，工具可见；站点 `window.open` 弹窗不可见，不要依赖"。
 - `docs/technical/164-...md` §2.5 字段表补 `pdf.interstitial`；§3.4 下载小节补新路径；§6 实测结论补 2026-11-26 的 oversea→kns 根因与验证数字（1,070,254B curl / 1,688,310B 浏览器）。
 
-- [ ] **Step 3: 校验**
+- [x] **Step 3: 校验**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m backend.literature.cli validate-profile --path docs/templates/literature-sites/xueshu789.yaml
@@ -886,7 +886,7 @@ pdf:
 
 预期：`{"ok": true, "id": "xueshu789", "status": "ready"}`。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/templates/literature-sites/xueshu789.yaml docs/templates/literature-sites/README.md backend/literature/README.md docs/technical/164-literature-research-subsystem.md
@@ -900,7 +900,7 @@ git commit -m "docs(literature): xueshu789 模板与文档补中间页主机回�
 **Files:**
 - Modify: `backend/skills/skill_md/shipped/literature-research/SKILL.md`
 
-- [ ] **Step 1: 更新 §3 下载说明**
+- [x] **Step 1: 更新 §3 下载说明**
 
 在「### 3. 检索」第 3 点后追加：
 
@@ -929,13 +929,13 @@ git commit -m "docs(literature): xueshu789 模板与文档补中间页主机回�
    - 下载完成后中间页标签会被关闭；失败时把 `res.errors` 反馈给用户，不要反复重试。
 ```
 
-- [ ] **Step 2: 语法自检**
+- [x] **Step 2: 语法自检**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_skill_md_loader.py -q
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/skills/skill_md/shipped/literature-research/SKILL.md
@@ -949,7 +949,7 @@ git commit -m "docs(skill): literature-research 下载步骤改用 download_pdf 
 **Files:**
 - Modify: `architecture-baseline.json`（如 `browser_tool.py` 超基线）
 
-- [ ] **Step 1: 跑相关测试集**
+- [x] **Step 1: 跑相关测试集**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest \
@@ -958,14 +958,14 @@ git commit -m "docs(skill): literature-research 下载步骤改用 download_pdf 
   backend/tests/unit/test_browser_tool.py -q
 ```
 
-- [ ] **Step 2: ruff + py38 兼容**
+- [x] **Step 2: ruff + py38 兼容**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m ruff check backend/literature backend/tools/browser_tool.py backend/tests/unit/test_literature_pipeline.py backend/tests/unit/test_literature_site_profiles.py backend/tests/unit/test_browser_tool.py
 /home/fz/anaconda3/envs/sage-backend/bin/python scripts/check_py38_compat.py
 ```
 
-- [ ] **Step 3: 架构棘轮**
+- [x] **Step 3: 架构棘轮**
 
 ```bash
 node scripts/architecture-check.mjs 2>/dev/null || node --experimental-vm-modules scripts/architecture-check.mjs
@@ -978,7 +978,7 @@ git add architecture-baseline.json
 git commit -m "chore(architecture): 更新 browser_tool.py 行数基线（interact attr 动作）"
 ```
 
-- [ ] **Step 4: 全量文献 + 工具回归**
+- [x] **Step 4: 全量文献 + 工具回归**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit -q -k "literature or browser"
@@ -1028,3 +1028,13 @@ SAGE_PYTHON=/home/fz/anaconda3/envs/sage-backend/bin/python ./node_modules/.bin/
 | 中间页时序变化（2s 跳转） | `sleep_after_open_s` + `tab_timeout_s` 均可在 profile 调整；识别基于 URL 子串而非固定时序 |
 | 站点后续改回直接下载 | interstitial 路径在 `url_contains` 匹配不到标签时明确报错，不会误判成功；原点击路径保留 |
 | 行数棘轮 | Task 7 同步更新 `architecture-baseline.json` |
+
+
+---
+
+## 实施记录（2026-11-26）
+
+- Task 1–7 已完成并通过门禁：`pytest -k "literature or browser"` 639 passed；ruff 全绿；`check_py38_compat.py` 通过；`architecture-check.mjs` 全绿（`browser_tool.py` 基线 4249、`test_browser_tool.py` 基线 3008）。
+- 偏差 1：`browser_interact` 的属性名参数最终取 **`attr_name`**（原计划 `name`）：`sage.call(name, **args)` 的首参就是 `name`，同名 kwargs 会 `TypeError`（单测已捕获）。
+- 偏差 2：中间页下载与驱动能力测试拆到新文件 `backend/tests/unit/test_literature_interstitial_download.py`，把 `test_literature_pipeline.py` 保持在 794 行（<800 硬线）。
+- Task 8（真机端到端）待合并后重启桌面端执行；浏览器侧链路已用原桥真机验证（重写主机后 1,688,310B PDF 落盘）。
