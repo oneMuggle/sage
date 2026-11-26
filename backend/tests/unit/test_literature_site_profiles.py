@@ -93,6 +93,42 @@ class TestProfileModel:
         with pytest.raises(SiteProfileError, match="decode"):
             profile_from_dict(raw)
 
+    def test_pdf_interstitial_parses(self):
+        raw = _raw_profile()
+        raw["pdf"]["interstitial"] = {
+            "url_contains": ["cnki.net/docdown"],
+            "host_fallbacks": ["kns.cnki.net"],
+            "tab_timeout_s": 8,
+            "sleep_after_open_s": 3,
+            "attempt_timeout_s": 20,
+        }
+        profile = profile_from_dict(raw)
+        inter = profile.pdf.interstitial
+        assert inter is not None
+        assert inter.url_contains == ("cnki.net/docdown",)
+        assert inter.host_fallbacks == ("kns.cnki.net",)
+        assert inter.tab_timeout_s == 8.0
+        assert inter.sleep_after_open_s == 3.0
+        assert inter.attempt_timeout_s == 20.0
+
+    def test_pdf_interstitial_defaults(self):
+        raw = _raw_profile()
+        raw["pdf"]["interstitial"] = {"url_contains": ["cnki.net/docdown"]}
+        inter = profile_from_dict(raw).pdf.interstitial
+        assert inter.host_fallbacks == ()
+        assert inter.tab_timeout_s == 6.0
+        assert inter.sleep_after_open_s == 2.5
+        assert inter.attempt_timeout_s == 15.0
+
+    def test_pdf_interstitial_requires_url_contains(self):
+        raw = _raw_profile()
+        raw["pdf"]["interstitial"] = {"host_fallbacks": ["kns.cnki.net"]}
+        with pytest.raises(SiteProfileError, match="url_contains"):
+            profile_from_dict(raw)
+
+    def test_pdf_interstitial_absent_by_default(self):
+        assert profile_from_dict(_raw_profile()).pdf.interstitial is None
+
     def test_rejects_invalid_id(self):
         with pytest.raises(SiteProfileError, match="id"):
             profile_from_dict(_raw_profile(id="Bad ID"))
