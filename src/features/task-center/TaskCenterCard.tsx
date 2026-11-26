@@ -16,6 +16,7 @@ import {
   Network,
   PauseCircle,
   Play,
+  Sparkles,
   Target,
   Workflow,
   X,
@@ -38,6 +39,7 @@ const SOURCE_ICON: Record<UnifiedTaskSource, LucideIcon> = {
   goal: Target,
   todo: ListTodo,
   scheduled: CalendarClock,
+  evolution: Sparkles,
 };
 
 const STATUS_ICON: Record<TaskCenterStatus, LucideIcon> = {

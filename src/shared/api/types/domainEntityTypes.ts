@@ -191,7 +191,7 @@ export type EvolutionTaskName =
   | 'memory_reflection';
 
 /** 进化任务运行状态字段（与后端 EvolutionRunRegistry 快照对齐）。 */
-export type EvolutionRunState = 'running' | 'succeeded' | 'failed';
+export type EvolutionRunState = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 /** 进化任务最近一次运行快照 —— GET /scheduled/evolution/tasks 的 run 字段。 */
 export interface EvolutionRunSnapshot {
@@ -212,6 +212,8 @@ export interface EvolutionRunSnapshot {
   /** 任务统计（终态才有；字段随任务而异） */
   result: Record<string, unknown> | null;
   error: string | null;
+  /** 已请求取消（协作式：任务在检查点响应前仍为 running） */
+  cancel_requested: boolean;
 }
 
 /** GET /scheduled/evolution/tasks 的单项。 */
