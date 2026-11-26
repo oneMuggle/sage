@@ -81,3 +81,18 @@ writer profile 的 system prompt 同步提示：用户明示的硬性格式要�
   参考文献表）
 - Round 10（P3）: docx 格式 Linter（对照 FormatSpec 校验产出 + 一键修复）、
   `paper-writing` / `report-writing` 技能
+
+## 7. P0 扩展（2026-11-26）
+
+FormatSpec 增补以下字段（详见 [176 章](./176-word-template-refill-and-layout-p0.md)）：
+
+- `page.size` 扩展 A3/A5/B4/B5/legal + `width_cm`/`height_cm` 自定义纸张；
+- `page.line_numbering`（`w:lnNumType`：count_by/restart/start）；
+- `body.first_line_indent_chars`（`w:firstLineChars`，按字符缩进）；
+- `headings.hN.line_spacing` / `line_spacing_pt`（标题行距）；
+- `header`/`footer` 的 `tab_right`/`border_bottom`/`page_number_style`
+  （`zh` = “第 X 页 共 Y 页”）/字体字段；
+- `section_breaks[].header/footer`（节级页眉页脚，`page_setup` 变为可选）。
+
+新增字段全部 Optional，不传时产物与历史版本一致。写入逻辑位于
+`backend/office/word_layout_sections.py`，`word_layout.py` 仅委托调用。

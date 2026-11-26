@@ -28,6 +28,7 @@ Public surface:
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
@@ -405,7 +406,180 @@ class OfficeFillWordTemplateTool(BaseTool):
         )
 
 
+class OfficeRefillWordTemplateTool(BaseTool):
+    """Refill a Word template by cloning block paragraphs (no placeholders needed)."""
+
+    requires_tool_context = False
+    risk = RiskClass.WRITE_LOCAL
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="office_refill_word_template",
+            description=(
+                "Refill a Word template (.docx) that has NO {{placeholders}} by "
+                "cloning its pre-formatted block paragraphs. `blocks` is an "
+                "ordered list of {kind, text}; kind is one of h1/h2/h3/body/bold "
+                "and selects which template paragraph is cloned (direct "
+                "formatting is preserved). The replaced region starts at the "
+                "first h1/outline-level-0 paragraph unless `start_anchor_text` "
+                "or `anchors` is given; it runs to the end unless "
+                "`end_anchor_text` is given. Writes a NEW file next to the "
+                "template (<stem>-refilled.docx) or to `output_path`."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "doc_id": {
+                        "type": "string",
+                        "description": "Word document id from office_list.",
+                    },
+                    "file_path": {
+                        "type": "string",
+                        "description": (
+                            "ABSOLUTE path to the .docx template (when no doc_id)."
+                        ),
+                    },
+                    "blocks": {
+                        "type": "array",
+                        "description": "Ordered content blocks to write.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "kind": {
+                                    "type": "string",
+                                    "enum": ["h1", "h2", "h3", "body", "bold"],
+                                },
+                                "text": {"type": "string"},
+                            },
+                            "required": ["kind", "text"],
+                        },
+                    },
+                    "anchors": {
+                        "type": "object",
+                        "description": (
+                            "Optional explicit paragraph indices for block "
+                            'templates, e.g. {"h1": 5, "body": 9}.'
+                        ),
+                    },
+                    "start_anchor_text": {
+                        "type": "string",
+                        "description": "Text prefix marking the replacement start.",
+                    },
+                    "end_anchor_text": {
+                        "type": "string",
+                        "description": (
+                            "Text prefix marking the replacement end (exclusive)."
+                        ),
+                    },
+                    "output_path": {
+                        "type": "string",
+                        "description": (
+                            "Optional ABSOLUTE path for the output .docx; omit "
+                            "to write <template-stem>-refilled.docx."
+                        ),
+                    },
+                },
+                "required": ["blocks"],
+            },
+        )
+
+    def execute(  # noqa: PLR0911 — 错误早退路径多，保持线性可读
+        self,
+        blocks: Optional[list] = None,
+        anchors: Optional[Dict[str, Any]] = None,
+        start_anchor_text: Optional[str] = None,
+        end_anchor_text: Optional[str] = None,
+        doc_id: Optional[str] = None,
+        file_path: Optional[str] = None,
+        output_path: Optional[str] = None,
+        **kwargs: Any,
+    ) -> ToolResult:
+        if not isinstance(blocks, list) or not blocks:
+            return ToolResult(success=False, error="blocks_required")
+
+        ctx = current_tool_context()
+        resolved = _resolve_template_input(self, ctx, doc_id, file_path)
+        if isinstance(resolved, ToolResult):
+            return resolved
+        input_path, workspace_str, doc = resolved
+        workspace = Path(workspace_str)
+
+        if output_path is not None:
+            if not isinstance(output_path, str) or not output_path.strip():
+                return ToolResult(success=False, error="output_path_invalid")
+            blocked = self._enforce_workspace(output_path)
+            if blocked is not None:
+                return blocked
+            final = Path(output_path).expanduser()
+            if not final.is_absolute():
+                return ToolResult(
+                    success=False, error="output_path_absolute_required: 请传绝对路径"
+                )
+            if final.suffix.lower() != ".docx":
+                return ToolResult(
+                    success=False, error="unsupported_file_type: 仅支持 .docx"
+                )
+            from backend.office.path_safety import resolve_within
+
+            try:
+                final = resolve_within(workspace, final)
+            except OfficePathError as exc:
+                return _office_error_result(exc, "output_path_invalid")
+            if final.exists():
+                return ToolResult(
+                    success=False, error=f"file_exists: {final.name} 已存在，请更换 output_path"
+                )
+        else:
+            final = input_path.resolve().with_name(f"{input_path.stem}-refilled.docx")
+            blocked = self._enforce_workspace(str(final))
+            if blocked is not None:
+                return blocked
+
+        from backend.office.word_template_refill import (  # 延迟 import
+            fill_word_template_blocks,
+        )
+
+        try:
+            result = fill_word_template_blocks(
+                input_path,
+                blocks,
+                final.name,
+                workspace_path=workspace_str,
+                anchors=anchors,
+                start_anchor_text=start_anchor_text,
+                end_anchor_text=end_anchor_text,
+            )
+        except OfficeError as exc:
+            return _office_error_result(exc, "refill_failed")
+        except Exception as exc:  # noqa: BLE001
+            return ToolResult(success=False, error=f"refill_failed: {exc}")
+
+        produced = (workspace / result["output_path"]).resolve()
+        if produced != final:
+            try:
+                produced.replace(final)
+            except OSError as exc:
+                with contextlib.suppress(OSError):
+                    produced.unlink()
+                return ToolResult(success=False, error=f"refill_failed: {exc}")
+
+        _record_artifact_safely(str(final), final.stat().st_size)
+        return ToolResult(
+            success=True,
+            content={
+                "path": str(final),
+                "filename": final.name,
+                "bytes": final.stat().st_size,
+                "inserted_blocks": result["inserted_blocks"],
+                "removed_paragraphs": result["removed_paragraphs"],
+                "anchors": result["anchors"],
+                "warnings": result["warnings"],
+            },
+        )
+
+
 __all__ = [
     "OfficeAnalyzeWordTemplateTool",
     "OfficeFillWordTemplateTool",
+    "OfficeRefillWordTemplateTool",
 ]
