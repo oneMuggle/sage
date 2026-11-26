@@ -534,16 +534,23 @@ class OfficeRefillWordTemplateTool(BaseTool):
             blocked = self._enforce_workspace(str(final))
             if blocked is not None:
                 return blocked
+        if final.exists():
+            return ToolResult(
+                success=False, error=f"file_exists: {final.name} 已存在，请更换 output_path"
+            )
 
         from backend.office.word_template_refill import (  # 延迟 import
             fill_word_template_blocks,
         )
 
+        # 服务层只写模板同目录：用临时名落盘后再移动到最终目标，
+        # 避免跨目录 output_path 与模板目录同名文件互撞。
+        tmp_name = f".refill-{uuid.uuid4().hex}.docx"
         try:
             result = fill_word_template_blocks(
                 input_path,
                 blocks,
-                final.name,
+                tmp_name,
                 workspace_path=workspace_str,
                 anchors=anchors,
                 start_anchor_text=start_anchor_text,
@@ -555,13 +562,12 @@ class OfficeRefillWordTemplateTool(BaseTool):
             return ToolResult(success=False, error=f"refill_failed: {exc}")
 
         produced = (workspace / result["output_path"]).resolve()
-        if produced != final:
-            try:
-                produced.replace(final)
-            except OSError as exc:
-                with contextlib.suppress(OSError):
-                    produced.unlink()
-                return ToolResult(success=False, error=f"refill_failed: {exc}")
+        try:
+            produced.replace(final)
+        except OSError as exc:
+            with contextlib.suppress(OSError):
+                produced.unlink()
+            return ToolResult(success=False, error=f"refill_failed: {exc}")
 
         _record_artifact_safely(str(final), final.stat().st_size)
         return ToolResult(

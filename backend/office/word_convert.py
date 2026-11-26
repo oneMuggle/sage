@@ -273,12 +273,16 @@ def _convert_with_word_com(
 
     word = None
     document = None
+    temp_target = target.with_name(
+        f".{target.stem}.{uuid.uuid4().hex}.com{target.suffix}"
+    )
     try:
         word = win32com.client.DispatchEx("Word.Application")
         word.Visible = False
         word.DisplayAlerts = 0
         document = word.Documents.Open(str(source), ReadOnly=True)
-        document.SaveAs2(str(target), FileFormat=_WD_FORMATS[target_format])
+        document.SaveAs2(str(temp_target), FileFormat=_WD_FORMATS[target_format])
+        os.replace(temp_target, target)  # noqa: PTH105 — 与 LibreOffice 路径一致的原子替换
         logger.info("Word COM conversion succeeded: %s", target)
         return True, ""
     except Exception as exc:  # noqa: BLE001 — COM 失败统一折叠
@@ -291,6 +295,9 @@ def _convert_with_word_com(
         if word is not None:
             with contextlib.suppress(Exception):
                 word.Quit()
+        with contextlib.suppress(OSError):
+            if temp_target.exists():
+                temp_target.unlink()
 
 
 def _tail(stream: Optional[bytes], limit: int = 400) -> str:

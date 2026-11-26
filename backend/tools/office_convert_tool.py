@@ -88,6 +88,12 @@ class OfficeConvertWordTool(BaseTool):
         if not path.is_file():
             return ToolResult(success=False, error="file_not_found")
 
+        # 写沙箱：受限子代理下源目录即写入边界（产物落在源文件同目录），
+        # 与 _BOUNDARY_SPECS 的 file_path 登记一致。
+        blocked = self._enforce_workspace(str(path))
+        if blocked is not None:
+            return blocked
+
         ctx = current_tool_context()
         workspace = _workspace_for_input(ctx, path)
         result = convert_word(

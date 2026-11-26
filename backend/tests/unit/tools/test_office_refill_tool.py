@@ -82,3 +82,31 @@ def test_refill_tool_maps_service_error(tmp_path: Path) -> None:
 
     assert result.success is False
     assert "缺少块模板段落" in (result.error or "")
+
+
+def test_refill_tool_cross_directory_output_avoids_collision(
+    tmp_path: Path, monkeypatch
+) -> None:
+    template_dir = tmp_path / "tpl"
+    template_dir.mkdir()
+    template = _build_template(template_dir / "template.docx")
+    # 模板目录存在同名文件：跨目录输出不应被它误判为「已存在」
+    (template_dir / "custom.docx").write_bytes(b"collision")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    monkeypatch.setattr(
+        "backend.tools.office_template_tool._workspace_for_input",
+        lambda ctx, path: tmp_path,
+    )
+    tool = OfficeRefillWordTemplateTool()
+
+    result = tool.execute(
+        file_path=str(template),
+        blocks=[{"kind": "body", "text": "跨目录输出"}],
+        output_path=str(out_dir / "custom.docx"),
+    )
+
+    assert result.success is True
+    assert (out_dir / "custom.docx").exists()
+    assert (template_dir / "custom.docx").read_bytes() == b"collision"

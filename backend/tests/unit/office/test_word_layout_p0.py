@@ -5,10 +5,12 @@
 
 from __future__ import annotations
 
+import pytest
 from docx import Document
 from docx.oxml.ns import qn
 from docx.shared import Pt
 
+from backend.office.errors import OfficeGenerateError
 from backend.office.models import (
     WordBodyStyleSpec,
     WordFormatSpec,
@@ -56,6 +58,14 @@ def test_named_a3_paper_and_landscape() -> None:
     section = doc.sections[0]
     assert round(section.page_width.cm, 1) == 42.0
     assert round(section.page_height.cm, 1) == 29.7
+
+
+def test_custom_paper_requires_both_dimensions() -> None:
+    doc = Document()
+    with pytest.raises(OfficeGenerateError):
+        apply_format_spec(
+            doc, WordFormatSpec(page=WordPageSetupSpec(width_cm=17.6))
+        )
 
 
 def test_first_line_indent_chars_written_to_normal_style() -> None:

@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Optional, Tuple
 
 from ._docx_lazy import Cm, Inches, OxmlElement, align_map_ltr, qn
+from .errors import OfficeGenerateError
 from .models import WordHeaderFooterSpec, WordPageSetupSpec
 
 #: 命名纸张 → (宽, 高) EMU
@@ -75,7 +76,13 @@ _PPR_BEFORE_IND = (
 
 
 def page_size_for(page: WordPageSetupSpec) -> Optional[Tuple[Any, Any]]:
-    """返回 (width, height) EMU；自定义宽高优先于命名纸张，未匹配返回 None。"""
+    """返回 (width, height) EMU；自定义宽高优先于命名纸张，未匹配返回 None。
+
+    自定义纸张要求宽高成对出现；只给一个维度视为配置错误（显式报错，
+    避免静默 no-op）。
+    """
+    if (page.width_cm is None) != (page.height_cm is None):
+        raise OfficeGenerateError("自定义纸张需同时提供 width_cm 与 height_cm")
     if page.width_cm is not None and page.height_cm is not None:
         return Cm(page.width_cm), Cm(page.height_cm)
     return _PAGE_SIZES.get(page.size or "")
@@ -237,7 +244,8 @@ def write_header_footer(
     if part.is_linked_to_previous:
         part.is_linked_to_previous = False
     paragraph = part.paragraphs[0] if part.paragraphs else part.add_paragraph()
-    paragraph.text = spec.text or ""
+    if spec.text is not None:
+        paragraph.text = spec.text
     if spec.align is not None:
         paragraph.alignment = align_map_ltr()[spec.align]
     if spec.tab_right:

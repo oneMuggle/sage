@@ -93,11 +93,13 @@ def fill_word_template_profile_endpoint(req: WordTemplateProfileFillRequest) -> 
 @router.post("/refill")
 def refill_word_template_blocks_endpoint(req: WordTemplateRefillRequest) -> dict:
     """Clone template block paragraphs (no placeholders required) into a new .docx."""
+    workspace = validate_workspace(Path(req.workspace_path))
+    template = resolve_within(workspace, Path(req.template_path).expanduser())
     return fill_word_template_blocks(
-        Path(req.template_path),
+        template,
         req.blocks,
         req.output_filename,
-        workspace_path=str(Path(req.workspace_path).resolve()),
+        workspace_path=str(workspace),
         anchors=req.anchors,
         start_anchor_text=req.start_anchor_text,
         end_anchor_text=req.end_anchor_text,
