@@ -95,7 +95,9 @@ def test_medium_task_wraps_scout(monkeypatch):
     async def fake_clarify(client, message, emit):
         return []
 
-    async def fake_scout(client, message, emit, clarifications, max_iterations=3):
+    async def fake_scout(
+        client, message, emit, clarifications, max_iterations=3, fallback_client=None
+    ):
         return "- fact"
 
     monkeypatch.setattr(classifier_module, "classify_complexity", fake_classify)
@@ -199,4 +201,149 @@ def test_run_scout_agent_emits_thinking_and_tool_progress(monkeypatch):
     assert any(
         p["kind"] == "tool_call" and p["text"] == "read_file" for p in progresses
     )
+
+
+# ---------------------------------------------------------------------------
+# HIGH 2: _scout 普通客户端回退
+# ---------------------------------------------------------------------------
+
+
+def test_scout_retries_with_fallback_client_on_failure(monkeypatch):
+    """首客户端非超时失败 → 用 fallback_client 再试一次并返回其事实。"""
+    calls = []
+
+    async def fake_run_agent(client, goal, max_iterations=3, emit=None):
+        calls.append(client)
+        if client == "bad":
+            raise RuntimeError("thinking_effort unsupported")
+        return "- fact from fallback"
+
+    monkeypatch.setattr(plan_preflight, "_run_scout_agent", fake_run_agent)
+    _, emit = _collect()
+
+    facts = asyncio.run(
+        plan_preflight._scout(
+            "bad", "goal", emit, [], max_iterations=3, fallback_client="good"
+        )
+    )
+    assert facts == "- fact from fallback"
+    assert calls == ["bad", "good"]
+
+
+def test_scout_returns_empty_when_both_clients_fail(monkeypatch):
+    """回退也失败 → 返回空串（跳过事实注入，不阻塞拆解）。"""
+
+    async def fake_run_agent(client, goal, max_iterations=3, emit=None):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(plan_preflight, "_run_scout_agent", fake_run_agent)
+    _, emit = _collect()
+
+    facts = asyncio.run(
+        plan_preflight._scout("bad", "goal", emit, [], fallback_client="good")
+    )
+    assert facts == ""
+
+
+def test_scout_without_fallback_returns_empty(monkeypatch):
+    """未提供 fallback_client → 首客户端失败即返回空串，不再重试。"""
+    calls = []
+
+    async def fake_run_agent(client, goal, max_iterations=3, emit=None):
+        calls.append(client)
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(plan_preflight, "_run_scout_agent", fake_run_agent)
+    _, emit = _collect()
+
+    facts = asyncio.run(plan_preflight._scout("only", "goal", emit, []))
+    assert facts == ""
+    assert calls == ["only"]
+
+
+# ---------------------------------------------------------------------------
+# MEDIUM 3: _run_scout_agent 思考节流
+# ---------------------------------------------------------------------------
+
+
+def _patch_scout_agent(monkeypatch, events):
+    """把 SageAgent.run_loop 替换为固定事件序列，并屏蔽只读注册表清理。"""
+    import backend.core.legacy.agent as agent_module
+    import backend.tools.agent_tool as agent_tool_module
+
+    class _FakeSageAgent:
+        def __init__(self, bare=False):
+            self.tool_registry = None
+            self._owned_workspace_root = None
+            self.llm_client = None
+
+        async def run_loop(self, messages, max_iterations=3):
+            for event in events:
+                yield event
+
+    monkeypatch.setattr(agent_module, "SageAgent", _FakeSageAgent)
+    monkeypatch.setattr(
+        agent_tool_module,
+        "build_readonly_tool_registry",
+        lambda: types.SimpleNamespace(_owned_workspace_root=None),
+    )
+    monkeypatch.setattr(
+        agent_tool_module, "_cleanup_subagent_workspace", lambda *a, **k: None
+    )
+
+
+def _collect_scout_progress():
+    collected = []
+
+    async def emit(envelope):
+        collected.append(envelope)
+
+    asyncio.run(plan_preflight._run_scout_agent(object(), "goal", emit=emit))
+    return [
+        e["plan_progress"] for e in collected if e["state"] == "plan_progress"
+    ]
+
+
+def test_run_scout_agent_throttles_rapid_thinking(monkeypatch):
+    """高频重复思考被间隔节流 + 去重 → 仅推送 1 条。"""
+    events = [
+        AgentEvent(state=AgentState.REASONING, reasoning="分析中") for _ in range(5)
+    ] + [AgentEvent(state=AgentState.DONE, content="完成")]
+    _patch_scout_agent(monkeypatch, events)
+
+    progresses = _collect_scout_progress()
+    thinking = [p for p in progresses if p["kind"] == "thinking"]
+    assert len(thinking) == 1
+
+
+def test_run_scout_agent_dedupes_identical_thinking(monkeypatch):
+    """间隔置 0 时仍跳过与上一条相同的思考文本。"""
+    monkeypatch.setattr(plan_preflight, "SCOUT_THINKING_MIN_INTERVAL_S", 0.0)
+    events = [
+        AgentEvent(state=AgentState.REASONING, reasoning="分析中"),
+        AgentEvent(state=AgentState.REASONING, reasoning="分析中"),
+        AgentEvent(state=AgentState.REASONING, reasoning="新分析"),
+        AgentEvent(state=AgentState.REASONING, reasoning="新分析"),
+        AgentEvent(state=AgentState.DONE, content="完成"),
+    ]
+    _patch_scout_agent(monkeypatch, events)
+
+    progresses = _collect_scout_progress()
+    thinking = [p["text"] for p in progresses if p["kind"] == "thinking"]
+    assert thinking == ["分析中", "新分析"]
+
+
+def test_run_scout_agent_caps_thinking_emits(monkeypatch):
+    """整轮思考推送条数受 SCOUT_THINKING_MAX_EMITS 封顶。"""
+    monkeypatch.setattr(plan_preflight, "SCOUT_THINKING_MIN_INTERVAL_S", 0.0)
+    monkeypatch.setattr(plan_preflight, "SCOUT_THINKING_MAX_EMITS", 2)
+    events = [
+        AgentEvent(state=AgentState.REASONING, reasoning=f"想法{i}") for i in range(5)
+    ] + [AgentEvent(state=AgentState.DONE, content="完成")]
+    _patch_scout_agent(monkeypatch, events)
+
+    progresses = _collect_scout_progress()
+    thinking = [p for p in progresses if p["kind"] == "thinking"]
+    assert len(thinking) == 2
+    assert [p["text"] for p in thinking] == ["想法0", "想法1"]
 

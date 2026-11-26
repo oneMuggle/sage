@@ -683,6 +683,9 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
           iterationOffset: nextOffset,
           // M5: run 收尾后延长提示失去意义（不再有进行中的迭代），随流一起清掉
           budgetCheckpoint: null,
+          // 2026-11-25: run 收尾后规划时间线的瞬态进度随之清空 —— 此前只在
+          // startStream 重置，导致上一轮时间线在历史气泡里残留。
+          planProgress: null,
         }),
       };
     }),

@@ -979,6 +979,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 直接透传，不重枚举；run_id 复用 resume 返回的 new_run_id。
                     plan_tasks = data.plan_override
                     run_id = data.run_id or f"orch-{uuid.uuid4()}"
+                    # 沿用既有计划时拆解阶段不执行；显式推 skipped 事件，
+                    # 避免前端规划时间线停在「等待」态。
+                    await emit_planning_skipped(
+                        entry.queue.put,
+                        stages=[PLAN_STAGE_DECOMPOSE],
+                        reason="沿用既有计划，跳过拆解",
+                    )
                 else:
                     # P2-8 (2026-08-14): orchestration_mode=template:<id> → 确定性模板拆解。
                     orchestration_mode = data.orchestration_mode or "auto"

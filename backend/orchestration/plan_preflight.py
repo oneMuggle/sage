@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
@@ -71,6 +72,11 @@ SCOUT_MAX_ITERATIONS = 4
 
 #: 事实清单注入 planner context 的截断上限（字符）。
 SCOUT_FACTS_MAX_CHARS = 4000
+
+#: 侦察思考事件的节流：最小推送间隔（秒）与单轮上限 —— 逐 token 的
+#: reasoning_delta 若无节流会以极高频率刷屏（前端每条都收）。
+SCOUT_THINKING_MIN_INTERVAL_S = 0.1
+SCOUT_THINKING_MAX_EMITS = 200
 
 #: 单轮澄清最多提问数（防骚扰上限；全局防骚扰由 run_loop 的
 #: MAX_CONSECUTIVE_UNANSWERED_QUESTIONS 管辖，这里管单轮生成量）。
@@ -293,6 +299,7 @@ async def run_plan_preflight(
                             emit,
                             clarifications,
                             max_iterations=settings.max_scout_iterations,
+                            fallback_client=client,
                         ),
                         describe_result=lambda value: (
                             "已收集事实" if value else "未收集到事实"
@@ -376,6 +383,7 @@ async def run_plan_preflight(
                         emit,
                         clarifications,
                         max_iterations=settings.max_scout_iterations,
+                        fallback_client=client,
                     ),
                     describe_result=lambda value: (
                         "已收集事实" if value else "未收集到事实"
@@ -416,7 +424,13 @@ async def _clarify(
         "{max_opts}", str(limits["max_options_per_question"])
     )
     try:
-        raw = await client.complete(prompt)
+        # 惰性导入避免导入环；注入的 utility 客户端失败时 helper 回退普通
+        # 客户端（无思考参数）再试一次，避免上游拒绝参数时直接跳过澄清。
+        from backend.orchestration.llm_factory import complete_with_plain_fallback
+
+        raw = await complete_with_plain_fallback(
+            prompt, client=client, task_type="planning"
+        )
     except Exception as exc:  # noqa: BLE001 — 判定失败必须跳过，绝不阻塞
         logger.warning("plan_preflight 澄清判定 LLM 调用失败，跳过: %s", exc)
         return []
@@ -518,8 +532,13 @@ async def _scout(
     emit: Optional[Callable[[Dict[str, Any]], Awaitable[None]]],
     clarifications: List[str],
     max_iterations: int = SCOUT_MAX_ITERATIONS,
+    fallback_client: Optional[Any] = None,
 ) -> str:
-    """只读侦察：产出分点事实清单（截断至 SCOUT_FACTS_MAX_CHARS，失败为空）。"""
+    """只读侦察：产出分点事实清单（截断至 SCOUT_FACTS_MAX_CHARS，失败为空）。
+
+    ``fallback_client``（一般是不带思考参数的普通客户端）：首客户端以非超时
+    异常失败时，用它再试一次 —— 覆盖上游拒绝 utility 客户端思考参数的场景。
+    """
     await _emit(emit, {"state": "orch_preflight", "phase": "scout"})
 
     goal = message
@@ -537,7 +556,17 @@ async def _scout(
         )
         return ""
     except Exception as exc:  # noqa: BLE001 — 侦察失败不阻塞拆解
-        logger.warning("plan_preflight 侦察失败，跳过: %s", exc)
+        logger.warning("plan_preflight 侦察失败，尝试普通客户端回退: %s", exc)
+        if fallback_client is not None and fallback_client is not client:
+            try:
+                facts = await asyncio.wait_for(
+                    _run_scout_agent(fallback_client, goal, max_iterations, emit=emit),
+                    timeout=_scout_timeout_s(),
+                )
+            except Exception as exc2:  # noqa: BLE001 — 回退也失败则跳过事实注入
+                logger.warning("plan_preflight 侦察回退失败，跳过: %s", exc2)
+                return ""
+            return (facts or "").strip()[:SCOUT_FACTS_MAX_CHARS]
         return ""
     return (facts or "").strip()[:SCOUT_FACTS_MAX_CHARS]
 
@@ -585,18 +614,43 @@ async def _run_scout_agent(
 
     try:
         answer = ""
+        # 思考节流：逐 token 的 reasoning_delta 若无节制地推送会刷屏。
+        # 频率 ≤1/100ms、整轮上限 SCOUT_THINKING_MAX_EMITS 条，并跳过与上一条
+        # 已推送思考文本完全相同的重复；工具事件不节流，保留实时反馈。
+        last_thinking_emit_at = 0.0
+        thinking_emit_count = 0
+        last_thinking_text: Optional[str] = None
         async for event in subagent.run_loop(messages, max_iterations=max_iterations):
             state = getattr(event, "state", None)
             state_value = getattr(state, "value", state)
             mapped = _scout_event_to_progress(event)
             if mapped is not None:
-                await emit_plan_progress(
-                    emit,
-                    stage=PLAN_STAGE_SCOUT,
-                    status=STATUS_PROGRESS,
-                    kind=mapped["kind"],
-                    text=mapped["text"],
-                )
+                if mapped["kind"] == KIND_THINKING:
+                    now = time.monotonic()
+                    text = mapped["text"]
+                    if (
+                        thinking_emit_count < SCOUT_THINKING_MAX_EMITS
+                        and text != last_thinking_text
+                        and (now - last_thinking_emit_at) >= SCOUT_THINKING_MIN_INTERVAL_S
+                    ):
+                        last_thinking_emit_at = now
+                        last_thinking_text = text
+                        thinking_emit_count += 1
+                        await emit_plan_progress(
+                            emit,
+                            stage=PLAN_STAGE_SCOUT,
+                            status=STATUS_PROGRESS,
+                            kind=mapped["kind"],
+                            text=text,
+                        )
+                else:
+                    await emit_plan_progress(
+                        emit,
+                        stage=PLAN_STAGE_SCOUT,
+                        status=STATUS_PROGRESS,
+                        kind=mapped["kind"],
+                        text=mapped["text"],
+                    )
             if state_value == "done":
                 answer = event.content or ""
                 break

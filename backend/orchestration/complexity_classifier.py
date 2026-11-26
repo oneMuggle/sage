@@ -101,16 +101,7 @@ class ComplexityClassifier:
         """
         try:
             # 惰性导入：llm_factory 读 settings DB，保持与 plan_preflight 同款装配路径
-            from backend.orchestration.llm_factory import build_utility_llm_client
-
-            client = build_utility_llm_client(task_type="classification")
-            if client is None:
-                logger.info("complexity_classifier: 无 LLM 配置，降级为 medium")
-                return ComplexityClassification(
-                    complexity="medium",
-                    research_needed=False,
-                    reasoning="无 LLM 配置，降级为 medium",
-                )
+            from backend.orchestration.llm_factory import complete_utility
 
             # 先替换 {context} 再替换 {message}：反序会让消息体里出现的
             # "{context}" 被二次替换成上下文，形成 prompt 注入面。
@@ -119,7 +110,11 @@ class ComplexityClassifier:
             )
 
             try:
-                raw = await client.complete(prompt)
+                # 不注入 client：complete_utility 在 utility 客户端失败时会自动
+                # 回退一次「不带思考参数」的普通客户端 —— 覆盖上游拒绝
+                # reasoning_effort/thinking_budget 的兼容场景。无配置时它抛
+                # RuntimeError，同样落到下面的降级路径。
+                raw = await complete_utility(prompt, task_type="classification")
             except Exception as exc:  # noqa: BLE001 — 分类失败必须降级，绝不阻塞
                 logger.warning(
                     "complexity_classifier LLM 调用失败，降级为 medium: %s", exc
@@ -280,19 +275,20 @@ async def estimate_budget_level(
     from backend.utils.py_compat import TIMEOUT_ERRORS
 
     try:
-        from backend.orchestration.llm_factory import build_utility_llm_client
-
-        client = build_utility_llm_client(task_type="classification")
-        if client is None:
-            logger.info("estimate_budget_level: 无 LLM 配置，回落启发式")
-            return None
+        from backend.orchestration.llm_factory import complete_utility
 
         prompt = _BUDGET_ESTIMATE_PROMPT.replace(
             "{context_signals}", context_signals or "无特殊信号"
         ).replace("{message}", message)
 
         try:
-            raw = await asyncio.wait_for(client.complete(prompt), timeout=timeout_s)
+            # 不注入 client：complete_utility 内部在 utility 客户端失败时回退
+            # 普通客户端（无思考参数）。无配置时抛 RuntimeError，仍落到下面
+            # 的通用异常降级。
+            raw = await asyncio.wait_for(
+                complete_utility(prompt, task_type="classification"),
+                timeout=timeout_s,
+            )
         except TIMEOUT_ERRORS:
             logger.warning(
                 "estimate_budget_level: LLM 超时（%ss），回落启发式", timeout_s

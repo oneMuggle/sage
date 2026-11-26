@@ -34,6 +34,10 @@ MAX_PLAN_TASKS = 8
 #: 避免 LLM 按 prompt 产出的值被源头静默丢弃（契约漂移）。
 MAX_ESTIMATED_ITERATIONS = 15
 
+#: 流式拆解草稿里程碑步长（字符）：每累计 +N 字推一次进度，替代逐 delta
+#: 推送（后者会把原始 JSON 切片直接灌进 UI，且高频刷屏）。
+DRAFT_MILESTONE_CHARS = 400
+
 
 def _is_dispatchable_agent(agent_id: str) -> bool:
     """agent_id 当前是否可被 ChatDispatcher 派发（存在且启用）。
@@ -517,15 +521,24 @@ class Planner:
         prompt: str,
         progress: Callable[[str, str], Any],
     ) -> str:
-        """流式拆解：把 reasoning/content delta 交给进度回调，返回终态内容。"""
+        """流式拆解：reasoning 逐段透传，content 仅按里程碑推送进度。
+
+        content_delta 是原始 JSON 计划文本的切片，逐条推给 UI 既无信息量
+        又高频刷屏；改为每累计 ``DRAFT_MILESTONE_CHARS`` 字推一次「已生成
+        计划草稿 · N 字」，最终文本仍完整返回供解析。
+        """
         messages = [{"role": "user", "content": prompt}]
         content = ""
+        next_milestone = DRAFT_MILESTONE_CHARS
         async for kind, payload in self.llm_client.chat_stream_events(messages):
             if kind == "reasoning_delta" and payload:
                 await progress("reasoning", str(payload))
             elif kind == "content_delta" and payload:
                 content += str(payload)
-                await progress("message", str(payload))
+                if len(content) >= next_milestone:
+                    await progress("message", f"已生成计划草稿 · {len(content)} 字")
+                    while next_milestone <= len(content):
+                        next_milestone += DRAFT_MILESTONE_CHARS
             elif kind == "response":
                 final = getattr(payload, "content", None)
                 if final:

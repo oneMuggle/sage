@@ -138,11 +138,43 @@ class TestComplexityClassifierDegradation:
         with patch(
             "backend.orchestration.llm_factory.build_utility_llm_client",
             new=lambda task_type=None: None,
+        ), patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            new=lambda: None,
         ):
             classifier = ComplexityClassifier()
             result = await classifier.classify("test message")
             assert result.complexity == "medium"
-            assert "无 LLM 配置" in result.reasoning
+            # complete_utility 抛 RuntimeError（无可用端点）→ 通用失败降级文案
+            assert "LLM 调用失败" in result.reasoning
+
+    @pytest.mark.asyncio()
+    async def test_utility_failure_falls_back_to_plain_client(self):
+        """utility 客户端失败 → 回退普通客户端成功 → 不降级。"""
+        bad_client = AsyncMock()
+        bad_client.complete.side_effect = RuntimeError("thinking_budget unsupported")
+        good_client = AsyncMock()
+        good_client.complete.return_value = json.dumps(
+            {
+                "complexity": "simple",
+                "research_needed": False,
+                "reasoning": "回退成功",
+            }
+        )
+
+        with patch(
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: bad_client,
+        ), patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            new=lambda: good_client,
+        ):
+            classifier = ComplexityClassifier()
+            result = await classifier.classify("test message")
+            assert result.complexity == "simple"
+            assert result.reasoning == "回退成功"
+            bad_client.complete.assert_awaited_once()
+            good_client.complete.assert_awaited_once()
 
     @pytest.mark.asyncio()
     async def test_llm_call_failure(self):

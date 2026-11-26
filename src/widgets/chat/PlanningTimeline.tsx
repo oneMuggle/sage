@@ -10,6 +10,7 @@ import { isPlanningActive, type PlanStageState } from '../../features/send-messa
 
 interface PlanningTimelineProps {
   sessionId: string | null | undefined;
+  messageId?: string;
 }
 
 const STAGE_LABELS: Record<PlanStageState['stage'], string> = {
@@ -29,13 +30,20 @@ const STATUS_DOT: Record<PlanStageState['status'], string> = {
   failed: 'bg-red-500',
 };
 
-export function PlanningTimeline({ sessionId }: PlanningTimelineProps) {
+export function PlanningTimeline({ sessionId, messageId }: PlanningTimelineProps) {
   const stages = useChatStreamStore((s) => selectSessionSlots(s, sessionId).planProgress);
+  // 规划进度是本轮流的瞬态，挂在会话槽上；只有当前正在流式输出的那条
+  // assistant 气泡才应展示它 —— 否则每一条历史 assistant 气泡都会重复渲染。
+  const streamingMessageId = useChatStreamStore(
+    (s) => selectSessionSlots(s, sessionId).streaming?.messageId ?? null,
+  );
   const [collapsed, setCollapsed] = useState(false);
 
   if (!stages || stages.length === 0) return null;
+  if (!messageId || streamingMessageId !== messageId) return null;
 
   const active = isPlanningActive(stages);
+  const failed = stages.some((stage) => stage.status === 'failed');
   const settled = stages.filter(
     (stage) => stage.status === 'done' || stage.status === 'skipped',
   ).length;
@@ -48,7 +56,7 @@ export function PlanningTimeline({ sessionId }: PlanningTimelineProps) {
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-text-muted">
-          {active ? '规划中' : '规划完成'} · {settled}/{stages.length} 步
+          {active ? '规划中' : failed ? '规划失败' : '规划完成'} · {settled}/{stages.length} 步
         </span>
         <button
           type="button"

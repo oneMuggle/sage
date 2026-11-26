@@ -335,6 +335,38 @@ async def complete_utility(
         return await fallback.complete(prompt)
 
 
+async def complete_with_plain_fallback(
+    prompt: str,
+    *,
+    client: Optional[Any] = None,
+    task_type: str = "classification",
+) -> str:
+    """调用 ``client``（缺省为 utility 客户端），失败时回退无思考参数普通客户端。
+
+    与 ``complete_utility`` 的差异：即使注入了 ``client``，这里也会在失败后
+    回退一次 ``build_llm_client_from_settings()`` 构建的普通客户端 —— 覆盖
+    上游拒绝 ``reasoning_effort``/``thinking_budget`` 的兼容场景。供需要
+    显式传入（可能带思考参数）客户端的调用方使用：首个客户端失败时仍能
+    降级到不带思考参数的请求，而不是把整步判定直接判死。
+
+    两者都不可用 / 都失败时上抛原始异常，由调用方既有降级逻辑收口。
+    """
+    primary = client or build_utility_llm_client(task_type)
+    if primary is None:
+        raise RuntimeError("no usable LLM endpoint configured")
+    try:
+        return await primary.complete(prompt)
+    except Exception as exc:  # noqa: BLE001 — 任何异常都尝试一次无思考参数回退
+        fallback = build_llm_client_from_settings()
+        if fallback is None or fallback is primary:
+            raise
+        logger.warning(
+            "llm_factory: LLM call failed, retrying without thinking overrides: %s",
+            exc,
+        )
+        return await fallback.complete(prompt)
+
+
 def build_httpx_adapter_from_settings() -> Optional[Any]:
     """Build an ``HttpxLLMAdapter`` bound to the persisted endpoint, or ``None``.
 

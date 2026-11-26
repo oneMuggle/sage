@@ -644,6 +644,14 @@ async def test_override_path_skips_decompose_and_preserves_task_id():
     assert tp_event["queued"] == 1
     # override 也算 multi：dispatch 工具必注册
     assert "dispatch_subagents" in registered_tools
+    # LOW 7a：override 路径跳过拆解，必须显式推送 decompose skipped 事件，
+    # 否则前端规划时间线停在「等待」态。
+    plan_progress = [
+        e["plan_progress"] for e in events if e["state"] == "plan_progress"
+    ]
+    assert any(
+        p["stage"] == "decompose" and p["status"] == "skipped" for p in plan_progress
+    ), f"override 应推送 decompose skipped，实际 plan_progress={plan_progress}"
     # LOW-2 回归：plan_override 哨兵不外泄。plan_json 里它是后端内部占位
     # （区分"没有真实推理"与"推理为空串"），但 task_plan 事件的 reasoning 会
     # 被前端 PlanCard 的"规划思路"折叠区原文展示给用户 —— 内部标记必须过滤

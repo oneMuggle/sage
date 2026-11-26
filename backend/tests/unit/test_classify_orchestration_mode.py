@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -59,7 +59,30 @@ async def test_auto_no_client_falls_back_single():
 async def test_auto_llm_error_falls_back_single():
     client = MagicMock()
     client.complete = AsyncMock(side_effect=RuntimeError("llm down"))
-    assert await _classify_orchestration_mode("复杂任务", "auto", client) == "single"
+    # 固定回退客户端为 None，避免测试环境真的存在端点而发起网络请求。
+    with patch(
+        "backend.orchestration.llm_factory.build_llm_client_from_settings",
+        new=lambda: None,
+    ):
+        assert await _classify_orchestration_mode("复杂任务", "auto", client) == "single"
+
+
+@pytest.mark.asyncio()
+async def test_auto_llm_error_falls_back_to_plain_client():
+    """utility 客户端失败 → 回退普通客户端成功 → 得到正常判定而非降级。"""
+    bad_client = MagicMock()
+    bad_client.complete = AsyncMock(side_effect=RuntimeError("thinking unsupported"))
+    good_client = _client_returning("multi")
+
+    with patch(
+        "backend.orchestration.llm_factory.build_llm_client_from_settings",
+        new=lambda: good_client,
+    ):
+        result = await _classify_orchestration_mode("复杂任务", "auto", bad_client)
+
+    assert result == "multi"
+    bad_client.complete.assert_awaited_once()
+    good_client.complete.assert_awaited_once()
 
 
 @pytest.mark.asyncio()
