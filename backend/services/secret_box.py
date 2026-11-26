@@ -457,7 +457,7 @@ def unwrap_search_config_json(raw: Optional[str]) -> Optional[str]:
     return json.dumps(data, ensure_ascii=False)
 
 
-def wrap_service_json(spec: ExternalServiceSpec, raw: str | None) -> str | None:
+def wrap_service_json(spec: ExternalServiceSpec, raw: Optional[str]) -> Optional[str]:
     """按 ``spec.secret_fields`` 对 JSON 字符串做字段级加密(幂等, 已 enc: 跳过)。"""
     if raw is None or not spec.secret_fields:
         return raw
@@ -483,7 +483,7 @@ def wrap_service_json(spec: ExternalServiceSpec, raw: str | None) -> str | None:
     return json.dumps(data, ensure_ascii=False)
 
 
-def unwrap_service_json(spec: ExternalServiceSpec, raw: str | None) -> str | None:
+def unwrap_service_json(spec: ExternalServiceSpec, raw: Optional[str]) -> Optional[str]:
     """与 :func:`wrap_service_json` 对称；单字段解密失败置空。"""
     if raw is None or not spec.secret_fields:
         return raw
@@ -510,7 +510,7 @@ def unwrap_service_json(spec: ExternalServiceSpec, raw: str | None) -> str | Non
     return json.dumps(data, ensure_ascii=False)
 
 
-def wrap_mineru_service_json(raw: str | None) -> str | None:
+def wrap_mineru_service_json(raw: Optional[str]) -> Optional[str]:
     """字符串层包装(preferences "mineru_service" 写侧): 委托通用 spec 驱动实现。"""
     from backend.services.external_services.registry import get_service
 
@@ -520,7 +520,7 @@ def wrap_mineru_service_json(raw: str | None) -> str | None:
     return wrap_service_json(spec, raw)
 
 
-def unwrap_mineru_service_json(raw: str | None) -> str | None:
+def unwrap_mineru_service_json(raw: Optional[str]) -> Optional[str]:
     """与 :func:`wrap_mineru_service_json` 对称；委托通用 spec 驱动实现。"""
     from backend.services.external_services.registry import get_service
 

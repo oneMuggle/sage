@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Mapping, Optional
 
 from backend.services.external_services.spec import ExternalServiceSpec
 
@@ -48,7 +48,7 @@ def read_stored_settings(spec: ExternalServiceSpec) -> Dict[str, Any]:
 
 def load_service_settings(
     spec: ExternalServiceSpec,
-    environ: Mapping[str, str] | None = None,
+    environ: Optional[Mapping[str, str]] = None,
 ) -> Dict[str, Any]:
     env = os.environ if environ is None else environ
     return merge_service_settings(spec, read_stored_settings(spec), env)
