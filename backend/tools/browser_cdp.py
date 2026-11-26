@@ -103,6 +103,13 @@ RESERVED_BROWSER_ID = "render-pool"
 #: ``browser_extension_bridge.EXTENSION_BROWSER_ID`` 保持一致）。
 EXTENSION_BROWSER_ID = "external"
 
+
+def _is_reserved_browser_id(browser_id: str) -> bool:
+    """内部渲染池保留槽位（web_fetch 懒重建），不参与用户会话解析。"""
+    return browser_id == RESERVED_BROWSER_ID or browser_id.startswith(
+        RESERVED_BROWSER_ID + "-"
+    )
+
 #: 一次性（非持久）浏览器 user-data-dir 的目录名前缀，启动清扫按此匹配
 EPHEMERAL_PREFIX = "sage_browser_"
 
@@ -329,6 +336,11 @@ class BrowserSession:
     name: str = ""
     #: P1/P3: 最后使用时间（ISO 格式字符串，便于 JSON 序列化；LRU 回收依据）
     last_used_at: str = ""
+    #: 启动该实例的聊天会话 id（ToolExecutionContext.session_id）。
+    #: "" = 无归属（REST 设置页 / 内部基础设施 / 旧调用方），保持旧解析语义。
+    owner: str = ""
+    #: 工具执行期间的活动租约数；>0 时上限/LRU 淘汰必须跳过该实例。
+    lease_count: int = 0
 
     def __post_init__(self) -> None:
         # 初始化时设置 last_used_at 为当前时间（如果未提供）
@@ -345,6 +357,10 @@ class BrowserSession:
 
     def is_alive(self) -> bool:
         return self.process.poll() is None
+
+    def is_leased(self) -> bool:
+        """是否有工具调用正在使用该实例（租约未释放）。"""
+        return self.lease_count > 0
 
 
 class BrowserSessionManager:
@@ -400,19 +416,18 @@ class BrowserSessionManager:
                 if needs_slot and self._counted_locked() >= max_sessions:
                     # 渲染池是懒重建的后台实例：为前台会话让位，下次渲染按需重建。
                     # 内置池会话共享 Electron 单进程，不能个别回收（会误关其它标签页）。
+                    # 被租用的池实例正被 in-flight 渲染使用，不能牺牲。
                     for pool_id in [
                         bid
                         for bid, pooled in list(self._sessions.items())
-                        if (
-                            bid == RESERVED_BROWSER_ID
-                            or bid.startswith(RESERVED_BROWSER_ID + "-")
-                        )
+                        if _is_reserved_browser_id(bid)
                         and getattr(pooled, "browser_type", None) != BrowserType.EMBEDDED
+                        and not pooled.is_leased()
                     ]:
                         if self._counted_locked() < max_sessions:
                             break
                         evicted.append(self._sessions.pop(pool_id))
-                # P3: LRU 自动回收（用户开启时生效）
+                # P3: LRU 自动回收（用户开启时生效；跳过租用中的实例）
                 if lru_evict and needs_slot and self._counted_locked() >= max_sessions:
                     lru_evicted = self._evict_lru_locked()
                     if lru_evicted:
@@ -420,7 +435,8 @@ class BrowserSessionManager:
                 if needs_slot and self._counted_locked() >= max_sessions:
                     raise BrowserCDPError(
                         f"浏览器实例数已达上限 {max_sessions}：请关闭 Sage 打开的"
-                        "浏览器窗口后重试（对话中可调用 browser_close 关闭实例）"
+                        "浏览器窗口后重试（对话中可调用 browser_close 关闭实例）；"
+                        "若有实例正在执行操作，请等其完成后重试"
                     )
                 self._sessions[session.browser_id] = session
         finally:
@@ -455,8 +471,76 @@ class BrowserSessionManager:
             return user_sessions[0]
         return None
 
-    def require(self, browser_id: Optional[str]) -> BrowserSession:
-        session = self.get(browser_id)
+    def owned_sessions(self, owner: str) -> List[BrowserSession]:
+        """返回 ``owner`` 会话拥有的存活用户实例（过滤保留渲染池）。
+
+        ``owner == ""`` 表示无归属（REST/基础设施/旧调用方），返回空列表 ——
+        这些调用方走 ``get(None)`` 的旧解析语义，不做归属区分。
+        """
+        if not owner:
+            return []
+        with self._lock:
+            return [
+                session
+                for session_id, session in self._sessions.items()
+                if session.owner == owner
+                and not _is_reserved_browser_id(session_id)
+                and session.is_alive()
+            ]
+
+    def resolve_owned(self, owner: str) -> BrowserSession:
+        """按归属解析当前会话的浏览器实例；0 个或多个都抛可读错误。"""
+        sessions = self.owned_sessions(owner)
+        if len(sessions) == 1:
+            sessions[0].touch()
+            return sessions[0]
+        if len(sessions) > 1:
+            raise BrowserCDPError(
+                "当前会话有多个浏览器实例在运行：请在 browser_* 调用中传 browser_id 指定"
+            )
+        raise BrowserCDPError(
+            "当前会话还没有浏览器实例——先调用 browser_launch（browser_navigate 会自动拉起）"
+        )
+
+    def require(self, browser_id: Optional[str], owner: str = "") -> BrowserSession:
+        """解析并校验会话归属（``owner`` 非空时）。
+
+        缺省解析（``browser_id`` 为空）在归属模式下按“本会话自有实例 → 用户
+        共享标签页”顺序进行，绝不回退到其他会话的实例；显式 id 属于其他会话
+        时直接拒绝（EXTERNAL 共享标签页除外）。``owner == ""`` 保持旧语义。
+        """
+        if browser_id:
+            session = self.get(browser_id)
+            if session is None:
+                raise BrowserCDPError(f"未知 browser_id: {browser_id}")
+            if (
+                owner
+                and session.owner
+                and session.owner != owner
+                and getattr(session, "browser_type", None) != BrowserType.EXTERNAL
+            ):
+                raise BrowserCDPError(
+                    "该浏览器实例属于另一个会话，不能跨会话操作；"
+                    "请用 browser_launch 启动本会话自己的实例"
+                )
+        elif owner:
+            owned = self.owned_sessions(owner)
+            if len(owned) == 1:
+                session = owned[0]
+            elif len(owned) > 1:
+                raise BrowserCDPError(
+                    "当前会话有多个浏览器实例在运行：请在 browser_* 调用中传 browser_id 指定"
+                )
+            else:
+                with self._lock:
+                    session = self._sessions.get(EXTENSION_BROWSER_ID)
+                if session is None:
+                    raise BrowserCDPError(
+                        "当前会话没有运行中的浏览器实例——先调用 browser_launch"
+                        "（browser_navigate 会自动拉起）"
+                    )
+        else:
+            session = self.get(None)
         if session is None:
             if browser_id:
                 raise BrowserCDPError(f"未知 browser_id: {browser_id}")
@@ -473,6 +557,23 @@ class BrowserSessionManager:
         # LRU 顺序：每次真实访问都刷新最后使用时间。
         session.touch()
         return session
+
+    # ------------------------------------------------------------------
+    # 租约：工具执行期间阻止上限/LRU 淘汰杀掉正在使用的实例
+    # ------------------------------------------------------------------
+
+    def acquire_lease(self, session: BrowserSession) -> None:
+        """登记一次工具执行租约（线程安全；已移除会话也允许计数，释放幂等）。"""
+        with self._lock:
+            session.lease_count += 1
+            session.touch()
+
+    def release_lease(self, session: BrowserSession) -> None:
+        """释放一次工具执行租约（计数不低于 0，任何异常都不上抛）。"""
+        with self._lock:
+            if session.lease_count > 0:
+                session.lease_count -= 1
+            session.touch()
 
     def remove(self, browser_id: str) -> Optional[BrowserSession]:
         with self._lock:
@@ -510,6 +611,7 @@ class BrowserSessionManager:
             (sid, s)
             for sid, s in self._sessions.items()
             if s.is_alive()
+            and not s.is_leased()
             and sid != EXTENSION_BROWSER_ID
             and getattr(s, "browser_type", None) != BrowserType.EMBEDDED
             and sid != RESERVED_BROWSER_ID
@@ -568,6 +670,8 @@ class BrowserSessionManager:
                     "alive": s.is_alive(),
                     "persistent": s.persistent,
                     "profile_name": s.profile_name,
+                    "owner": s.owner,
+                    "busy": s.is_leased(),
                 }
                 for s in self._sessions.values()
                 # 内部渲染池槽位（web_fetch 懒重建）不是用户会话，面板不展示。
@@ -592,6 +696,7 @@ def _terminate_session(session: BrowserSession) -> None:
     Embedded 会话的生命周期归 Electron 主进程：这里关闭本会话的目标后返回。
     External 会话是用户自己的标签页：Sage 只丢弃会话引用，绝不关闭页面。
     """
+    _release_profile(session.user_data_dir, session.browser_id)
     if getattr(session, "browser_type", None) == BrowserType.EXTERNAL:
         return
     if getattr(session, "browser_type", None) == BrowserType.EMBEDDED:
@@ -715,6 +820,63 @@ def _profiles_root() -> Path:
     root = _data_root() / "browser-profiles"
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+# ---------------------------------------------------------------------------
+# 持久 profile 占用互斥（按聊天会话归属启动的实例才启用）
+# ---------------------------------------------------------------------------
+
+#: 持久 profile 目录 → 占用它的 browser_id（进程内；进程退出即失效）
+_profile_owners: Dict[str, str] = {}
+_profile_owners_lock = threading.Lock()
+
+
+def _claim_profile(profile_dir: str, browser_id: str, allow_suffix: bool = False) -> str:
+    """登记持久 profile 占用；返回最终使用的目录（隐式 default 可自动后缀）。
+
+    Chromium 不允许两个进程同时使用同一个 user-data-dir。同会话复用同 id
+    视为幂等；其他 browser_id 占用时：
+    - ``allow_suffix=True``（隐式默认 profile）：依次尝试 ``<dir>-2..-10``；
+    - ``allow_suffix=False``（用户显式命名）：抛可读错误。
+    """
+    candidate = profile_dir
+    for attempt in range(10):
+        with _profile_owners_lock:
+            holder = _profile_owners.get(candidate)
+            if holder is None or holder == browser_id:
+                _profile_owners[candidate] = browser_id
+                return candidate
+        if not allow_suffix:
+            raise BrowserCDPError(
+                f"持久 profile「{os.path.basename(profile_dir)}」正被另一个浏览器会话"
+                "使用：请换一个 profile_name，或等待其关闭后重试"
+            )
+        candidate = f"{profile_dir}-{attempt + 2}"
+    raise BrowserCDPError(
+        f"持久 profile「{os.path.basename(profile_dir)}」占用过多（-2..-10 均已使用）"
+    )
+
+
+def _release_profile(profile_dir: str, browser_id: str) -> None:
+    """释放持久 profile 占用（仅当占用者仍是该 browser_id）。"""
+    if not profile_dir:
+        return
+    with _profile_owners_lock:
+        if _profile_owners.get(profile_dir) == browser_id:
+            _profile_owners.pop(profile_dir, None)
+
+
+def _assert_firefox_single_instance(browser_id: str) -> None:
+    """Firefox 调试端口固定 9229：已有存活 Firefox 实例时拒绝再启动。"""
+    for session in get_browser_manager().all_sessions():
+        if getattr(session, "browser_type", None) != BrowserType.FIREFOX:
+            continue
+        if session.browser_id == browser_id or not session.is_alive():
+            continue
+        raise BrowserCDPError(
+            "同一时刻只能有一个 Firefox 调试实例（调试端口固定 9229）："
+            "请先关闭正在运行的 Firefox 浏览器后重试"
+        )
 
 
 def _ephemeral_root() -> Path:
@@ -918,11 +1080,21 @@ class _EmbeddedProcess:
         return 0
 
 
+def _register_or_release(session: BrowserSession) -> None:
+    """注册会话；失败时终止进程并释放已占用的持久 profile，避免泄漏。"""
+    try:
+        get_browser_manager().register(session)
+    except Exception:
+        _terminate_session(session)
+        raise
+
+
 def launch_browser(
     headless: bool = True,
     browser_id: Optional[str] = None,
     persistent: bool = False,
-    profile_name: str = "default",
+    profile_name: Optional[str] = None,
+    owner: str = "",
 ) -> BrowserSession:
     """启动浏览器实例并完成 DevToolsActivePort 握手。
 
@@ -932,10 +1104,15 @@ def launch_browser(
                       RESERVED_BROWSER_ID）；缺省生成随机 id。
         persistent:   使用持久 profile（``_profiles_root()/<profile_name>``，
                       登录态跨会话保留）；False = 一次性临时目录。
-        profile_name: 持久 profile 目录名（净化为安全 basename）。
+        profile_name: 持久 profile 目录名（净化为安全 basename）；None =
+                      隐式默认（``default``，被其他会话占用时自动后缀）。
+        owner:        启动该实例的聊天会话 id。非空时启用持久 profile 占用
+                      互斥；"" 表示无归属调用方（基础设施/旧路径），保持
+                      原行为。
 
     Raises:
-        BrowserCDPError: 找不到浏览器 / 启动超时 / 实例数超限。
+        BrowserCDPError: 找不到浏览器 / 启动超时 / 实例数超限 /
+            profile 被其他会话占用 / Firefox 已有实例。
     """
     # 设置页选择的浏览器优先于 Win7 内置兜底；显式环境变量仍最高（见 discover_and_select）
     cap = discover_and_select(_get_user_browser_path())
@@ -943,8 +1120,8 @@ def launch_browser(
         raise BrowserCDPError(
             "未找到 Chrome/Edge/Firefox 浏览器：请安装或用环境变量 SAGE_BROWSER_PATH / SAGE_FIREFOX_PATH 指定可执行文件路径"
         )
+    session_id = browser_id or uuid.uuid4().hex[:12]
     if cap.browser_type == BrowserType.EMBEDDED:
-        session_id = browser_id or uuid.uuid4().hex[:12]
         bridge_token = getattr(cap.launcher, "token", "")
         bridge_query = (
             f"token={quote(bridge_token, safe='')}"
@@ -963,8 +1140,9 @@ def launch_browser(
             profile_name="embedded",
             browser_type=BrowserType.EMBEDDED,
             bridge_token=bridge_token,
+            owner=owner,
         )
-        get_browser_manager().register(session)
+        _register_or_release(session)
         return session
     executable = cap.executable
     if not executable or not Path(executable).is_file():
@@ -973,12 +1151,26 @@ def launch_browser(
         )
     launcher = cap.launcher
 
+    browser_type = cap.browser_type
+    if browser_type == BrowserType.FIREFOX:
+        _assert_firefox_single_instance(session_id)
+
+    profile_claimed = False
     if persistent:
         from .download_tool import sanitize_filename
 
-        profile_dir = _profiles_root() / sanitize_filename(profile_name or "default")
-        profile_dir.mkdir(parents=True, exist_ok=True)
-        user_data_dir = str(profile_dir)
+        base_name = profile_name or "default"
+        profile_dir = _profiles_root() / sanitize_filename(base_name)
+        if owner:
+            # 归属启动：同一 profile 不允许被两个会话同时打开；隐式默认名
+            # 被占用时自动后缀，显式命名直接报错。
+            user_data_dir = _claim_profile(
+                str(profile_dir), session_id, allow_suffix=profile_name is None
+            )
+            profile_claimed = True
+        else:
+            user_data_dir = str(profile_dir)
+        Path(user_data_dir).mkdir(parents=True, exist_ok=True)
     else:
         user_data_dir = tempfile.mkdtemp(prefix=EPHEMERAL_PREFIX, dir=str(_ephemeral_root()))
     from .http_factory import browser_proxy_flag
@@ -993,6 +1185,8 @@ def launch_browser(
             stdin=subprocess.DEVNULL,
         )
     except OSError as exc:
+        if profile_claimed:
+            _release_profile(user_data_dir, session_id)
         if not persistent:
             _remove_dir_with_retry(user_data_dir)
         raise BrowserCDPError(f"浏览器启动失败: {exc}")
@@ -1000,7 +1194,7 @@ def launch_browser(
     try:
         port, ws_path = launcher.wait_for_cdp(process, user_data_dir, timeout=LAUNCH_TIMEOUT_SECONDS)
         session = BrowserSession(
-            browser_id=browser_id or uuid.uuid4().hex[:12],
+            browser_id=session_id,
             executable=executable,
             headless=headless,
             user_data_dir=user_data_dir,
@@ -1008,17 +1202,19 @@ def launch_browser(
             port=port,
             ws_path=ws_path,
             persistent=persistent,
-            profile_name=str(profile_name or "") if persistent else "",
+            profile_name=Path(user_data_dir).name if persistent else "",
             browser_type=cap.browser_type,
+            owner=owner,
         )
-        get_browser_manager().register(session)
+        _register_or_release(session)
         return session
     except Exception as exc:
         # 提前退出/握手异常统一走 _terminate_session：其中已含杀进程树 +
         # 一次性目录带重试的回收（main 线 2a44025d 语义在此结构下的落点）。
+        # browser_id 用本次 session_id：_terminate_session 据此释放持久 profile 占用。
         _terminate_session(
             BrowserSession(
-                "",
+                session_id,
                 executable,
                 headless,
                 user_data_dir,
