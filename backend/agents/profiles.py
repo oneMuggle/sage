@@ -795,6 +795,8 @@ _WRITER_CURRENT_DEFAULT_TOOLS: List[str] = [
     # 2026-09 Parity Batch-1: PDF 三类 + Word 模板两件（与 writer.tools 同步）。
     "office_read_pdf", "office_generate_pdf", "office_read_pdf_form",
     "office_fill_pdf_form", "office_analyze_word_template", "office_fill_word_template",
+    # 2026-11-26 Word P0：整块结构填充 + .doc 转换（与 writer.tools 同步）。
+    "office_refill_word_template", "office_convert_word",
     # 2026-09-18: PPT 模板两件（与 writer.tools 同步）。
     "office_analyze_ppt_template", "office_fill_ppt_template",
     # 2026-09 Parity Batch-2: office_analyze（本地数据分析，同步 writer.tools）。

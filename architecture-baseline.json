@@ -2,7 +2,7 @@
   "version": 1,
   "files": {
     "backend/adapters/out/skill/inproc.py": 1178,
-    "backend/agents/profiles.py": 1304,
+    "backend/agents/profiles.py": 1308,
     "backend/api/arena_routes.py": 873,
     "backend/api/legacy_routes.py": 3155,
     "backend/api/llm_proxy_routes.py": 1216,
@@ -61,7 +61,7 @@
     "backend/tools/download_tool.py": 1152,
     "backend/tools/office_analyze_tool.py": 978,
     "backend/tools/office_create_tool.py": 1890,
-    "backend/tools/permissions.py": 910,
+    "backend/tools/permissions.py": 912,
     "backend/tools/subprocess_util.py": 900,
     "backend/tools/web_render.py": 1099,
     "backend/tools/web_tool.py": 1610,
