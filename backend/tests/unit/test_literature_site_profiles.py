@@ -60,6 +60,39 @@ class TestProfileModel:
         assert profile.status == "ready"
         assert profile.source_layer == "builtin"
 
+    def test_parses_detail_url_from(self):
+        raw = _raw_profile()
+        raw["detail"] = {
+            "open_by": "click_text",
+            "url_from": {"selector": "a.downloadlink", "param": "url", "decode": "base64"},
+            "fields": {"abstract": {"selector": "#ChDivSummary"}},
+        }
+        profile = profile_from_dict(raw)
+        assert profile.detail is not None
+        assert profile.detail.url_from is not None
+        assert profile.detail.url_from.selector == "a.downloadlink"
+        assert profile.detail.url_from.param == "url"
+        assert profile.detail.url_from.decode == "base64"
+        assert profile.detail.fields["abstract"].selector == "#ChDivSummary"
+
+    def test_detail_url_from_defaults_decode_none(self):
+        raw = _raw_profile()
+        raw["detail"] = {"url_from": {"selector": "a", "param": "u"}}
+        profile = profile_from_dict(raw)
+        assert profile.detail.url_from.decode == "none"
+
+    def test_rejects_detail_url_from_without_param(self):
+        raw = _raw_profile()
+        raw["detail"] = {"url_from": {"selector": "a"}}
+        with pytest.raises(SiteProfileError, match="url_from.param"):
+            profile_from_dict(raw)
+
+    def test_rejects_detail_url_from_bad_decode(self):
+        raw = _raw_profile()
+        raw["detail"] = {"url_from": {"selector": "a", "param": "u", "decode": "rot13"}}
+        with pytest.raises(SiteProfileError, match="decode"):
+            profile_from_dict(raw)
+
     def test_rejects_invalid_id(self):
         with pytest.raises(SiteProfileError, match="id"):
             profile_from_dict(_raw_profile(id="Bad ID"))
@@ -233,6 +266,19 @@ class TestGuidance:
         assert "a.downloadlink" in text
         assert "仅个人学习" in text
         assert "{query}" not in text
+
+    def test_renders_detail_url_from(self):
+        from backend.literature.guidance import render_search_guidance
+
+        raw = _raw_profile()
+        raw["detail"] = {
+            "url_from": {"selector": "a.downloadlink", "param": "url", "decode": "base64"},
+            "fields": {"abstract": {"selector": "#ChDivSummary"}},
+        }
+        text = render_search_guidance(profile_from_dict(raw), "x")
+        assert "详情 URL 推导" in text
+        assert "取查询参数 url" in text
+        assert "decode=base64" in text
 
     def test_reports_login_state(self):
         from backend.literature.guidance import render_search_guidance
