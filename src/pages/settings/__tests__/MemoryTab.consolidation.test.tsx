@@ -9,7 +9,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-
 import { useEvolutionRunStore } from '../../../entities/evolution/evolutionRunStore';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { MemoryTab } from '../MemoryTab';
