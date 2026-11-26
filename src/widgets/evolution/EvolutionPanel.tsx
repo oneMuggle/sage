@@ -104,7 +104,10 @@ function useNowTicker(active: boolean): number {
   return now;
 }
 
-const RunningProgress: React.FC<{ run: EvolutionRunSnapshot }> = ({ run }) => {
+const RunningProgress: React.FC<{ run: EvolutionRunSnapshot; onCancel: () => void }> = ({
+  run,
+  onCancel,
+}) => {
   const now = useNowTicker(true);
   const currentIndex = REFLECTION_PHASES.findIndex((phase) => phase.key === run.phase);
   const isReflection = currentIndex >= 0;
@@ -122,7 +125,19 @@ const RunningProgress: React.FC<{ run: EvolutionRunSnapshot }> = ({ run }) => {
           <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
           {TASK_DISPLAY[run.name] ?? run.name}执行中 · {run.phase_label ?? '准备中'}
         </span>
-        <span className="text-muted">{formatElapsed(run.started_at, now)}</span>
+        <span className="flex items-center gap-2 text-muted">
+          {formatElapsed(run.started_at, now)}
+          <button
+            type="button"
+            data-testid="evolution-run-cancel"
+            onClick={onCancel}
+            disabled={run.cancel_requested}
+            title="协作式取消：任务在当前阶段结束后的检查点停止"
+            className="rounded-radius-sm border border-border px-2 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover disabled:opacity-50"
+          >
+            {run.cancel_requested ? '取消中…' : '取消'}
+          </button>
+        </span>
       </div>
       {isReflection && (
         <ol className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-muted">
@@ -166,6 +181,7 @@ export const EvolutionPanel: React.FC = () => {
   const runs = useEvolutionRunStore((state) => state.runs);
   const refreshRuns = useEvolutionRunStore((state) => state.refresh);
   const triggerRun = useEvolutionRunStore((state) => state.trigger);
+  const cancelRun = useEvolutionRunStore((state) => state.cancel);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -215,6 +231,15 @@ export const EvolutionPanel: React.FC = () => {
     setTriggerError(null);
     try {
       await triggerRun(name);
+    } catch (err) {
+      setTriggerError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const cancelTask = async (name: string): Promise<void> => {
+    setTriggerError(null);
+    try {
+      await cancelRun(name);
     } catch (err) {
       setTriggerError(err instanceof Error ? err.message : String(err));
     }
@@ -287,7 +312,9 @@ export const EvolutionPanel: React.FC = () => {
             );
           })}
         </div>
-        {runningEntry && <RunningProgress run={runningEntry} />}
+        {runningEntry && (
+          <RunningProgress run={runningEntry} onCancel={() => void cancelTask(runningEntry.name)} />
+        )}
         {triggerError && (
           <p className="text-xs text-danger mt-2" data-testid="evolution-run-error">
             启动失败：{triggerError}
@@ -298,7 +325,9 @@ export const EvolutionPanel: React.FC = () => {
             {TASK_DISPLAY[latestFinished.name] ?? latestFinished.name}
             {latestFinished.state === 'succeeded'
               ? `完成${finishedSummary ? `：${finishedSummary}` : ''}`
-              : `失败：${latestFinished.error ?? '未知错误'}`}
+              : latestFinished.state === 'cancelled'
+                ? '已取消'
+                : `失败：${latestFinished.error ?? '未知错误'}`}
           </p>
         )}
       </div>

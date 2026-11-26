@@ -70,16 +70,22 @@ export interface BridgeSession {
     get(filter: Record<string, unknown>): Promise<BridgeCookie[]>;
     set(details: Record<string, unknown>): Promise<void>;
   };
-  setDownloadPath?(path: string): void;
+  /** 设置某浏览器实例（session）的下载目录；省略 session 保持全局兜底。 */
+  setDownloadPath?(path: string, session?: string): void;
 }
 
 export interface BridgeDeps {
-  createWindow(visible: boolean): Promise<BridgeWindow> | BridgeWindow;
+  createWindow(
+    visible: boolean,
+    session?: string,
+  ): Promise<BridgeWindow> | BridgeWindow;
   getSession(): BridgeSession;
   randomId(): string;
   log?(message: string): void;
-  /** 订阅 Electron will-download，把下载事件转成 CDP Browser.download* 帧。 */
-  onDownload?(handler: (method: string, params: Record<string, unknown>) => void): void;
+  /** 订阅 Electron will-download；session 标明下载所属的浏览器实例。 */
+  onDownload?(
+    handler: (method: string, params: Record<string, unknown>, session?: string) => void,
+  ): void;
 }
 
 export interface BridgeRequest {
@@ -171,22 +177,34 @@ function toElectronCookie(cookie: Record<string, unknown>): Record<string, unkno
 export class AgentBrowserBridge {
   /** key = `${mode}|${session}`；session 由后端 browser_id 提供。 */
   private readonly targets = new Map<string, Map<string, TargetEntry>>();
-  private readonly eventClients = new Set<(message: Record<string, unknown>) => void>();
+  /** 事件客户端 → 订阅的 browser session（undefined = 订阅全部事件）。 */
+  private readonly eventClients = new Map<
+    (message: Record<string, unknown>) => void,
+    string | undefined
+  >();
 
   constructor(private readonly deps: BridgeDeps) {
-    deps.onDownload?.((method, params) => this.emitEvent({ method, params }));
+    deps.onDownload?.((method, params, session) =>
+      this.emitEvent({ method, params }, session),
+    );
   }
 
-  /** 注册 WS 事件客户端；返回注销函数。 */
-  attachEventClient(send: (message: Record<string, unknown>) => void): () => void {
-    this.eventClients.add(send);
+  /** 注册 WS 事件客户端；session 非空时只接收该浏览器实例的事件。 */
+  attachEventClient(
+    send: (message: Record<string, unknown>) => void,
+    session?: string,
+  ): () => void {
+    this.eventClients.set(send, session);
     return () => {
       this.eventClients.delete(send);
     };
   }
 
-  private emitEvent(message: Record<string, unknown>): void {
-    for (const client of this.eventClients) {
+  private emitEvent(message: Record<string, unknown>, session?: string): void {
+    for (const [client, clientSession] of this.eventClients) {
+      // 带 session 的事件只发给该实例的订阅者（或未限定订阅者）；
+      // 无 session 的旧事件保持广播语义。
+      if (session && clientSession && clientSession !== session) continue;
       try {
         client(message);
       } catch {
@@ -210,18 +228,19 @@ export class AgentBrowserBridge {
     if (!method) throw new Error('missing method');
     const mode = modeOf(request);
     const params = request.params ?? {};
-    const scope = this.scope(mode, String(request.session || 'default'));
+    const session = String(request.session || 'default');
+    const scope = this.scope(mode, session);
 
     switch (method) {
       case 'Target.getTargets':
         return this.getTargets(scope);
       case 'Target.createTarget':
-        return this.createTarget(scope, mode, String(params.url || 'about:blank'));
+        return this.createTarget(scope, mode, String(params.url || 'about:blank'), session);
       case 'Target.closeTarget':
         return this.closeTarget(scope, String(params.targetId || ''));
       case 'Target.attachToTarget': {
         const targetId = String(params.targetId ?? request.targetId ?? '');
-        const entry = await this.resolveTarget(scope, mode, targetId, false);
+        const entry = await this.resolveTarget(scope, mode, session, targetId, false);
         return { sessionId: `sage-${entry.id}` };
       }
       case 'Browser.getVersion':
@@ -232,7 +251,7 @@ export class AgentBrowserBridge {
         };
       case 'Browser.setDownloadBehavior': {
         const downloadPath = typeof params.downloadPath === 'string' ? params.downloadPath : '';
-        if (downloadPath) this.deps.getSession().setDownloadPath?.(downloadPath);
+        if (downloadPath) this.deps.getSession().setDownloadPath?.(downloadPath, session);
         return {};
       }
       case 'Storage.getCookies':
@@ -252,7 +271,7 @@ export class AgentBrowserBridge {
         return {};
       }
       case 'Page.captureScreenshot': {
-        const entry = await this.resolveTarget(scope, mode, request.targetId, false);
+        const entry = await this.resolveTarget(scope, mode, session, request.targetId, false);
         const image = await entry.win.webContents.capturePage();
         return { data: Buffer.from(image.toPNG()).toString('base64') };
       }
@@ -263,12 +282,12 @@ export class AgentBrowserBridge {
       case 'Page.getNavigationHistory':
       case 'Runtime.evaluate':
       case 'Runtime.enable': {
-        const entry = await this.resolveTarget(scope, mode, request.targetId, true);
+        const entry = await this.resolveTarget(scope, mode, session, request.targetId, true);
         return this.sendToDebugger(entry, method, params);
       }
       default:
         if (DEBUGGER_PREFIXES.some((prefix) => method.startsWith(prefix))) {
-          const entry = await this.resolveTarget(scope, mode, request.targetId, true);
+          const entry = await this.resolveTarget(scope, mode, session, request.targetId, true);
           return this.sendToDebugger(entry, method, params);
         }
         throw new Error(`unsupported method: ${method}`);
@@ -409,13 +428,14 @@ export class AgentBrowserBridge {
     scope: Map<string, TargetEntry>,
     mode: Mode,
     url: string,
+    session: string,
   ): Promise<{ targetId: string }> {
     const targetUrl = url || 'about:blank';
     if (!/^(https?:\/\/|about:blank)/i.test(targetUrl)) {
       throw new Error(`unsupported url scheme: ${targetUrl.slice(0, 32)}`);
     }
     const id = this.deps.randomId();
-    const win = await this.deps.createWindow(mode === 'visible');
+    const win = await this.deps.createWindow(mode === 'visible', session);
     const entry: TargetEntry = { id, win, attached: false };
     // 先登记再加载：加载失败/超时也必须能按 targetId 回收窗口
     scope.set(id, entry);
@@ -449,6 +469,7 @@ export class AgentBrowserBridge {
   private async resolveTarget(
     scope: Map<string, TargetEntry>,
     mode: Mode,
+    session: string,
     targetId: string | undefined,
     createIfMissing: boolean,
   ): Promise<TargetEntry> {
@@ -461,7 +482,7 @@ export class AgentBrowserBridge {
       if (!entry.win.isDestroyed()) return entry;
     }
     if (!createIfMissing) throw new Error('no page target');
-    const created = await this.createTarget(scope, mode, 'about:blank');
+    const created = await this.createTarget(scope, mode, 'about:blank', session);
     const entry = scope.get(created.targetId);
     if (!entry) throw new Error('failed to create target');
     return entry;
@@ -601,7 +622,7 @@ export function startAgentBrowserBridge(
       const send = (message: Record<string, unknown>): void => {
         if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
       };
-      const unsubscribe = bridge.attachEventClient(send);
+      const unsubscribe = bridge.attachEventClient(send, session);
       ws.on('message', (data) => {
         void bridge.handleSocketMessage(String(data), session, headless, send);
       });

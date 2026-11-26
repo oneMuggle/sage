@@ -71,6 +71,7 @@ export const enChatAndSiderBrowserExtension = {
   'settings.network.browser.panel_hint': 'Click an instance to bind it to the current chat',
   'settings.network.browser.panel_bind': 'Bind',
   'settings.network.browser.panel_bound': 'Bound',
+  'settings.network.browser.panel_owned_by_other': 'Other chat',
   'settings.network.browser.panel_rename': 'Rename',
   'settings.network.browser.panel_last_used': 'Last used',
   'settings.network.browser.rename_saved': 'Renamed',

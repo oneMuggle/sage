@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from backend.scheduler.evolution_run_registry import (
+    STATE_CANCELLED,
     STATE_FAILED,
     STATE_RUNNING,
     STATE_SUCCEEDED,
@@ -145,3 +146,39 @@ def test_snapshots_returns_all_known_runs() -> None:
 
     snaps = reg.snapshots()
     assert set(snaps.keys()) == {"a", "b"}
+
+
+def test_request_cancel_sets_flag_only_while_running() -> None:
+    reg = EvolutionRunRegistry()
+    run_id = reg.begin("memory_reflection")
+    assert run_id is not None
+
+    assert reg.request_cancel("memory_reflection") is True
+    snap = reg.snapshot("memory_reflection")
+    assert snap["cancel_requested"] is True
+    assert reg.is_cancel_requested("memory_reflection", run_id) is True
+
+    reg.finish("memory_reflection", run_id, cancelled=True)
+    assert reg.request_cancel("memory_reflection") is False
+
+
+def test_is_cancel_requested_scoped_to_run_id() -> None:
+    reg = EvolutionRunRegistry()
+    run_id = reg.begin("memory_reflection")
+    assert run_id is not None
+    reg.request_cancel("memory_reflection")
+
+    assert reg.is_cancel_requested("memory_reflection", "other-run") is False
+    assert reg.is_cancel_requested("memory_reflection", run_id) is True
+
+
+def test_finish_cancelled_state_wins_over_error() -> None:
+    reg = EvolutionRunRegistry()
+    run_id = reg.begin("memory_pruning")
+    assert run_id is not None
+
+    reg.finish("memory_pruning", run_id, error="ignored", cancelled=True)
+    snap = reg.snapshot("memory_pruning")
+    assert snap["state"] == STATE_CANCELLED
+    assert snap["phase_label"] == "已取消"
+    assert snap["error"] is None

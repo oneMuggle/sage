@@ -10,6 +10,7 @@ import type {
 } from '../../shared/api/orchRunClient';
 import type { Lane, LaneStatus, ScheduledTask, Todo, TodoItemStatus } from '../../shared/api/types';
 import type { TaskStatusValue } from '../../shared/api/types/chatAndEventTypes';
+import type { EvolutionRunSnapshot } from '../../shared/api/types/domainEntityTypes';
 
 import type { TaskCenterEntry, TaskCenterStatus } from './taskCenterStore';
 import { TERMINAL_TASK_STATUSES } from './taskCenterStore';
@@ -22,7 +23,8 @@ export type UnifiedTaskSource =
   | 'run'
   | 'goal'
   | 'todo'
-  | 'scheduled';
+  | 'scheduled'
+  | 'evolution';
 
 /**
  * 点击语义覆盖：缺省（null）表示"走 detailPath 路由跳转"。
@@ -519,6 +521,55 @@ export function normalizeScheduledTask(task: ScheduledTask): UnifiedTaskEntry | 
     openTarget: null,
     cancelRef: null,
     meta: { enabled: task.enabled ? 1 : 0, mode: task.mode ?? 'deliver' },
+  };
+}
+
+/** 2026-11-26 P1: 进化任务运行快照 → 任务中心行。 */
+export const EVOLUTION_STATUS_MAP: Readonly<
+  Record<EvolutionRunSnapshot['state'], TaskCenterStatus>
+> = {
+  running: 'running',
+  succeeded: 'succeeded',
+  failed: 'failed',
+  cancelled: 'cancelled',
+};
+
+const EVOLUTION_TASK_TITLES: Readonly<Record<string, string>> = {
+  memory_reflection: '记忆整理',
+  memory_pruning: '记忆修剪',
+  memory_consolidation: '记忆固化',
+  daily_summary: '每日摘要',
+  preference_learning: '偏好学习',
+  importance_reevaluation: '重要性重评估',
+  skill_consolidation: '技能巡检',
+};
+
+export function normalizeEvolutionRun(run: EvolutionRunSnapshot): UnifiedTaskEntry {
+  const running = run.state === 'running';
+  const llmDone = Number(run.progress.llm_done);
+  const llmTotal = Number(run.progress.llm_total);
+  const percent =
+    running && Number.isFinite(llmTotal) && llmTotal > 0
+      ? Math.max(0, Math.min(100, Math.round((llmDone / llmTotal) * 100)))
+      : null;
+  return {
+    id: `evolution:${run.name}`,
+    source: 'evolution',
+    title: EVOLUTION_TASK_TITLES[run.name] ?? run.name,
+    status: EVOLUTION_STATUS_MAP[run.state] ?? 'running',
+    startedAt: run.started_at ?? null,
+    updatedAt: run.finished_at ?? null,
+    percent,
+    error: run.error ?? null,
+    cancellable: running,
+    detailPath: '/settings?tab=evolution',
+    openTarget: null,
+    cancelRef: running ? { source: 'evolution', rawId: run.name } : null,
+    meta: {
+      phase: run.phase_label ?? null,
+      trigger: run.trigger,
+      durationMs: run.duration_ms ?? null,
+    },
   };
 }
 
