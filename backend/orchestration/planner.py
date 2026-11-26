@@ -17,7 +17,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.orchestration.llm_factory import build_llm_client_from_settings
 from backend.orchestration.models import Task, Team
@@ -33,6 +33,10 @@ MAX_PLAN_TASKS = 8
 #: M3.3: 计划卡预估轮次的合法区间。prompt 契约与 sanitizer 共用本常量，
 #: 避免 LLM 按 prompt 产出的值被源头静默丢弃（契约漂移）。
 MAX_ESTIMATED_ITERATIONS = 15
+
+#: 流式拆解草稿里程碑步长（字符）：每累计 +N 字推一次进度，替代逐 delta
+#: 推送（后者会把原始 JSON 切片直接灌进 UI，且高频刷屏）。
+DRAFT_MILESTONE_CHARS = 400
 
 
 def _is_dispatchable_agent(agent_id: str) -> bool:
@@ -298,6 +302,7 @@ class Planner:
         self,
         request: str,
         context: Optional[Dict[str, Any]] = None,
+        progress: Optional[Callable[[str, str], Any]] = None,
     ) -> Plan:
         """
         Decompose a user request into a team of tasks.
@@ -326,7 +331,9 @@ class Planner:
 
         # Decompose using LLM or fallback to single-task decomposition.
         if self.llm_client is not None:
-            tasks, reasoning = await self._decompose_with_llm(request, context)
+            tasks, reasoning = await self._decompose_with_llm(
+                request, context, progress
+            )
         else:
             tasks, reasoning = self._simple_decompose(request)
 
@@ -476,15 +483,25 @@ class Planner:
         self,
         request: str,
         context: Optional[Dict[str, Any]] = None,
+        progress: Optional[Callable[[str, str], Any]] = None,
     ) -> Tuple[List[Dict[str, Any]], str]:
         """Decompose request via the LLM; any failure → single-task fallback."""
         prompt = self._build_decomposition_prompt(request, context)
 
-        try:
-            response = await self.llm_client.complete(prompt)
-        except Exception as exc:
-            logger.warning("Planner LLM call failed, falling back: %s", exc)
-            return self._simple_decompose(request)
+        response: Optional[str] = None
+        if progress is not None and hasattr(self.llm_client, "chat_stream_events"):
+            try:
+                response = await self._stream_decomposition(prompt, progress)
+            except Exception as exc:  # noqa: BLE001 — 流式失败回退非流式
+                logger.warning("Planner streaming failed, falling back: %s", exc)
+                response = None
+
+        if not response:
+            try:
+                response = await self.llm_client.complete(prompt)
+            except Exception as exc:
+                logger.warning("Planner LLM call failed, falling back: %s", exc)
+                return self._simple_decompose(request)
 
         if not response or not isinstance(response, str):
             return self._simple_decompose(request)
@@ -498,6 +515,35 @@ class Planner:
         if not tasks:
             return self._simple_decompose(request)
         return tasks, reasoning
+
+    async def _stream_decomposition(
+        self,
+        prompt: str,
+        progress: Callable[[str, str], Any],
+    ) -> str:
+        """流式拆解：reasoning 逐段透传，content 仅按里程碑推送进度。
+
+        content_delta 是原始 JSON 计划文本的切片，逐条推给 UI 既无信息量
+        又高频刷屏；改为每累计 ``DRAFT_MILESTONE_CHARS`` 字推一次「已生成
+        计划草稿 · N 字」，最终文本仍完整返回供解析。
+        """
+        messages = [{"role": "user", "content": prompt}]
+        content = ""
+        next_milestone = DRAFT_MILESTONE_CHARS
+        async for kind, payload in self.llm_client.chat_stream_events(messages):
+            if kind == "reasoning_delta" and payload:
+                await progress("reasoning", str(payload))
+            elif kind == "content_delta" and payload:
+                content += str(payload)
+                if len(content) >= next_milestone:
+                    await progress("message", f"已生成计划草稿 · {len(content)} 字")
+                    while next_milestone <= len(content):
+                        next_milestone += DRAFT_MILESTONE_CHARS
+            elif kind == "response":
+                final = getattr(payload, "content", None)
+                if final:
+                    content = str(final)
+        return content
 
     @staticmethod
     def _allow_deep_decomposition() -> bool:

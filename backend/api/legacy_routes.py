@@ -908,6 +908,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             #          （复杂任务必出 task_plan + 必注册工具 — 硬约束 1）
             from backend.orchestration.llm_factory import (
                 build_llm_client_from_settings,
+                build_utility_llm_client,
             )
             from backend.orchestration.plan_progress import (
                 PLAN_STAGE_CLARIFY,
@@ -917,6 +918,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 PLAN_STAGE_SCOUT,
                 PLAN_STAGE_SCOUT_DEEP,
                 emit_planning_skipped,
+                make_stream_progress_emitter,
                 run_planning_stage,
             )
 
@@ -944,7 +946,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         runner=lambda: _classify_orchestration_mode(
                             data.message,
                             data.orchestration_mode or "auto",
-                            llm_client=build_llm_client_from_settings(),
+                            llm_client=build_utility_llm_client(task_type="classification")
+                            or build_llm_client_from_settings(),
                         ),
                         describe_result=lambda value: (
                             "多智能体编排" if value == "multi" else "单智能体执行"
@@ -976,6 +979,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 直接透传，不重枚举；run_id 复用 resume 返回的 new_run_id。
                     plan_tasks = data.plan_override
                     run_id = data.run_id or f"orch-{uuid.uuid4()}"
+                    # 沿用既有计划时拆解阶段不执行；显式推 skipped 事件，
+                    # 避免前端规划时间线停在「等待」态。
+                    await emit_planning_skipped(
+                        entry.queue.put,
+                        stages=[PLAN_STAGE_DECOMPOSE],
+                        reason="沿用既有计划，跳过拆解",
+                    )
                 else:
                     # P2-8 (2026-08-14): orchestration_mode=template:<id> → 确定性模板拆解。
                     orchestration_mode = data.orchestration_mode or "auto"
@@ -1021,6 +1031,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     _level = _complexity_info.get("complexity")
                                     if isinstance(_level, str):
                                         preflight_complexity = _level
+                            decompose_progress = make_stream_progress_emitter(
+                                entry.queue.put, stage=PLAN_STAGE_DECOMPOSE
+                            )
                             plan = await run_planning_stage(
                                 entry.queue.put,
                                 stage=PLAN_STAGE_DECOMPOSE,
@@ -1029,7 +1042,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     team_registry=TeamRegistry(),
                                     llm_client=build_llm_client_from_settings(),
                                 ).decompose_request(
-                                    data.message, context=preflight_context
+                                    data.message,
+                                    context=preflight_context,
+                                    progress=decompose_progress,
                                 ),
                                 describe_result=lambda value: (
                                     f"拆解为 {len(getattr(value, 'tasks', []) or [])} 个任务"

@@ -31,6 +31,7 @@ async def research(
     topic: str,
     project_path: Path,
     settings: Any = None,
+    progress: Any = None,
 ) -> ResearchReport:
     """复杂任务深度调研。
 
@@ -40,6 +41,7 @@ async def research(
         topic: 调研主题（通常来自用户 /plan 目标）
         project_path: 项目根目录路径
         settings: 编排设置（``OrchSettings``），用于读取搜索 API key 等配置
+        progress: 可选进度回调（``async def (payload) -> None``），透传给 ``deep_research()``
 
     Returns:
         ``ResearchReport``：结构化调研报告。失败时返回空报告（confidence=0）。
@@ -95,6 +97,7 @@ async def research(
             search_api_key=search_api_key,
             llm_call=ctx.llm_call,
             auto_ingest=False,  # scout_deep 不保存到 wiki（避免污染知识库）
+            progress=progress,
         )
         logger.info("scout_deep: deep_research 完成 status=%s", task.status)
     except Exception as exc:
