@@ -470,7 +470,9 @@ async def test_max_scout_iterations_from_settings_flows_to_scout(monkeypatch):
 
     captured: dict = {}
 
-    async def fake_scout(client, message, emit, clarifications, max_iterations=4):
+    async def fake_scout(
+        client, message, emit, clarifications, max_iterations=4, fallback_client=None
+    ):
         captured["max_iterations"] = max_iterations
         return "facts"
 
