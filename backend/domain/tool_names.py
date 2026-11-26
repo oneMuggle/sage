@@ -82,6 +82,9 @@ OFFICE_TOOLS = (
     "office_fill_pdf_form",
     "office_analyze_word_template",
     "office_fill_word_template",
+    # 2026-11-26 Word P0：无占位符模板整块克隆填充；.doc <-> .docx 转换
+    "office_refill_word_template",
+    "office_convert_word",
     # 2026-09-18 PPT 模板两件套（office-p5a HTTP 能力的 LLM 工具面镜像）：
     # analyze 枚举版式/占位符（READ）；fill 以模板副本另存新 .pptx（WRITE_LOCAL）。
     "office_analyze_ppt_template",

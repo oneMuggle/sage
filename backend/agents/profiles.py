@@ -530,6 +530,8 @@ def create_default_agents() -> List[AgentProfile]:
                 "office_fill_pdf_form",
                 "office_analyze_word_template",
                 "office_fill_word_template",
+                "office_refill_word_template",
+                "office_convert_word",
                 # 2026-09-18: PPT 模板两件（与 OFFICE_TOOLS 同步）。
                 "office_analyze_ppt_template",
                 "office_fill_ppt_template",

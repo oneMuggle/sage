@@ -141,6 +141,8 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "office_generate_pdf": ToolCapability.WRITE,
     "office_fill_pdf_form": ToolCapability.WRITE,
     "office_fill_word_template": ToolCapability.WRITE,
+    "office_refill_word_template": ToolCapability.WRITE,
+    "office_convert_word": ToolCapability.WRITE,
     "office_fill_ppt_template": ToolCapability.WRITE,
     "office_fill_latex_template": ToolCapability.WRITE,
     "office_fix_word": ToolCapability.WRITE,
