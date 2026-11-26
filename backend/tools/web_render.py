@@ -563,6 +563,23 @@ class _RendererPool:
 _pool = _RendererPool()
 
 
+#: 凭据渲染串行锁（browser_id → Lock）。``Storage.setCookies/getCookies`` 是
+#: 浏览器级操作：同一渲染池槽位上并发执行两个不同账号的凭据渲染会互相覆盖
+#: cookie（串号/串味），必须按实例串行。非凭据渲染不持锁（只读公开页面）。
+_credential_locks: Dict[str, threading.Lock] = {}
+_credential_locks_guard = threading.Lock()
+
+
+def _credential_render_lock(browser_id: str) -> threading.Lock:
+    """返回某浏览器实例的凭据渲染串行锁（同 id 同锁）。"""
+    with _credential_locks_guard:
+        lock = _credential_locks.get(browser_id)
+        if lock is None:
+            lock = threading.Lock()
+            _credential_locks[browser_id] = lock
+        return lock
+
+
 def get_renderer_pool() -> _RendererPool:
     """渲染池单例访问（测试注入 / 后续生命周期管理用）。"""
     return _pool
@@ -885,6 +902,13 @@ def render_page(
             credential_origins = list(resolution.origins or [])
 
     session = _pool.acquire()
+    credential_lock = (
+        _credential_render_lock(session.browser_id)
+        if (credential_cookies or credential_origins)
+        else None
+    )
+    if credential_lock is not None:
+        credential_lock.acquire()
     channel_ok = _ensure_pool_channel(session)
     target_id: Optional[str] = None
     net_session: Optional[str] = None
@@ -962,6 +986,8 @@ def render_page(
         if target_id:
             with contextlib.suppress(BrowserCDPError):
                 cdp_command(session, "Target.closeTarget", {"targetId": target_id})
+        if credential_lock is not None:
+            credential_lock.release()
 
     page: Dict[str, Any] = {}
     if isinstance(info, str):

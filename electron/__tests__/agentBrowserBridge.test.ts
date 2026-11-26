@@ -53,16 +53,25 @@ function makeWindow(visible: boolean): FakeWindow {
 
 function makeDeps(cookieStore: Record<string, unknown>[] = [], failLoad = false) {
   const windows: FakeWindow[] = [];
+  const windowSessions: Array<string | undefined> = [];
+  const downloadPaths: Array<{ path: string; session?: string }> = [];
   let counter = 0;
   const deps: BridgeDeps & {
     windows: FakeWindow[];
+    windowSessions: Array<string | undefined>;
+    downloadPaths: Array<{ path: string; session?: string }>;
     cookieStore: Record<string, unknown>[];
-    downloadHandler: ((method: string, params: Record<string, unknown>) => void) | null;
+    downloadHandler:
+      | ((method: string, params: Record<string, unknown>, session?: string) => void)
+      | null;
   } = {
     windows,
+    windowSessions,
+    downloadPaths,
     cookieStore,
     downloadHandler: null,
-    createWindow: (visible: boolean) => {
+    createWindow: (visible: boolean, session?: string) => {
+      windowSessions.push(session);
       const win = makeWindow(visible);
       if (failLoad) {
         win.webContents.loadURL = vi.fn(async () => {
@@ -78,6 +87,9 @@ function makeDeps(cookieStore: Record<string, unknown>[] = [], failLoad = false)
         set: async (details: Record<string, unknown>) => {
           cookieStore.push(details);
         },
+      },
+      setDownloadPath: (path: string, session?: string) => {
+        downloadPaths.push({ path, session });
       },
     }),
     randomId: () => `t${++counter}`,
@@ -361,6 +373,49 @@ describe('AgentBrowserBridge', () => {
     unsubscribe();
     deps.downloadHandler?.('Browser.downloadWillBegin', { guid: 'g2' });
     expect(messages).toHaveLength(1);
+  });
+
+  it('routes session-tagged download events only to matching clients', () => {
+    const deps = makeDeps();
+    const bridge = new AgentBrowserBridge(deps);
+    const s1: Array<Record<string, unknown>> = [];
+    const s2: Array<Record<string, unknown>> = [];
+    const all: Array<Record<string, unknown>> = [];
+    bridge.attachEventClient((message) => s1.push(message), 's1');
+    bridge.attachEventClient((message) => s2.push(message), 's2');
+    bridge.attachEventClient((message) => all.push(message));
+
+    deps.downloadHandler?.('Browser.downloadWillBegin', { guid: 'g1' }, 's1');
+    deps.downloadHandler?.('Browser.downloadWillBegin', { guid: 'g2' });
+
+    expect(s1.map((m) => m.method)).toEqual([
+      'Browser.downloadWillBegin',
+      'Browser.downloadWillBegin',
+    ]);
+    expect(s2.map((m) => m.method)).toEqual(['Browser.downloadWillBegin']); // 仅广播的无 session 事件
+    expect(all).toHaveLength(2);
+  });
+
+  it('passes the browser session to createWindow and setDownloadPath', async () => {
+    const deps = makeDeps();
+    const bridge = new AgentBrowserBridge(deps);
+
+    await bridge.dispatch({
+      method: 'Target.createTarget',
+      params: { url: 'about:blank' },
+      headless: true,
+      session: 's1',
+    });
+    await bridge.dispatch({
+      method: 'Browser.setDownloadBehavior',
+      params: { downloadPath: '/tmp/sage-downloads-s1' },
+      session: 's1',
+    });
+
+    expect(deps.windowSessions).toEqual(['s1']);
+    expect(deps.downloadPaths).toEqual([
+      { path: '/tmp/sage-downloads-s1', session: 's1' },
+    ]);
   });
 
   it('routes WS sessionId commands to the target debugger', async () => {

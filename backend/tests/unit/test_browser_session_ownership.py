@@ -394,3 +394,44 @@ class TestToolOwnership:
             reset_tool_context(token)
 
         assert calls == []
+
+
+# ---------------------------------------------------------------------------
+# external 共享标签页全局串行（P1）
+# ---------------------------------------------------------------------------
+
+
+class TestExternalSharedTabLock:
+    def _external(self, tmp_path, owner: str = "conv-a"):
+        return _session(
+            "external", tmp_path, owner=owner, browser_type=BrowserType.EXTERNAL
+        )
+
+    def test_external_action_lock_busy_raises(self, manager, tmp_path, monkeypatch):
+        monkeypatch.setattr(browser_tool, "_EXTERNAL_LOCK_TIMEOUT_SECONDS", 0.05)
+        session = self._external(tmp_path)
+        assert browser_tool._EXTERNAL_ACTION_LOCK.acquire(blocking=False) is True
+        try:
+            # 嵌套 with：括号式多上下文语法仅 py3.9+，这里保持 py38 兼容
+            with pytest.raises(BrowserCDPError, match="共享标签页"):  # noqa: SIM117
+                with browser_tool._browser_lease_scope():
+                    browser_tool._lease_session(session)
+        finally:
+            browser_tool._EXTERNAL_ACTION_LOCK.release()
+
+    def test_external_lock_released_after_scope(self, manager, tmp_path, monkeypatch):
+        monkeypatch.setattr(browser_tool, "_EXTERNAL_LOCK_TIMEOUT_SECONDS", 0.05)
+        session = self._external(tmp_path)
+        with browser_tool._browser_lease_scope():
+            browser_tool._lease_session(session)
+        # 作用域退出后全局锁已释放
+        assert browser_tool._EXTERNAL_ACTION_LOCK.acquire(blocking=False) is True
+        browser_tool._EXTERNAL_ACTION_LOCK.release()
+
+    def test_chromium_session_does_not_take_external_lock(self, manager, tmp_path):
+        session = _session("chrome-1", tmp_path, owner="conv-a")
+        with browser_tool._browser_lease_scope():
+            browser_tool._lease_session(session)
+            # 普通实例不占用 external 锁
+            assert browser_tool._EXTERNAL_ACTION_LOCK.acquire(blocking=False) is True
+            browser_tool._EXTERNAL_ACTION_LOCK.release()
