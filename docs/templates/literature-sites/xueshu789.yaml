@@ -4,12 +4,13 @@
 #   或复制到 <项目>/.sage/literature_sites/
 # 加载顺序：builtin < ~/.sage/literature_sites < .sage/literature_sites
 #
-# 实测要点（2026-11-22，仅作启用参考，实际以真机为准）：
+# 实测要点（2026-11-26，仅作启用参考，实际以真机为准）：
 #   - 卡号+密码登录，成功后 URL 进 /dbList/，标题不含「登录」
 #   - /dbItem/3 可用（重定向知网代理检索页）；/dbItem/1 代理报错；/dbItem/2 触发滑块验证
-#   - 下载：必须点击 a.downloadlink 元素本身，完整 href 含 &ddata=文件名|库|题名|库|hash
-#     不要用快照里截断的 doDownload?url=... 直连（缺 ddata 报「参数错误」）
-#   - 下载完成后新标签可能显示 CNKI「页面不存在」，以浏览器下载目录为准
+#   - 下载：完整 href 含 &ddata=文件名|库|题名|库|hash，必须用元素 href（缺 ddata 报「参数错误」）
+#   - 2026-11-26 起站点下载改为中间页：doDownload → 「文献下载中」页，约 2s 后跳
+#     downurl；downurl 主机写死 oversea.cnki.net，国内库内容在该网关 404。
+#     通过 pdf.interstitial 先换 kns.cnki.net 再原域兜底（实测 1.68MB PDF 落盘）。
 id: xueshu789
 display_name: 学术资源站
 home_url: https://www.xueshu789.cc/
@@ -70,7 +71,18 @@ pdf:
     selector: "a.downloadlink"
     text: 下载
   post_click_wait_s: 8
-  note: "必须点击 a.downloadlink 元素（完整 href 含 &ddata=文件名|库|题名|库|hash）；不要用快照中截断的 URL 直连，否则 doDownload 报参数错误"
+  # 下载中间页：doDownload 301 → /doDownload/「文献下载中」页，约 2s 后 JS 跳
+  # downurl；该站把 downurl 主机写死为 oversea.cnki.net，国内库内容在海外网关
+  # 404。运行时按 host_fallbacks 先换 kns.cnki.net 再原域兜底。
+  interstitial:
+    url_contains:
+      - "cnki.net/docdown"
+    host_fallbacks:
+      - "kns.cnki.net"
+    tab_timeout_s: 6
+    sleep_after_open_s: 2.5
+    attempt_timeout_s: 15
+  note: "下载链接完整 href 含 &ddata=文件名|库|题名|库|hash；不要用快照中截断的 URL 直连，否则 doDownload 报参数错误。中间页主机回退见 interstitial。"
   forbid:
     - CAJ
   validate:
@@ -82,6 +94,6 @@ rate_limit:
 compliance:
   note: 仅使用本人账号/机构授权；不绕过付费墙；验证码交还用户
   default_enabled: false
-version: "0.3.0"
+version: "0.4.0"
 status: ready
-last_verified_at: "2026-11-22"
+last_verified_at: "2026-11-26"

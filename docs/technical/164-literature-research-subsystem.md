@@ -54,7 +54,8 @@
 | `AccessSpec` / `LoginSpec` | `access.mode`（`browser`/`rest`/`hybrid`）；登录提示 `account_label` / `password_label` / `url_contains` / `title_not_contains` |
 | `SearchSpec` | `url_template` / `wait_for` / `pagination` / `result_fields` / `mode`（`url`/`interactive`）/ `entry_url` / `entry_click` / `input_selectors` / `submit_key` / `wait_after_s` / `result_hint` |
 | `DetailSpec` | `open_by` / `fields` |
-| `PdfSpec` | `entry_selector` / `entry_text` / `forbid`（默认 `("CAJ",)`）/ `magic`（默认 `"%PDF-"`）/ `title_match` / `post_click_wait_s` / `note` |
+| `PdfSpec` | `entry_selector` / `entry_text` / `forbid`（默认 `("CAJ",)`）/ `magic`（默认 `"%PDF-"`）/ `title_match` / `post_click_wait_s` / `interstitial` / `note` |
+| `PdfInterstitialSpec` | `url_contains`（必填，识别中间页/跳转 URL）/ `host_fallbacks`（主机回退，按序替换、原域最后）/ `tab_timeout_s`（默认 6）/ `sleep_after_open_s`（默认 2.5）/ `attempt_timeout_s`（默认 15） |
 | `RateLimitSpec` | `min_interval_s`（默认 5）/ `max_batch`（默认 20） |
 | `ComplianceSpec` | `note` / `default_enabled`（默认 `False`） |
 | `PaperRecord` | `paper_key` / `title` / `authors` / `year` / `venue` / `abstract` / `url` / `doi` / `source_site` / `source_query` / `retrieved_at` / `fulltext_path` / `language` / `extra` |
@@ -105,7 +106,7 @@
 
 ### 2.6 示例 profile：浏览器登录 + 检索 + PDF 下载（xueshu789）
 
-`docs/templates/literature-sites/xueshu789.yaml`（示例模板，不自动加载；复制到 `~/.sage/literature_sites/` 后启用）当前是 `status: ready`、`version: 0.3.0`、`last_verified_at: "2026-11-22"`：
+`docs/templates/literature-sites/xueshu789.yaml`（示例模板，不自动加载；复制到 `~/.sage/literature_sites/` 后启用）当前是 `status: ready`、`version: 0.4.0`、`last_verified_at: "2026-11-26"`：
 
 | 项 | 值 |
 |---|---|
@@ -125,8 +126,10 @@
 - `/dbItem/1` 代理返回“出错啦”；`/dbItem/2` 触发知网滑块验证（需人工完成）；`/dbItem/3` 可用，重定向到 `http://82.157.23.222:5888/kns8s/defaultresult/index`（标题“检索-中国知网”）。
 - 搜索框 placeholder 含“检索词”；输入关键词后 Enter，约 5 秒出结果。
 - 结果条目的题名/作者/来源链接指向 `https://www.xueshu789.cc/doDownload?url=...`，操作列有“下载 / 原版阅读 / CNKI AI阅读”。
-- `a.downloadlink` 的真实 href 还带 `&ddata=<文件名>|<库>|<题名>|<库>|<hash>`；必须点击该 DOM 元素，经 `oversea.cnki.net/docdown/fulltext/download` 落盘 PDF。用快照里截断的 `doDownload?url=...` 直连会因缺少 `ddata` 报“参数错误”。
-- 下载完成后新标签可能显示“页面不存在”，以下载目录中的文件为准。
+- `a.downloadlink` 的真实 href 还带 `&ddata=<文件名>|<库>|<题名>|<库>|<hash>`；用快照里截断的 `doDownload?url=...` 直连会因缺少 `ddata` 报“参数错误”。
+- **2026-11-26 起站点改为两段式下载**：`doDownload` → `301` → `/doDownload/`「文献下载中」中间页，约 `2s` 后 JS 跳 `downurl`；该站把 `downurl` 主机写死为 `oversea.cnki.net/docdown/fulltext/download?q=...`，国内库（CJFQ 等）内容在海外网关返回 CNKI 404「页面不存在」（与登录态/Referer/UA/cookie 无关，curl 复放排除）。同一 q/invoice token 换 `kns.cnki.net` 返回 `application/pdf`（实测 1,070,254B；浏览器内重写主机后 1,688,310B 落盘、`%PDF-1.6`、题名匹配）。
+- 因此 profile 声明 `pdf.interstitial`（`url_contains: cnki.net/docdown`、`host_fallbacks: [kns.cnki.net]`），由 `download_pdf` 的中间页路径完成「入口 href → 新标签 → 等跳转 → 主机回退 → 校验」；发现中间页标签的识别基于 URL 子串，不依赖固定时序。
+- 下载完成后新标签可能显示“页面不存在”，以 `DownloadResult.path` / 下载目录中的文件为准。
 
 ## 3. 检索与交互执行（M1a / M1b）
 
@@ -196,8 +199,14 @@ wait_download(timeout_s=60) -> Optional[str]
 
 ### 3.4 PDF 下载与文件校验
 
-`download_pdf(profile, driver, expected_title, dest_dir, timeout_s=60)`：
+`download_pdf(profile, driver, expected_title, dest_dir, timeout_s=60, *, entry_url="", entry_selector="")`：
 
+0. 若 profile 声明了 `pdf.interstitial`（两段式下载），优先走中间页路径：
+   1. 取入口 href：`entry_url` 参数优先，否则用 `entry_selector`（缺省 `pdf.entry_selector`）经 `driver.element_attr(selector, "href")` 读取（完整 href 含站点签名参数）；
+   2. `driver.open_tab(href)` 新开工具可见标签页，等待 `sleep_after_open_s` 让中间页跳转；
+   3. `driver.tabs()` 轮询至 URL 命中 `url_contains`（上限 `tab_timeout_s`）；
+   4. 按 `host_fallbacks` 生成候选 URL（回退主机在前、原域最后），逐个 `focus_tab` + `navigate` + `wait_download`（非最后一次尝试限 `attempt_timeout_s`）；导航报错（附件下载的 `ERR_ABORTED`）不阻断，继续等下载；
+   5. 校验通过即关闭标签并返回；驱动缺 `element_attr`/`open_tab`/`tabs` 能力或拿不到 href 时回退到下面的原路径。
 1. 若站点未配置 `pdf` 或没有入口，返回 `DownloadResult(None, False, [错误])`；
 2. 优先用 `pdf.entry_selector`（`driver.click`），否则用 `pdf.entry_text`（`driver.click_text`）——**必须点 DOM 元素**，不能用截断 URL 直连；
 3. 若配置 `post_click_wait_s` 则 `driver.sleep`；
@@ -205,7 +214,7 @@ wait_download(timeout_s=60) -> Optional[str]
 5. `validate_pdf(path, expected_title, magic)` 检查：文件存在、文件头等于 magic（默认 `%PDF-`）、归一化后的文件名与题名互相包含；
 6. 若 `pdf.forbid` 中的词出现在文件后缀里（如 `CAJ`）则记错误。
 
-返回 `DownloadResult(path, ok, errors)`。部分站点的 `&ddata=` 附加参数坑就是这一层设计的直接原因，见 §2.6。
+返回 `DownloadResult(path, ok, errors)`。部分站点的 `&ddata=` 附加参数坑与「中间页写错下载主机」坑（2026-11-26，xueshu789 oversea→kns）都是这一层设计的直接原因，见 §2.6。
 
 ### 3.5 交互式检索的边界
 
