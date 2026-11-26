@@ -52,7 +52,7 @@ export function ProbeStatusDisplay({ result }: { result: ProbeResult }) {
   const config = statusConfig[result.status];
 
   return (
-    <div className={clsx('mt-2 px-2 py-1.5 rounded-radius-sm text-[11px]', config.bg)}>
+    <div className={clsx('mt-2 px-2 py-1.5 rounded-radius-sm text-ui-xs', config.bg)}>
       <span className={clsx('font-medium', config.color)}>{t(config.labelKey)}</span>
       {result.adapter !== 'unknown' && (
         <span className="text-muted ml-2">

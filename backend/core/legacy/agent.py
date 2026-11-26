@@ -2676,13 +2676,31 @@ class SageAgent:
                             pending_retries: List[RetryEvent] = []
                             # 2026-11-26: 端点切换事件同样先暂存，成功/失败前补发。
                             pending_failovers: List[FailoverEvent] = []
+                            chat_kwargs: Dict[str, Any] = {
+                                "retry_callback": pending_retries.append,
+                                "failover_callback": pending_failovers.append,
+                            }
                             try:
-                                response = await self.llm_client.chat(
-                                    messages,
-                                    tools=available_tools or None,
-                                    retry_callback=pending_retries.append,
-                                    failover_callback=pending_failovers.append,
-                                )
+                                try:
+                                    response = await self.llm_client.chat(
+                                        messages,
+                                        tools=available_tools or None,
+                                        **chat_kwargs,
+                                    )
+                                except TypeError as type_exc:
+                                    # 兼容仅实现旧签名的测试替身/注入客户端：
+                                    # 参数绑定阶段即抛错，去掉新 kwarg 重试一次。
+                                    if (
+                                        "failover_callback" not in str(type_exc)
+                                        or "failover_callback" not in chat_kwargs
+                                    ):
+                                        raise
+                                    chat_kwargs.pop("failover_callback")
+                                    response = await self.llm_client.chat(
+                                        messages,
+                                        tools=available_tools or None,
+                                        **chat_kwargs,
+                                    )
                             except LLMError:
                                 for retry_evt in _retry_events_to_agent_events(
                                     pending_retries, i, self.agent_id

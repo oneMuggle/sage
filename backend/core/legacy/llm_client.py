@@ -1398,8 +1398,9 @@ class LLMClient:
             # 再发起一次尝试"时保留原始错误类型/状态码。
             has_failed_once = False
             # 2026-11-26: 与非流式同口径 —— 每跳各自享有一份重试预算
-            #（stream_started 仅用于耗时/首字延迟指标，不参与预算）。
-            retry_started = _retry_now()
+            #（stream_started 仅用于耗时/首字延迟指标；首跳复用同一时钟样本，
+            # 避免多取一次 monotonic 干扰调用方/测试对时钟采样的假设）。
+            retry_started = stream_started if hop_index == 0 else _retry_now()
             last_llm_err = None
             hop_failed = False
             try:
