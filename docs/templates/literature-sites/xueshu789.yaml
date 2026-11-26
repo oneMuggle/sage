@@ -56,9 +56,15 @@ search:
       selector: ""
 detail:
   open_by: click_text
+  # 结果行链接是代理跳转地址，真正的知网摘要页 URL 藏在其 url 查询参数里（base64 编码）。
+  # 读取该参数、解码后即为 kns.cnki.net 摘要页，可从中取 #ChDivSummary 正文。
+  url_from:
+    selector: "a.downloadlink"
+    param: "url"
+    decode: base64
   fields:
     abstract:
-      selector: ""
+      selector: "#ChDivSummary"
 pdf:
   entry:
     selector: "a.downloadlink"

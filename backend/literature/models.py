@@ -13,6 +13,7 @@ _HTTP_SCHEMES = ("http", "https")
 _ACCESS_MODES = frozenset({"browser", "rest", "hybrid"})
 _SEARCH_MODES = frozenset({"url", "interactive"})
 _PROFILE_STATUSES = frozenset({"ready", "draft"})
+_URL_FROM_DECODES = frozenset({"none", "base64", "url"})
 
 
 class SiteProfileError(ValueError):
@@ -63,9 +64,23 @@ class SearchSpec:
 
 
 @dataclass(frozen=True)
+class UrlFromSpec:
+    """从结果行链接中推导详情/摘要页 URL 的声明式规则。
+
+    适用于「结果链接是跳转/代理地址，真正的详情页 URL 藏在其某个查询参数里」的站点：
+    读取 ``selector`` 命中的元素 href，取查询参数 ``param``，按 ``decode`` 解码后即为详情页 URL。
+    """
+
+    selector: str = ""
+    param: str = ""
+    decode: str = "none"
+
+
+@dataclass(frozen=True)
 class DetailSpec:
     open_by: str = "click_text"
     fields: Dict[str, SiteField] = field(default_factory=dict)
+    url_from: Optional[UrlFromSpec] = None
 
 
 @dataclass(frozen=True)
@@ -203,6 +218,20 @@ def _site_fields(value: Any, field_name: str) -> Dict[str, SiteField]:
     return {str(key): _site_field(item, f"{field_name}.{key}") for key, item in raw.items()}
 
 
+def _parse_url_from(value: Any) -> Optional[UrlFromSpec]:
+    if value is None:
+        return None
+    data = _require_dict(value, "detail.url_from")
+    selector = _require_str(data.get("selector"), "detail.url_from.selector", required=True)
+    param = _require_str(data.get("param"), "detail.url_from.param", required=True)
+    decode = _require_str(data.get("decode"), "detail.url_from.decode") or "none"
+    if decode not in _URL_FROM_DECODES:
+        raise SiteProfileError(
+            f"detail.url_from.decode 必须是 {sorted(_URL_FROM_DECODES)} 之一"
+        )
+    return UrlFromSpec(selector=selector, param=param, decode=decode)
+
+
 def _validate_http_url(value: str, field_name: str) -> str:
     parsed = urlparse(value)
     if parsed.scheme not in _HTTP_SCHEMES or not parsed.netloc:
@@ -336,6 +365,7 @@ def profile_from_dict(
         detail = DetailSpec(
             open_by=_require_str(data.get("open_by"), "detail.open_by") or "click_text",
             fields=_site_fields(data.get("fields"), "detail.fields"),
+            url_from=_parse_url_from(data.get("url_from")),
         )
 
     rate_raw = _require_dict(raw.get("rate_limit"), "rate_limit")
