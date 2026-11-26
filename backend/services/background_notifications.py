@@ -61,6 +61,32 @@ class BackgroundNotificationQueue:
             self._items.clear()
             return items
 
+    def push_evolution(
+        self,
+        name: str,
+        label: str,
+        status: str,
+        summary: str = "",
+    ) -> None:
+        """记录一条手动触发的进化任务终态通知（2026-11-26 P1）。
+
+        status 与运行注册表终态对齐：succeeded / failed / cancelled。
+        cron / 补跑触发的任务不入队 —— 凌晨自动任务不应打扰用户。
+        """
+        icons = {"succeeded": "✅", "failed": "❌", "cancelled": "⏹"}
+        verbs = {"succeeded": "完成", "failed": "失败", "cancelled": "已取消"}
+        with self._lock:
+            self._items.append(
+                {
+                    "kind": "evolution_task",
+                    "task_name": name,
+                    "status": status,
+                    "title": f"{icons.get(status, 'ℹ️')} {label}{verbs.get(status, status)}",
+                    "body": (summary or "").strip()[:200],
+                    "created_at": datetime.now().isoformat(),
+                }
+            )
+
     def size(self) -> int:
         with self._lock:
             return len(self._items)

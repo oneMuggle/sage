@@ -664,6 +664,20 @@ phase_label / progress{} / started_at（epoch 毫秒） / finished_at / duration
 - 前端：store 映射 / 轮询启停 / 连续失败停止 / 完成提示一次；
   组件卸载再挂载恢复运行中状态。
 
+### 8.7.5 完成通知 / 取消 / 任务中心（2026-11 P1）
+
+- **完成通知**：手动触发的任务终态（成功 / 失败 / 取消）入队
+  `BackgroundNotificationQueue`（`kind: evolution_task`），Electron 主进程轮询
+  `/scheduled/notifications/pending` 转 OS 通知；cron / 补跑不发送，避免凌晨打扰。
+  与后台任务通知共用「后台任务」偏好门控。
+- **协作式取消**：`POST /api/v1/scheduled/evolution/{name}/cancel` 置注册表取消标志；
+  任务在检查点（记忆反思：启动 / 分组后 / 去重后 / LLM 每组前 / 写结果前）抛
+  `EvolutionTaskCancelled`，执行器落 `cancelled` 终态；单次进行中的 LLM 调用不会被
+  强行中断，UI 如实显示「取消中…」。未在运行时幂等返回 `cancelled=false`。
+- **任务中心**：`src/features/task-center` 统一任务模型新增 `evolution` 数据源
+  （标题 = 任务名、百分比 = LLM k/N、运行中可取消、深链 `/settings?tab=evolution`），
+  与后台 shell / 编排 run 等并列展示；取消动作经同一 `cancelRef` 分发。
+
 ---
 
 _文档版本: v1.0_

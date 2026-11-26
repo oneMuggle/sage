@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { invokeMock, toastMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
-  toastMock: { success: vi.fn(), error: vi.fn() },
+  toastMock: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 vi.mock('../../../shared/api/desktopInvoke', () => ({ invoke: invokeMock }));
 vi.mock('sonner', () => ({ toast: toastMock }));
@@ -45,6 +45,7 @@ describe('useEvolutionRunStore', () => {
     invokeMock.mockReset();
     toastMock.success.mockReset();
     toastMock.error.mockReset();
+    toastMock.info.mockReset();
     useEvolutionRunStore.getState().reset();
   });
 
@@ -169,5 +170,36 @@ describe('useEvolutionRunStore', () => {
     await vi.advanceTimersByTimeAsync(EVOLUTION_RUN_POLL_MS * 3);
     expect(invokeMock.mock.calls.length).toBe(callsAfterStop);
     expect(useEvolutionRunStore.getState().error).toBe('backend down');
+  });
+
+  it('cancelled 终态提示已取消', async () => {
+    vi.useFakeTimers();
+    let run = makeRun();
+    invokeMock.mockImplementation(async () => tasksPayload(run));
+
+    await useEvolutionRunStore.getState().refresh();
+    run = makeRun({ state: 'cancelled', finished_at: Date.now() });
+    await vi.advanceTimersByTimeAsync(EVOLUTION_RUN_POLL_MS);
+
+    expect(toastMock.info).toHaveBeenCalledWith('记忆整理已取消');
+  });
+
+  it('cancel 调 scheduled_evolution_cancel 并刷新取消中快照', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'scheduled_evolution_cancel') {
+        return { ok: true, cancelled: true, run: makeRun({ cancel_requested: true }) };
+      }
+      if (cmd === 'scheduled_evolution_tasks') {
+        return tasksPayload(makeRun({ cancel_requested: true }));
+      }
+      return null;
+    });
+
+    const snapshot = await useEvolutionRunStore.getState().cancel('memory_reflection');
+
+    expect(invokeMock).toHaveBeenCalledWith('scheduled_evolution_cancel', {
+      name: 'memory_reflection',
+    });
+    expect(snapshot?.cancel_requested).toBe(true);
   });
 });

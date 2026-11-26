@@ -59,6 +59,14 @@ _PRUNE_QUALITY_DELETE_MAX = 100
 ProgressReporter = Callable[[str, str, Dict[str, Any]], None]
 
 
+class EvolutionTaskCancelled(Exception):  # noqa: N818 — 控制流信号，不是错误条件
+    """协作式取消信号：任务在检查点发现取消请求时抛出。
+
+    执行器捕获后把运行登记为 cancelled 终态；任务自身的兜底
+    ``except Exception`` 必须先 re-raise 本异常，避免被记成失败。
+    """
+
+
 class BaseEvolutionTask:
     """进化任务基类"""
 
@@ -71,6 +79,7 @@ class BaseEvolutionTask:
         self._llm_cache = None
         self._llm_cache_resolved = False
         self._progress_reporter: Optional[ProgressReporter] = None
+        self._cancel_check: Optional[Callable[[], bool]] = None
 
     async def run_async(self):
         """异步执行任务（子类实现）"""
@@ -79,6 +88,23 @@ class BaseEvolutionTask:
     def set_progress_reporter(self, reporter: Optional[ProgressReporter]) -> None:
         """注入/清除阶段进度回调（执行器调用，None 表示清除）。"""
         self._progress_reporter = reporter
+
+    def set_cancel_check(self, checker: Optional[Callable[[], bool]]) -> None:
+        """注入/清除取消检查回调（执行器调用，None 表示清除）。"""
+        self._cancel_check = checker
+
+    def _check_cancelled(self) -> None:
+        """检查点：已被请求取消则抛出 EvolutionTaskCancelled。"""
+        checker = self._cancel_check
+        if checker is None:
+            return
+        try:
+            requested = bool(checker())
+        except Exception:  # noqa: BLE001 — 检查失败按未取消处理，不打断任务
+            logger.debug("进化任务取消检查失败", exc_info=True)
+            return
+        if requested:
+            raise EvolutionTaskCancelled()
 
     def _report_progress(self, phase: str, label: str, **extra: Any) -> None:
         """上报阶段进度。旁路语义：无回调或回调异常都静默，绝不打断任务。"""
@@ -1753,6 +1779,7 @@ class MemoryReflectionTask(BaseEvolutionTask):
         for (scope, project_key), rows in groups.items():
             if len(rows) < 2:
                 continue
+            self._check_cancelled()
             ordered = sorted(rows, key=lambda r: r.get("created_at") or 0, reverse=True)
             sample = ordered[: self.LLM_GROUP_LIMIT]
             lines = [
@@ -1931,6 +1958,7 @@ class MemoryReflectionTask(BaseEvolutionTask):
         _started = time.monotonic()
         stats = {"scanned": 0, "deduped": 0, "merged": 0, "invalidated": 0}
         try:
+            self._check_cancelled()
             if self.memory_manager is None:
                 logger.info("记忆反思缺少 memory_manager，跳过")
                 record_evolution_log(
@@ -1957,10 +1985,12 @@ class MemoryReflectionTask(BaseEvolutionTask):
             )
             groups = self._group_by_attribution(rows)
             self._report_progress("group", "按归属分组", groups=len(groups))
+            self._check_cancelled()
 
             deduped_ids = set(self._heuristic_dedupe(groups))
             stats["deduped"] = len(deduped_ids)
             self._report_progress("dedupe", "启发式去重", deduped=stats["deduped"])
+            self._check_cancelled()
             if deduped_ids:
                 # 已失效行不再送 LLM（避免对同一批内容重复出 MERGE 操作）
                 groups = {
@@ -1968,6 +1998,7 @@ class MemoryReflectionTask(BaseEvolutionTask):
                     for key, v in groups.items()
                 }
             llm_stats = await self._run_llm_ops(groups)
+            self._check_cancelled()
             self._report_progress("finalize", "写入结果")
             stats["merged"] = llm_stats["merged"]
             stats["invalidated"] = llm_stats["invalidated"]
@@ -1990,6 +2021,9 @@ class MemoryReflectionTask(BaseEvolutionTask):
                 metrics=stats,
             )
             logger.info(description)
+        except EvolutionTaskCancelled:
+            logger.info("记忆反思任务已被取消")
+            raise
         except Exception as exc:  # noqa: BLE001 — 定时任务兜底
             logger.warning(f"记忆反思任务失败: {exc}")
             record_evolution_log(
