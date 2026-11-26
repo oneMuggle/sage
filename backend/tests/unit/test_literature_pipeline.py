@@ -427,6 +427,81 @@ class TestBrowserSearch:
         assert result.ok is False
         assert any("%PDF" in e for e in result.errors)
 
+    def _interstitial_profile(self, **overrides):
+        from backend.literature.models import profile_from_dict
+
+        raw = _raw_profile()
+        interstitial = {
+            "url_contains": ["cnki.net/docdown"],
+            "host_fallbacks": ["kns.cnki.net"],
+        }
+        interstitial.update(overrides)
+        raw["pdf"]["interstitial"] = interstitial
+        return profile_from_dict(raw)
+
+    def test_download_interstitial_rewrites_host_and_validates(self, tmp_path):
+        from backend.literature.search import download_pdf
+
+        driver = _InterstitialDriver()
+        pdf = tmp_path / "示例论文.pdf"
+        pdf.write_bytes(b"%PDF-1.6\nfake")
+        driver.download_path = str(pdf)
+        result = download_pdf(
+            self._interstitial_profile(),
+            driver,
+            "示例论文",
+            tmp_path,
+            entry_selector="table tbody tr:nth-child(1) a.downloadlink",
+        )
+        assert result.ok is True, result.errors
+        assert driver.attrs == [("table tbody tr:nth-child(1) a.downloadlink", "href")]
+        assert driver.opened == ["https://www.xueshu789.cc/doDownload?url=x&ddata=y"]
+        assert driver.focused == ["t1"]
+        assert driver.navigations[0].startswith("https://kns.cnki.net/docdown/")
+        assert "q=abc" in driver.navigations[0]
+        assert driver.closed == ["t1"]
+        assert driver.clicks == []
+
+    def test_download_interstitial_tolerates_navigation_abort(self, tmp_path):
+        from backend.literature.search import download_pdf
+
+        driver = _InterstitialDriver()
+        pdf = tmp_path / "示例论文.pdf"
+        pdf.write_bytes(b"%PDF-1.6\nfake")
+        driver.download_path = str(pdf)
+        kns_url = "https://kns.cnki.net/docdown/fulltext/download?q=abc"
+        driver.navigate_errors[kns_url] = "net::ERR_ABORTED"
+        result = download_pdf(
+            self._interstitial_profile(), driver, "示例论文", tmp_path
+        )
+        assert result.ok is True, result.errors
+
+    def test_download_interstitial_without_tab_fails(self, tmp_path):
+        from backend.literature.search import download_pdf
+
+        driver = _InterstitialDriver()
+        driver.tabs_state = []
+        result = download_pdf(
+            self._interstitial_profile(tab_timeout_s=0),
+            driver,
+            "示例论文",
+            tmp_path,
+        )
+        assert result.ok is False
+        assert any("url_contains" in e for e in result.errors)
+
+    def test_candidate_urls_order(self):
+        from backend.literature.search import _candidate_download_urls
+
+        urls = _candidate_download_urls(
+            "https://oversea.cnki.net/docdown/x?q=1&invoice=2",
+            ["kns.cnki.net", "kns.cnki.net", "alt.example"],
+        )
+        assert urls[0] == "https://kns.cnki.net/docdown/x?q=1&invoice=2"
+        assert urls[1] == "https://alt.example/docdown/x?q=1&invoice=2"
+        assert urls[2].startswith("https://oversea.cnki.net/docdown/x?q=1")
+        assert len(urls) == 3
+
 
 class TestRecording:
     def test_observation_becomes_valid_draft_profile(self, tmp_path):
@@ -629,6 +704,54 @@ class _InteractiveDriver(_FakeDriver):
 
     def current_title(self):
         return self._title
+
+
+class _InterstitialDriver(_FakeDriver):
+    """模拟中间页站点：入口 href → 新标签 → 跳转后按回退主机导航下载。"""
+
+    def __init__(self):
+        super().__init__()
+        self.attrs = []
+        self.opened = []
+        self.focused = []
+        self.closed = []
+        self.tab_sleeps = []
+        self.navigations = []
+        self.entry_href = "https://www.xueshu789.cc/doDownload?url=x&ddata=y"
+        self.tabs_state = [
+            {
+                "tab_id": "t1",
+                "url": "https://oversea.cnki.net/docdown/fulltext/download?q=abc",
+                "active": True,
+            }
+        ]
+        self.navigate_errors = {}
+
+    def element_attr(self, selector, name="href"):
+        self.attrs.append((selector, name))
+        return self.entry_href
+
+    def open_tab(self, url):
+        self.opened.append(url)
+        return "t1"
+
+    def sleep(self, seconds):
+        self.tab_sleeps.append(seconds)
+
+    def tabs(self):
+        return self.tabs_state
+
+    def focus_tab(self, tab_id):
+        self.focused.append(tab_id)
+
+    def close_tab(self, tab_id):
+        self.closed.append(tab_id)
+
+    def navigate(self, url, wait_for=""):
+        self.navigations.append(url)
+        if url in self.navigate_errors:
+            raise RuntimeError(self.navigate_errors[url])
+        return url
 
 
 class TestInteractiveSearch:
