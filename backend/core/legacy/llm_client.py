@@ -1344,227 +1344,277 @@ class LLMClient:
             tools: OpenAI 格式工具 schema 列表（可选）
             tool_choice: "auto" | "none" | "required"
         """
-        client = self._get_client()
-
-        body: Dict[str, Any] = {
-            "model": self.config.model,
-            "messages": self._convert_messages(messages),
-            "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
-            "stream": True,
-            # OpenAI / DeepSeek / 多数兼容网关支持；不支持的由 run_loop
-            # 回退非流式（本方法只在首个事件前抛错，重放安全）。
-            "stream_options": {"include_usage": True},
-        }
-        if tools:
-            body["tools"] = tools
-            body["tool_choice"] = tool_choice or "auto"
-        if self.config.reasoning_effort is not None:
-            body["reasoning_effort"] = self.config.reasoning_effort
-        if self.config.thinking_budget is not None:
-            body["thinking_budget"] = self.config.thinking_budget
-
-        aggregator = StreamToolCallAggregator()
-        content_parts: List[str] = []
-        reasoning_parts: List[str] = []
-        finish_reason: Optional[str] = None
-        stream_model: str = self.config.model
-        stream_usage: Optional[Dict[str, Any]] = None
-        # Task 5 (2026-09-15): capture pricing snapshot before stream
-        price_snapshot = _capture_price_snapshot(
-            self.config.endpoint_id, self.config.model
-        )
-
-        # 2026-10-25: 动态超时调整 — 根据模型和上下文长度计算
-        dynamic_timeout = self.config.compute_dynamic_timeout(body["messages"])
-        # 超时在每次尝试开头设置（见下方 attempt_timeout），以受剩余预算约束。
-
-        # L3 重试退避（流式版）: 仅在"尚未产出任何增量"时重试——此时重放
-        # 安全（调用方没收到过任何事件）;已有增量后失败无法安全重放,按原
-        # 错误面终止（调用方语义见 run_loop）。
-        max_attempts, base_delay, max_delay, total_budget = _retry_settings()
-        attempt = 0
-        fallback_used = False
-        # 第二轮 C1: 首字延迟 / 总耗时计时（含重试等待，即用户实际等待的时间）
-        # 重试预算复用 stream_started —— 不额外取时钟，避免干扰调用方对时钟采样次数的假设。
+        hops = self._failover_hops()
+        hop_index = 0
+        hop_errors: List[str] = []
+        # 第二轮 C1: 首字延迟 / 总耗时计时（含重试等待与跨端点切换，即用户实际等待的时间）
         stream_started = time.monotonic()
         first_token_at: Optional[float] = None
-        # 2026-11-03: 预算现在计入在途请求耗时；记录上一次失败，供"预算不足以
-        # 再发起一次尝试"时保留原始错误类型/状态码。
         last_llm_err: Optional[LLMError] = None
-        has_failed_once = False
         while True:
-            attempt += 1
-            # 2026-11-03: 单次请求超时不再固定为 dynamic_timeout，而是受剩余
-            # 预算约束 —— 否则 180s 预算下仍可能多等一个完整超时（实测 86s）。
-            attempt_timeout = dynamic_timeout
-            if total_budget > 0 and has_failed_once:
-                elapsed_now = _retry_now() - stream_started
-                remaining_now = total_budget - elapsed_now
-                if has_failed_once:
-                    if remaining_now <= _LLM_RETRY_MIN_ATTEMPT_S:
-                        raise _retry_budget_exhausted_error(
-                            last_llm_err
-                            or LLMError(LLMErrorType.TIMEOUT, "重试预算耗尽"),
-                            attempt - 1,
-                            max_attempts,
-                            0.0,
-                            total_budget,
-                        )
-                    attempt_timeout = min(dynamic_timeout, remaining_now)
-                    # 退避结束、请求即将发出：让前端从"倒计时"切换到
-                    # "请求在途，已等待 Ns"（对标 Claude Code 的 Waiting 横幅）。
-                    yield (
-                        "retry_attempt_started",
-                        RetryAttemptStartedEvent(
-                            attempt=attempt,
-                            elapsed_s=max(0.0, elapsed_now),
-                            attempt_timeout_s=attempt_timeout,
-                            budget_remaining_s=max(0.0, remaining_now),
-                        ),
-                    )
-            client.timeout = httpx.Timeout(attempt_timeout)
+            hop = hops[hop_index]
+            client = (
+                self._get_client() if hop_index == 0 else self._get_client_for_hop(hop)
+            )
+            body = self._build_request_body(
+                hop, messages, tools, tool_choice, stream=True, include_usage=True
+            )
+
+            aggregator = StreamToolCallAggregator()
+            content_parts: List[str] = []
+            reasoning_parts: List[str] = []
+            finish_reason: Optional[str] = None
+            stream_model: str = hop.model
+            stream_usage: Optional[Dict[str, Any]] = None
+            # Task 5 (2026-09-15): capture pricing snapshot before stream
+            price_snapshot = _capture_price_snapshot(hop.endpoint_id, hop.model)
+
+            # 2026-10-25: 动态超时调整 — 根据模型和上下文长度计算
+            dynamic_timeout = self.config.compute_dynamic_timeout(body["messages"])
+            # 超时在每次尝试开头设置（见下方 attempt_timeout），以受剩余预算约束。
+
+            # L3 重试退避（流式版）: 仅在"尚未产出任何增量"时重试——此时重放
+            # 安全（调用方没收到过任何事件）;已有增量后失败无法安全重放,按原
+            # 错误面终止（调用方语义见 run_loop）。
+            max_attempts, base_delay, max_delay, total_budget = _retry_settings()
+            attempt = 0
+            fallback_used = False
+            # 2026-11-03: 预算现在计入在途请求耗时；记录上一次失败，供"预算不足以
+            # 再发起一次尝试"时保留原始错误类型/状态码。
+            has_failed_once = False
+            hop_failed = False
             try:
-                async with client.stream(
-                    "POST", "/v1/chat/completions", json=body
-                ) as response:
-                    if response.status_code >= 400:
-                        # 预读错误体：代理的 upstream_timeout 标记在 body 里；
-                        # 流式响应不预读则 .text 抛 ResponseNotRead，分类拿不到标记。
-                        await response.aread()
-                    response.raise_for_status()
-
-                    async for line in response.aiter_lines():
-                        if not line.startswith("data: "):
-                            continue
-                        data_str = line[6:]
-                        if data_str.strip() == "[DONE]":
-                            break
-                        try:
-                            data = json.loads(data_str)
-                        except json.JSONDecodeError:
-                            continue
-
-                        if isinstance(data.get("model"), str):
-                            stream_model = data["model"]
-                        if isinstance(data.get("usage"), dict) and data["usage"]:
-                            stream_usage = data["usage"]
-
-                        choices = data.get("choices", [])
-                        if not choices:
-                            continue
-                        choice = choices[0]
-                        if choice.get("finish_reason"):
-                            finish_reason = choice["finish_reason"]
-                        delta = choice.get("delta") or {}
-
-                        reasoning_piece = delta.get("reasoning_content") or delta.get(
-                            "reasoning"
-                        )
-                        if isinstance(reasoning_piece, str) and reasoning_piece:
-                            first_token_at = first_token_at or time.monotonic()
-                            reasoning_parts.append(reasoning_piece)
-                            yield ("reasoning_delta", reasoning_piece)
-
-                        content_piece = delta.get("content")
-                        if isinstance(content_piece, str) and content_piece:
-                            first_token_at = first_token_at or time.monotonic()
-                            content_parts.append(content_piece)
-                            yield ("content_delta", content_piece)
-
-                        if delta.get("tool_calls"):
-                            aggregator.feed(delta["tool_calls"])
-                break  # 流正常结束
-
-            except Exception as e:
-                try:
-                    self._raise_classified_error(e)  # 总是抛出
-                except LLMError as llm_err:
-                    last_llm_err = llm_err
-                    has_failed_once = True
-                    nothing_yielded = not content_parts and not reasoning_parts
-                    can_fallback = (
-                        not fallback_used
-                        and self.config.fallback_model
-                        and self.config.fallback_model != body.get("model")
-                    )
-                    # 已产出增量后失败无法安全重放：调用方（agent.run_loop 的
-                    # _saw_content_delta 契约）已把前一段增量实时下发给用户，
-                    # 换模型从零重放会造成内容重复/拼接错乱 — 无条件终止。
-                    if not nothing_yielded:
-                        raise
-                    if (
-                        attempt >= max_attempts
-                        or llm_err.type not in _RETRYABLE_ERROR_TYPES
-                    ):
-                        # D-1 (round5 批次 D): 主模型重试耗尽且未产出任何增量 →
-                        # 降级 fallback_model 再来一轮（每实例至多一次）。
-                        # 与 chat() 同口径：仅对可重试类型的失败降级；
-                        # 鉴权/参数类错误换模型也无济于事，直接 raise。
-                        if can_fallback and llm_err.type in _RETRYABLE_ERROR_TYPES:
-                            fallback_used = True
-                            body["model"] = self.config.fallback_model
-                            attempt = 0
-                            logger.warning(
-                                "LLM 流式主模型重试耗尽(%s), 降级 fallback model: %s",
-                                llm_err.message,
-                                self.config.fallback_model,
+                while True:
+                    attempt += 1
+                    # 2026-11-03: 单次请求超时不再固定为 dynamic_timeout，而是受剩余
+                    # 预算约束 —— 否则 180s 预算下仍可能多等一个完整超时（实测 86s）。
+                    attempt_timeout = dynamic_timeout
+                    if total_budget > 0 and has_failed_once:
+                        elapsed_now = _retry_now() - stream_started
+                        remaining_now = total_budget - elapsed_now
+                        if has_failed_once:
+                            if remaining_now <= _LLM_RETRY_MIN_ATTEMPT_S:
+                                raise _retry_budget_exhausted_error(
+                                    last_llm_err
+                                    or LLMError(LLMErrorType.TIMEOUT, "重试预算耗尽"),
+                                    attempt - 1,
+                                    max_attempts,
+                                    0.0,
+                                    total_budget,
+                                )
+                            attempt_timeout = min(dynamic_timeout, remaining_now)
+                            # 退避结束、请求即将发出：让前端从"倒计时"切换到
+                            # "请求在途，已等待 Ns"（对标 Claude Code 的 Waiting 横幅）。
+                            yield (
+                                "retry_attempt_started",
+                                RetryAttemptStartedEvent(
+                                    attempt=attempt,
+                                    elapsed_s=max(0.0, elapsed_now),
+                                    attempt_timeout_s=attempt_timeout,
+                                    budget_remaining_s=max(0.0, remaining_now),
+                                ),
                             )
+                    client.timeout = httpx.Timeout(attempt_timeout)
+                    try:
+                        async with client.stream(
+                            "POST", "/v1/chat/completions", json=body
+                        ) as response:
+                            if response.status_code >= 400:
+                                # 预读错误体：代理的 upstream_timeout 标记在 body 里；
+                                # 流式响应不预读则 .text 抛 ResponseNotRead，分类拿不到标记。
+                                await response.aread()
+                            response.raise_for_status()
+
+                            async for line in response.aiter_lines():
+                                if not line.startswith("data: "):
+                                    continue
+                                data_str = line[6:]
+                                if data_str.strip() == "[DONE]":
+                                    break
+                                try:
+                                    data = json.loads(data_str)
+                                except json.JSONDecodeError:
+                                    continue
+
+                                if isinstance(data.get("model"), str):
+                                    stream_model = data["model"]
+                                if isinstance(data.get("usage"), dict) and data["usage"]:
+                                    stream_usage = data["usage"]
+
+                                choices = data.get("choices", [])
+                                if not choices:
+                                    continue
+                                choice = choices[0]
+                                if choice.get("finish_reason"):
+                                    finish_reason = choice["finish_reason"]
+                                delta = choice.get("delta") or {}
+
+                                reasoning_piece = delta.get(
+                                    "reasoning_content"
+                                ) or delta.get("reasoning")
+                                if isinstance(reasoning_piece, str) and reasoning_piece:
+                                    first_token_at = first_token_at or time.monotonic()
+                                    reasoning_parts.append(reasoning_piece)
+                                    yield ("reasoning_delta", reasoning_piece)
+
+                                content_piece = delta.get("content")
+                                if isinstance(content_piece, str) and content_piece:
+                                    first_token_at = first_token_at or time.monotonic()
+                                    content_parts.append(content_piece)
+                                    yield ("content_delta", content_piece)
+
+                                if delta.get("tool_calls"):
+                                    aggregator.feed(delta["tool_calls"])
+                        break  # 流正常结束
+
+                    except Exception as e:
+                        try:
+                            self._raise_classified_error(e)  # 总是抛出
+                        except LLMError as llm_err:
+                            last_llm_err = llm_err
+                            has_failed_once = True
+                            nothing_yielded = not content_parts and not reasoning_parts
+                            can_fallback = (
+                                not fallback_used
+                                and hop.fallback_model
+                                and hop.fallback_model != body.get("model")
+                            )
+                            # 已产出增量后失败无法安全重放：调用方（agent.run_loop 的
+                            # _saw_content_delta 契约）已把前一段增量实时下发给用户，
+                            # 换模型从零重放会造成内容重复/拼接错乱 — 无条件终止。
+                            if not nothing_yielded:
+                                raise
+                            if (
+                                attempt >= max_attempts
+                                or llm_err.type not in _RETRYABLE_ERROR_TYPES
+                            ):
+                                # D-1 (round5 批次 D): 主模型重试耗尽且未产出任何增量 →
+                                # 降级 fallback_model 再来一轮（每实例至多一次）。
+                                # 与 chat() 同口径：仅对可重试类型的失败降级；
+                                # 鉴权/参数类错误换模型也无济于事，直接 raise。
+                                if can_fallback and llm_err.type in _RETRYABLE_ERROR_TYPES:
+                                    fallback_used = True
+                                    body["model"] = hop.fallback_model
+                                    attempt = 0
+                                    logger.warning(
+                                        "LLM 流式主模型重试耗尽(%s), 降级 fallback model: %s",
+                                        llm_err.message,
+                                        hop.fallback_model,
+                                    )
+                                    aggregator = StreamToolCallAggregator()
+                                    content_parts = []
+                                    reasoning_parts = []
+                                    finish_reason = None
+                                    stream_usage = None
+                                    continue
+                                raise
+                            delay = _retry_backoff_seconds(
+                                llm_err, attempt, base_delay, max_delay
+                            )
+                            elapsed_now = _retry_now() - stream_started
+                            budget_remaining: Optional[float] = None
+                            next_attempt_timeout: Optional[float] = None
+                            if total_budget > 0:
+                                budget_remaining = total_budget - (elapsed_now + delay)
+                                if budget_remaining < _LLM_RETRY_MIN_ATTEMPT_S:
+                                    raise _retry_budget_exhausted_error(
+                                        llm_err, attempt, max_attempts, delay, total_budget
+                                    )
+                                next_attempt_timeout = min(dynamic_timeout, budget_remaining)
+                            logger.warning(
+                                "LLM 流式请求失败(%s/%s): %s — %.1fs 后重试",
+                                attempt,
+                                max_attempts,
+                                llm_err.message,
+                                delay,
+                            )
+                            # 推送重试事件：与 content_delta 同一事件通道，agent.run_loop
+                            # 转成 AgentEvent 后由 SSE 下发，前端实时显示"重试中"。
+                            yield (
+                                "retry",
+                                RetryEvent(
+                                    attempt=attempt,
+                                    max_attempts=max_attempts,
+                                    error_type=llm_err.type.value,
+                                    error_message=llm_err.message,
+                                    delay=delay,
+                                    elapsed_s=max(0.0, elapsed_now),
+                                    attempt_timeout_s=next_attempt_timeout,
+                                    budget_total_s=total_budget
+                                    if total_budget > 0
+                                    else None,
+                                    budget_remaining_s=budget_remaining,
+                                ),
+                            )
+                            # 重置累积器,保证重放从零开始
                             aggregator = StreamToolCallAggregator()
                             content_parts = []
                             reasoning_parts = []
                             finish_reason = None
                             stream_usage = None
-                            continue
-                        raise
-                    delay = _retry_backoff_seconds(llm_err, attempt, base_delay, max_delay)
-                    elapsed_now = _retry_now() - stream_started
-                    budget_remaining: Optional[float] = None
-                    next_attempt_timeout: Optional[float] = None
-                    if total_budget > 0:
-                        budget_remaining = total_budget - (elapsed_now + delay)
-                        if budget_remaining < _LLM_RETRY_MIN_ATTEMPT_S:
-                            raise _retry_budget_exhausted_error(
-                                llm_err, attempt, max_attempts, delay, total_budget
-                            )
-                        next_attempt_timeout = min(dynamic_timeout, budget_remaining)
-                    logger.warning(
-                        "LLM 流式请求失败(%s/%s): %s — %.1fs 后重试",
-                        attempt,
-                        max_attempts,
-                        llm_err.message,
-                        delay,
-                    )
-                    # 推送重试事件：与 content_delta 同一事件通道，agent.run_loop
-                    # 转成 AgentEvent 后由 SSE 下发，前端实时显示"重试中"。
-                    yield (
-                        "retry",
-                        RetryEvent(
-                            attempt=attempt,
-                            max_attempts=max_attempts,
-                            error_type=llm_err.type.value,
-                            error_message=llm_err.message,
-                            delay=delay,
-                            elapsed_s=max(0.0, elapsed_now),
-                            attempt_timeout_s=next_attempt_timeout,
-                            budget_total_s=total_budget if total_budget > 0 else None,
-                            budget_remaining_s=budget_remaining,
-                        ),
-                    )
-                    # 重置累积器,保证重放从零开始
-                    aggregator = StreamToolCallAggregator()
-                    content_parts = []
-                    reasoning_parts = []
-                    finish_reason = None
-                    stream_usage = None
-                    # 2026-10-26: 退避等待期间每 5s 发一次 heartbeat 事件,
-                    # 喂前端 watchdog 防止误杀流。delay <= 0 时不 sleep。
-                    _hb_interval = 5.0
-                    _hb_elapsed = 0.0
-                    while _hb_elapsed < delay:
-                        await asyncio.sleep(min(_hb_interval, delay - _hb_elapsed))
-                        _hb_elapsed += _hb_interval
-                        yield ("heartbeat", None)
+                            # 2026-10-26: 退避等待期间每 5s 发一次 heartbeat 事件,
+                            # 喂前端 watchdog 防止误杀流。delay <= 0 时不 sleep。
+                            _hb_interval = 5.0
+                            _hb_elapsed = 0.0
+                            while _hb_elapsed < delay:
+                                await asyncio.sleep(min(_hb_interval, delay - _hb_elapsed))
+                                _hb_elapsed += _hb_interval
+                                yield ("heartbeat", None)
+            except LLMError as hop_err:
+                hop_failed = True
+                last_llm_err = hop_err
+
+            if not hop_failed:
+                self._record_hop_health(hop, True)
+                break
+
+            nothing_yielded = not content_parts and not reasoning_parts
+            self._record_hop_health(hop, False, last_llm_err.type.value)
+            hop_errors.append(
+                "%s: %s"
+                % (
+                    hop.endpoint_name or hop.endpoint_id or hop.base_url,
+                    last_llm_err.message,
+                )
+            )
+            if self._should_failover(
+                last_llm_err, nothing_yielded=nothing_yielded
+            ) and hop_index + 1 < len(hops):
+                next_hop = hops[hop_index + 1]
+                self._record_hop_failover(hop)
+                yield (
+                    "failover",
+                    FailoverEvent(
+                        from_endpoint=hop.endpoint_id,
+                        from_endpoint_name=hop.endpoint_name,
+                        to_endpoint=next_hop.endpoint_id,
+                        to_endpoint_name=next_hop.endpoint_name,
+                        reason=last_llm_err.type.value,
+                        hop_index=hop_index,
+                        total_hops=len(hops),
+                    ),
+                )
+                logger.warning(
+                    "LLM 流式端点失败(%s), 切换到下一端点: %s",
+                    hop.endpoint_id or hop.base_url,
+                    next_hop.endpoint_id or next_hop.base_url,
+                )
+                aggregator = StreamToolCallAggregator()
+                content_parts = []
+                reasoning_parts = []
+                finish_reason = None
+                stream_usage = None
+                hop_index += 1
+                continue
+            if len(hops) > 1 and nothing_yielded:
+                raise LLMError(
+                    last_llm_err.type,
+                    "%s（已尝试 %d 个端点：%s）"
+                    % (last_llm_err.message, len(hops), "；".join(hop_errors)),
+                    status_code=last_llm_err.status_code,
+                    retry_after=last_llm_err.retry_after,
+                )
+            raise last_llm_err
 
         raw_content = "".join(content_parts)
         reasoning_content = "".join(reasoning_parts) or None
@@ -1599,7 +1649,7 @@ class LLMClient:
                     usage_dict["completion_tokens"],
                     session_id=self.session_id,
                     cached_tokens=usage_dict["cached_tokens"],
-                    endpoint_id=self.config.endpoint_id,
+                    endpoint_id=hop.endpoint_id,
                     price_snapshot=price_snapshot,
                     context_breakdown=self._context_breakdown_snapshot(
                         body, usage_dict["prompt_tokens"]

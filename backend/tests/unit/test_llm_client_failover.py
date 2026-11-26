@@ -202,3 +202,83 @@ async def test_fallback_model_stays_inside_primary_hop():
     assert response.content == "ok"
     assert models == ["m1", "m1", "mini", "mini"]
     assert backup.post.await_args_list[0].kwargs["json"]["model"] == "m1"
+
+
+def _stream_ok(lines):
+    class _Ctx:
+        async def __aenter__(self):
+            resp = AsyncMock()
+            resp.status_code = 200
+            resp.raise_for_status = Mock()
+
+            async def _lines():
+                for line in lines:
+                    yield line
+
+            resp.aiter_lines = lambda: _lines()
+            return resp
+
+        async def __aexit__(self, *args):
+            return False
+
+    return _Ctx()
+
+
+@pytest.mark.asyncio()
+async def test_stream_fails_over_before_first_delta():
+    client = _client([HOP2])
+    primary, backup = AsyncMock(), AsyncMock()
+    primary.stream = Mock(side_effect=httpx.ConnectError("down"))
+    backup.stream = Mock(
+        return_value=_stream_ok(
+            [
+                'data: {"model":"m1","choices":[{"delta":{"content":"ok"}}]}',
+                "data: [DONE]",
+            ]
+        )
+    )
+    events = []
+    with patch.object(client, "_get_client", return_value=primary), patch.object(
+        client, "_get_client_for_hop", return_value=backup
+    ):
+        async for event in client.chat_stream_events(
+            [{"role": "user", "content": "hi"}]
+        ):
+            events.append(event)
+    kinds = [kind for kind, _ in events]
+    assert "failover" in kinds
+    assert ("content_delta", "ok") in events
+
+
+@pytest.mark.asyncio()
+async def test_stream_does_not_failover_after_first_delta():
+    client = _client([HOP2])
+    primary, backup = AsyncMock(), AsyncMock()
+
+    class _BrokenCtx:
+        async def __aenter__(self):
+            resp = AsyncMock()
+            resp.status_code = 200
+            resp.raise_for_status = Mock()
+
+            async def _lines():
+                yield 'data: {"model":"m1","choices":[{"delta":{"content":"partial"}}]}'
+                raise httpx.ReadError("cut")
+
+            resp.aiter_lines = lambda: _lines()
+            return resp
+
+        async def __aexit__(self, *args):
+            return False
+
+    primary.stream = Mock(return_value=_BrokenCtx())
+    backup.stream = Mock(return_value=_stream_ok(["data: [DONE]"]))
+    with patch.object(client, "_get_client", return_value=primary), patch.object(
+        client, "_get_client_for_hop", return_value=backup
+    ):
+        with pytest.raises(LLMError):
+            async for _event in client.chat_stream_events(
+                [{"role": "user", "content": "hi"}]
+            ):
+                pass
+    assert backup.stream.call_count == 0
