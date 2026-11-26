@@ -48,6 +48,10 @@ export interface BrowserSessionInfo {
   alive: boolean;
   persistent: boolean;
   profile_name: string;
+  /** 启动该实例的聊天会话 id；空串 = 无归属（旧实例/基础设施）。 */
+  owner?: string;
+  /** 是否有浏览器工具正在使用该实例。 */
+  busy?: boolean;
 }
 
 export interface BrowserStatusResponse {

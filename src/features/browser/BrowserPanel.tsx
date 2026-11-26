@@ -14,7 +14,6 @@ import { toast } from 'sonner';
 import {
   fetchBrowserAudit,
   fetchBrowserControl,
-  fetchBrowserControlSessions,
   fetchPendingConfirmations,
   resolveConfirmation,
   setBrowserControl,
@@ -23,6 +22,7 @@ import {
   type BrowserPendingConfirmation,
   type ConfirmationDecision,
 } from '../../shared/api/browserControlClient';
+import { fetchBrowserStatus } from '../../shared/api/browserSettingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { buildLocalImageSrc } from '../../shared/lib/localImageSrc';
 import { useStore, type ToolCall } from '../../shared/lib/store';
@@ -249,8 +249,10 @@ export function BrowserPanel({
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditEntries, setAuditEntries] = useState<BrowserAuditEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
-  /** 无 browser_meta 时从存活会话 / 无过滤确认项发现到的会话 id（C1c）。 */
-  const [discoveredSessionId, setDiscoveredSessionId] = useState<string | null>(null);
+  /** 本对话名下的浏览器实例（/browser/status.owner === conversationId）。 */
+  const [ownedSessionIds, setOwnedSessionIds] = useState<string[] | null>(null);
+  /** 无归属的旧实例（owner 为空）：仅用于兼容本对话已记住的候选。 */
+  const [legacySessionIds, setLegacySessionIds] = useState<string[] | null>(null);
 
   const reportBounds = useCallback(() => {
     const apiRef = panelApi();
@@ -300,13 +302,26 @@ export function BrowserPanel({
   }, [messages, conversationId, toolCalls]);
   const recentCalls = browserCalls.slice(-MAX_STEPS);
   const toolSessionId = useMemo(() => latestBrowserSessionId(browserCalls), [browserCalls]);
-  // 会话恢复：工具结果 → 本对话记忆 → 存活会话发现 → 待确认项自带 session。
-  const sessionId =
-    toolSessionId ?? rememberedSessionId ?? discoveredSessionId ?? pending?.session_id ?? null;
+  const ownedSet = useMemo(() => new Set(ownedSessionIds ?? []), [ownedSessionIds]);
+  const legacySet = useMemo(() => new Set(legacySessionIds ?? []), [legacySessionIds]);
+  // 会话恢复：工具结果 → 本对话记忆（两者都必须是本对话名下实例或旧的无归属
+  // 实例）→ 唯一自有实例。绝不回退到其他对话的实例。
+  const candidateSessionId = toolSessionId ?? rememberedSessionId;
+  const sessionId = (() => {
+    if (candidateSessionId) {
+      if (ownedSessionIds === null) return candidateSessionId; // status 未到时先用本对话候选
+      if (ownedSet.has(candidateSessionId) || legacySet.has(candidateSessionId)) {
+        return candidateSessionId;
+      }
+    }
+    if (ownedSessionIds !== null && ownedSessionIds.length === 1) return ownedSessionIds[0];
+    return null;
+  })();
 
-  // 切对话：清掉上一对话的瞬时发现态 / 旧确认条（会话记忆按对话键保留）。
+  // 切对话：清掉上一对话的归属缓存 / 旧确认条（会话记忆按对话键保留）。
   useEffect(() => {
-    setDiscoveredSessionId(null);
+    setOwnedSessionIds(null);
+    setLegacySessionIds(null);
     setPending(null);
     setControlState('agent');
   }, [conversationId]);
@@ -328,26 +343,22 @@ export function BrowserPanel({
     const target = sessionId;
     let cancelled = false;
     const load = (): void => {
+      if (conversationId) {
+        void fetchBrowserStatus()
+          .then((status) => {
+            if (cancelled) return;
+            const alive = status.sessions.filter((item) => item.alive);
+            setOwnedSessionIds(
+              alive.filter((item) => item.owner === conversationId).map((item) => item.id),
+            );
+            setLegacySessionIds(alive.filter((item) => !item.owner).map((item) => item.id));
+          })
+          .catch(() => undefined);
+      }
       if (!target) {
-        // C1c：还没有任何 browser_meta 时也要能发现会话/待确认项 ——
-        // 取唯一存活会话，并轮询无过滤确认项，避免首次确认永久卡死。
-        void fetchBrowserControlSessions()
-          .then((sessions) => {
-            if (cancelled) return;
-            const alive = sessions.filter((item) => item.alive);
-            if (alive.length === 1) setDiscoveredSessionId(alive[0].session_id);
-          })
-          .catch(() => undefined);
-        void fetchPendingConfirmations()
-          .then((items) => {
-            if (cancelled) return;
-            const first = items[0] ?? null;
-            setPending(first);
-            if (first?.session_id) {
-              setDiscoveredSessionId((prev) => prev ?? first.session_id);
-            }
-          })
-          .catch(() => undefined);
+        // 本对话没有可归属的浏览器：清空本地状态，绝不认领其他会话的实例/确认项。
+        setPending(null);
+        setControlState('agent');
         return;
       }
       void fetchBrowserControl(target)
@@ -357,18 +368,7 @@ export function BrowserPanel({
         .catch(() => undefined);
       void fetchPendingConfirmations(target)
         .then((items) => {
-          if (cancelled) return;
-          if (items[0]) {
-            setPending(items[0]);
-            return;
-          }
-          // 会话过滤 0 条时回退到无过滤列表：session_id 推导错误时
-          // pending 仍必须浮出（多会话场景也以实际待确认为准）。
-          void fetchPendingConfirmations()
-            .then((all) => {
-              if (!cancelled) setPending(all[0] ?? null);
-            })
-            .catch(() => undefined);
+          if (!cancelled) setPending(items[0] ?? null);
         })
         .catch(() => undefined);
     };
@@ -378,7 +378,7 @@ export function BrowserPanel({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [sessionId]);
+  }, [sessionId, conversationId]);
 
   // 截图加载失败时回退展示路径（截图位于数据目录，可能不在 sage-file 白名单内）。
   useEffect(() => {
