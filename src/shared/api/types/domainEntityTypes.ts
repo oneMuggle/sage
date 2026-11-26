@@ -190,10 +190,44 @@ export type EvolutionTaskName =
   | 'skill_consolidation'
   | 'memory_reflection';
 
-/** `scheduled_evolution_run` 的归一化返回（result 中的统计字段因任务而异） */
-export interface EvolutionTaskRunResult {
+/** 进化任务运行状态字段（与后端 EvolutionRunRegistry 快照对齐）。 */
+export type EvolutionRunState = 'running' | 'succeeded' | 'failed';
+
+/** 进化任务最近一次运行快照 —— GET /scheduled/evolution/tasks 的 run 字段。 */
+export interface EvolutionRunSnapshot {
+  run_id: string;
+  name: string;
+  state: EvolutionRunState;
+  /** manual / scheduled / catch_up */
+  trigger: string;
+  /** 阶段键：start / collect / group / dedupe / llm / finalize / done */
+  phase: string | null;
+  phase_label: string | null;
+  /** 阶段指标（scanned、llm_done、llm_total 等，随任务而异） */
+  progress: Record<string, number | string | boolean>;
+  /** epoch 毫秒 */
+  started_at: number | null;
+  finished_at: number | null;
+  duration_ms: number | null;
+  /** 任务统计（终态才有；字段随任务而异） */
+  result: Record<string, unknown> | null;
+  error: string | null;
+}
+
+/** GET /scheduled/evolution/tasks 的单项。 */
+export interface EvolutionTaskStatusEntry {
   name: EvolutionTaskName;
-  result: Record<string, unknown>;
+  job_id: string;
+  run: EvolutionRunSnapshot | null;
+}
+
+/** POST /scheduled/evolution/{name}/run 的响应（202 异步触发）。 */
+export interface EvolutionTaskTriggerResult {
+  name: EvolutionTaskName;
+  ok: boolean;
+  /** false = 该任务已在运行，本次请求幂等 attach 到当前 run */
+  started: boolean;
+  run: EvolutionRunSnapshot | null;
 }
 
 /**
