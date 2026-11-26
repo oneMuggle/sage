@@ -100,6 +100,7 @@ from backend.api.chat_stream_registry import StreamRegistry
 # B1 (P11): 记忆嵌入器状态/切换 API
 from backend.api.diagnostic_routes import router as diagnostic_router
 from backend.api.embedder_routes import router as embedder_router
+from backend.api.endpoint_health_routes import router as endpoint_health_router
 from backend.api.export_routes import router as export_router
 from backend.api.feedback_routes import router as feedback_router
 from backend.api.git_status_routes import router as git_status_router
@@ -1617,6 +1618,7 @@ app.include_router(chat_attachment_router, prefix="/api/v1")
 
 # Model catalog: candidate review, overrides, snapshot import/export, OpenRouter sync
 app.include_router(build_model_catalog_router(), prefix="/api/v1/model-catalog")
+app.include_router(endpoint_health_router, prefix="/api/v1")
 
 # Smart model routing: POST /api/v1/routing/route
 from backend.api.routing_routes import build_router as build_routing_router
