@@ -64,6 +64,8 @@ const TOP_KEYS: ReadonlySet<keyof AppSettings> = new Set([
   // 2026-10-27: 会话标题专用模型 id — 同样会被 sanitizeForBackend 静默丢弃，
   // 漏了后端 title_generator 永远读不到配置。
   'titleModelId',
+  // 2026-11-26: 端点故障转移配置段 —— 漏了后端永远读不到开关与阈值。
+  'failover',
   // 'memoryServerSync' 不在此白名单内 — 后端已下线该字段, 前端发出去会 400.
 ]);
 const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([
@@ -85,6 +87,8 @@ const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([
   // 2026-11-08: 内网救援工具写入时间戳 (ms epoch) —— 漏了会被 sanitizeForBackend
   // 静默丢弃，导致后端已更新的 key 被旧本地缓存覆盖。
   'apiKeyUpdatedAt',
+  // 2026-11-26: 故障转移优先级 —— 漏了后端构链时无法按用户排序。
+  'priority',
   // 'localModelPath' 不在此白名单内 — UI 已隐藏, 后端白名单已收紧.
 ]);
 const SNAKE_KEYS_TO_DROP: ReadonlySet<string> = new Set([

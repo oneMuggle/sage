@@ -21,6 +21,7 @@ from backend.data.settings_canonicalizer import (
     ALIASES,
     LEGAL_DISCOVERED_MODEL_KEYS,
     LEGAL_ENDPOINT_KEYS,
+    LEGAL_FAILOVER_KEYS,
     LEGAL_MODEL_SELECTION_KEYS,
     LEGAL_MODEL_SELECTIONS_KEYS,
     LEGAL_ORCH_KEYS,
@@ -66,6 +67,8 @@ EXPECTED_TOP_KEYS = frozenset(
         "routing",
         # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键）
         "titleModelId",
+        # 2026-11-26: 端点故障转移配置段
+        "failover",
     }
 )
 
@@ -97,6 +100,8 @@ def test_legal_endpoint_keys_is_stable() -> None:
                 "quota",
                 # 2026-11-08: 内网救援工具写入时间戳
                 "apiKeyUpdatedAt",
+                # 2026-11-26: 故障转移优先级
+                "priority",
             }
         )
         == LEGAL_ENDPOINT_KEYS
@@ -106,6 +111,21 @@ def test_legal_endpoint_keys_is_stable() -> None:
 def test_legal_quota_keys_is_stable() -> None:
     """LEGAL_QUOTA_KEYS 是 EndpointQuota 2 字段 (2026-09-18)."""
     assert frozenset({"dailyTokens", "monthlyBudgetUsd"}) == LEGAL_QUOTA_KEYS
+
+
+def test_legal_failover_keys_is_stable() -> None:
+    """LEGAL_FAILOVER_KEYS 是 FailoverSettings 4 字段 (2026-11-26)."""
+    assert (
+        frozenset(
+            {
+                "enabled",
+                "probeIntervalMs",
+                "cooldownMs",
+                "consecutiveFailThreshold",
+            }
+        )
+        == LEGAL_FAILOVER_KEYS
+    )
 
 
 def test_legal_model_selection_keys_is_stable() -> None:
