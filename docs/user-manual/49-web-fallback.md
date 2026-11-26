@@ -97,6 +97,11 @@ http://127.0.0.1:8765/?token=xxxxxxxxxxxxxxxx
 命令行窗口里打印的地址（形如 `http://127.0.0.1:8765/?token=…`）粘贴到已安装的
 Chrome/Firefox 地址栏打开。
 
+> **用 Firefox/Chrome 仍白屏？** 按 F12 打开开发者工具，若控制台提示"使用了
+> 不允许的 MIME 类型（text/plain）"，说明后端把 JS 模块按 `text/plain` 下发
+> （Windows 注册表把 `.js` 登记成了 `text/plain`）。升级到包含 2026-11-26
+> 修复的版本即可，无需修改浏览器设置或注册表。
+
 **检查后端是否启动：**
 
 ```bash
