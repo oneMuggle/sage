@@ -1292,7 +1292,7 @@ def _build_interact_expression(  # noqa: PLR0911 — 每个动作分支独立返
     key: str,
     clear: bool,
     ref: str,
-    name: str = "",
+    attr_name: str = "",
     frame_owner: Optional[Dict[str, str]] = None,
 ) -> str:
     """按定位优先级构造交互 JS（ref > selector > text，scroll 无定位）。
@@ -1302,7 +1302,7 @@ def _build_interact_expression(  # noqa: PLR0911 — 每个动作分支独立返
     """
     frame_name = str((frame_owner or {}).get("name") or "")
     if action == "attr":
-        snippet = _js_attr_element(name or "href")
+        snippet = _js_attr_element(attr_name or "href")
         if ref and frame_owner:
             return build_frame_ref_expression(snippet, ref, frame_name)
         if ref:
@@ -2070,7 +2070,7 @@ class BrowserInteractTool(BaseTool):
                         ],
                         "description": "要执行的动作",
                     },
-                    "name": {
+                    "attr_name": {
                         "type": "string",
                         "description": "attr 动作要读取的元素属性名（默认 href）",
                     },
@@ -2114,7 +2114,7 @@ class BrowserInteractTool(BaseTool):
         ref: str = "",
         browser_id: str = "",
         path: str = "",
-        name: str = "",
+        attr_name: str = "",
         **kwargs: Any,
     ) -> ToolResult:
         rejection = _validate_interact_args(
@@ -2122,7 +2122,7 @@ class BrowserInteractTool(BaseTool):
         )
         if rejection is not None:
             return rejection
-        name = (name or "").strip() or "href"
+        attr_name = (attr_name or "").strip() or "href"
 
         upload_file: Optional[Path] = None
         expression = ""
@@ -2229,7 +2229,7 @@ class BrowserInteractTool(BaseTool):
                     key,
                     bool(clear),
                     ref,
-                    name=name,
+                    attr_name=attr_name,
                     frame_owner=frame_owner,
                 )
             # M4 敏感动作：先取目标元数据再分类；hard_block 不允许用户放行。

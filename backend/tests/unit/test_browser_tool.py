@@ -842,7 +842,7 @@ def test_interact_attr_returns_attribute_value(stubbed):
         }
     )
     result = _tool(BrowserInteractTool).execute(
-        action="attr", selector="a.downloadlink", name="href", browser_id="b1"
+        action="attr", selector="a.downloadlink", attr_name="href", browser_id="b1"
     )
     assert result.success is True
     assert result.content["info"].startswith("https://www.xueshu789.cc/doDownload")

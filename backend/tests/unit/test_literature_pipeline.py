@@ -743,6 +743,66 @@ class TestSageToolDriver:
         }
         assert SageToolDriver(call).wait_download() == "/b.pdf"
 
+    def test_element_attr_reads_info(self):
+        from backend.literature.sage_driver import SageToolDriver
+
+        call = _FakeCall()
+        call.responses["browser_interact"] = {
+            "action": "attr",
+            "info": "https://www.xueshu789.cc/doDownload?url=x&ddata=y",
+        }
+        driver = SageToolDriver(call)
+        value = driver.element_attr("table tbody tr a.downloadlink")
+        assert value.startswith("https://www.xueshu789.cc/doDownload")
+        assert call.calls[-1] == (
+            "browser_interact",
+            {
+                "action": "attr",
+                "selector": "table tbody tr a.downloadlink",
+                "attr_name": "href",
+            },
+        )
+
+    def test_tabs_lists_dicts(self):
+        from backend.literature.sage_driver import SageToolDriver
+
+        call = _FakeCall()
+        call.responses["browser_tabs"] = {
+            "tabs": [
+                {
+                    "tab_id": "t1",
+                    "url": "https://oversea.cnki.net/docdown?q=1",
+                    "active": True,
+                },
+                "bad-entry",
+            ]
+        }
+        driver = SageToolDriver(call)
+        tabs = driver.tabs()
+        assert tabs == [
+            {
+                "tab_id": "t1",
+                "url": "https://oversea.cnki.net/docdown?q=1",
+                "active": True,
+            }
+        ]
+
+    def test_open_focus_close_tab(self):
+        from backend.literature.sage_driver import SageToolDriver
+
+        call = _FakeCall()
+        call.responses["browser_tabs"] = {"tab_id": "t9"}
+        driver = SageToolDriver(call)
+        assert driver.open_tab("https://a/do") == "t9"
+        assert call.calls[-1] == (
+            "browser_tabs",
+            {"action": "create", "url": "https://a/do"},
+        )
+        driver.focus_tab("t9")
+        assert call.calls[-1] == ("browser_tabs", {"action": "switch", "tab_id": "t9"})
+        driver.close_tab("t9")
+        assert call.calls[-1] == ("browser_tabs", {"action": "close", "tab_id": "t9"})
+
     def test_fetch_text_returns_content_and_tracks_page(self):
         from backend.literature.sage_driver import SageToolDriver
 
