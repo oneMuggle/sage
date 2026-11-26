@@ -57,6 +57,7 @@ function makeRunSnapshot(overrides: Record<string, unknown> = {}) {
     duration_ms: null,
     result: null,
     error: null,
+    cancel_requested: false,
     ...overrides,
   };
 }
@@ -223,5 +224,36 @@ describe('EvolutionPanel 状态显示', () => {
     expect(secondButton).toBeDisabled();
     expect(screen.getByText(/整理中/)).toBeTruthy();
     expect(screen.getByTestId('evolution-run-progress')).toBeTruthy();
+  });
+
+  it('运行中显示取消按钮，点击后切到「取消中…」并禁用', async () => {
+    let currentRun: Record<string, unknown> = makeRunSnapshot();
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_evolution_logs') return [makeLog()];
+      if (cmd === 'scheduled_evolution_run') {
+        return { ok: true, started: true, run: currentRun };
+      }
+      if (cmd === 'scheduled_evolution_cancel') {
+        currentRun = makeRunSnapshot({ cancel_requested: true });
+        return { ok: true, cancelled: true, run: currentRun };
+      }
+      if (cmd === 'scheduled_evolution_tasks') {
+        return tasksPayload(currentRun);
+      }
+      return null;
+    });
+
+    render(<EvolutionPanel />);
+    const runButton = await screen.findByTestId('evolution-run-memory_reflection');
+    fireEvent.click(runButton);
+
+    const cancelButton = await screen.findByTestId('evolution-run-cancel');
+    expect(cancelButton).toHaveTextContent('取消');
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('evolution-run-cancel')).toHaveTextContent('取消中…');
+    });
+    expect(screen.getByTestId('evolution-run-cancel')).toBeDisabled();
   });
 });

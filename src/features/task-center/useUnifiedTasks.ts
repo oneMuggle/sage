@@ -4,6 +4,7 @@
  */
 import { useEffect, useMemo, useRef } from 'react';
 
+import { useEvolutionRunStore } from '../../entities/evolution/evolutionRunStore';
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import { useRunDirectoryStore } from '../../entities/orchestration/runDirectoryStore';
 import { useStore } from '../../shared/lib/store';
@@ -18,6 +19,7 @@ import {
   normalizeCanonicalRun,
   normalizeCanonicalTask,
   normalizeChatTask,
+  normalizeEvolutionRun,
   normalizeGoalTask,
   normalizeLaneTask,
   normalizeRegistryTask,
@@ -55,6 +57,8 @@ export function useUnifiedTasks(): UnifiedTasksResult {
   const goals = useUnifiedTaskStore((s) => s.goals);
   const todos = useUnifiedTaskStore((s) => s.todos);
   const scheduledTasks = useUnifiedTaskStore((s) => s.scheduledTasks);
+  // 2026-11-26 P1: 进化任务运行快照（仅本 session 内可见的状态源）
+  const evolutionRuns = useEvolutionRunStore((s) => s.runs);
   const loading = useUnifiedTaskStore((s) => s.loading);
   const error = useUnifiedTaskStore((s) => s.error);
 
@@ -176,6 +180,10 @@ export function useUnifiedTasks(): UnifiedTasksResult {
       if (e) entries.push(e);
     }
 
+    for (const run of Object.values(evolutionRuns)) {
+      entries.push(normalizeEvolutionRun(run));
+    }
+
     return entries.sort(compareUnifiedTasks);
   }, [
     registryTasks,
@@ -185,6 +193,7 @@ export function useUnifiedTasks(): UnifiedTasksResult {
     goals,
     todos,
     scheduledTasks,
+    evolutionRuns,
     streamSessions,
     directoryRuns,
   ]);

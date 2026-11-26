@@ -41,6 +41,8 @@ interface EvolutionRunStoreState {
   error: string | null;
   refresh: () => Promise<void>;
   trigger: (name: string) => Promise<EvolutionRunSnapshot | null>;
+  /** 协作式取消：置后端取消标志并刷新快照（任务在检查点响应）。 */
+  cancel: (name: string) => Promise<EvolutionRunSnapshot | null>;
   /** 测试用：清空状态并停止轮询 */
   reset: () => void;
 }
@@ -80,8 +82,10 @@ export const useEvolutionRunStore = create<EvolutionRunStoreState>((set, get) =>
       const label = TASK_LABELS[name] ?? name;
       if (run.state === 'succeeded') {
         toast.success(`${label}完成`);
-      } else {
+      } else if (run.state === 'failed') {
         toast.error(`${label}失败${run.error ? `：${run.error}` : ''}`);
+      } else {
+        toast.info(`${label}已取消`);
       }
     }
     set({ runs: next, error: null });
@@ -120,6 +124,19 @@ export const useEvolutionRunStore = create<EvolutionRunStoreState>((set, get) =>
       }
       // 立即取回新快照（running / 幂等 attach），再确保轮询持续 ——
       // 即使组件此刻卸载，store 层定时器仍会把任务推进到终态。
+      await get().refresh();
+      ensurePolling();
+      return get().runs[name] ?? null;
+    },
+
+    async cancel(name: string): Promise<EvolutionRunSnapshot | null> {
+      const raw = await invoke<unknown>('scheduled_evolution_cancel', { name });
+      const body = (raw ?? {}) as Record<string, unknown>;
+      if (body.ok === false) {
+        throw new Error(typeof body.detail === 'string' ? body.detail : '取消失败');
+      }
+      // 立即刷新：snapshot 的 cancel_requested 让 UI 切到「取消中…」，
+      // 任务在检查点响应后状态收敛为 cancelled。
       await get().refresh();
       ensurePolling();
       return get().runs[name] ?? null;

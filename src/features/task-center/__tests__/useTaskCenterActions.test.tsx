@@ -22,6 +22,7 @@ vi.mock('../../../shared/api/scheduledClient', () => ({
 vi.mock('../../send-message/useChat', () => ({ cancelSessionStream: vi.fn() }));
 
 import { cancelGoal, pauseGoal, startGoal } from '../../../entities/autonomous-goals/goalApi';
+import { useEvolutionRunStore } from '../../../entities/evolution/evolutionRunStore';
 import { useOrchestrationFocusStore } from '../../../entities/orchestration/orchestrationFocusStore';
 import { invoke } from '../../../shared/api/desktopInvoke';
 import { scheduledClient } from '../../../shared/api/scheduledClient';
@@ -68,6 +69,7 @@ describe('useTaskCenterActions', () => {
     probedPath = '';
     // open() 会写 taskCenterStore 的抽屉状态，跨用例清理避免顺序耦合
     useTaskCenterStore.setState({ shellStream: null, delivery: null });
+    useEvolutionRunStore.getState().reset();
   });
 
   it('M2.4: subagent-thread 打开 → 记录 focus 请求并路由到会话', () => {
@@ -129,6 +131,24 @@ describe('useTaskCenterActions', () => {
       ),
     );
     expect(invoke).toHaveBeenCalledWith('shell_kill', { id: 'sh-9' });
+  });
+
+  it('evolution cancel 走 invoke(scheduled_evolution_cancel)', async () => {
+    vi.mocked(invoke).mockResolvedValue({} as never);
+    const { result } = renderHook(() => useTaskCenterActions(), { wrapper });
+    await act(() =>
+      result.current.cancel(
+        entry({
+          id: 'evolution:memory_reflection',
+          source: 'evolution',
+          detailPath: '/settings?tab=evolution',
+          cancelRef: { source: 'evolution', rawId: 'memory_reflection' },
+        }),
+      ),
+    );
+    expect(invoke).toHaveBeenCalledWith('scheduled_evolution_cancel', {
+      name: 'memory_reflection',
+    });
   });
 
   it('lane cancel 调 laneBoardStore.cancel 并 await', async () => {
