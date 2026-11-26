@@ -1,8 +1,8 @@
 /**
- * R17-B: memoryApi.runConsolidation 封装测试。
+ * 2026-11-26: memoryApi.runEvolutionTask 触发器语义测试。
  *
- * mock desktopInvoke.invoke，验证通道名、统计数字归一（后端缺字段 → 0）、
- * 以及 ok=false（任务执行失败）的语义化抛错。
+ * 后端 POST /scheduled/evolution/{name}/run 改为 202 异步契约：
+ * 立即返回 {name, ok, started, run}，结果经 scheduled_evolution_tasks 轮询。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,63 +14,56 @@ vi.mock('../desktopInvoke', () => ({
 
 import { memoryApi } from '../memoryApi';
 
-describe('memoryApi.runConsolidation (R17-B)', () => {
+const runningSnapshot = {
+  run_id: 'run-1',
+  name: 'memory_reflection',
+  state: 'running',
+  trigger: 'manual',
+  phase: 'start',
+  phase_label: '准备中',
+  progress: {},
+  started_at: 1_700_000_000_000,
+  finished_at: null,
+  duration_ms: null,
+  result: null,
+  error: null,
+};
+
+describe('memoryApi.runEvolutionTask (async trigger)', () => {
   beforeEach(() => {
     mockInvoke.mockReset();
   });
 
-  it('routes through scheduled_evolution_run and returns normalized stats', async () => {
-    mockInvoke.mockResolvedValue({
-      name: 'memory_consolidation',
-      ok: true,
-      result: { promoted: 3, decayed: 7, total: 10 },
-    });
-
-    await expect(memoryApi.runConsolidation()).resolves.toEqual({
-      promoted: 3,
-      decayed: 7,
-      total: 10,
-    });
-    expect(mockInvoke).toHaveBeenCalledWith('scheduled_evolution_run', {
-      name: 'memory_consolidation',
-    });
-  });
-
-  it('coerces malformed stats to zeros', async () => {
-    mockInvoke.mockResolvedValue({ ok: true, result: { promoted: 'x' } });
-
-    await expect(memoryApi.runConsolidation()).resolves.toEqual({
-      promoted: 0,
-      decayed: 0,
-      total: 0,
-    });
-  });
-
-  it('throws a readable error when the task failed (ok=false)', async () => {
-    mockInvoke.mockResolvedValue({ ok: false, result: {} });
-
-    await expect(memoryApi.runConsolidation()).rejects.toThrow(/失败/);
-  });
-});
-
-describe('memoryApi.runEvolutionTask (memory evolution revival)', () => {
-  beforeEach(() => {
-    mockInvoke.mockReset();
-  });
-
-  it('routes arbitrary task names and returns raw stats', async () => {
+  it('routes through scheduled_evolution_run and returns the trigger snapshot', async () => {
     mockInvoke.mockResolvedValue({
       name: 'memory_reflection',
       ok: true,
-      result: { deduped: 2, merged: 1, consolidated: 0 },
+      started: true,
+      run: runningSnapshot,
     });
 
     await expect(memoryApi.runEvolutionTask('memory_reflection')).resolves.toEqual({
       name: 'memory_reflection',
-      result: { deduped: 2, merged: 1, consolidated: 0 },
+      ok: true,
+      started: true,
+      run: runningSnapshot,
     });
     expect(mockInvoke).toHaveBeenCalledWith('scheduled_evolution_run', {
       name: 'memory_reflection',
+    });
+  });
+
+  it('marks started=false when the backend attaches to a running task', async () => {
+    mockInvoke.mockResolvedValue({
+      name: 'memory_consolidation',
+      ok: true,
+      started: false,
+      run: runningSnapshot,
+    });
+
+    await expect(memoryApi.runEvolutionTask('memory_consolidation')).resolves.toMatchObject({
+      started: false,
+      run: runningSnapshot,
     });
   });
 

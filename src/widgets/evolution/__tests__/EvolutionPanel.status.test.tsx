@@ -1,16 +1,19 @@
 /**
- * EvolutionPanel — 进化日志显示回归测试。
+ * EvolutionPanel — 进化日志与运行态显示回归测试。
  *
- * 覆盖三个历史 bug:
- *   1. 状态值不匹配 —— 后端写 'success'，旧前端只认 'completed'，
- *      导致所有记录显示成灰色原始英文。
- *   2. 时间戳单位错误 —— 后端 created_at 是 Unix 秒，前端当毫秒用，
- *      日期显示成 1970 年。
- *   3. 错误静默吞掉 —— invoke 失败时页面空白，用户无感知。
+ * 覆盖历史 bug:
+ *   1. 状态值不匹配 —— 后端写 'success'，旧前端只认 'completed'
+ *   2. 时间戳单位错误 —— 后端 created_at 是 Unix 秒
+ *   3. 错误静默吞掉 —— invoke 失败时页面空白
+ *
+ * 2026-11-26 增补：手动任务运行态由 evolutionRunStore 持有 ——
+ * 触发后显示阶段进度；重新挂载（模拟切 tab / 去聊天页）状态不丢；
+ * 完成后的统计摘要立即出现（游标不展示）。
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useEvolutionRunStore } from '../../../entities/evolution/evolutionRunStore';
 import { EvolutionPanel } from '../EvolutionPanel';
 
 const invokeMock = vi.fn();
@@ -33,9 +36,51 @@ function makeLog(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeRunSnapshot(overrides: Record<string, unknown> = {}) {
+  return {
+    run_id: 'run-1',
+    name: 'memory_reflection',
+    state: 'running',
+    trigger: 'manual',
+    phase: 'llm',
+    phase_label: 'LLM 合并',
+    progress: {
+      scanned: 120,
+      recent_scanned: 100,
+      backlog_scanned: 20,
+      deduped: 3,
+      llm_done: 3,
+      llm_total: 8,
+    },
+    started_at: Date.now() - 5_000,
+    finished_at: null,
+    duration_ms: null,
+    result: null,
+    error: null,
+    ...overrides,
+  };
+}
+
+function tasksPayload(run: Record<string, unknown> | null) {
+  return {
+    tasks: [
+      {
+        name: 'memory_reflection',
+        job_id: 'evolution/memory_reflection',
+        run,
+      },
+    ],
+  };
+}
+
 describe('EvolutionPanel 状态显示', () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    useEvolutionRunStore.getState().reset();
+  });
+
+  afterEach(() => {
+    useEvolutionRunStore.getState().reset();
   });
 
   it('把后端的 success 状态渲染成中文「成功」', async () => {
@@ -98,7 +143,7 @@ describe('EvolutionPanel 状态显示', () => {
 
   it('点击重试后重新拉取日志', async () => {
     invokeMock.mockRejectedValueOnce(new Error('后端不可达'));
-    invokeMock.mockResolvedValueOnce([makeLog()]);
+    invokeMock.mockResolvedValue([makeLog()]);
 
     render(<EvolutionPanel />);
 
@@ -108,33 +153,75 @@ describe('EvolutionPanel 状态显示', () => {
     await waitFor(() => {
       expect(screen.getByText('成功')).toBeTruthy();
     });
-    expect(invokeMock).toHaveBeenCalledTimes(2);
+    const logCalls = invokeMock.mock.calls.filter(([cmd]) => cmd === 'get_evolution_logs');
+    expect(logCalls).toHaveLength(2);
   });
 
-  it('手动运行记忆反思并展示统计（游标不展示）', async () => {
-    invokeMock.mockResolvedValueOnce([makeLog()]);
-    invokeMock.mockResolvedValueOnce({
-      ok: true,
-      result: {
-        deduped: 2,
-        merged: 1,
-        consolidated: 0,
-        reflection_backlog_cursor_ms: 1234567890,
-      },
+  it('触发任务后显示当前阶段，完成后展示统计摘要（游标不展示）', async () => {
+    let currentRun: Record<string, unknown> = makeRunSnapshot();
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_evolution_logs') return [makeLog()];
+      if (cmd === 'scheduled_evolution_tasks') {
+        return tasksPayload(currentRun);
+      }
+      if (cmd === 'scheduled_evolution_run') {
+        return { ok: true, started: true, run: currentRun };
+      }
+      return null;
     });
-    invokeMock.mockResolvedValueOnce([makeLog()]);
 
     render(<EvolutionPanel />);
     const button = await screen.findByTestId('evolution-run-memory_reflection');
     fireEvent.click(button);
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('scheduled_evolution_run', {
-        name: 'memory_reflection',
-      });
+      expect(screen.getByText(/整理中 · LLM 合并/)).toBeTruthy();
     });
-    const result = await screen.findByTestId('evolution-run-result');
-    expect(result.textContent).toContain('deduped: 2');
-    expect(result.textContent).not.toContain('reflection_backlog_cursor_ms');
+    expect(button).toBeDisabled();
+    expect(screen.getByTestId('evolution-run-progress')).toHaveTextContent('LLM 合并 3/8');
+
+    currentRun = makeRunSnapshot({
+      state: 'succeeded',
+      phase: 'done',
+      phase_label: '完成',
+      finished_at: Date.now(),
+      duration_ms: 42_000,
+      result: {
+        scanned: 120,
+        deduped: 3,
+        merged: 1,
+        invalidated: 2,
+        reflection_backlog_cursor_ms: 123,
+      },
+    });
+
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('evolution-run-result')).toHaveTextContent('deduped: 3');
+      },
+      { timeout: 5_000 },
+    );
+    const result = screen.getByTestId('evolution-run-result');
+    expect(result).not.toHaveTextContent('reflection_backlog_cursor_ms');
+    expect(button).not.toBeDisabled();
+  });
+
+  it('重新挂载后从 store 恢复运行中状态（切 tab / 换页面不丢）', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'get_evolution_logs') return [makeLog()];
+      if (cmd === 'scheduled_evolution_tasks') return tasksPayload(makeRunSnapshot());
+      return null;
+    });
+
+    const first = render(<EvolutionPanel />);
+    const firstButton = await screen.findByTestId('evolution-run-memory_reflection');
+    await waitFor(() => expect(firstButton).toBeDisabled());
+    first.unmount();
+
+    render(<EvolutionPanel />);
+    const secondButton = await screen.findByTestId('evolution-run-memory_reflection');
+    expect(secondButton).toBeDisabled();
+    expect(screen.getByText(/整理中/)).toBeTruthy();
+    expect(screen.getByTestId('evolution-run-progress')).toBeTruthy();
   });
 });

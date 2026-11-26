@@ -1,13 +1,16 @@
 /**
- * EvolutionPanel - 进化系统面板 (PR-C §5.1 后)
+ * EvolutionPanel - 进化系统面板
  *
- * §5.1 把 5 个 evolution 任务接到 lifespan 自动 cron 后,不再需要手动
- * 触发 / 实时状态面板。本组件只展示:后台接管说明 + 最近 N 条 logs
- * (复用 get_evolution_logs)。
+ * 2026-11-26：手动维护任务的运行态改由 evolutionRunStore 持有。
+ * 此前 running 状态存在组件本地 useState，设置页切 tab / 跳去会话页
+ * 会卸载组件、状态归零 —— 而后端任务还在跑，UI 与任务失联且可重复触发。
+ * 现在轮询活在 store 层，任何页面重新挂载都会恢复到「执行中 + 当前阶段」。
  */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useEvolutionRunStore } from '../../entities/evolution/evolutionRunStore';
 import { invoke } from '../../shared/api/desktopInvoke';
+import type { EvolutionRunSnapshot } from '../../shared/api/types/domainEntityTypes';
 import { formatLocalString } from '../../shared/lib/timeFormatter';
 
 interface EvolutionLog {
@@ -53,6 +56,15 @@ const RUNNABLE_TASKS: Array<{
   },
 ];
 
+/** 记忆反思的阶段清单 —— 与后端 MemoryReflectionTask 上报的 phase 键对齐。 */
+const REFLECTION_PHASES: Array<{ key: string; label: string }> = [
+  { key: 'collect', label: '扫描记忆' },
+  { key: 'group', label: '分组' },
+  { key: 'dedupe', label: '去重' },
+  { key: 'llm', label: 'LLM 合并' },
+  { key: 'finalize', label: '写入结果' },
+];
+
 const STATUS_DISPLAY: Record<string, { label: string; className: string }> = {
   success: { label: '成功', className: 'text-success' },
   failed: { label: '失败', className: 'text-danger' },
@@ -60,54 +72,153 @@ const STATUS_DISPLAY: Record<string, { label: string; className: string }> = {
   skipped_no_llm: { label: '跳过（无 LLM）', className: 'text-warning' },
 };
 
+/** 把任务统计渲染成一行摘要；游标是内部实现细节，不展示给用户。 */
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatEvolutionRunResult(
+  result: Record<string, unknown> | null | undefined,
+): string | null {
+  if (!result) return null;
+  const parts = Object.entries(result)
+    .filter(([key]) => key !== 'reflection_backlog_cursor_ms')
+    .map(([key, value]) => `${key}: ${String(value)}`);
+  return parts.length > 0 ? parts.join('，') : null;
+}
+
+function formatElapsed(startedAt: number | null, nowMs: number): string {
+  if (!startedAt) return '';
+  const seconds = Math.max(0, Math.floor((nowMs - startedAt) / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return minutes > 0 ? `${minutes}m${rest}s` : `${rest}s`;
+}
+
+/** 运行中每秒刷新一次的时钟（只用于已耗时显示，不参与快照轮询）。 */
+function useNowTicker(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return undefined;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [active]);
+  return now;
+}
+
+const RunningProgress: React.FC<{ run: EvolutionRunSnapshot }> = ({ run }) => {
+  const now = useNowTicker(true);
+  const currentIndex = REFLECTION_PHASES.findIndex((phase) => phase.key === run.phase);
+  const isReflection = currentIndex >= 0;
+  const llmDone = Number(run.progress.llm_done);
+  const llmTotal = Number(run.progress.llm_total);
+  const scanned = Number(run.progress.scanned);
+
+  return (
+    <div
+      data-testid="evolution-run-progress"
+      className="mt-3 rounded-radius-sm border border-border bg-surface px-3 py-2 text-xs"
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-text-secondary">
+          <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+          {TASK_DISPLAY[run.name] ?? run.name}执行中 · {run.phase_label ?? '准备中'}
+        </span>
+        <span className="text-muted">{formatElapsed(run.started_at, now)}</span>
+      </div>
+      {isReflection && (
+        <ol className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-muted">
+          {REFLECTION_PHASES.map((phase, index) => {
+            const state =
+              index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'pending';
+            const suffix =
+              state === 'current' && phase.key === 'llm' && llmTotal > 0
+                ? ` ${Math.max(0, Math.min(llmDone, llmTotal))}/${llmTotal}`
+                : '';
+            return (
+              <li
+                key={phase.key}
+                data-phase-state={state}
+                className={
+                  state === 'done'
+                    ? 'text-success'
+                    : state === 'current'
+                      ? 'font-medium text-primary'
+                      : ''
+                }
+              >
+                {state === 'done' ? '✓ ' : ''}
+                {phase.label}
+                {suffix}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      {!isReflection && scanned > 0 && (
+        <p className="mt-1.5 text-muted">已扫描 {scanned} 条记忆</p>
+      )}
+    </div>
+  );
+};
+
 export const EvolutionPanel: React.FC = () => {
   const [logs, setLogs] = useState<EvolutionLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [runningTask, setRunningTask] = useState<string | null>(null);
-  const [runMessage, setRunMessage] = useState<string | null>(null);
+  const [triggerError, setTriggerError] = useState<string | null>(null);
+  const runs = useEvolutionRunStore((state) => state.runs);
+  const refreshRuns = useEvolutionRunStore((state) => state.refresh);
+  const triggerRun = useEvolutionRunStore((state) => state.trigger);
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
       setError(null);
       const result = await invoke<EvolutionLog[]>('get_evolution_logs', {
         limit: 10,
         offset: 0,
       });
-      setLogs(result);
+      setLogs(Array.isArray(result) ? result : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败，请稍后重试');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 60_000);
-    return () => clearInterval(interval);
   }, []);
 
-  const runTask = async (name: string, label: string) => {
-    setRunningTask(name);
-    setRunMessage(`${label}执行中...`);
+  useEffect(() => {
+    void fetchLogs();
+    // 重入恢复：上一轮/其他入口触发的任务可能仍在跑，进面板先取一次快照
+    void refreshRuns();
+    const interval = setInterval(fetchLogs, 60_000);
+    return () => clearInterval(interval);
+  }, [fetchLogs, refreshRuns]);
+
+  const runningEntry = useMemo(
+    () => Object.values(runs).find((run) => run.state === 'running') ?? null,
+    [runs],
+  );
+
+  // 任务刚结束：立即刷新最近执行记录，不再等 60s 轮询
+  const wasRunningRef = useRef(false);
+  useEffect(() => {
+    const isRunning = runningEntry !== null;
+    if (wasRunningRef.current && !isRunning) {
+      void fetchLogs();
+    }
+    wasRunningRef.current = isRunning;
+  }, [runningEntry, fetchLogs]);
+
+  const latestFinished = useMemo(() => {
+    const finished = Object.values(runs).filter((run) => run.state !== 'running');
+    finished.sort((a, b) => (b.finished_at ?? 0) - (a.finished_at ?? 0));
+    return finished[0] ?? null;
+  }, [runs]);
+
+  const runTask = async (name: string): Promise<void> => {
+    setTriggerError(null);
     try {
-      const raw = await invoke<unknown>('scheduled_evolution_run', { name });
-      const body = (raw ?? {}) as Record<string, unknown>;
-      if (body.ok === false) {
-        throw new Error(typeof body.detail === 'string' ? body.detail : '任务执行失败');
-      }
-      const result = (body.result ?? {}) as Record<string, unknown>;
-      const parts = Object.entries(result)
-        // 游标是内部实现细节，不展示给用户
-        .filter(([key]) => key !== 'reflection_backlog_cursor_ms')
-        .map(([key, value]) => `${key}: ${String(value)}`);
-      setRunMessage(`${label}完成${parts.length > 0 ? `：${parts.join('，')}` : ''}`);
-      await fetchLogs();
+      await triggerRun(name);
     } catch (err) {
-      setRunMessage(`${label}失败：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setRunningTask(null);
+      setTriggerError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -123,12 +234,16 @@ export const EvolutionPanel: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center gap-3 p-8">
         <div className="text-sm text-danger">加载进化日志失败：{error}</div>
-        <button onClick={fetchLogs} className="text-sm text-primary hover:text-primary-hover">
+        <button onClick={() => void fetchLogs()} className="text-sm text-primary hover:text-primary-hover">
           重试
         </button>
       </div>
     );
   }
+
+  const finishedSummary = latestFinished
+    ? formatEvolutionRunResult(latestFinished.result)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -152,25 +267,39 @@ export const EvolutionPanel: React.FC = () => {
         <h3 className="text-sm font-medium text-text-secondary mb-3">维护操作</h3>
         <p className="text-xs text-muted mb-2">
           应用关闭会错过凌晨的自动任务；这里可手动补跑。重度任务会调用模型，建议空闲时执行。
+          运行在后台进行，切换页面不会中断，回来仍可看到进度。
         </p>
         <div className="flex flex-wrap gap-2">
-          {RUNNABLE_TASKS.map((task) => (
-            <button
-              key={task.name}
-              type="button"
-              disabled={runningTask !== null}
-              onClick={() => void runTask(task.name, task.label)}
-              title={task.description}
-              data-testid={`evolution-run-${task.name}`}
-              className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
-            >
-              {runningTask === task.name ? '执行中...' : task.label}
-            </button>
-          ))}
+          {RUNNABLE_TASKS.map((task) => {
+            const taskRun = runs[task.name];
+            const isRunning = taskRun?.state === 'running';
+            return (
+              <button
+                key={task.name}
+                type="button"
+                disabled={runningEntry !== null}
+                onClick={() => void runTask(task.name)}
+                title={task.description}
+                data-testid={`evolution-run-${task.name}`}
+                className="px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-hover disabled:opacity-50"
+              >
+                {isRunning ? `整理中 · ${taskRun.phase_label ?? '执行中'}` : task.label}
+              </button>
+            );
+          })}
         </div>
-        {runMessage && (
+        {runningEntry && <RunningProgress run={runningEntry} />}
+        {triggerError && (
+          <p className="text-xs text-danger mt-2" data-testid="evolution-run-error">
+            启动失败：{triggerError}
+          </p>
+        )}
+        {latestFinished && (
           <p className="text-xs text-text-secondary mt-2" data-testid="evolution-run-result">
-            {runMessage}
+            {TASK_DISPLAY[latestFinished.name] ?? latestFinished.name}
+            {latestFinished.state === 'succeeded'
+              ? `完成${finishedSummary ? `：${finishedSummary}` : ''}`
+              : `失败：${latestFinished.error ?? '未知错误'}`}
           </p>
         )}
       </div>
