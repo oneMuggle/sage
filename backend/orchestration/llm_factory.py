@@ -575,11 +575,20 @@ def attach_endpoint_chain(cfg: Optional[Dict[str, Any]]) -> Optional[Dict[str, A
             return cfg
         raw = SettingsRepository().get_json("app_settings")
         settings = to_camel(raw) if isinstance(raw, dict) else {}
+        # fallback_model 偏好由调用方（如流式 producer）在 load 之后注入；
+        # 构链发生在 load 内，需要自行兜底读取（仅接受非空字符串）。
+        fallback_model = cfg.get("fallback_model")
+        if not isinstance(fallback_model, str) or not fallback_model.strip():
+            try:
+                pref = SettingsRepository().get("fallback_model")
+            except Exception:  # noqa: BLE001 — 偏好读取失败不阻断构链
+                pref = None
+            fallback_model = pref if isinstance(pref, str) and pref.strip() else None
         chain = build_endpoint_chain(
             settings.get("endpoints") or [],
             primary_endpoint_id=cfg.get("endpoint_id"),
             primary_model=cfg.get("model"),
-            fallback_model=cfg.get("fallback_model"),
+            fallback_model=fallback_model,
             health=get_health_registry(),
         )
         if len(chain) <= 1:

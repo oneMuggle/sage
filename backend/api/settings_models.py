@@ -182,7 +182,7 @@ class SettingsPayload(BaseModel):
     titleModelId: Optional[str] = None  # noqa: N815
 
     # ----- 端点故障转移 (2026-11-26) -----
-    # {enabled, probeIntervalMs, cooldownMs, consecutiveFailThreshold};
+    # 子键: enabled / probeIntervalMs / cooldownMs / consecutiveFailThreshold。
     # 白名单与值域校验下沉到 canonicalizer validate_settings_shape。
     failover: Optional[dict] = None
 
@@ -261,7 +261,7 @@ class LegacySettingsPayload(BaseModel):
     titleModelId: Optional[str] = None  # noqa: N815
 
     # ----- 端点故障转移 (2026-11-26) -----
-    # {enabled, probeIntervalMs, cooldownMs, consecutiveFailThreshold};
+    # 子键: enabled / probeIntervalMs / cooldownMs / consecutiveFailThreshold。
     # 白名单与值域校验下沉到 canonicalizer validate_settings_shape。
     failover: Optional[dict] = None
 

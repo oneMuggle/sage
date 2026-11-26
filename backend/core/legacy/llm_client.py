@@ -1069,11 +1069,8 @@ class LLMClient:
 
             self._record_hop_health(hop, False, last_llm_err.type.value)
             hop_errors.append(
-                "%s: %s"
-                % (
-                    hop.endpoint_name or hop.endpoint_id or hop.base_url,
-                    last_llm_err.message,
-                )
+                f"{hop.endpoint_name or hop.endpoint_id or hop.base_url}: "
+                f"{last_llm_err.message}"
             )
             if self._should_failover(last_llm_err) and hop_index + 1 < len(hops):
                 next_hop = hops[hop_index + 1]
@@ -1100,8 +1097,9 @@ class LLMClient:
             if len(hops) > 1:
                 raise LLMError(
                     last_llm_err.type,
-                    "%s（已尝试 %d 个端点：%s）"
-                    % (last_llm_err.message, len(hops), "；".join(hop_errors)),
+                    f"{last_llm_err.message}（已尝试 {len(hops)} 个端点："
+                    + "；".join(hop_errors)
+                    + "）",
                     status_code=last_llm_err.status_code,
                     retry_after=last_llm_err.retry_after,
                 )
@@ -1571,11 +1569,8 @@ class LLMClient:
             nothing_yielded = not content_parts and not reasoning_parts
             self._record_hop_health(hop, False, last_llm_err.type.value)
             hop_errors.append(
-                "%s: %s"
-                % (
-                    hop.endpoint_name or hop.endpoint_id or hop.base_url,
-                    last_llm_err.message,
-                )
+                f"{hop.endpoint_name or hop.endpoint_id or hop.base_url}: "
+                f"{last_llm_err.message}"
             )
             if self._should_failover(
                 last_llm_err, nothing_yielded=nothing_yielded
@@ -1609,8 +1604,9 @@ class LLMClient:
             if len(hops) > 1 and nothing_yielded:
                 raise LLMError(
                     last_llm_err.type,
-                    "%s（已尝试 %d 个端点：%s）"
-                    % (last_llm_err.message, len(hops), "；".join(hop_errors)),
+                    f"{last_llm_err.message}（已尝试 {len(hops)} 个端点："
+                    + "；".join(hop_errors)
+                    + "）",
                     status_code=last_llm_err.status_code,
                     retry_after=last_llm_err.retry_after,
                 )

@@ -123,9 +123,7 @@ export function RetryBanner({ info }: RetryBannerProps) {
           {t('chat.retry.failover_switched').replace('{to}', to)}
         </span>
         <span className="text-muted">
-          {t('chat.retry.failover_reason')
-            .replace('{from}', from)
-            .replace('{reason}', reason)}
+          {t('chat.retry.failover_reason').replace('{from}', from).replace('{reason}', reason)}
         </span>
       </div>
     );

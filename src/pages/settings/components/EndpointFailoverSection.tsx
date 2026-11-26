@@ -1,11 +1,7 @@
 import { clsx } from 'clsx';
 
-import {
-  DEFAULT_FAILOVER_SETTINGS,
-  type FailoverSettings,
-} from '../../../entities/setting/types';
+import { DEFAULT_FAILOVER_SETTINGS, type FailoverSettings } from '../../../entities/setting/types';
 import { useI18n } from '../../../shared/lib/i18n';
-
 import type { EndpointsTabProps } from '../components';
 
 const MIN_PROBE_INTERVAL_MS = 30_000;
@@ -105,9 +101,7 @@ export function EndpointFailoverSection({ settings, updateSettings }: EndpointsT
           />
         </label>
       </div>
-      <p className="text-ui-xs text-muted/70">
-        {t('settings.endpoints.failover.hint')}
-      </p>
+      <p className="text-ui-xs text-muted/70">{t('settings.endpoints.failover.hint')}</p>
     </div>
   );
 }

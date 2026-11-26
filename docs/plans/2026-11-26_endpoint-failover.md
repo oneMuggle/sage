@@ -37,7 +37,7 @@
 - Produces（后端）：`LEGAL_FAILOVER_KEYS`、`FAILOVER_INT_RANGES`；canonicalizer 接受 `failover{enabled,probeIntervalMs,cooldownMs,consecutiveFailThreshold}` 与 `endpoints[].priority`。
 - Produces（前端）：`FailoverSettings`、`DEFAULT_FAILOVER_SETTINGS`、`EndpointConfig.priority?: number`、`AppSettings.failover`。
 
-- [ ] **Step 1: 写失败的后端测试**
+- [x] **Step 1: 写失败的后端测试**
 
 ```python
 # backend/tests/unit/test_settings_failover_fields.py
@@ -81,12 +81,12 @@ def test_failover_values_validated(key, value):
         validate_settings_shape(settings)
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_settings_failover_fields.py -q`
 Expected: FAIL（`priority`/`failover` 被拒）。
 
-- [ ] **Step 3: 实现 canonicalizer**
+- [x] **Step 3: 实现 canonicalizer**
 
 ```python
 # settings_canonicalizer.py —— LEGAL_TOP_KEYS 增 "failover"
@@ -128,7 +128,7 @@ for key, (lo, hi) in FAILOVER_INT_RANGES.items():
             raise ValueError(f"failover.{key} must be an integer in [{lo}, {hi}]")
 ```
 
-- [ ] **Step 4: 更新 settings_models.py**
+- [x] **Step 4: 更新 settings_models.py**
 
 ```python
 # EndpointPayload 内：
@@ -138,7 +138,7 @@ priority: Optional[int] = None  # noqa: N815 — 1 = 最高优先级（failover 
 failover: Optional[dict] = None
 ```
 
-- [ ] **Step 5: 更新契约测试**
+- [x] **Step 5: 更新契约测试**
 
 ```python
 # test_settings_schema_parity.py
@@ -146,7 +146,7 @@ failover: Optional[dict] = None
 # test_legal_endpoint_keys_is_stable 集合增 "priority"
 ```
 
-- [ ] **Step 6: 前端类型与白名单**
+- [x] **Step 6: 前端类型与白名单**
 
 ```ts
 // src/entities/setting/types.ts
@@ -176,7 +176,7 @@ failover: DEFAULT_FAILOVER_SETTINGS,
 // ENDPOINT_KEYS 增 'priority'
 ```
 
-- [ ] **Step 7: 前端测试**
+- [x] **Step 7: 前端测试**
 
 ```ts
 // src/tests/settingsFailoverFields.test.ts
@@ -194,7 +194,7 @@ describe('failover settings defaults', () => {
 });
 ```
 
-- [ ] **Step 8: 运行全部相关测试**
+- [x] **Step 8: 运行全部相关测试**
 
 Run:
 ```bash
@@ -203,7 +203,7 @@ npx vitest run src/tests/settingsFailoverFields.test.ts
 ```
 Expected: 全绿。
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add backend/data/settings_canonicalizer.py backend/api/settings_models.py backend/tests/contract/test_settings_schema_parity.py backend/tests/unit/test_settings_failover_fields.py src/entities/setting/types.ts src/entities/setting/storage.ts src/tests/settingsFailoverFields.test.ts
@@ -222,7 +222,7 @@ git commit -m "feat(settings): add endpoint priority and failover settings schem
 - Produces: `FailoverConfig`（`enabled/probe_interval_ms/cooldown_ms/consecutive_fail_threshold`）、`load_failover_config() -> FailoverConfig`、`EndpointHealthState`、`EndpointHealthRegistry`（`record_success(endpoint_id)`、`record_failure(endpoint_id, reason)`、`record_failover(endpoint_id)`、`is_available(endpoint_id) -> bool`、`snapshot(endpoint_ids=None) -> List[Dict[str, Any]]`、`configure(threshold=, cooldown_s=)`、`reset()`）、`get_health_registry()`、`reset_health_registry()`。
 - 常量：`HEALTHY="healthy"`、`DEGRADED="degraded"`、`FAILED="failed"`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_endpoint_health.py
@@ -258,12 +258,12 @@ def test_record_failover_counter():
     assert reg.snapshot(["ep1"])[0]["failoverCount"] == 1
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_endpoint_health.py -q`
 Expected: FAIL（模块不存在）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```python
 # backend/services/endpoint_health.py
@@ -447,12 +447,12 @@ def reset_health_registry() -> None:
     _registry = None
 ```
 
-- [ ] **Step 4: 运行测试**
+- [x] **Step 4: 运行测试**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_endpoint_health.py -q`
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/services/endpoint_health.py backend/tests/unit/test_endpoint_health.py
@@ -472,7 +472,7 @@ git commit -m "feat(failover): add endpoint health registry with cooldown and sn
 - Consumes: `get_health_registry()`（Task 2）。
 - Produces: `build_endpoint_chain(endpoints, *, primary_endpoint_id, primary_model, fallback_model=None, health=None) -> List[EndpointHop]`、`attach_endpoint_chain(cfg) -> dict`；`load_llm_config_for_chat()` 返回值在 failover 开启时含 `endpoint_chain`。
 
-- [ ] **Step 1: 在 llm_client.py 加入 EndpointHop**
+- [x] **Step 1: 在 llm_client.py 加入 EndpointHop**
 
 ```python
 @dataclass(frozen=True)
@@ -490,7 +490,7 @@ class EndpointHop:
     thinking_budget: Optional[int] = None
 ```
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 ```python
 # backend/tests/unit/test_llm_factory_failover.py
@@ -559,12 +559,12 @@ def test_fallback_model_only_on_primary_hop():
     assert chain[1].fallback_model is None
 ```
 
-- [ ] **Step 3: 运行确认失败**
+- [x] **Step 3: 运行确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_llm_factory_failover.py -q`
 Expected: FAIL（`build_endpoint_chain` 不存在）。
 
-- [ ] **Step 4: 实现构链**
+- [x] **Step 4: 实现构链**
 
 ```python
 # llm_factory.py 追加
@@ -690,12 +690,12 @@ def attach_endpoint_chain(cfg: Optional[Dict[str, Any]]) -> Optional[Dict[str, A
     return attach_endpoint_chain(merged)
 ```
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_llm_factory_failover.py -q`
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/core/legacy/llm_client.py backend/orchestration/llm_factory.py backend/tests/unit/test_llm_factory_failover.py
@@ -714,7 +714,7 @@ git commit -m "feat(failover): build priority-ordered endpoint chain from settin
 - Consumes: `EndpointHop`（Task 3）、`get_health_registry()`（Task 2）。
 - Produces: `FailoverEvent`；`LLMClient.chat(..., failover_callback=None)`；`LLMConfig.endpoint_chain: List[EndpointHop]`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_llm_client_failover.py
@@ -846,12 +846,12 @@ async def test_usage_recorded_for_serving_hop(monkeypatch):
     assert recorded and recorded[-1] == "ep2"
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_llm_client_failover.py -q`
 Expected: FAIL（`endpoint_chain` 未生效、无 `failover_callback`）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `LLMConfig` 末尾加：
 
@@ -1040,7 +1040,7 @@ class FailoverEvent:
 usage 记录使用 `hop.endpoint_id` / `body["model"]`；`chat()` 签名增加
 `failover_callback: Optional[Callable[[FailoverEvent], None]] = None`。
 
-- [ ] **Step 4: 运行新测试与回归**
+- [x] **Step 4: 运行新测试与回归**
 
 Run:
 ```bash
@@ -1048,7 +1048,7 @@ Run:
 ```
 Expected: 全绿。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/core/legacy/llm_client.py backend/tests/unit/test_llm_client_failover.py
@@ -1066,7 +1066,7 @@ git commit -m "feat(failover): non-streaming endpoint failover in LLMClient"
 **Interfaces:**
 - Produces: 流式事件 `("failover", FailoverEvent)`；首字前失败可跨跳，首字后不跨跳。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def _stream_ok(lines):
@@ -1131,12 +1131,12 @@ async def test_stream_does_not_failover_after_first_delta():
     assert backup.stream.call_count == 0
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_llm_client_failover.py -k stream -q`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `_chat_stream_events_raw` 同样改为外层 hop 循环：body 通过
 `_build_request_body(hop, messages, tools, tool_choice, stream=True, include_usage=True)`
@@ -1148,7 +1148,7 @@ Expected: FAIL。
 - 若不可跨跳（已出首字或最后一跳）：`_record_hop_health(hop, False, ...)` 后 raise；
 - 成功结束：`_record_hop_health(hop, True)`；usage 记录使用 `hop.endpoint_id`。
 
-- [ ] **Step 4: 运行流式相关全部测试**
+- [x] **Step 4: 运行流式相关全部测试**
 
 Run:
 ```bash
@@ -1156,7 +1156,7 @@ Run:
 ```
 Expected: 全绿。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/core/legacy/llm_client.py backend/tests/unit/test_llm_client_failover.py
@@ -1175,7 +1175,7 @@ git commit -m "feat(failover): streaming endpoint failover before first delta"
 **Interfaces:**
 - Produces: `probe_endpoint(endpoint, *, client=None) -> str`（`"success"|"failure"|"reachable"`）、`run_endpoint_probe_loop(stop_event=None)`、`start_endpoint_probe_task() -> asyncio.Task`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_endpoint_probe.py
@@ -1246,12 +1246,12 @@ async def test_ollama_uses_api_tags():
     assert seen["path"] == "/api/tags"
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_endpoint_probe.py -q`
 Expected: FAIL（模块不存在）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```python
 # backend/services/endpoint_probe.py
@@ -1373,7 +1373,7 @@ def start_endpoint_probe_task() -> asyncio.Task:
     return asyncio.create_task(run_endpoint_probe_loop(), name="endpoint-probe")
 ```
 
-- [ ] **Step 4: lifespan 装配（main.py）**
+- [x] **Step 4: lifespan 装配（main.py）**
 
 ```python
     # 端点健康探测：仅探测 degraded/failed 端点，不消耗 token。
@@ -1392,12 +1392,12 @@ def start_endpoint_probe_task() -> asyncio.Task:
         await endpoint_probe_task
 ```
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_endpoint_probe.py -q`
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/services/endpoint_probe.py backend/tests/unit/test_endpoint_probe.py backend/main.py
@@ -1416,7 +1416,7 @@ git commit -m "feat(failover): background health probes for failed endpoints"
 **Interfaces:**
 - Produces: `GET /api/v1/endpoints/health` → `{"endpoints": [...]}`；`build_health_payload() -> Dict[str, Any]`（可单测）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # backend/tests/unit/test_endpoint_health_routes.py
@@ -1439,12 +1439,12 @@ def test_payload_lists_configured_endpoints_with_health():
     reset_health_registry()
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_endpoint_health_routes.py -q`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现与挂载**
+- [x] **Step 3: 实现与挂载**
 
 ```python
 # backend/api/endpoint_health_routes.py
@@ -1497,12 +1497,12 @@ from backend.api.endpoint_health_routes import router as endpoint_health_router
 app.include_router(endpoint_health_router, prefix="/api/v1")
 ```
 
-- [ ] **Step 4: 运行测试**
+- [x] **Step 4: 运行测试**
 
 Run: `/home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_endpoint_health_routes.py -q`
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/api/endpoint_health_routes.py backend/tests/unit/test_endpoint_health_routes.py backend/main.py
@@ -1524,7 +1524,7 @@ git commit -m "feat(failover): expose endpoint health API"
 - Consumes: `FailoverEvent`（Task 4/5）。
 - Produces: `retry_info.kind = "failover"`、`from_endpoint/to_endpoint/from_endpoint_name/to_endpoint_name`。
 
-- [ ] **Step 1: 后端测试**
+- [x] **Step 1: 后端测试**
 
 ```python
 # backend/tests/unit/test_agent_failover_event.py
@@ -1543,7 +1543,7 @@ def test_failover_event_maps_to_retry_info():
     assert info["error_type"] == "timeout"
 ```
 
-- [ ] **Step 2: 实现 agent 映射**
+- [x] **Step 2: 实现 agent 映射**
 
 在 `agent.py` 的 `_retry_info_from_event` 附近新增：
 
@@ -1578,7 +1578,7 @@ def _failover_retry_info(event: Any) -> Dict[str, Any]:
                                         )
 ```
 
-- [ ] **Step 3: 前端类型与横幅**
+- [x] **Step 3: 前端类型与横幅**
 
 ```ts
 // chatAndEventTypes.ts RetryInfo 内追加：
@@ -1612,7 +1612,7 @@ if (retryInfo.kind === 'failover') {
 
 （若组件使用 i18n，新增键 `chat.retry.failover_switched` / `failover_reason`，zh/en 同步。）
 
-- [ ] **Step 4: 前端测试**
+- [x] **Step 4: 前端测试**
 
 ```tsx
 // RetryBanner.failover.test.tsx
@@ -1633,14 +1633,14 @@ describe('RetryBanner failover', () => {
 });
 ```
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_agent_failover_event.py -q
 npx vitest run src/widgets/chat/__tests__/RetryBanner.failover.test.tsx
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/core/legacy/agent.py backend/tests/unit/test_agent_failover_event.py src/shared/api/types/chatAndEventTypes.ts src/widgets/chat/RetryBanner.tsx src/widgets/chat/__tests__/RetryBanner.failover.test.tsx
@@ -1664,7 +1664,7 @@ git commit -m "feat(failover): surface endpoint switch events in chat retry bann
 **Interfaces:**
 - Produces: `moveEndpoint(endpoints, index, direction) -> EndpointConfig[]`（重排后 priority 1..N）；`useEndpointHealth(enabled) -> Record<string, EndpointHealthRow>`；`EndpointFailoverSection({settings, updateSettings})`。
 
-- [ ] **Step 1: 写排序纯函数测试**
+- [x] **Step 1: 写排序纯函数测试**
 
 ```ts
 // src/tests/endpointPriority.test.ts
@@ -1692,7 +1692,7 @@ describe('moveEndpoint', () => {
 });
 ```
 
-- [ ] **Step 2: 实现纯函数**
+- [x] **Step 2: 实现纯函数**
 
 ```ts
 // src/pages/settings/endpointPriority.ts
@@ -1713,7 +1713,7 @@ export function moveEndpoint(
 }
 ```
 
-- [ ] **Step 3: 健康 API 客户端与 hook**
+- [x] **Step 3: 健康 API 客户端与 hook**
 
 ```ts
 // api.ts
@@ -1767,13 +1767,13 @@ export function useEndpointHealth(enabled: boolean): Record<string, EndpointHeal
 }
 ```
 
-- [ ] **Step 4: 拆出编辑器组件降低行数**
+- [x] **Step 4: 拆出编辑器组件降低行数**
 
 把 `EndpointsTab.tsx` 中 `ProbeStatusDisplay` 与 `QuotaEditor` 原样移到
 `src/pages/settings/components/EndpointEditors.tsx`（导出两者），EndpointsTab 改为导入。
 完成后 `wc -l src/pages/settings/EndpointsTab.tsx` 应降到约 620 行。
 
-- [ ] **Step 5: 故障转移设置组件**
+- [x] **Step 5: 故障转移设置组件**
 
 ```tsx
 // EndpointFailoverSection.tsx
@@ -1832,7 +1832,7 @@ export function EndpointFailoverSection({ settings, updateSettings }: Props) {
 
 （实现时按项目 i18n 规范把中文文案改为 `settings.endpoints.failover.*` 键，zh/en 同步添加。）
 
-- [ ] **Step 6: 接入 EndpointsTab**
+- [x] **Step 6: 接入 EndpointsTab**
 
 - 顶部（标题之后）渲染 `<EndpointFailoverSection settings={settings} updateSettings={updateSettings} />`；
 - `const health = useEndpointHealth(settings.failover?.enabled === true);`
@@ -1876,14 +1876,14 @@ export function EndpointFailoverSection({ settings, updateSettings }: Props) {
 - `handleAdd` 中新端点设置 `priority: settings.endpoints.length + 1`。
 - `settings.endpoints.map((ep) =>` 改为 `settings.endpoints.map((ep, index) =>`。
 
-- [ ] **Step 7: 运行前端测试与类型检查**
+- [x] **Step 7: 运行前端测试与类型检查**
 
 ```bash
 npx vitest run src/tests/endpointPriority.test.ts src/tests/settingsFailoverFields.test.ts
 npx tsc --noEmit
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/features/manage-endpoints/api.ts src/features/manage-endpoints/useEndpointHealth.ts src/pages/settings/components/EndpointFailoverSection.tsx src/pages/settings/components/EndpointEditors.tsx src/pages/settings/endpointPriority.ts src/pages/settings/EndpointsTab.tsx src/shared/lib/i18n/locales/zh/settingsUi.ts src/shared/lib/i18n/locales/en/settingsUi.ts src/tests/endpointPriority.test.ts
@@ -1899,9 +1899,9 @@ git commit -m "feat(failover): endpoint priority controls, failover settings and
 - Modify: `docs/technical/README.md`（章节目录）
 - Delete after merge: `docs/plans/2026-11-26_endpoint-failover.md`
 
-- [ ] **Step 1: 写技术文档**：数据模型、触发语义（含流式契约）、健康状态机、探测与 failback、API 契约、UI 入口、测试与排障（如何判断为什么切换）。
-- [ ] **Step 2: 更新 README 章节表**。
-- [ ] **Step 3: 全量验证**
+- [x] **Step 1: 写技术文档**：数据模型、触发语义（含流式契约）、健康状态机、探测与 failback、API 契约、UI 入口、测试与排障（如何判断为什么切换）。
+- [x] **Step 2: 更新 README 章节表**。
+- [x] **Step 3: 全量验证**
 
 ```bash
 /home/fz/anaconda3/envs/sage-backend/bin/python -m pytest backend/tests/unit/test_endpoint_health.py backend/tests/unit/test_endpoint_probe.py backend/tests/unit/test_llm_factory_failover.py backend/tests/unit/test_llm_client_failover.py backend/tests/unit/test_endpoint_health_routes.py backend/tests/unit/test_agent_failover_event.py backend/tests/contract/test_settings_schema_parity.py backend/tests/unit/test_settings_failover_fields.py -q
@@ -1911,7 +1911,7 @@ npx vitest run src/tests/endpointPriority.test.ts src/tests/settingsFailoverFiel
 npm run build
 ```
 
-- [ ] **Step 4: 架构棘轮/行数守卫**
+- [x] **Step 4: 架构棘轮/行数守卫**
 
 ```bash
 wc -l src/pages/settings/EndpointsTab.tsx
@@ -1920,14 +1920,14 @@ wc -l src/pages/settings/EndpointsTab.tsx
 
 （若仓库无 `backend/tests/architecture`，跑 CI 中对应的 ratchet 测试文件。）
 
-- [ ] **Step 5: Commit 文档**
+- [x] **Step 5: Commit 文档**
 
 ```bash
 git add docs/technical/ docs/plans/2026-11-26_endpoint-failover.md docs/superpowers/specs/2026-11-26-endpoint-failover-design.md
 git commit -m "docs(failover): archive endpoint failover technical guide"
 ```
 
-- [ ] **Step 6: 推送与 PR**（用户已授权实施；按项目 feature 分支流程）
+- [x] **Step 6: 推送与 PR**（用户已授权实施；按项目 feature 分支流程）
 
 ```bash
 git push -u origin feat/endpoint-failover-priority

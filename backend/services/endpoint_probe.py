@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -125,10 +126,9 @@ async def run_endpoint_probe_loop(stop_event: Optional[asyncio.Event] = None) ->
         remaining = config.probe_interval_ms / 1000.0
         while remaining > 0 and not stop_event.is_set():
             chunk = min(_SLEEP_CHUNK_S, remaining)
-            try:
+            # py38: asyncio.TimeoutError 与内置 TimeoutError 尚非同一类型。
+            with contextlib.suppress(asyncio.TimeoutError):  # noqa: UP041
                 await asyncio.wait_for(stop_event.wait(), timeout=chunk)
-            except asyncio.TimeoutError:
-                pass
             remaining -= chunk
 
 

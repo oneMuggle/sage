@@ -1,4 +1,5 @@
-# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容
+# ruff: noqa: UP006, UP007, UP035, UP045, SIM117 — release/win7 Python 3.8 兼容
+# （py38 不支持括号多上下文 with）
 """2026-11-26: LLMClient 跨端点故障转移测试（非流式）。"""
 
 from unittest.mock import AsyncMock, Mock, patch
@@ -276,7 +277,7 @@ async def test_stream_does_not_failover_after_first_delta():
     with patch.object(client, "_get_client", return_value=primary), patch.object(
         client, "_get_client_for_hop", return_value=backup
     ):
-        with pytest.raises(LLMError):
+        with pytest.raises(LLMError):  # noqa: PT012 — 断言块含 async for 驱动
             async for _event in client.chat_stream_events(
                 [{"role": "user", "content": "hi"}]
             ):

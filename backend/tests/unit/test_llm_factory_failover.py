@@ -2,15 +2,15 @@
 
 from unittest.mock import patch
 
-from backend.services.endpoint_health import EndpointHealthRegistry
 from backend.orchestration.llm_factory import attach_endpoint_chain, build_endpoint_chain
+from backend.services.endpoint_health import EndpointHealthRegistry
 
 
 def _ep(eid, priority=None, models=("m1",), model_id=""):
     ep = {
         "id": eid,
         "name": eid,
-        "baseUrl": "http://%s" % eid,
+        "baseUrl": f"http://{eid}",
         "apiKey": "k",
         "protocol": "openai-compatible",
         "modelId": model_id,

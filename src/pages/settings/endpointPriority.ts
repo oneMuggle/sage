@@ -11,8 +11,7 @@ export function moveEndpoint(
   direction: -1 | 1,
 ): EndpointConfig[] {
   const target = index + direction;
-  const renumber = (list: EndpointConfig[]) =>
-    list.map((ep, i) => ({ ...ep, priority: i + 1 }));
+  const renumber = (list: EndpointConfig[]) => list.map((ep, i) => ({ ...ep, priority: i + 1 }));
   if (index < 0 || index >= endpoints.length || target < 0 || target >= endpoints.length) {
     return renumber(endpoints);
   }

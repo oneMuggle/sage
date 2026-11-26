@@ -34,26 +34,26 @@ def test_priority_optional():
 def test_priority_must_be_positive_int(bad):
     settings = _base()
     settings["endpoints"][0]["priority"] = bad
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="priority"):
         validate_settings_shape(settings)
 
 
 def test_unknown_failover_key_rejected():
     settings = _base()
     settings["failover"] = {"enabled": True, "foo": 1}
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="unknown failover field"):
         validate_settings_shape(settings)
 
 
 def test_failover_must_be_dict():
     settings = _base()
     settings["failover"] = "enabled"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="failover is not a dict"):
         validate_settings_shape(settings)
 
 
 @pytest.mark.parametrize(
-    "key,value",
+    ("key", "value"),
     [
         ("probeIntervalMs", 1000),
         ("cooldownMs", 100),
@@ -66,5 +66,5 @@ def test_failover_must_be_dict():
 def test_failover_values_validated(key, value):
     settings = _base()
     settings["failover"] = {key: value}
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="failover"):
         validate_settings_shape(settings)

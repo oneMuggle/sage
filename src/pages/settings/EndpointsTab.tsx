@@ -7,9 +7,7 @@ import { useMemo, useState } from 'react';
 
 import { getProtocolOptions } from '../../entities/endpoint/providerRegistry';
 import { bindDiscoveredModels } from '../../entities/model-catalog/api';
-import {
-  formatTokens,
-} from '../../entities/setting/contextPresets';
+import { formatTokens } from '../../entities/setting/contextPresets';
 import {
   DEFAULT_ENDPOINT,
   type EndpointConfig,
@@ -252,9 +250,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                       health[ep.id].status === 'failed' && 'bg-red-500',
                     )}
                     title={`${health[ep.id].status}${
-                      health[ep.id].lastFailureReason
-                        ? ` · ${health[ep.id].lastFailureReason}`
-                        : ''
+                      health[ep.id].lastFailureReason ? ` · ${health[ep.id].lastFailureReason}` : ''
                     }`}
                   />
                 )}
@@ -272,7 +268,9 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                 {/* 2026-11-26: 上移/下移并重排 priority 1..N */}
                 <button
                   disabled={index === 0}
-                  onClick={() => updateSettings({ endpoints: moveEndpoint(settings.endpoints, index, -1) })}
+                  onClick={() =>
+                    updateSettings({ endpoints: moveEndpoint(settings.endpoints, index, -1) })
+                  }
                   className="text-xs text-muted hover:text-text transition-colors disabled:opacity-30"
                   data-testid={`endpoint-up-${ep.id}`}
                   aria-label="Move endpoint up"
@@ -281,7 +279,9 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                 </button>
                 <button
                   disabled={index === settings.endpoints.length - 1}
-                  onClick={() => updateSettings({ endpoints: moveEndpoint(settings.endpoints, index, 1) })}
+                  onClick={() =>
+                    updateSettings({ endpoints: moveEndpoint(settings.endpoints, index, 1) })
+                  }
                   className="text-xs text-muted hover:text-text transition-colors disabled:opacity-30"
                   data-testid={`endpoint-down-${ep.id}`}
                   aria-label="Move endpoint down"
@@ -635,7 +635,6 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
     </div>
   );
 }
-
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function auditEndpointsTabGovernance(): {
