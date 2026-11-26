@@ -68,9 +68,14 @@ export function RulesSubtabs({ workspacePath, onGoToDocuments }: RulesSubtabsPro
   const mounted = useKeepAliveTabs(activeSubtab);
 
   const openDraft = useRuleDraftStore((state) => state.open);
+  const resumeDraft = useRuleDraftStore((state) => state.resume);
+  const resetDraft = useRuleDraftStore((state) => state.reset);
   const setLoading = useRuleDraftStore((state) => state.setLoading);
   const setDraft = useRuleDraftStore((state) => state.setDraft);
   const setDraftError = useRuleDraftStore((state) => state.setError);
+  const draftRuleCount = useRuleDraftStore((state) => state.rules.length);
+  const isDraftOpen = useRuleDraftStore((state) => state.isOpen);
+  const draftSourceName = useRuleDraftStore((state) => state.sourceName);
 
   const documentPath = activeDocument ? officeDocumentPath(activeDocument) : null;
 
@@ -130,6 +135,35 @@ export function RulesSubtabs({ workspacePath, onGoToDocuments }: RulesSubtabsPro
           >
             {mounted.includes(id) && id === 'rules-library' ? (
               <div className="space-y-4">
+                {draftRuleCount > 0 && !isDraftOpen && (
+                  <div
+                    className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs"
+                    data-testid="office-rules-resume-draft"
+                  >
+                    <span className="text-text">
+                      📝 有未完成的抽取草稿（{draftRuleCount} 条
+                      {draftSourceName ? ` · ${draftSourceName}` : ''}）
+                    </span>
+                    <button
+                      type="button"
+                      onClick={resumeDraft}
+                      className="rounded bg-primary px-2.5 py-1 text-ui-2xs text-white hover:bg-primary/90"
+                    >
+                      继续编辑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm('确定丢弃这份草稿吗？')) {
+                          resetDraft();
+                        }
+                      }}
+                      className="rounded border border-border px-2.5 py-1 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+                    >
+                      丢弃
+                    </button>
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
