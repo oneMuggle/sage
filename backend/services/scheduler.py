@@ -445,6 +445,18 @@ class SchedulerService:
         """已注册的 evolution 任务名列表。"""
         return list(self._evolution_tasks.keys())
 
+    def cancel_evolution_task(self, name: str) -> Optional[Dict[str, Any]]:
+        """请求取消正在运行的进化任务；未注册返回 None（协作式，幂等）。"""
+        if name not in self._evolution_tasks:
+            return None
+        from backend.scheduler.evolution_run_registry import (  # noqa: PLC0415
+            get_evolution_run_registry,
+        )
+
+        registry = get_evolution_run_registry()
+        registry.request_cancel(name)
+        return registry.snapshot(name)
+
     def _fire_evolution(self, name: str, task: "BaseEvolutionTask") -> None:  # noqa: UP037
         """APScheduler 触发的实际执行函数。"""
         _run_evolution_task(name, task, trigger="scheduled")

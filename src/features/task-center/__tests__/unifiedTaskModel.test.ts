@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Goal } from '../../../entities/autonomous-goals/types';
 import type { DirectoryRun, DirectoryTask } from '../../../shared/api/orchRunClient';
 import type { Lane, ScheduledTask, Todo } from '../../../shared/api/types';
+import type { EvolutionRunSnapshot } from '../../../shared/api/types/domainEntityTypes';
 import type { TaskCenterEntry } from '../taskCenterStore';
 import {
   CANONICAL_RUN_STATUS_MAP,
@@ -17,6 +18,7 @@ import {
   normalizeCanonicalRun,
   normalizeCanonicalTask,
   normalizeChatTask,
+  normalizeEvolutionRun,
   normalizeGoalTask,
   normalizeLaneTask,
   normalizeRegistryTask,
@@ -582,5 +584,56 @@ describe('unifiedTaskModel / M4.2 canonical 运行视图', () => {
     const merged = mergeSubagentEntries(canonical, memory);
     expect(merged.status).toBe('failed');
     expect(merged.error).toBe('工具崩溃');
+  });
+});
+
+describe('normalizeEvolutionRun (2026-11-26 P1)', () => {
+  const run = (over: Partial<EvolutionRunSnapshot> = {}): EvolutionRunSnapshot => ({
+    run_id: 'run-1',
+    name: 'memory_reflection',
+    state: 'running',
+    trigger: 'manual',
+    phase: 'llm',
+    phase_label: 'LLM 合并',
+    progress: { llm_done: 3, llm_total: 6 },
+    started_at: 1_700_000_000_000,
+    finished_at: null,
+    duration_ms: null,
+    result: null,
+    error: null,
+    cancel_requested: false,
+    ...over,
+  });
+
+  it('running：标题/进度百分比/可取消/深链', () => {
+    const entry = normalizeEvolutionRun(run());
+    expect(entry.id).toBe('evolution:memory_reflection');
+    expect(entry.source).toBe('evolution');
+    expect(entry.title).toBe('记忆整理');
+    expect(entry.status).toBe('running');
+    expect(entry.percent).toBe(50);
+    expect(entry.cancellable).toBe(true);
+    expect(entry.cancelRef).toEqual({ source: 'evolution', rawId: 'memory_reflection' });
+    expect(entry.detailPath).toBe('/settings?tab=evolution');
+    expect(entry.meta.phase).toBe('LLM 合并');
+  });
+
+  it('终态映射与不可取消', () => {
+    expect(normalizeEvolutionRun(run({ state: 'succeeded', finished_at: 2 })).status).toBe(
+      'succeeded',
+    );
+    const failed = normalizeEvolutionRun(run({ state: 'failed', error: 'boom' }));
+    expect(failed.status).toBe('failed');
+    expect(failed.error).toBe('boom');
+
+    const cancelled = normalizeEvolutionRun(run({ state: 'cancelled' }));
+    expect(cancelled.status).toBe('cancelled');
+    expect(cancelled.cancellable).toBe(false);
+    expect(cancelled.cancelRef).toBeNull();
+    expect(cancelled.percent).toBeNull();
+  });
+
+  it('无 llm_total 时 percent 为 null（不伪造进度）', () => {
+    expect(normalizeEvolutionRun(run({ progress: {} })).percent).toBeNull();
   });
 });

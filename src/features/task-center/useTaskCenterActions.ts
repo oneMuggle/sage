@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { cancelGoal, pauseGoal, startGoal } from '../../entities/autonomous-goals/goalApi';
+import { useEvolutionRunStore } from '../../entities/evolution/evolutionRunStore';
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import { useOrchestrationFocusStore } from '../../entities/orchestration/orchestrationFocusStore';
 import { useRunDirectoryStore } from '../../entities/orchestration/runDirectoryStore';
@@ -57,6 +58,9 @@ export function useTaskCenterActions(): TaskCenterActions {
           void useRunDirectoryStore.getState().refresh();
         } else if (source === 'goal') {
           await cancelGoal(rawId);
+        } else if (source === 'evolution') {
+          // 2026-11-26 P1: 进化任务协作式取消（任务在检查点响应）。
+          await useEvolutionRunStore.getState().cancel(rawId);
         }
       } catch (err) {
         toast.error(toMessage(err));
