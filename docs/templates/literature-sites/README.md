@@ -14,6 +14,27 @@ cp docs/templates/literature-sites/xueshu789.yaml ~/.sage/literature_sites/
 验证：`python -m backend.literature.cli validate-profile --path ~/.sage/literature_sites/xueshu789.yaml`；
 列出已加载站点：`python -c "from backend.literature.profile_store import get_default_store as g; print(g().list_ids())"`。
 
+## `detail.url_from`：从结果链接推导详情页 URL
+
+有些站点的结果行链接不是详情页本身，而是跳转/代理地址，真正的详情页 URL 藏在某个查询参数里。
+可在 `detail.url_from` 中声明式描述这一推导，检索指导会据此提示：读取 `selector` 命中元素的 `href`，
+取查询参数 `param`，按 `decode` 解码后作为详情页 URL。适用于任何「链接套链接」的站点，不绑定具体站点。
+
+```yaml
+detail:
+  url_from:
+    selector: "a.downloadlink"   # 结果行中承载跳转链接的元素
+    param: "url"                 # href 中藏着真实详情页 URL 的查询参数
+    decode: base64               # none | base64 | url（默认 none）
+  fields:
+    abstract:
+      selector: "#ChDivSummary"  # 详情页中摘要正文的元素
+```
+
+- `decode=base64`：参数值是目标 URL 的 base64 编码（xueshu789 即如此，解码后为 `kns.cnki.net/.../abstract?v=...`）。
+- `decode=url`：参数值需先 URL 解码。
+- `decode=none`：参数值本身就是目标 URL。
+
 ## xueshu789 实测要点（2026-11-22）
 
 - 卡号+密码登录，成功后 URL 进 `/dbList/`，标题不含「登录」。
