@@ -149,7 +149,7 @@
 | 169 | [渲染器 CSP 与高保真预览](./169-renderer-csp.md) | 生产 CSP 指令表 + dataUrlToBlob 本地解码，修复高保真预览 |
 | 170 | [对标迭代 SOP](./170-parity-loop-sop.md) | 对标迭代闭环 SOP：步骤 / py38 兼容 / 验证矩阵 / 踩坑与红线 |
 | 171 | [Composer 状态条](./171-composer-status-bar.md) | 用量 / 响应速度 / 上下文三块观测指标下沉到输入框下方 + `useSessionUsage` 统一取数（单次请求 / 流中轮询 / 流末补拉 / 迟到响应守卫）+ 受控徽章与上下文条 + 空会话引导语互斥 |
-| 172 | [规则抽取草稿审阅 + AI 精炼](./172-rule-extraction-draft.md) | 抽取结果先预览再落库（置信度色标 + 冲突并排对比）+ 侧栏对话式 AI 精炼（自然语言 → add/modify/delete diff 卡片 + 逐条接受）+ 草稿 zustand 状态 + v22 迁移新增结构化元数据列 |
+| 172 | [规则抽取草稿审阅 + AI 精炼](./172-rule-extraction-draft.md) | 抽取结果先预览再落库（置信度色标 + 冲突并排对比）+ 侧栏对话式 AI 精炼（自然语言 → add/modify/delete diff 卡片 + 逐条接受）+ 草稿 zustand 状态（localStorage 持久化 + 恢复横幅）+ 置信度筛选/批量选择 + 手动添加 + 追加已有组同名跳过 + v22 迁移新增结构化元数据列 |
 | 173 | [技能整理优化与去重进化机制](./173-skill-evolution.md) | 结构化去重（embedding + TF-IDF 降级）+ 5 维质量评分与 hot/warm/cold 分层 + 三级渐进式加载（token 预算）+ 执行反馈自进化（建议 → 人工批准） |
 | 174 | [自部署服务通用化（P0–P2）](./174-selfhosted-service-framework.md) | DrawIO 激活（MCP → pool → Puppeteer）；统一富媒体契约（MediaStore + `/api/v1/media` + SVG 交互查看器）；声明式服务注册（Spec/SecretBox/状态路由/通用卡片） |
 ---

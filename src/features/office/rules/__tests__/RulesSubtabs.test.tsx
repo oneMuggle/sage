@@ -156,7 +156,7 @@ describe('RulesSubtabs — extract from active document (draft review)', () => {
       source_excerpt: '模板统计 156/164 段',
     });
     await waitFor(() => expect(screen.queryByTestId('rule-extraction-draft')).toBeNull());
-    expect(toast.success).toHaveBeenCalledWith('已创建 1 条规则');
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('共 1 条规则'));
   });
 
   it('surfaces extraction errors inside the draft panel', async () => {
@@ -171,6 +171,24 @@ describe('RulesSubtabs — extract from active document (draft review)', () => {
     });
 
     await waitFor(() => expect(screen.getByText(/boom/)).toBeInTheDocument());
+  });
+
+  it('shows a resume banner for a persisted draft and reopens it', async () => {
+    // Simulate a persisted draft after a refresh: rules survive, modal closed.
+    useRuleDraftStore.getState().setDraft([draftRule()], [], []);
+    useRuleDraftStore.getState().close();
+    renderSubtabs();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('office-rules-resume-draft')).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/未完成的抽取草稿（1 条/)).toBeInTheDocument();
+    expect(screen.queryByTestId('rule-extraction-draft')).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('继续编辑'));
+    });
+    expect(screen.getByTestId('rule-extraction-draft')).toBeInTheDocument();
   });
 
   it('is disabled when no document is selected', async () => {
