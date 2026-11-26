@@ -210,34 +210,40 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
 
     @router.get("/scheduled/evolution/tasks")
     def list_evolution_tasks(svc: SchedulerService = Depends(service_dep)) -> Dict[str, Any]:
+        runs = svc.get_evolution_runs()
         return {
             "tasks": [
-                {"name": name, "job_id": f"evolution/{name}"}
+                {"name": name, "job_id": f"evolution/{name}", "run": runs.get(name)}
                 for name in svc.get_evolution_task_names()
             ]
         }
 
-    @router.post("/scheduled/evolution/{name}/run")
+    @router.post("/scheduled/evolution/{name}/run", status_code=202)
     def run_evolution_task(
         name: str, svc: SchedulerService = Depends(service_dep)
     ) -> Dict[str, Any]:
+        """异步启动进化任务：立即返回运行快照，进度经 GET tasks 轮询。
+
+        同任务已在运行时不重复启动（started=false，幂等 attach 当前 run）。
+        返回值的 result 统计在任务结束后才会出现在 run 快照里。
+        """
         if name not in svc.get_evolution_task_names():
             raise HTTPException(
                 status_code=404,
                 detail={"type": "task_not_found", "message": f"evolution task '{name}' not registered"},
             )
-        result = svc.run_evolution_task_now(name)
-        # ConsolidationResult 是 int 子类，直接交给 FastAPI 会被序列化成裸数字，
-        # 前端拿不到 promoted/decayed；int 型任务（修剪/摘要）同样补一个 total。
-        if result is None:
-            payload: Any = {}
-        elif hasattr(result, "as_dict"):
-            payload = result.as_dict()
-        elif isinstance(result, int):
-            payload = {"total": int(result)}
-        else:
-            payload = result
-        return {"name": name, "ok": result is not None, "result": payload}
+        launched = svc.launch_evolution_task(name, trigger="manual")
+        if launched is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"type": "task_not_found", "message": f"evolution task '{name}' not registered"},
+            )
+        return {
+            "name": name,
+            "ok": True,
+            "started": bool(launched.get("started")),
+            "run": launched.get("run"),
+        }
 
     # ---------- desktop notifications (2026-11-05) ----------
     # Electron 主进程每 15s 轮询本端点,把排空的通知转成 OS 通知。
