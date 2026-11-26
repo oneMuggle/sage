@@ -41,4 +41,20 @@ describe('chatStreamStore · planProgress', () => {
     expect(slots.planProgress).toBeNull();
     expect(slots.preflightPhase).toBeNull();
   });
+
+  it('clearStream 收尾后清空 planProgress', () => {
+    const store = useChatStreamStore.getState();
+    store.startStream('s1', 'm1');
+    store.setPlanProgress('s1', {
+      stage: 'scout',
+      status: 'done',
+      kind: 'message',
+      text: 'facts',
+    });
+    expect(selectSessionSlots(useChatStreamStore.getState(), 's1').planProgress).not.toBeNull();
+
+    store.clearStream('s1', 'm1');
+    const slots = selectSessionSlots(useChatStreamStore.getState(), 's1');
+    expect(slots.planProgress).toBeNull();
+  });
 });

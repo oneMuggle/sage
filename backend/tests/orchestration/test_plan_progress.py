@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import time
 
 import pytest
 
@@ -179,6 +180,35 @@ def test_run_planning_stage_cancels_inner_task_on_outer_cancel():
     failed = [e for e in events if e["plan_progress"]["status"] == STATUS_FAILED]
     assert failed
     assert failed[-1]["plan_progress"]["text"] == "已取消"
+
+
+def test_run_planning_stage_cancel_bounds_stuck_emit():
+    """LOW 7b: 取消路径的补发事件最多等 100ms —— 挂起的 emit 不得拖延取消。"""
+
+    async def scenario():
+        async def runner():
+            await asyncio.sleep(30)
+
+        async def emit(event):
+            # 仅在取消补发的 failed 事件上挂起（started 事件必须正常返回）
+            if event["plan_progress"]["status"] == STATUS_FAILED:
+                await asyncio.sleep(30)
+
+        task = asyncio.ensure_future(
+            run_planning_stage(
+                emit, stage="decompose", runner=runner, heartbeat_interval_s=30
+            )
+        )
+        await asyncio.sleep(0.1)  # 让 started 事件发完、内层 task 进入等待
+        task.cancel()
+        started = time.monotonic()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        return time.monotonic() - started
+
+    elapsed = asyncio.run(scenario())
+    # 取消补发被 0.1s 超时截断，整体应远小于 30s 的挂起时长
+    assert elapsed < 1.0
 
 
 def test_stream_progress_emitter_throttles_and_flushes():

@@ -26,3 +26,15 @@
 ## 已知修复
 
 - `orch_preflight` 历史字段名为 `phase`，前端现同时读取 `phase` 与 `preflight_phase`，粗粒度指示条恢复渲染。
+
+## P2：调研实时化
+
+- 澄清（clarify）、侦察（scout）、深度调研（scout_deep）阶段接入 `plan_progress`，逐步实时展示提问、工具调用与调研结果。
+- 前端 `send-message` 事件循环增量合并 `plan_progress`，气泡内时间线随阶段推进实时刷新，无需等到整段结束。
+
+## P3：流式拆解与前哨优化
+
+- 拆解（decompose）阶段以流式方式回传思考与步骤；`make_stream_progress_emitter` 按「≥200 字符或 ≥0.6 秒」缓冲后批量上屏，避免逐 token 抖动。
+- 规划前哨小任务（模式/复杂度分类、澄清、侦察）改用 utility LLM 客户端：默认关闭思考（`reasoning_effort="low"`、`thinking_budget=0`），降低推理模型在小任务上的长思考开销。
+- `build_utility_llm_client(task_type=...)` 仅在显式传入 `task_type` 时应用按用途路由；侦察需要工具调用，故不传 `task_type`（不加路由 overlay）。
+- `complete_utility` 在客户端构建或调用失败时回退到普通客户端，绝不阻塞编排。

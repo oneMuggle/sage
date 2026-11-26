@@ -138,14 +138,20 @@ async def run_planning_stage(
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
-        await emit_plan_progress(
-            emit,
-            stage=stage,
-            status=STATUS_FAILED,
-            kind=KIND_ERROR,
-            text="已取消",
-            elapsed_ms=_elapsed_ms(),
-        )
+        # 取消路径自身处于取消上下文：向下游推「已取消」事件最多等 100ms，
+        # 避免挂起的 emit 回调把取消拖延成悬挂任务；失败一律吞掉后照常 re-raise。
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(
+                emit_plan_progress(
+                    emit,
+                    stage=stage,
+                    status=STATUS_FAILED,
+                    kind=KIND_ERROR,
+                    text="已取消",
+                    elapsed_ms=_elapsed_ms(),
+                ),
+                timeout=0.1,
+            )
         raise
     except Exception as exc:  # noqa: BLE001 — 原样上抛给调用方降级
         await emit_plan_progress(

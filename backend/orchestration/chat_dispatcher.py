@@ -151,13 +151,18 @@ async def _classify_orchestration_mode(
         return "single"
     if llm_client is None:
         return "single"
+    # str.replace, NOT .format(): user message may contain literal { / }
+    # (JSON / code snippets / template strings) which would make .format()
+    # raise KeyError/IndexError and silently downgrade to single with a
+    # misleading "判定失败" log.
+    prompt = _CLASSIFY_PROMPT.replace("{message}", message)
     try:
-        # str.replace, NOT .format(): user message may contain literal { / }
-        # (JSON / code snippets / template strings) which would make .format()
-        # raise KeyError/IndexError and silently downgrade to single with a
-        # misleading "判定失败" log.
-        prompt = _CLASSIFY_PROMPT.replace("{message}", message)
-        response = await llm_client.complete(prompt)
+        # 惰性导入避免导入环；注入的 client（多为 utility 客户端，带思考参数）
+        # 失败时 helper 会回退不带思考参数的普通客户端再试一次，避免上游拒绝
+        # reasoning_effort 时编排被静默关掉。
+        from backend.orchestration.llm_factory import complete_with_plain_fallback
+
+        response = await complete_with_plain_fallback(prompt, client=llm_client)
         return "multi" if "multi" in (response or "").strip().lower() else "single"
     except Exception as exc:  # noqa: BLE001 — 判定失败必须降级，绝不阻塞聊天
         logger.warning("编排语义判定失败，降级 single: %s", exc)

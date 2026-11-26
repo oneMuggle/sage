@@ -5,11 +5,10 @@
 import asyncio
 import json
 import logging
-from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .files import secure_delete_path, secure_write_temp_file
 from .ingest import IngestConfig, ingest_source
@@ -151,6 +150,7 @@ async def deep_research(
     ingest_config: IngestConfig = None,
     auto_ingest: bool = True,
     http_post: Optional[Callable] = None,
+    progress: Optional[Callable[..., Any]] = None,
 ) -> ResearchTask:
     """执行 Deep Research 流程。
 
@@ -167,6 +167,10 @@ async def deep_research(
     Returns:
         ResearchTask: 更新后的研究任务
     """
+    async def _notify(text: str) -> None:
+        if progress is not None:
+            await progress({"text": text})
+
     if llm_call is None:
         task.status = "error"
         task.error = {"code": RESEARCH_ERROR_CODE, "message": "LLM 配置缺失"}
@@ -175,12 +179,15 @@ async def deep_research(
     try:
         # Step 1: 生成搜索查询
         task.status = "searching"
+        await _notify("生成检索词…")
         logger.info(f"开始研究: {task.topic}")
 
         task.queries = await generate_search_queries(task.topic, llm_call)
+        await _notify(f"生成 {len(task.queries)} 个检索词")
         logger.info(f"生成了 {len(task.queries)} 个搜索查询")
 
         # Step 2: 执行网络搜索
+        await _notify("执行网络搜索…")
         task.web_results = await multi_query_search(
             queries=task.queries,
             provider=search_provider,
@@ -188,6 +195,7 @@ async def deep_research(
             base_url=search_base_url,
             max_results_per_query=5,
         )
+        await _notify(f"收集到 {len(task.web_results)} 条搜索结果")
         logger.info(f"收集到 {len(task.web_results)} 个搜索结果")
 
         if not task.web_results:
@@ -197,12 +205,15 @@ async def deep_research(
 
         # Step 3: LLM 综合
         task.status = "synthesizing"
+        await _notify("综合调研结果…")
         task.synthesis = await synthesize_research(task.topic, task.web_results, llm_call)
+        await _notify("调研综合完成")
         logger.info("研究综合完成")
 
         # Step 4: 自动 Ingest（可选）
         if auto_ingest and ingest_config is not None:
             task.status = "ingesting"
+            await _notify("写入知识库…")
 
             if not callable(http_post):
                 task.status = "error"

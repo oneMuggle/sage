@@ -136,13 +136,45 @@ class TestComplexityClassifierDegradation:
     async def test_no_llm_config(self):
         """无 LLM 配置 → 降级为 medium。"""
         with patch(
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: None,
+        ), patch(
             "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=None,
+            new=lambda: None,
         ):
             classifier = ComplexityClassifier()
             result = await classifier.classify("test message")
             assert result.complexity == "medium"
-            assert "无 LLM 配置" in result.reasoning
+            # complete_utility 抛 RuntimeError（无可用端点）→ 通用失败降级文案
+            assert "LLM 调用失败" in result.reasoning
+
+    @pytest.mark.asyncio()
+    async def test_utility_failure_falls_back_to_plain_client(self):
+        """utility 客户端失败 → 回退普通客户端成功 → 不降级。"""
+        bad_client = AsyncMock()
+        bad_client.complete.side_effect = RuntimeError("thinking_budget unsupported")
+        good_client = AsyncMock()
+        good_client.complete.return_value = json.dumps(
+            {
+                "complexity": "simple",
+                "research_needed": False,
+                "reasoning": "回退成功",
+            }
+        )
+
+        with patch(
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: bad_client,
+        ), patch(
+            "backend.orchestration.llm_factory.build_llm_client_from_settings",
+            new=lambda: good_client,
+        ):
+            classifier = ComplexityClassifier()
+            result = await classifier.classify("test message")
+            assert result.complexity == "simple"
+            assert result.reasoning == "回退成功"
+            bad_client.complete.assert_awaited_once()
+            good_client.complete.assert_awaited_once()
 
     @pytest.mark.asyncio()
     async def test_llm_call_failure(self):
@@ -151,8 +183,8 @@ class TestComplexityClassifierDegradation:
         mock_client.complete.side_effect = Exception("LLM error")
 
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=mock_client,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: mock_client,
         ):
             classifier = ComplexityClassifier()
             result = await classifier.classify("test message")
@@ -172,8 +204,8 @@ class TestComplexityClassifierDegradation:
         )
 
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=mock_client,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: mock_client,
         ):
             classifier = ComplexityClassifier()
             result = await classifier.classify("test message")
@@ -196,8 +228,8 @@ class TestClassifyComplexityFunction:
         )
 
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=mock_client,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: mock_client,
         ):
             result = await classify_complexity("test message")
             assert result.complexity == "complex"
@@ -240,8 +272,8 @@ class TestEstimateBudgetLevel:
             return_value=json.dumps({"level": "simple", "reasoning": "单文件小改"})
         )
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=mock_client,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: mock_client,
         ):
             result = await estimate_budget_level("修复 typo")
             assert result is not None
@@ -258,8 +290,8 @@ class TestEstimateBudgetLevel:
             return_value=json.dumps({"level": "long", "reasoning": "端到端迁移"})
         )
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=mock_client,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: mock_client,
         ):
             result = await estimate_budget_level("批量迁移 100 个文件")
             assert result is not None
@@ -271,8 +303,8 @@ class TestEstimateBudgetLevel:
         from backend.orchestration.complexity_classifier import estimate_budget_level
 
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=None,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: None,
         ):
             result = await estimate_budget_level("test")
             assert result is None
@@ -292,8 +324,8 @@ class TestEstimateBudgetLevel:
 
         mock_client.complete = slow_complete
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=mock_client,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: mock_client,
         ):
             result = await estimate_budget_level("test", timeout_s=0.1)
             assert result is None
@@ -306,8 +338,8 @@ class TestEstimateBudgetLevel:
         mock_client = AsyncMock()
         mock_client.complete = AsyncMock(side_effect=RuntimeError("网络错误"))
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=mock_client,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: mock_client,
         ):
             result = await estimate_budget_level("test")
             assert result is None
@@ -320,8 +352,8 @@ class TestEstimateBudgetLevel:
         mock_client = AsyncMock()
         mock_client.complete = AsyncMock(return_value="not json")
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=mock_client,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: mock_client,
         ):
             result = await estimate_budget_level("test")
             assert result is None
@@ -336,8 +368,8 @@ class TestEstimateBudgetLevel:
             return_value=json.dumps({"level": "invalid", "reasoning": "test"})
         )
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=mock_client,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: mock_client,
         ):
             result = await estimate_budget_level("test")
             assert result is None
@@ -350,8 +382,8 @@ class TestEstimateBudgetLevel:
         mock_client = AsyncMock()
         mock_client.complete = AsyncMock(return_value="")
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=mock_client,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: mock_client,
         ):
             result = await estimate_budget_level("test")
             assert result is None
@@ -366,8 +398,8 @@ class TestEstimateBudgetLevel:
             return_value=json.dumps({"level": "complex", "reasoning": "test"})
         )
         with patch(
-            "backend.orchestration.llm_factory.build_llm_client_from_settings",
-            return_value=mock_client,
+            "backend.orchestration.llm_factory.build_utility_llm_client",
+            new=lambda task_type=None: mock_client,
         ):
             result = await estimate_budget_level(
                 "重构认证系统",
