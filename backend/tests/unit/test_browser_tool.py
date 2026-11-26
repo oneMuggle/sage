@@ -1910,7 +1910,8 @@ def test_navigate_auto_launches_visible_by_default(autolaunch, monkeypatch):
     assert autolaunch.launches[0] == {
         "headless": False,
         "persistent": False,
-        "profile_name": "",
+        "profile_name": None,
+        "owner": "",
     }
     # meta 的 session_id 来自自动拉起的新会话
     assert result.content["browser_meta"]["session_id"] == "b-auto"

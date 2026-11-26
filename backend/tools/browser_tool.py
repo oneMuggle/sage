@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import functools
 import io
 import json
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -39,6 +41,7 @@ from backend.services.browser_control import (
 from . import browser_frames
 from .base import BaseTool, ToolResult, ToolSchema
 from .browser_cdp import (
+    EXTENSION_BROWSER_ID,
     RESERVED_BROWSER_ID,
     BrowserCDPError,
     BrowserSession,
@@ -69,6 +72,7 @@ from .browser_observe import (
     parse_key_combo,
     parse_snapshot_payload,
 )
+from .context import current_tool_context
 from .file_tool import _record_artifact_safely
 from .network_config import load_network_policy
 from .web_render import _wait_network_idle, inject_network_monitor, wait_page_ready
@@ -156,13 +160,86 @@ _LAST_LOGIN_WALL: Dict[str, bool] = {}
 _SNAPSHOT_FRAME_REFS: Dict[str, Dict[str, Dict[str, str]]] = {}
 
 
+def _current_owner() -> str:
+    """当前工具调用所属的聊天会话 id；无上下文（单测/REST）返回空串。"""
+    ctx = current_tool_context()
+    return (ctx.session_id or "") if ctx is not None else ""
+
+
+#: 当前工具调用的租约作用域栈（executor 线程内有效）。
+_lease_local = threading.local()
+
+
+@contextlib.contextmanager
+def _browser_lease_scope():
+    """工具执行作用域：退出时统一释放本作用域内登记的会话租约。"""
+    stack = getattr(_lease_local, "stack", None)
+    if stack is None:
+        stack = []
+        _lease_local.stack = stack
+    acquired: List[BrowserSession] = []
+    stack.append(acquired)
+    try:
+        yield
+    finally:
+        stack.pop()
+        release = getattr(get_browser_manager(), "release_lease", None)
+        if release is not None:
+            for session in acquired:
+                release(session)
+
+
+def _lease_session(session: BrowserSession) -> None:
+    """在活动租约作用域内登记一次使用（无作用域时静默跳过）。"""
+    stack = getattr(_lease_local, "stack", None)
+    if not stack:
+        return
+    acquired = stack[-1]
+    if any(item is session for item in acquired):
+        return
+    acquire = getattr(get_browser_manager(), "acquire_lease", None)
+    if acquire is None:
+        return
+    acquire(session)
+    acquired.append(session)
+
+
+def _leased(fn):
+    """浏览器工具 execute 装饰器：为整个调用持有租约。"""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with _browser_lease_scope():
+            return fn(*args, **kwargs)
+
+    return wrapper
+
+
+#: 每聊天会话的自动拉起互斥（避免 check-then-act 双开孤儿实例）。
+_launch_locks: Dict[str, threading.Lock] = {}
+_launch_locks_guard = threading.Lock()
+
+
+def _owner_launch_lock(owner: str) -> threading.Lock:
+    key = owner or "__anonymous__"
+    with _launch_locks_guard:
+        lock = _launch_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _launch_locks[key] = lock
+        return lock
+
+
 def _error(exc: BrowserCDPError) -> ToolResult:
     return ToolResult(success=False, error=str(exc))
 
 
 def _resolve_session(browser_id: Optional[str]) -> BrowserSession:
-    """统一入口：解析会话并把 BrowserCDPError 归一为带提示的错误。"""
-    return get_browser_manager().require(browser_id)
+    """统一入口：按调用方会话归属解析会话，并登记执行租约。"""
+    manager = get_browser_manager()
+    session = manager.require(browser_id, owner=_current_owner())
+    _lease_session(session)
+    return session
 
 
 # ---------------------------------------------------------------------------
@@ -334,15 +411,19 @@ def _browser_default_visible() -> bool:
     return str(raw).strip() != "0"
 
 
-def _has_user_browser_session() -> bool:
-    """manager 中是否存在任何非保留用户会话。
+def _has_usable_browser_session(owner: str) -> bool:
+    """当前会话是否存在可直接使用的浏览器（自有实例 / 用户共享标签页）。
 
-    ``get(None) is None`` 同时表示「零个用户会话」和「≥2 个用户会话无法
-    免 id 解析」。后者若触发自动拉起只会弹出无法被解析的孤儿窗口，因此
-    自动拉起前须用 ``all_sessions()`` 过滤保留槽位（web_fetch 渲染池）后
-    判断是否真的为空。``all_sessions()`` 已持锁返回副本列表。
+    归属模式下只看本会话拥有的实例与 ``external`` 共享标签页——绝不把其他
+    会话的实例当作"可用"，因此自动拉起判断不会因别人开了浏览器而跳过。
+    无归属（``owner == ""``）保持旧语义：存在任意非保留用户会话即可用。
     """
-    for session in get_browser_manager().all_sessions():
+    manager = get_browser_manager()
+    if owner:
+        if manager.owned_sessions(owner):
+            return True
+        return manager.get(EXTENSION_BROWSER_ID) is not None
+    for session in manager.all_sessions():
         browser_id = session.browser_id or ""
         if browser_id == RESERVED_BROWSER_ID:
             continue
@@ -352,16 +433,26 @@ def _has_user_browser_session() -> bool:
     return False
 
 
-def _apply_download_behavior(session: BrowserSession, workspace_root: Optional[str]) -> None:
-    """把浏览器内触发的下载重定向到工作区（或数据目录）。
+def _download_dir_for(session: BrowserSession, workspace_root: Optional[str]) -> Path:
+    """下载落盘目录：工作区内 ``<root>/downloads``；否则数据目录按实例分目录。
+
+    无工作区时按 ``browser_id`` 分子目录：多会话并发下载不再互相覆盖，
+    ``browser_downloads`` 的目录列举回退也不会把别人的文件列进来。
+    """
+    if workspace_root:
+        return Path(workspace_root) / "downloads"
+    return browser_downloads_root() / (session.browser_id or "unknown")
+
+
+def _apply_download_behavior(session: BrowserSession, workspace_root: Optional[str]) -> Path:
+    """把浏览器内触发的下载重定向到工作区（或数据目录下按实例分目录）。
 
     Electron 内嵌桥在 ``will-download`` 时若拿不到保存目录会弹系统保存对话框，
-    受控/隐藏窗口下无人可点 → 下载卡死。``browser_launch`` 原本单独设置；
-    ``browser_navigate`` 自动拉起与 ``browser_login`` 复用/新建会话路径也必须
-    显式设置，否则首次由 navigate 拉起的浏览器永远收不到该指令。
-    设置失败只告警，不阻断主流程。
+    受控/隐藏窗口下无人可点 → 下载卡死。``browser_launch`` / ``browser_navigate``
+    自动拉起 / ``browser_login`` 复用或新建会话都必须设置。
+    设置失败只告警，不阻断主流程；返回目标目录供调用方启动下载跟踪。
     """
-    download_dir = Path(workspace_root) / "downloads" if workspace_root else browser_downloads_root()
+    download_dir = _download_dir_for(session, workspace_root)
     try:
         download_dir.mkdir(parents=True, exist_ok=True)
         cdp_command(
@@ -371,6 +462,7 @@ def _apply_download_behavior(session: BrowserSession, workspace_root: Optional[s
         )
     except BrowserCDPError as exc:
         logger.warning("setDownloadBehavior 失败（不影响主流程）: %s", exc)
+    return download_dir
 
 
 def _capture_step_thumbnail(session: BrowserSession) -> Optional[str]:
@@ -618,7 +710,7 @@ def _record_browser_audit(
         browser_action_repo.record(
             {
                 "session_id": session.browser_id if session is not None else "unknown",
-                "conversation_id": None,
+                "conversation_id": _current_owner() or None,
                 "ts": int(time.time() * 1000),
                 "domain": resolved_domain,
                 "tool": tool,
@@ -1298,18 +1390,19 @@ class BrowserLaunchTool(BaseTool):
                     },
                     "profile_name": {
                         "type": "string",
-                        "description": "持久 profile 名称（默认 default）",
+                        "description": "持久 profile 名称（不传时自动选择可用目录）",
                     },
                 },
                 "required": [],
             },
         )
 
+    @_leased
     def execute(
         self,
         headless: bool = True,
         persistent: bool = False,
-        profile_name: str = "default",
+        profile_name: str = "",
         **kwargs: Any,
     ) -> ToolResult:
         if kwargs:
@@ -1324,24 +1417,17 @@ class BrowserLaunchTool(BaseTool):
             session = launch_browser(
                 headless=bool(headless),
                 persistent=bool(persistent),
-                profile_name=str(profile_name or "default"),
+                profile_name=(str(profile_name).strip() or None),
+                owner=_current_owner(),
             )
         except BrowserCDPError as exc:
             return _error(exc)
 
-        # 下载黑洞修复：把浏览器内触发的下载重定向到工作区（或数据目录），
-        # 否则文件落在临时 profile 目录，browser_close 时一并被删。
+        # 下载黑洞修复：把浏览器内触发的下载重定向到工作区（或数据目录下按
+        # 浏览器实例分目录），否则文件落在临时 profile 目录，browser_close
+        # 时一并被删；不同会话的下载也不再互相覆盖。
         root = self._policy.workspace_root
-        download_dir = Path(root) / "downloads" if root else browser_downloads_root()
-        try:
-            download_dir.mkdir(parents=True, exist_ok=True)
-            cdp_command(
-                session,
-                "Browser.setDownloadBehavior",
-                {"behavior": "allow", "downloadPath": str(download_dir)},
-            )
-        except BrowserCDPError as exc:
-            logger.warning("setDownloadBehavior 失败（不影响启动）: %s", exc)
+        download_dir = _apply_download_behavior(session, root)
 
         # SN3：常驻事件通道跟踪下载（downloadWillBegin / downloadProgress）。
         # embedded 也走同一 WS 通道（P2 桥已支持事件升级）。
@@ -1412,6 +1498,7 @@ class BrowserNavigateTool(BaseTool):
             },
         )
 
+    @_leased
     def execute(  # noqa: PLR0911 — 每个拒绝路径独立 return，扁平比提取辅助函数更直读
         self,
         url: str = "",
@@ -1439,19 +1526,22 @@ class BrowserNavigateTool(BaseTool):
             network_rejection = load_network_policy().check_host(url)
             if network_rejection:
                 return ToolResult(success=False, error=network_rejection)
-        # 可见受控浏览器（M3）：门禁全部通过且没有任何用户会话时自动拉起。
-        # 自动拉起的会话即后续 _resolve_session 拿到的默认会话；显式
-        # browser_id 的解析失败保持原有报错语义。多会话 + 无 browser_id 属
-        # 歧义（get(None) 同样为 None），此时保持原多实例报错，不产生孤儿窗口。
-        if not browser_id and not _has_user_browser_session():
-            try:
-                launch_browser(
-                    headless=not _browser_default_visible(),
-                    persistent=False,
-                    profile_name="",
-                )
-            except BrowserCDPError as exc:
-                return _error(exc)
+        # 可见受控浏览器（M3）：门禁全部通过且当前会话没有可用浏览器时自动
+        # 拉起（实例归属当前聊天会话）。同一会话的"检查 + 拉起"持锁串行，
+        # 避免并发首次导航各开一个、随后又因多实例无法解析而双报错。
+        owner = _current_owner()
+        if not browser_id and not _has_usable_browser_session(owner):
+            with _owner_launch_lock(owner):
+                if not _has_usable_browser_session(owner):
+                    try:
+                        launch_browser(
+                            headless=not _browser_default_visible(),
+                            persistent=False,
+                            profile_name=None,
+                            owner=owner,
+                        )
+                    except BrowserCDPError as exc:
+                        return _error(exc)
         session: Optional[BrowserSession] = None
         started = time.monotonic()
         try:
@@ -1783,6 +1873,7 @@ class BrowserSnapshotTool(BaseTool):
             },
         )
 
+    @_leased
     def execute(  # noqa: PLR0911 — 门禁/校验各走独立早退分支，扁平更直读
         self,
         mode: str = "interactive",
@@ -1982,6 +2073,7 @@ class BrowserInteractTool(BaseTool):
             },
         )
 
+    @_leased
     def execute(  # noqa: PLR0911 — 每个校验/门禁路径独立 return，扁平更直读
         self,
         action: str = "",
@@ -2432,6 +2524,7 @@ class BrowserScreenshotTool(BaseTool):
             },
         )
 
+    @_leased
     def execute(  # noqa: PLR0911 — 多个早退错误分支更清晰
         self,
         path: str = "",
@@ -2453,19 +2546,22 @@ class BrowserScreenshotTool(BaseTool):
         if not root:
             return ToolResult(success=False, error="browser_screenshot 需要绑定工作区（workspace）")
 
-        if path:
-            target = Path(root) / path
-        else:
-            target = Path(root) / f"browser_screenshot_{time.strftime('%Y%m%d-%H%M%S')}.png"
-        blocked = self._enforce_workspace(str(target))
-        if blocked is not None:
-            return blocked
-
         session: Optional[BrowserSession] = None
         full_page_ok = False
         full_page_note = ""
         try:
             session = _resolve_session(browser_id or None)
+            if path:
+                target = Path(root) / path
+            else:
+                # 默认文件名带实例 id：多会话同一秒截图不再互相覆盖。
+                target = Path(root) / (
+                    f"browser_screenshot_{session.browser_id}_"
+                    f"{time.strftime('%Y%m%d-%H%M%S')}.png"
+                )
+            blocked = self._enforce_workspace(str(target))
+            if blocked is not None:
+                return blocked
             blocked = _blocked_by_control(session, "browser_screenshot")
             if blocked is not None:
                 return blocked
@@ -2544,6 +2640,7 @@ class BrowserCloseTool(BaseTool):
             },
         )
 
+    @_leased
     def execute(  # noqa: PLR0911 — 每个拒绝路径独立 return，扁平更直读
         self, browser_id: str = "", target_id: str = "", **kwargs: Any
     ) -> ToolResult:
@@ -2644,6 +2741,7 @@ class BrowserTabsTool(BaseTool):
             },
         )
 
+    @_leased
     def execute(  # noqa: PLR0911 — 每个拒绝路径独立 return，扁平更直读
         self,
         action: str = "",
@@ -2867,6 +2965,7 @@ class BrowserDownloadsTool(BaseTool):
             },
         )
 
+    @_leased
     def execute(
         self,
         browser_id: str = "",
@@ -2898,11 +2997,10 @@ class BrowserDownloadsTool(BaseTool):
 
         tracker = get_download_tracker(session.browser_id)
         if tracker is None or not tracker.connected:
-            root = self._policy.workspace_root
             download_dir = (
                 tracker.download_dir
                 if tracker is not None
-                else str(Path(root) / "downloads" if root else browser_downloads_root())
+                else str(_download_dir_for(session, self._policy.workspace_root))
             )
             items = list_download_dir(download_dir)
             if wait_for_complete and any(i["state"] == "inProgress" for i in items):
@@ -3026,6 +3124,7 @@ class BrowserCookiesTool(BaseTool):
             },
         )
 
+    @_leased
     def execute(  # noqa: PLR0911, PLR0913 — 每个拒绝/动作路径独立 return，扁平更直读
         self,
         action: str = "",
@@ -3429,6 +3528,7 @@ class BrowserLoginTool(BaseTool):
             },
         )
 
+    @_leased
     def execute(  # noqa: PLR0911
         self,
         url: str = "",
@@ -3526,26 +3626,33 @@ class BrowserLoginTool(BaseTool):
             )
 
         # 检查是否已有活跃的登录浏览器（避免重复启动）
+        owner = _current_owner()
         manager = get_browser_manager()
         existing = manager.get(_LOGIN_PROFILE_NAME)
         if existing is not None and existing.is_alive():
+            if owner and existing.owner and existing.owner != owner:
+                return _abort_and_cleanup(
+                    "login_busy: 另一个会话正在使用登录浏览器，请等待其完成后再试"
+                )
             # 复用已有浏览器，直接导航到目标 URL
             session = existing
             reuse = True
         else:
-            # 启动新的可见持久浏览器
+            # 启动新的可见持久浏览器（归属当前会话；profile 被占用时给可读错误）
             try:
                 session = launch_browser(
                     headless=False,
                     browser_id=_LOGIN_PROFILE_NAME,
                     persistent=True,
                     profile_name=_LOGIN_PROFILE_NAME,
+                    owner=owner,
                 )
             except BrowserCDPError as exc:
                 return _abort_and_cleanup(
                     f"browser_launch_failed: 无法启动浏览器（{exc}）"
                 )
             reuse = False
+        _lease_session(session)
 
         # 登录会话同样确保下载目录已设置（登录后可能直接触发下载）。
         _apply_download_behavior(session, self._policy.workspace_root)
@@ -3848,6 +3955,7 @@ class BrowserListAccountsTool(BaseTool):
             },
         )
 
+    @_leased
     def execute(
         self,
         domain: str = "",
@@ -3924,6 +4032,7 @@ class BrowserSwitchAccountTool(BaseTool):
             },
         )
 
+    @_leased
     def execute(  # noqa: PLR0911 — 每个拒绝/动作路径独立 return，扁平更直读
         self,
         account_id: str = "",
@@ -3969,8 +4078,12 @@ class BrowserSwitchAccountTool(BaseTool):
                 )
             account_id = matches[0].id
 
+        try:
+            session = _resolve_session(browser_id or None)
+        except BrowserCDPError as exc:
+            return _error(exc)
         result = browser_account_service.switch_account(
-            account_id, browser_id=browser_id or None
+            account_id, browser_id=session.browser_id, owner=_current_owner()
         )
         if not result.ok:
             return ToolResult(success=False, error=result.message or "switch_failed")

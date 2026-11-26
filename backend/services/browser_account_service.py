@@ -372,10 +372,12 @@ class BrowserAccountService:
         self,
         target_account_id: str,
         browser_id: Optional[str] = None,
+        owner: str = "",
     ) -> SwitchResult:
         """切换到目标账号：快照当前 → 清空 → 注入目标 → 刷新。
 
-        ``browser_id=None`` 时解析唯一用户会话（与 browser_* 工具同口径）。
+        ``browser_id=None`` 时：``owner`` 非空按该聊天会话的归属解析，空则
+        解析唯一用户会话（设置页等无上下文调用方的旧语义）。
         切换失败时尽力回滚到切换前快照。
         """
         from backend.tools.browser_cdp import BrowserCDPError, get_browser_manager
@@ -392,7 +394,12 @@ class BrowserAccountService:
             )
         manager = get_browser_manager()
         try:
-            session = manager.require(browser_id) if browser_id else manager.get(None)
+            if browser_id:
+                session = manager.require(browser_id, owner=owner)
+            elif owner:
+                session = manager.resolve_owned(owner)
+            else:
+                session = manager.get(None)
         except BrowserCDPError:
             return SwitchResult(
                 ok=False,
