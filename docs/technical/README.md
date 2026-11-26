@@ -149,7 +149,7 @@
 | 173 | [对标改进循环 SOP](./173-parity-loop-sop.md) | 对标迭代闭环 SOP：步骤 / py38 兼容 / 验证矩阵 / 踩坑与红线 |
 | 174 | [Office 结构化提取与 PDF 复杂表格兜底](./174-office-extract-pdf-tables.md) | 提取适配器分层（测量/策略/适配/编排）+ 表格形状诊断（`table_diagnostics`）+ 无边框探测（列数判别式，只探测不产正文）+ 复杂度原因码 + 结构化后端兜底路由（auto/off/force，失败保留原结果） |
 | 175 | [Composer 状态条（会话观测指标下沉）](./175-composer-status-bar.md) | 用量 / 响应速度 / 上下文三块观测指标下沉到输入框下方 + `useSessionUsage` 统一取数（单次请求 / 流中轮询 / 流末补拉 / 迟到响应守卫）+ 受控徽章与上下文条 + 空会话引导语互斥 |
-| 176 | [规则抽取草稿审阅 + AI 精炼](./176-rule-extraction-draft.md) | 抽取结果先预览再落库（置信度色标 + 冲突并排对比）+ 侧栏对话式 AI 精炼（自然语言 → add/modify/delete diff 卡片 + 逐条接受）+ 草稿 zustand 状态 + v22 迁移新增结构化元数据列 |
+| 176 | [规则抽取草稿审阅 + AI 精炼](./176-rule-extraction-draft.md) | 抽取结果先预览再落库（置信度色标 + 冲突并排对比）+ 侧栏对话式 AI 精炼（自然语言 → add/modify/delete diff 卡片 + 逐条接受）+ 草稿 zustand 状态（localStorage 持久化 + 恢复横幅）+ 置信度筛选/批量选择 + 手动添加 + 追加已有组同名跳过 + v22 迁移新增结构化元数据列 |
 | 177 | [技能整理优化与去重进化机制](./177-skill-evolution.md) | 结构化去重（embedding + TF-IDF 降级）+ 5 维质量评分与 hot/warm/cold 分层 + 三级渐进式加载（token 预算）+ 执行反馈自进化（建议 → 人工批准） |
 | 178 | [自部署服务通用化（P0–P2）](./178-selfhosted-service-framework.md) | DrawIO 激活（MCP → pool → Puppeteer）；统一富媒体契约（MediaStore + `/api/v1/media` + SVG 交互查看器）；声明式服务注册（Spec/SecretBox/状态路由/通用卡片） |
 ---

@@ -7,7 +7,7 @@
  * nothing touches the database until the draft is committed.
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { officeRulesApi } from '../../../shared/api/officeRulesApi';
@@ -32,10 +32,22 @@ function nextEntryId(): number {
 export function RuleRefinePanel() {
   const rules = useRuleDraftStore((state) => state.rules);
   const applyRefineAction = useRuleDraftStore((state) => state.applyRefineAction);
+  const pendingInstruction = useRuleDraftStore((state) => state.pendingInstruction);
+  const setPendingInstruction = useRuleDraftStore((state) => state.setPendingInstruction);
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // A per-rule "AI 修改" shortcut drops a prefilled instruction here.
+  useEffect(() => {
+    if (pendingInstruction) {
+      setInput(pendingInstruction);
+      setPendingInstruction(null);
+      inputRef.current?.focus();
+    }
+  }, [pendingInstruction, setPendingInstruction]);
 
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
@@ -212,6 +224,7 @@ export function RuleRefinePanel() {
       <div className="border-t border-border px-2 py-2">
         <div className="flex items-end gap-1.5">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {

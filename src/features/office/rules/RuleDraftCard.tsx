@@ -8,6 +8,7 @@
 import { useState } from 'react';
 
 import type { DraftRule } from './ruleDraftStore';
+import { useRuleDraftStore } from './ruleDraftStore';
 
 export interface RuleDraftCardProps {
   rule: DraftRule;
@@ -44,6 +45,7 @@ function formatParams(params: Record<string, unknown>): string {
 export function RuleDraftCard({ rule, onToggle, onUpdate, onRemove }: RuleDraftCardProps) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(rule.name);
+  const setPendingInstruction = useRuleDraftStore((state) => state.setPendingInstruction);
   const level = confidenceLevel(rule.confidence);
 
   const handleSave = () => {
@@ -109,9 +111,7 @@ export function RuleDraftCard({ rule, onToggle, onUpdate, onRemove }: RuleDraftC
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{rule.name}</span>
               <span className="text-ui-xs text-muted font-mono">{rule.kind}</span>
-              <span
-                className={`rounded border px-1 py-0.5 text-ui-xs ${CONFIDENCE_STYLES[level]}`}
-              >
+              <span className={`rounded border px-1 py-0.5 text-ui-xs ${CONFIDENCE_STYLES[level]}`}>
                 {Math.round(rule.confidence * 100)}%
               </span>
             </div>
@@ -134,17 +134,27 @@ export function RuleDraftCard({ rule, onToggle, onUpdate, onRemove }: RuleDraftC
 
         <div className="shrink-0 flex items-center gap-1">
           {!editing && (
-            <button
-              type="button"
-              onClick={() => {
-                setEditName(rule.name);
-                setEditing(true);
-              }}
-              className="rounded px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-              title="编辑规则名称"
-            >
-              编辑
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditName(rule.name);
+                  setEditing(true);
+                }}
+                className="rounded px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+                title="编辑规则名称"
+              >
+                编辑
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingInstruction(`修改规则「${rule.name}」：`)}
+                className="rounded px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-bg-hover"
+                title="用 AI 修改这条规则（指令会填入右侧对话框）"
+              >
+                AI 修改
+              </button>
+            </>
           )}
           <button
             type="button"

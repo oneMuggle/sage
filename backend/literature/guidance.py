@@ -72,6 +72,12 @@ def render_search_guidance(
         if profile.detail
         else "（未配置）"
     )
+    if profile.detail and profile.detail.url_from:
+        uf = profile.detail.url_from
+        detail += (
+            f"\n详情 URL 推导: 读取 {uf.selector} 的 href，"
+            f"取查询参数 {uf.param}，decode={uf.decode} 后作为详情/摘要页 URL"
+        )
     pdf = "（未配置）"
     if profile.pdf:
         entry = profile.pdf.entry_selector or profile.pdf.entry_text or "（待录制）"
