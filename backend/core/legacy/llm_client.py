@@ -210,6 +210,19 @@ class EndpointHop:
     thinking_budget: Optional[int] = None
 
 
+@dataclass
+class FailoverEvent:
+    """2026-11-26: 端点故障转移事件（reason = 触发的 LLMErrorType.value）。"""
+
+    from_endpoint: Optional[str]
+    from_endpoint_name: Optional[str]
+    to_endpoint: Optional[str]
+    to_endpoint_name: Optional[str]
+    reason: str
+    hop_index: int
+    total_hops: int
+
+
 def _retry_budget_exhausted_error(
     llm_err: LLMError,
     attempt: int,
@@ -353,6 +366,8 @@ class LLMConfig:
     # 高水位预算——见 context_first_aid.effective_budget_tokens。None =
     # 未解析到，按默认常量兜底，不会关闭压缩。
     context_window: Optional[int] = None
+    # 2026-11-26: 优先级故障转移链。空 = 单端点（历史行为）。
+    endpoint_chain: List[EndpointHop] = field(default_factory=list)
 
     def compute_dynamic_timeout(self, messages: List[Dict[str, Any]]) -> int:
         """根据模型和上下文长度计算动态超时。
@@ -533,6 +548,8 @@ class LLMClient:
     def __init__(self, config: LLMConfig):
         self.config = config
         self._client: Optional[httpx.AsyncClient] = None
+        # 2026-11-26: 非主跳的 HTTP 客户端缓存（按 endpoint_id/base_url 键）。
+        self._hop_clients: Dict[str, httpx.AsyncClient] = {}
         # L2 真流式 (2026-09-06): 流式 + tools 首块前失败过的 provider 标记
         # （部分上游不支持 stream+tools 或 stream_options）。置位后
         # run_loop 直接走非流式,避免每次迭代都白白多打一个失败请求。
@@ -588,6 +605,10 @@ class LLMClient:
         """关闭 HTTP 客户端"""
         if self._client and not self._client.is_closed:
             await self._client.aclose()
+        for client in self._hop_clients.values():
+            if not client.is_closed:
+                await client.aclose()
+        self._hop_clients.clear()
 
     @staticmethod
     def _raise_classified_error(exc: Exception) -> None:
@@ -775,12 +796,137 @@ class LLMClient:
 
         return reasoning, clean_content
 
+    # ------------------------------------------------------------------
+    # 2026-11-26: 端点故障转移辅助
+    # ------------------------------------------------------------------
+
+    def _failover_hops(self) -> List[EndpointHop]:
+        """当前请求的端点链；未配置时按 config 构造单跳（历史行为）。"""
+        chain = getattr(self.config, "endpoint_chain", None)
+        if chain:
+            return list(chain)
+        return [
+            EndpointHop(
+                endpoint_id=self.config.endpoint_id,
+                base_url=self.config.base_url,
+                api_key=self.config.api_key,
+                provider=self.config.provider,
+                model=self.config.model,
+                fallback_model=self.config.fallback_model,
+                reasoning_effort=self.config.reasoning_effort,
+                thinking_budget=self.config.thinking_budget,
+            )
+        ]
+
+    def _get_client_for_hop(self, hop: EndpointHop) -> httpx.AsyncClient:
+        """非主跳的 HTTP 客户端（按 hop 的 base_url/api_key 构建并缓存）。"""
+        key = hop.endpoint_id or hop.base_url
+        cached = self._hop_clients.get(key)
+        if cached is not None and not cached.is_closed:
+            return cached
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if self.config.use_proxy:
+            backend = (self.config.backend_url or "http://127.0.0.1:8765").rstrip("/")
+            client_base_url = f"{backend}/api/v1/llm"
+            headers["X-LLM-Provider-Url"] = hop.base_url
+            token = os.environ.get("SAGE_LOCAL_AUTH_TOKEN")
+            if token:
+                headers["X-Sage-Local-Authorization"] = f"Bearer {token}"
+        else:
+            client_base_url = hop.base_url.rstrip("/")
+            if client_base_url.endswith("/v1"):
+                client_base_url = client_base_url[: -len("/v1")]
+        if hop.api_key:
+            headers["Authorization"] = f"Bearer {hop.api_key}"
+        headers.update(self.config.extra_headers)
+        client = httpx.AsyncClient(
+            base_url=client_base_url,
+            headers=headers,
+            timeout=httpx.Timeout(self.config.timeout),
+        )
+        self._hop_clients[key] = client
+        return client
+
+    @staticmethod
+    def _should_failover(llm_err: LLMError, *, nothing_yielded: bool = True) -> bool:
+        """该错误是否应触发切换下一端点。
+
+        - 可重试类错误：单跳内重试耗尽后才走到这里 → 切换；
+        - 认证类（401 / 403）：不重试，直接切换；
+        - 流式已产出增量：不可重放，禁止切换。
+        """
+        if not nothing_yielded:
+            return False
+        if llm_err.type in _RETRYABLE_ERROR_TYPES or llm_err.type == LLMErrorType.AUTH_FAILED:
+            return True
+        return llm_err.status_code == 403
+
+    @staticmethod
+    def _record_hop_health(hop: EndpointHop, success: bool, reason: str = "") -> None:
+        """被动健康上报；任何失败静默（健康簿记不得打断聊天）。"""
+        if not hop.endpoint_id:
+            return
+        try:
+            from backend.services.endpoint_health import get_health_registry
+
+            registry = get_health_registry()
+            if success:
+                registry.record_success(hop.endpoint_id)
+            else:
+                registry.record_failure(hop.endpoint_id, reason)
+        except Exception:  # noqa: BLE001 — fail-open
+            logger.debug("endpoint health update skipped", exc_info=True)
+
+    @staticmethod
+    def _record_hop_failover(hop: EndpointHop) -> None:
+        if not hop.endpoint_id:
+            return
+        try:
+            from backend.services.endpoint_health import get_health_registry
+
+            get_health_registry().record_failover(hop.endpoint_id)
+        except Exception:  # noqa: BLE001 — fail-open
+            logger.debug("endpoint failover counter skipped", exc_info=True)
+
+    def _build_request_body(
+        self,
+        hop: EndpointHop,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]],
+        tool_choice: Optional[str],
+        *,
+        stream: bool,
+        include_usage: bool,
+    ) -> Dict[str, Any]:
+        """按 hop 构造请求体（chat 与流式共用）。"""
+        body: Dict[str, Any] = {
+            "model": hop.model,
+            "messages": self._convert_messages(messages),
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+        }
+        if stream:
+            body["stream"] = True
+            if include_usage:
+                body["stream_options"] = {"include_usage": True}
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = tool_choice or "auto"
+        if hop.provider == "claude":
+            body["max_tokens"] = self.config.max_tokens
+        if hop.reasoning_effort is not None:
+            body["reasoning_effort"] = hop.reasoning_effort
+        if hop.thinking_budget is not None:
+            body["thinking_budget"] = hop.thinking_budget
+        return body
+
     async def chat(
         self,
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[str] = None,
         retry_callback: Optional[Callable[[RetryEvent], None]] = None,
+        failover_callback: Optional[Callable[[FailoverEvent], None]] = None,
     ) -> LLMResponse:
         """
         发送聊天请求（非流式）
@@ -794,134 +940,172 @@ class LLMClient:
         Returns:
             LLM 回复
         """
-        client = self._get_client()
-
-        body = {
-            "model": self.config.model,
-            "messages": self._convert_messages(messages),
-            "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
-        }
-
-        if tools:
-            body["tools"] = tools
-            body["tool_choice"] = tool_choice or "auto"
-
-        if self.config.provider == "claude":
-            body["max_tokens"] = self.config.max_tokens
-
-        # 推理参数透传: provider 决定哪种 key 会被上游接受
-        # - OpenAI o1/o3/5 + DeepSeek + 多数 OpenAI 兼容代理: reasoning_effort
-        # - Gemini 2.5 (OpenAI 兼容模式): thinking_budget
-        # 同时存在时,让上游自己挑(不同 provider 接受不同 key)
-        if self.config.reasoning_effort is not None:
-            body["reasoning_effort"] = self.config.reasoning_effort
-        if self.config.thinking_budget is not None:
-            body["thinking_budget"] = self.config.thinking_budget
-
         start_time = time.time()
-
-        # Task 5 (2026-09-15): capture pricing snapshot before request
-        price_snapshot = _capture_price_snapshot(
-            self.config.endpoint_id, self.config.model
-        )
-
-        # 2026-10-25: 动态超时调整 — 根据模型和上下文长度计算
-        dynamic_timeout = self.config.compute_dynamic_timeout(body["messages"])
-        # 超时在每次尝试开头设置（见下方 attempt_timeout），以受剩余预算约束。
-
-        # L3 重试退避: 限流/服务端错误/超时/网络失败按指数退避重试
-        # （尊重 retry-after）。请求整体重放安全——非流式,无部分产出。
-        max_attempts, base_delay, max_delay, total_budget = _retry_settings()
-        attempt = 0
-        fallback_used = False
-        retry_started = _retry_now()
-        has_failed_once = False
-        last_llm_err: Optional[LLMError] = None
+        hops = self._failover_hops()
+        hop_index = 0
+        hop_errors: List[str] = []
         while True:
-            attempt += 1
-            # 2026-11-03: 单次请求超时受剩余预算约束（首次尝试不受限）。
-            attempt_timeout = dynamic_timeout
-            if total_budget > 0 and has_failed_once:
-                remaining_now = total_budget - (_retry_now() - retry_started)
-                if remaining_now <= _LLM_RETRY_MIN_ATTEMPT_S:
-                    raise _retry_budget_exhausted_error(
-                        last_llm_err or LLMError(LLMErrorType.TIMEOUT, "重试预算耗尽"),
-                        attempt - 1,
-                        max_attempts,
-                        0.0,
-                        total_budget,
-                    )
-                attempt_timeout = min(dynamic_timeout, remaining_now)
-            client.timeout = httpx.Timeout(attempt_timeout)
+            hop = hops[hop_index]
+            client = (
+                self._get_client() if hop_index == 0 else self._get_client_for_hop(hop)
+            )
+            body = self._build_request_body(
+                hop, messages, tools, tool_choice, stream=False, include_usage=False
+            )
+
+            # Task 5 (2026-09-15): capture pricing snapshot before request
+            price_snapshot = _capture_price_snapshot(hop.endpoint_id, hop.model)
+
+            # 2026-10-25: 动态超时调整 — 根据模型和上下文长度计算
+            dynamic_timeout = self.config.compute_dynamic_timeout(body["messages"])
+            # 超时在每次尝试开头设置（见下方 attempt_timeout），以受剩余预算约束。
+
+            # L3 重试退避: 限流/服务端错误/超时/网络失败按指数退避重试
+            # （尊重 retry-after）。请求整体重放安全——非流式,无部分产出。
+            max_attempts, base_delay, max_delay, total_budget = _retry_settings()
+            attempt = 0
+            fallback_used = False
+            retry_started = _retry_now()
+            has_failed_once = False
+            last_llm_err: Optional[LLMError] = None
+            hop_failed = False
             try:
-                response = await client.post("/v1/chat/completions", json=body)
-                response.raise_for_status()
-                data = response.json()
-                break
-            except Exception as e:
-                try:
-                    self._raise_classified_error(e)  # 总是抛出
-                except LLMError as llm_err:
-                    last_llm_err = llm_err
-                    has_failed_once = True
-                    if (
-                        attempt >= max_attempts
-                        or llm_err.type not in _RETRYABLE_ERROR_TYPES
-                    ):
-                        # D-1 (round5 批次 D): 主模型重试耗尽 → 降级 fallback_model
-                        # 再来一轮（每实例至多一次）。model 在请求 body 里,
-                        # 无需失效 client 缓存。
-                        if (
-                            not fallback_used
-                            and self.config.fallback_model
-                            and self.config.fallback_model != body.get("model")
-                            and llm_err.type in _RETRYABLE_ERROR_TYPES
-                        ):
-                            fallback_used = True
-                            body["model"] = self.config.fallback_model
-                            attempt = 0
-                            logger.warning(
-                                "LLM 主模型重试耗尽(%s), 降级 fallback model: %s",
-                                llm_err.message,
-                                self.config.fallback_model,
-                            )
-                            continue
-                        raise
-                    delay = _retry_backoff_seconds(llm_err, attempt, base_delay, max_delay)
-                    elapsed_now = _retry_now() - retry_started
-                    budget_remaining: Optional[float] = None
-                    next_attempt_timeout: Optional[float] = None
-                    if total_budget > 0:
-                        budget_remaining = total_budget - (elapsed_now + delay)
-                        if budget_remaining < _LLM_RETRY_MIN_ATTEMPT_S:
+                while True:
+                    attempt += 1
+                    # 2026-11-03: 单次请求超时受剩余预算约束（首次尝试不受限）。
+                    attempt_timeout = dynamic_timeout
+                    if total_budget > 0 and has_failed_once:
+                        remaining_now = total_budget - (_retry_now() - retry_started)
+                        if remaining_now <= _LLM_RETRY_MIN_ATTEMPT_S:
                             raise _retry_budget_exhausted_error(
-                                llm_err, attempt, max_attempts, delay, total_budget
+                                last_llm_err
+                                or LLMError(LLMErrorType.TIMEOUT, "重试预算耗尽"),
+                                attempt - 1,
+                                max_attempts,
+                                0.0,
+                                total_budget,
                             )
-                        next_attempt_timeout = min(dynamic_timeout, budget_remaining)
-                    logger.warning(
-                        "LLM 请求失败(%s/%s): %s — %.1fs 后重试",
-                        attempt,
-                        max_attempts,
-                        llm_err.message,
-                        delay,
-                    )
-                    # 推送重试事件到回调（如 SSE）
-                    if retry_callback:
-                        retry_callback(
-                            RetryEvent(
-                                attempt=attempt,
-                                max_attempts=max_attempts,
-                                error_type=llm_err.type.value,
-                                error_message=llm_err.message,
-                                delay=delay,
-                                elapsed_s=max(0.0, elapsed_now),
-                                attempt_timeout_s=next_attempt_timeout,
-                                budget_total_s=total_budget if total_budget > 0 else None,
-                                budget_remaining_s=budget_remaining,
+                        attempt_timeout = min(dynamic_timeout, remaining_now)
+                    client.timeout = httpx.Timeout(attempt_timeout)
+                    try:
+                        response = await client.post("/v1/chat/completions", json=body)
+                        response.raise_for_status()
+                        data = response.json()
+                        break
+                    except Exception as e:
+                        try:
+                            self._raise_classified_error(e)  # 总是抛出
+                        except LLMError as llm_err:
+                            last_llm_err = llm_err
+                            has_failed_once = True
+                            if (
+                                attempt >= max_attempts
+                                or llm_err.type not in _RETRYABLE_ERROR_TYPES
+                            ):
+                                # D-1 (round5 批次 D): 主模型重试耗尽 → 降级
+                                # fallback_model 再来一轮（每实例至多一次）。
+                                # 2026-11-26: fallback_model 仅由主跳携带。
+                                if (
+                                    not fallback_used
+                                    and hop.fallback_model
+                                    and hop.fallback_model != body.get("model")
+                                    and llm_err.type in _RETRYABLE_ERROR_TYPES
+                                ):
+                                    fallback_used = True
+                                    body["model"] = hop.fallback_model
+                                    attempt = 0
+                                    logger.warning(
+                                        "LLM 主模型重试耗尽(%s), 降级 fallback model: %s",
+                                        llm_err.message,
+                                        hop.fallback_model,
+                                    )
+                                    continue
+                                raise
+                            delay = _retry_backoff_seconds(
+                                llm_err, attempt, base_delay, max_delay
                             )
+                            elapsed_now = _retry_now() - retry_started
+                            budget_remaining: Optional[float] = None
+                            next_attempt_timeout: Optional[float] = None
+                            if total_budget > 0:
+                                budget_remaining = total_budget - (elapsed_now + delay)
+                                if budget_remaining < _LLM_RETRY_MIN_ATTEMPT_S:
+                                    raise _retry_budget_exhausted_error(
+                                        llm_err, attempt, max_attempts, delay, total_budget
+                                    )
+                                next_attempt_timeout = min(dynamic_timeout, budget_remaining)
+                            logger.warning(
+                                "LLM 请求失败(%s/%s): %s — %.1fs 后重试",
+                                attempt,
+                                max_attempts,
+                                llm_err.message,
+                                delay,
+                            )
+                            # 推送重试事件到回调（如 SSE）
+                            if retry_callback:
+                                retry_callback(
+                                    RetryEvent(
+                                        attempt=attempt,
+                                        max_attempts=max_attempts,
+                                        error_type=llm_err.type.value,
+                                        error_message=llm_err.message,
+                                        delay=delay,
+                                        elapsed_s=max(0.0, elapsed_now),
+                                        attempt_timeout_s=next_attempt_timeout,
+                                        budget_total_s=total_budget
+                                        if total_budget > 0
+                                        else None,
+                                        budget_remaining_s=budget_remaining,
+                                    )
+                                )
+                            await asyncio.sleep(delay)
+            except LLMError as hop_err:
+                hop_failed = True
+                last_llm_err = hop_err
+
+            if not hop_failed:
+                self._record_hop_health(hop, True)
+                break
+
+            self._record_hop_health(hop, False, last_llm_err.type.value)
+            hop_errors.append(
+                "%s: %s"
+                % (
+                    hop.endpoint_name or hop.endpoint_id or hop.base_url,
+                    last_llm_err.message,
+                )
+            )
+            if self._should_failover(last_llm_err) and hop_index + 1 < len(hops):
+                next_hop = hops[hop_index + 1]
+                self._record_hop_failover(hop)
+                if failover_callback is not None:
+                    failover_callback(
+                        FailoverEvent(
+                            from_endpoint=hop.endpoint_id,
+                            from_endpoint_name=hop.endpoint_name,
+                            to_endpoint=next_hop.endpoint_id,
+                            to_endpoint_name=next_hop.endpoint_name,
+                            reason=last_llm_err.type.value,
+                            hop_index=hop_index,
+                            total_hops=len(hops),
                         )
-                    await asyncio.sleep(delay)
+                    )
+                logger.warning(
+                    "LLM 端点失败(%s), 切换到下一端点: %s",
+                    hop.endpoint_id or hop.base_url,
+                    next_hop.endpoint_id or next_hop.base_url,
+                )
+                hop_index += 1
+                continue
+            if len(hops) > 1:
+                raise LLMError(
+                    last_llm_err.type,
+                    "%s（已尝试 %d 个端点：%s）"
+                    % (last_llm_err.message, len(hops), "；".join(hop_errors)),
+                    status_code=last_llm_err.status_code,
+                    retry_after=last_llm_err.retry_after,
+                )
+            raise last_llm_err
 
         elapsed = time.time() - start_time
         logger.debug(f"LLM 响应耗时: {elapsed:.2f}s")
@@ -974,12 +1158,12 @@ class LLMClient:
                 from backend.services.usage_tracker import usage_tracker
 
                 usage_tracker.record(
-                    data.get("model", self.config.model),
+                    data.get("model", hop.model),
                     usage_dict["prompt_tokens"],
                     usage_dict["completion_tokens"],
                     session_id=self.session_id,
                     cached_tokens=usage_dict["cached_tokens"],
-                    endpoint_id=self.config.endpoint_id,
+                    endpoint_id=hop.endpoint_id,
                     price_snapshot=price_snapshot,
                     context_breakdown=self._context_breakdown_snapshot(
                         body, usage_dict["prompt_tokens"]
@@ -993,7 +1177,7 @@ class LLMClient:
         return LLMResponse(
             content=content,
             reasoning_content=reasoning_content,
-            model=data.get("model", self.config.model),
+            model=data.get("model", hop.model),
             finish_reason=choice.get("finish_reason"),
             tool_calls=tool_calls,
             input_tokens=usage.get("prompt_tokens", 0),
