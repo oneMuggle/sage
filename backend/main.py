@@ -165,6 +165,7 @@ from backend.orchestration.wake_scheduler import WakeScheduler
 from backend.scheduler.todo_reminder import (
     init_todo_reminder_scheduler,
 )
+from backend.services.endpoint_probe import start_endpoint_probe_task
 from backend.services.scheduler import (
     get_scheduler_service,
     init_scheduler_service,
@@ -1183,6 +1184,8 @@ async def lifespan(app: FastAPI):
         _deferred_startup_init(app, main_loop, scheduler_service),
         name="deferred-startup-init",
     )
+    # 2026-11-26: 端点健康探测（仅 degraded/failed 端点，不消耗 token）。
+    app.state.endpoint_probe_task = start_endpoint_probe_task()
 
     if __name__ == "__main__":
         _elapsed_lifespan = time.monotonic() - _startup_t0
@@ -1198,6 +1201,11 @@ async def lifespan(app: FastAPI):
     _deferred_task.cancel()
     with suppress(asyncio.CancelledError):
         await _deferred_task
+    _endpoint_probe_task = getattr(app.state, "endpoint_probe_task", None)
+    if _endpoint_probe_task is not None:
+        _endpoint_probe_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _endpoint_probe_task
     # Progressive readiness：deferred 内创建的 MCP 状态观察任务独立于
     # deferred 本身，shutdown 时显式取消（避免遗留轮询）。
     _mcp_status_task = getattr(app.state, "mcp_status_task", None)
