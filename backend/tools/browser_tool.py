@@ -103,6 +103,7 @@ _VALID_ACTIONS = (
     "check",
     "uncheck",
     "upload",
+    "attr",
 )
 
 #: 视觉注入的截图约束（data URL 上限 1.5MB / 宽 1568px）
@@ -885,6 +886,18 @@ def _js_click_element() -> str:
     )
 
 
+def _js_attr_element(name: str) -> str:
+    return (
+        "(function(){"
+        f"var next={json.dumps(name)};"
+        "if(!el.getAttribute){return{ok:false,info:'no-attribute-api'};}"
+        "var v=el.getAttribute(next);"
+        "if(v===null){return{ok:false,info:'attribute-not-found: '+next};}"
+        "return{ok:true,info:String(v).slice(0,4000)};"
+        "})()"
+    )
+
+
 def _js_type_element(value: str, clear: bool) -> str:
     cleared = json.dumps(" cleared-first" if clear else "")
     return (
@@ -1223,6 +1236,9 @@ def _interact_arg_error(
     elif action in ("hover", "check", "uncheck"):
         if not located:
             error = f"{action} 需要 ref 或 selector"
+    elif action == "attr":
+        if not located:
+            error = "attr 需要 ref 或 selector"
     elif action == "press":
         if not isinstance(key, str) or not key:
             error = "press 需要 key"
@@ -1276,6 +1292,7 @@ def _build_interact_expression(  # noqa: PLR0911 — 每个动作分支独立返
     key: str,
     clear: bool,
     ref: str,
+    attr_name: str = "",
     frame_owner: Optional[Dict[str, str]] = None,
 ) -> str:
     """按定位优先级构造交互 JS（ref > selector > text，scroll 无定位）。
@@ -1284,6 +1301,13 @@ def _build_interact_expression(  # noqa: PLR0911 — 每个动作分支独立返
     frame 的隔离世界执行，且不附加页面 url/title（保持顶层页面缓存）。
     """
     frame_name = str((frame_owner or {}).get("name") or "")
+    if action == "attr":
+        snippet = _js_attr_element(attr_name or "href")
+        if ref and frame_owner:
+            return build_frame_ref_expression(snippet, ref, frame_name)
+        if ref:
+            return _expression_with_page_info(build_ref_expression(snippet, ref))
+        return _expression_with_page_info(_js_on_selector(selector, snippet))
     if action == "click":
         if ref and frame_owner:
             return build_frame_ref_expression(_js_click_element(), ref, frame_name)
@@ -2042,8 +2066,13 @@ class BrowserInteractTool(BaseTool):
                             "check",
                             "uncheck",
                             "upload",
+                            "attr",
                         ],
                         "description": "要执行的动作",
+                    },
+                    "attr_name": {
+                        "type": "string",
+                        "description": "attr 动作要读取的元素属性名（默认 href）",
                     },
                     "ref": {
                         "type": "string",
@@ -2085,6 +2114,7 @@ class BrowserInteractTool(BaseTool):
         ref: str = "",
         browser_id: str = "",
         path: str = "",
+        attr_name: str = "",
         **kwargs: Any,
     ) -> ToolResult:
         rejection = _validate_interact_args(
@@ -2092,6 +2122,7 @@ class BrowserInteractTool(BaseTool):
         )
         if rejection is not None:
             return rejection
+        attr_name = (attr_name or "").strip() or "href"
 
         upload_file: Optional[Path] = None
         expression = ""
@@ -2198,6 +2229,7 @@ class BrowserInteractTool(BaseTool):
                     key,
                     bool(clear),
                     ref,
+                    attr_name=attr_name,
                     frame_owner=frame_owner,
                 )
             # M4 敏感动作：先取目标元数据再分类；hard_block 不允许用户放行。

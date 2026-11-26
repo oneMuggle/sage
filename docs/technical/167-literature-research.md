@@ -19,7 +19,7 @@ Sage 的文献研究能力由随包分发的 `literature-research` skill 驱动�
 
 | 文件 | 职责 |
 |---|---|
-| `backend/literature/models.py` | `SiteProfile` / `SearchSpec` / `PdfSpec` / `PaperRecord` 等领域模型；`profile_from_dict` 校验、`render_search_url`、`is_logged_in` |
+| `backend/literature/models.py` | `SiteProfile` / `SearchSpec` / `PdfSpec`（含 `pdf.interstitial` 中间页声明）/ `PaperRecord` 等领域模型；`profile_from_dict` 校验、`render_search_url`、`is_logged_in` |
 | `backend/literature/profile_store.py` | 内置 / 用户 / 项目三级 profile 存储与缓存 |
 | `backend/literature/academic_adapter.py` | `ProfileBackedAdapter`，把 profile 包装成 `academic_adapters` 要求的 duck-typed 适配器 |
 | `backend/literature/guidance.py` | 把 profile 渲染成给 LLM 的检索指导文本，不执行浏览器 |
@@ -231,16 +231,32 @@ YAML 并记录 warning，`get(site_id)` 命中无效 profile 时抛 `SiteProfile
 
 ### 5.5 PDF 下载与校验
 
-`download_pdf` 要求 profile 配置 `pdf` 且至少有一个入口：
+`download_pdf(profile, driver, expected_title, dest_dir, timeout_s=60, *, entry_url="", entry_selector="")`：
 
-- 有 `entry_selector` 时 `driver.click(selector)`，否则 `driver.click_text(entry_text)`；
-- 可配置 `post_click_wait_s`，点击后等待新标签/下载触发；
-- `wait_download` 超时返回失败；
-- `validate_pdf` 校验文件头 magic（默认 `%PDF-`）与文件名是否包含题名；
-- `forbid`（默认 `CAJ`）命中后缀时记错误。
+- **中间页路径（profile 声明 `pdf.interstitial` 时优先）**：读取入口元素完整 href
+  （`entry_url` 参数优先，否则 `entry_selector` → `driver.element_attr(..., "href")`）→
+  `driver.open_tab(href)` 新开工具可见标签页 → 等 `sleep_after_open_s` 让中间页跳转 →
+  `driver.tabs()` 轮询至 URL 命中 `url_contains`（上限 `tab_timeout_s`）→ 按
+  `host_fallbacks` 生成候选 URL（回退主机在前、原域最后）逐个 `focus_tab` + `navigate` +
+  `wait_download`（非最后一次尝试限 `attempt_timeout_s`）→ 校验通过即关闭标签。
+  附件下载会中断导航（`net::ERR_ABORTED`），异常不阻断后续等下载；驱动缺
+  `element_attr`/`open_tab`/`tabs` 能力时回退到下面的原路径。
+- 原路径要求 profile 配置 `pdf` 且至少有一个入口：有 `entry_selector` 时
+  `driver.click(selector)`，否则 `driver.click_text(entry_text)`；可配置
+  `post_click_wait_s`；`wait_download` 超时返回失败；`validate_pdf` 校验文件头 magic
+  （默认 `%PDF-`）与文件名是否包含题名；`forbid`（默认 `CAJ`）命中后缀时记错误。
 
-部分站点的下载链接真实 href 还带 `&ddata=文件名|库|题名|库|hash` 这类附加参数，必须点击 DOM
-元素本身，不能用快照里截断的 URL 直连，否则服务端报「参数错误」。
+部分站点的下载链接真实 href 还带 `&ddata=文件名|库|题名|库|hash` 这类附加参数，必须使用 DOM
+元素本身的完整 href，不能用快照里截断的 URL 直连，否则服务端报「参数错误」。
+
+**2026-11-26 xueshu789 实测（oversea→kns 主机回退）**：站点下载改为两段式——
+`doDownload` → `301` → `/doDownload/`「文献下载中」中间页，约 `2s` 后 JS 跳
+`downurl`；该站把 `downurl` 主机写死为 `oversea.cnki.net/docdown/fulltext/download?q=...`，
+国内库（CJFQ 等）内容在海外网关返回 CNKI 404「页面不存在」（与登录态/Referer/UA/cookie
+无关，curl 复放排除）。同一 q/invoice token 换 `kns.cnki.net` 返回 `application/pdf`
+（实测 1,070,254B；浏览器内重写主机后 1,688,310B 落盘、`%PDF-1.6`、题名匹配）。
+因此 xueshu789 profile 声明 `pdf.interstitial`（`url_contains: cnki.net/docdown`、
+`host_fallbacks: [kns.cnki.net]`）。
 
 合规边界固定在 skill 与 profile 中：仅使用本人账号或机构授权；不代填密码、不导出
 cookie、不绕过付费墙；验证码/滑块交还用户在可见窗口完成；第三方站点默认禁用，
@@ -393,8 +409,10 @@ GB/T 7714 引用的 docx，再用 `office_lint_word` 自检；文献子系统不
 - **报告分组命名**：实现输出 6 个 verdict 分组，与「四态报告」的历史叫法不完全一致。
 - **引用样式**：仅 GB/T 7714 与 IEEE；APA/CSL 未实现，中文作者在 IEEE 下保持原样。
 - **站点可用性**：xueshu789 仅 `/dbItem/3` 实测可用；`/dbItem/1` 代理报「出错啦」，
-  `/dbItem/2` 会触发知网滑块验证，需要用户在可见窗口人工完成。下载完成后新标签
-  可能显示「页面不存在」，但 PDF 已落盘，应以浏览器下载目录为准。
+  `/dbItem/2` 会触发知网滑块验证，需要用户在可见窗口人工完成。2026-11-26 起下载为
+  两段式中间页且最终主机写死 `oversea.cnki.net`（国内库 404），由 profile
+  `pdf.interstitial.host_fallbacks` 回退 `kns.cnki.net` 修复；下载完成后中间页标签可能
+  显示「页面不存在」，以 `DownloadResult.path` / 浏览器下载目录为准。
 - **登录态**：`is_logged_in` 只按配置的 URL/标题规则判断，未配置时返回 `None`；
   登录本身必须由用户通过 `browser_login` 完成。
 - **项目层 profile 位置**：以进程 cwd 为基准；后端 cwd 不是工作区时，项目层

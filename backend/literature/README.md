@@ -47,6 +47,16 @@ search:
 登录墙 / 反爬 / 空正文时自动回落浏览器通道。`search.mode: interactive`
 必须走浏览器（需在真实页面输入检索词），不启用快路径。
 
+## 中间页下载（`pdf.interstitial`）
+
+部分站点的下载入口先落「准备中」中间页、再由页面 JS 跳到带时效签名的最终
+地址，且最终地址主机可能写错（xueshu789 即如此：oversea 网关对国内库 404）。
+在 profile 里声明两段式下载后，`download_pdf` 会：读取入口元素完整 `href` →
+新标签打开 → 等 URL 命中 `url_contains` → 按 `host_fallbacks` 重写主机逐个
+导航 → 等下载并校验。标签页用 `browser_tabs create` 打开（工具可见）；**不要
+依赖站点 `window.open` 弹窗**（弹窗不在桥注册表里，工具看不到）。字段细节见
+`docs/templates/literature-sites/README.md`。
+
 ## Claims 账本与核验（M2a）
 
 每次核验生成 `claims.jsonl`，每行一条 claim：
