@@ -473,11 +473,11 @@ GET  /api/v1/reports/{id}
 
 ### P2 — 工作日志捕获子系统
 
-- [ ] 步骤 P2.1：`database.py` 建 `work_logs` 表 + 索引
-- [ ] 步骤 P2.2：`backend/services/worklog_service.py`（CRUD + confirm/dismiss + 时间窗查询）
-- [ ] 步骤 P2.3：`backend/services/worklog_ai.py`（LLM 抽取候选，不落库；沿用 `todo_ai.py` 的预算控制模式）
-- [ ] 步骤 P2.4：`backend/api/worklog_router.py`（8 个端点）
-- [ ] 步骤 P2.5：agent 工具 `add_worklog` / `list_worklogs`
+- [x] 步骤 P2.1：`database.py` 建 `work_logs` 表 + 索引
+- [x] 步骤 P2.2：`backend/services/worklog_service.py`（CRUD + confirm/dismiss + 时间窗查询）
+- [x] 步骤 P2.3：`backend/services/worklog_ai.py`（LLM 抽取候选，不落库；沿用 `todo_ai.py` 的预算控制模式）
+- [x] 步骤 P2.4：`backend/api/worklog_router.py`（9 个端点）
+- [x] 步骤 P2.5：agent 工具 `add_worklog` / `list_worklogs`
 - [ ] 步骤 P2.6：IPC 8 命令 + manifest
 - [ ] 步骤 P2.7：前端 `TodoWorklogPanel.tsx`（收件箱 + 日志流 + 手动添加）+ `TodoPage` 分段控件
 - [ ] 步骤 P2.8：pytest + vitest 全绿

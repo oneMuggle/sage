@@ -14,17 +14,24 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from backend.services.conversation_excerpt import load_conversation_excerpt
+from backend.services.llm_endpoint import LLMNotConfiguredError, build_ai_client
+
 logger = logging.getLogger(__name__)
 
 MAX_CANDIDATES = 10
-MAX_MESSAGES = 80
-MAX_MESSAGE_CHARS = 2000
-_TOTAL_BUDGET_CHARS = 12000
+# 会话摘录的预算常量与实现已抽到 ``conversation_excerpt``（P2，工作日志抽取
+# 复用同一套预算），本模块只留候选解析与生成逻辑。
 _CODE_FENCE_RE = re.compile(r"```(?:json)?\s*\n?(.*?)\n?\s*```", re.DOTALL)
 
-
-class LLMNotConfiguredError(RuntimeError):
-    """LLM 端点未配置。"""
+__all__ = [
+    "MAX_CANDIDATES",
+    "LLMNotConfiguredError",
+    "ExtractedTodoCandidate",
+    "extract_todos",
+    "generate_daily_brief",
+    "generate_weekly_review",
+]
 
 
 class ExtractedTodoCandidate(BaseModel):
@@ -35,12 +42,12 @@ class ExtractedTodoCandidate(BaseModel):
 
 
 def _client() -> Any:
-    from backend.orchestration.llm_factory import build_llm_client_from_settings
+    """返回配置好的 LLM 客户端。
 
-    client = build_llm_client_from_settings()
-    if client is None:
-        raise LLMNotConfiguredError("LLM 未配置，请先在 设置 → 模型 中完成配置")
-    return client
+    实现已抽到 :mod:`backend.services.llm_endpoint`（P2，工作日志/报告抽取
+    复用同一份装配路径与异常类型），这里保留薄封装作为测试打桩点。
+    """
+    return build_ai_client()
 
 
 def _to_local_naive_iso(value: str) -> Optional[str]:
@@ -55,33 +62,12 @@ def _to_local_naive_iso(value: str) -> Optional[str]:
 
 
 def _load_conversation(session_id: str, message_ids: Optional[List[str]]) -> str:
-    """把会话消息压成 ``[用户]/[助手]`` 摘录文本（有预算上限）。"""
-    from backend.data.session_repo import MessageRepository
+    """把会话消息压成 ``[用户]/[助手]`` 摘录文本（有预算上限）。
 
-    repo = MessageRepository()
-    messages: List[Any] = []
-    if message_ids:
-        for message_id in message_ids[:MAX_MESSAGES]:
-            message = repo.get(message_id)
-            if message is not None:
-                messages.append(message)
-    else:
-        messages = list(reversed(repo.get_by_session(session_id, limit=MAX_MESSAGES)))
-
-    lines: List[str] = []
-    budget = _TOTAL_BUDGET_CHARS
-    for message in messages:
-        role = getattr(message, "role", "") or ""
-        if role not in ("user", "assistant"):
-            continue
-        content = (getattr(message, "content", "") or "").strip()
-        if not content or budget <= 0:
-            continue
-        take = content[: min(MAX_MESSAGE_CHARS, budget)]
-        budget -= len(take)
-        label = "用户" if role == "user" else "助手"
-        lines.append(f"[{label}] {take}")
-    return "\n\n".join(lines)
+    实现已迁到 :mod:`backend.services.conversation_excerpt`（P2 抽出，与工作
+    日志抽取共用同一套预算常量），这里保留薄封装兼容既有调用方。
+    """
+    return load_conversation_excerpt(session_id, message_ids)
 
 
 def _parse_candidates(raw: Any) -> List[Dict[str, Any]]:

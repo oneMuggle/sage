@@ -3,7 +3,7 @@
 
 R80 曾用 legacy/bundle 双跑对照证明两条装配路径等价；R81 删除 legacy
 后，本文件把当时实测得到的 ONLINE 94 个工具名及顺序钉成黄金快照（后续
-新增 bundle 时同步追加，当前 124 项）。
+新增 bundle 时同步追加，当前 129 项）。
 无 ``harness.yaml`` 时必须逐项命中这份清单——这是「删配置即回默认」
 的兼容承诺。预设只能从这份全量清单中按原顺序删减，不能重排。
 """
@@ -146,6 +146,8 @@ _EXPECTED_ONLINE = [
     "complete_todo",
     "update_todo",
     "delete_todo",
+    "add_worklog",
+    "list_worklogs",
     "design_list_systems",
     "design_list_templates",
     "design_generate",
@@ -242,6 +244,8 @@ _EXPECTED_SCHEMA_NAMES = [
     "complete_todo",
     "update_todo",
     "delete_todo",
+    "add_worklog",
+    "list_worklogs",
     "design_list_systems",
     "design_list_templates",
     "design_generate",
@@ -285,6 +289,7 @@ _EXPECTED_BUNDLE_NAMES = (
     "mcp",
     "plugins",
     "todo",
+    "worklog",
     "design",
     "self_status",
 )
@@ -314,6 +319,7 @@ _FOCUS_BUNDLES = (
     "mcp",
     "plugins",
     "todo",
+    "worklog",
     "self_status",
 )
 
@@ -421,7 +427,7 @@ def test_standard_online_matches_golden_snapshot() -> None:
     registry = _install_via_facade()
 
     assert registry.list_names() == _EXPECTED_ONLINE
-    assert len(registry.list_names()) == len(set(registry.list_names())) == 127
+    assert len(registry.list_names()) == len(set(registry.list_names())) == 129
 
 
 def test_standard_risks_and_schemas_align_with_golden_snapshot() -> None:
@@ -445,7 +451,7 @@ def test_network_gating_counts_and_differences() -> None:
     intranet = _install_via_facade(NetworkMode.INTRANET).list_names()
     offline = _install_via_facade(NetworkMode.OFFLINE).list_names()
 
-    assert (len(online), len(intranet), len(offline)) == (127, 126, 122)
+    assert (len(online), len(intranet), len(offline)) == (129, 128, 124)
     assert set(online) - set(intranet) == {"web_search"}
     assert set(intranet) - set(offline) == {
         "web_fetch",
@@ -495,7 +501,7 @@ def test_bundle_selection_for_standard_focus_headless_and_dev() -> None:
     assert tuple(b.name for b in select_bundle_objects(_harness("focus"))) == _FOCUS_BUNDLES
 
     headless = tuple(b.name for b in select_bundle_objects(_harness("headless")))
-    assert len(headless) == 33
+    assert len(headless) == 34
     assert "ask_user" not in headless
     assert [name for name in _EXPECTED_BUNDLE_NAMES if name in set(headless)] == list(headless)
 
@@ -515,7 +521,7 @@ def test_focus_install_excludes_heavy_tool_surfaces() -> None:
     registry = _install_bundles(_harness("focus"))
     names = registry.list_names()
 
-    assert len(names) == 61
+    assert len(names) == 63
     assert not any(name.startswith("office_") for name in names)
     assert not any(name.startswith("browser_") for name in names)
     assert not any(name.startswith("design_") for name in names)
@@ -528,7 +534,7 @@ def test_headless_install_excludes_ask_user_only() -> None:
     registry = _install_bundles(_harness("headless"))
     names = registry.list_names()
 
-    assert len(names) == 126
+    assert len(names) == 128
     assert "ask_user_question" not in names
     assert set(_EXPECTED_ONLINE) - set(names) == {"ask_user_question"}
     _assert_subsequence(names)
@@ -565,7 +571,7 @@ def test_register_all_tools_reads_project_harness(tmp_path: Path) -> None:
 
     registry = _install_via_facade()
 
-    assert len(registry.list_names()) == 126
+    assert len(registry.list_names()) == 128
     assert "ask_user_question" not in registry.list_names()
 
 
@@ -592,6 +598,9 @@ def _forwarded(bundle_name: str) -> Tuple[bool, int]:
     def todo_getter() -> None:
         return None
 
+    def worklog_getter() -> None:
+        return None
+
     recorder = _RecordingRegistry()
     bundle = next(item for item in BUNDLES if item.name == bundle_name)
     ctx = ToolInstallContext(
@@ -600,11 +609,15 @@ def _forwarded(bundle_name: str) -> Tuple[bool, int]:
         network_policy=NetworkPolicy(),
         scheduler_service_getter=scheduler_getter,
         todo_service_getter=todo_getter,
+        worklog_service_getter=worklog_getter,
     )
     install_bundles(ctx, [bundle])
     assert recorder.tools, f"{bundle_name} 未注册任何工具"
 
-    wanted = scheduler_getter if bundle_name == "schedule" else todo_getter
+    wanted = {
+        "schedule": scheduler_getter,
+        "worklog": worklog_getter,
+    }.get(bundle_name, todo_getter)
     # wake_session_at 不依赖 scheduler getter（直接复用 WakeStore 单例），
     # 只校验确实持有 getter 的实例。
     skip = {"wake_session_at"} if bundle_name == "schedule" else set()
@@ -617,7 +630,7 @@ def _forwarded(bundle_name: str) -> Tuple[bool, int]:
 
 @pytest.mark.parametrize(
     ("bundle_name", "expected_count"),
-    [("schedule", 4), ("todo", 5)],
+    [("schedule", 4), ("todo", 5), ("worklog", 2)],
 )
 def test_service_getter_is_forwarded(bundle_name: str, expected_count: int) -> None:
     all_forwarded, count = _forwarded(bundle_name)
