@@ -256,6 +256,14 @@ BACKGROUND_TASK_TOOLS = ("wake_on_background", "wait_background")
 # （完成/删除同样改 SQLite）。ToolPolicy 层会按风险分级处理。
 TODO_TOOLS = ("add_todo", "list_todos", "update_todo", "complete_todo", "delete_todo")
 
+# 工作日志子系统（2026-11-27 todo-ux-worklog-report P2）：两个 LLM 工具面
+# （add / list），均挂 WorklogService（SQLite 持久化）。与 TODO_TOOLS 同模式：
+# 工具无条件注册（对 LLM 可见），``worklog_service_getter`` 在执行期解析
+# service 是否就绪。``add_worklog`` 为 WRITE_LOCAL（写 work_logs 表）；
+# ``list_worklogs`` 为 READ（只读）。写入的记录一律落 ``pending``，
+# 用户确认后才计入日报/周报。
+WORKLOG_TOOLS = ("add_worklog", "list_worklogs")
+
 # Design Studio 工具面（2026-10-13 OpenDesign 集成 Task 13）：六件套。
 # 两个目录查询件（list_systems / list_templates）为 READ；三个产件
 # （generate / iterate / export）为 WRITE_LOCAL —— generate/iterate 写
@@ -308,6 +316,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(SCHEDULE_TOOLS)
         | set(BACKGROUND_TASK_TOOLS)
         | set(TODO_TOOLS)
+        | set(WORKLOG_TOOLS)
         | set(DESIGN_TOOLS)
         | set(SELF_STATUS_TOOLS)
     )
@@ -587,6 +596,7 @@ __all__ = [
     "WEB_FETCH_TOOLS",
     "WEB_SEARCH_TOOLS",
     "WEB_TOOLS",
+    "WORKLOG_TOOLS",
     "is_mcp_tool_name",
     "is_mcp_tool_reference",
     "is_mcp_tool_wildcard",

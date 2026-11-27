@@ -58,6 +58,7 @@ class ToolInstallContext:
     network_policy: Any = None
     scheduler_service_getter: Any = None
     todo_service_getter: Any = None
+    worklog_service_getter: Any = None
     capabilities: Dict[str, bool] = field(default_factory=dict)
 
 

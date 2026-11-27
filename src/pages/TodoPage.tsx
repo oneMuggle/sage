@@ -20,17 +20,28 @@ import { useSearchParams } from 'react-router-dom';
 import { useTodoStore } from '../entities/todo/todoStore';
 import { agentsApi } from '../shared/api/agentsApi';
 import { todoClient } from '../shared/api/todoClient';
-import type { Todo, TodoListParams, UpdateTodoInput } from '../shared/api/types';
+import type {
+  ReportType,
+  Todo,
+  TodoDropZone,
+  TodoListParams,
+  UpdateTodoInput,
+} from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
 import { PageHeader } from '../shared/ui';
 
-import { TodoAiDialog } from './todo/TodoAiDialog';
 import { TodoCreateForm } from './todo/TodoCreateForm';
 import { TodoHeatmap } from './todo/TodoHeatmap';
 import { TodoQuickAdd } from './todo/TodoQuickAdd';
+import { TodoReportDialog } from './todo/TodoReportDialog';
 import { TodoRowEditor } from './todo/TodoRowEditor';
 import { TodoSubtaskTree } from './todo/TodoSubtaskTree';
 import { TodoToolbar } from './todo/TodoToolbar';
+import { TodoWorklogPanel } from './todo/TodoWorklogPanel';
+import { useTodoDrag } from './todo/useTodoDrag';
+
+/** 页面分段：待办列表 / 工作日志（P2）。 */
+type TodoTab = 'todos' | 'logs';
 
 /** 专家条目（阶段 3：专家专属待办的过滤/创建来源）。 */
 export interface TodoSpecialistOption {
@@ -58,18 +69,35 @@ export function TodoPage() {
   const batchComplete = useTodoStore((s) => s.batchComplete);
   const batchDelete = useTodoStore((s) => s.batchDelete);
   const snooze = useTodoStore((s) => s.snooze);
+  const moveTodo = useTodoStore((s) => s.moveTodo);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [createBusy, setCreateBusy] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const [aiDialog, setAiDialog] = useState<null | 'brief' | 'weekly'>(null);
+  const [reportDialog, setReportDialog] = useState<null | ReportType>(null);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [specialists, setSpecialists] = useState<TodoSpecialistOption[]>([]);
   const lastSentQuery = useRef<string | undefined>(params.q);
 
+  // P2 分段控件：?tab=logs 进工作日志，缺省回待办列表。
+  const activeTab: TodoTab = searchParams.get('tab') === 'logs' ? 'logs' : 'todos';
+  const handleTabChange = useCallback(
+    (tab: TodoTab) => {
+      const next = new URLSearchParams(searchParams);
+      if (tab === 'todos') {
+        next.delete('tab');
+      } else {
+        next.set('tab', tab);
+      }
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
   useEffect(() => {
-    void load();
+    // 默认按手工次序加载 —— 拖拽排序的前提是列表本身就是手工序。
+    void load({ sort_by: 'manual' });
   }, [load]);
 
   // 专家列表（阶段 3）：失败静默降级为不显示专家过滤/选择器。
@@ -119,6 +147,35 @@ export function TodoPage() {
 
   // Check if any subtasks exist to decide rendering mode
   const hasSubtasks = useMemo(() => todos.some((todo) => todo.parent_id != null), [todos]);
+
+  /**
+   * P1 拖拽落库：失败提示由 store 内部 toast 处理，这里只吞掉异常，
+   * 避免未处理的 Promise rejection。
+   */
+  const handleMove = useCallback(
+    async (draggedId: number, targetId: number, zone: TodoDropZone) => {
+      try {
+        await moveTodo(draggedId, targetId, zone);
+      } catch {
+        // 已提示，无需重复处理。
+      }
+    },
+    [moveTodo],
+  );
+
+  /**
+   * P1 拖拽交互：
+   *   - 仅「手动排序」时可拖（其他排序下拖柄禁用）；
+   *   - 树形视图下「前 / 后」只允许同层重排；
+   *   - 「变成子任务」两种视图都允许 —— 目标必须是顶层行（层级上限两层）。
+   */
+  const { handleFor: dragHandleFor, rowFor: dragRowFor } = useTodoDrag({
+    todos,
+    enabled: params.sort_by === 'manual',
+    allowNest: true,
+    sameLayerOnly: hasSubtasks,
+    onMove: handleMove,
+  });
 
   const handleParamsChange = useCallback(
     (newParams: TodoListParams) => {
@@ -256,6 +313,8 @@ export function TodoPage() {
         onDelete={handleDelete}
         onAddSubtask={todo.parent_id == null ? handleAddSubtask : undefined}
         onSnooze={handleSnooze}
+        specialists={specialists}
+        drag={{ handle: dragHandleFor(todo), row: dragRowFor(todo) }}
       />
     ),
     [
@@ -267,6 +326,9 @@ export function TodoPage() {
       handleDelete,
       handleAddSubtask,
       handleSnooze,
+      specialists,
+      dragHandleFor,
+      dragRowFor,
     ],
   );
 
@@ -276,178 +338,220 @@ export function TodoPage() {
         title={t('todos.title')}
         actions={
           <div className="flex items-center gap-2 text-ui-xs text-text-muted">
-            {todos.length > 0 && (
-              <span>
-                {todos.filter((t) => t.status === 'completed').length}/{todos.length} 已完成
-              </span>
+            {activeTab === 'todos' && (
+              <>
+                {todos.length > 0 && (
+                  <span>
+                    {todos.filter((t) => t.status === 'completed').length}/{todos.length} 已完成
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setReportDialog('daily')}
+                  title="生成日报"
+                  aria-label="日报"
+                  data-testid="todo-report-daily"
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  日报
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReportDialog('weekly')}
+                  title="生成周报"
+                  aria-label="周报"
+                  data-testid="todo-report-weekly"
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
+                >
+                  周报
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowHeatmap((v) => !v)}
+                  title="完成热力图"
+                  aria-label="完成热力图"
+                  aria-pressed={showHeatmap}
+                  data-testid="todo-heatmap-toggle"
+                  className={`flex items-center gap-1 px-2 py-1 rounded border hover:border-primary hover:text-primary ${
+                    showHeatmap ? 'border-primary text-primary' : 'border-border'
+                  }`}
+                >
+                  <BarChart3 className="w-3 h-3" />
+                  热力图
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickAddOpen(true)}
+                  title="快速添加（快捷键 N）"
+                  aria-label="快速添加"
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
+                >
+                  <Zap className="w-3 h-3" />
+                  快速添加
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExport('md')}
+                  title="导出 Markdown"
+                  aria-label="导出 Markdown"
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
+                >
+                  <Download className="w-3 h-3" />
+                  MD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExport('json')}
+                  title="导出 JSON"
+                  aria-label="导出 JSON"
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
+                >
+                  <Download className="w-3 h-3" />
+                  JSON
+                </button>
+              </>
             )}
-            <button
-              type="button"
-              onClick={() => setAiDialog('brief')}
-              title="AI 今日简报"
-              aria-label="AI 简报"
-              data-testid="todo-ai-brief"
-              className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
-            >
-              <Sparkles className="w-3 h-3" />
-              简报
-            </button>
-            <button
-              type="button"
-              onClick={() => setAiDialog('weekly')}
-              title="周回顾"
-              aria-label="周回顾"
-              data-testid="todo-ai-weekly"
-              className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
-            >
-              周回顾
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowHeatmap((v) => !v)}
-              title="完成热力图"
-              aria-label="完成热力图"
-              aria-pressed={showHeatmap}
-              data-testid="todo-heatmap-toggle"
-              className={`flex items-center gap-1 px-2 py-1 rounded border hover:border-primary hover:text-primary ${
-                showHeatmap ? 'border-primary text-primary' : 'border-border'
-              }`}
-            >
-              <BarChart3 className="w-3 h-3" />
-              热力图
-            </button>
-            <button
-              type="button"
-              onClick={() => setQuickAddOpen(true)}
-              title="快速添加（快捷键 N）"
-              aria-label="快速添加"
-              className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
-            >
-              <Zap className="w-3 h-3" />
-              快速添加
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleExport('md')}
-              title="导出 Markdown"
-              aria-label="导出 Markdown"
-              className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
-            >
-              <Download className="w-3 h-3" />
-              MD
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleExport('json')}
-              title="导出 JSON"
-              aria-label="导出 JSON"
-              className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
-            >
-              <Download className="w-3 h-3" />
-              JSON
-            </button>
           </div>
         }
       />
 
       <div className="flex-1 overflow-y-auto p-6 max-w-3xl mx-auto w-full">
-        {/* Enhanced creation form */}
-        <TodoCreateForm onCreate={handleCreate} busy={createBusy} specialists={specialists} />
-
-        {/* Filter / Sort toolbar */}
-        <TodoToolbar
-          params={params}
-          searchQuery={searchQuery}
-          specialists={specialists}
-          onParamsChange={handleParamsChange}
-          onSearchChange={setSearchQuery}
-        />
-
-        {/* 完成热力图（阶段 3，可折叠） */}
-        {showHeatmap && (
-          <div className="px-1">
-            <TodoHeatmap />
-          </div>
-        )}
-
-        {/* Batch operations bar */}
-        {someSelected && (
-          <div className="flex items-center gap-2 mb-2 px-3 py-1.5 bg-primary/5 border border-primary/20 rounded-radius-sm">
-            <span className="text-ui-xs text-text-muted">已选择 {selectedIds.size} 项</span>
+        {/* P2 分段控件：待办 / 工作日志 */}
+        <div
+          className="inline-flex items-center gap-0.5 mb-4 p-0.5 rounded bg-bg-muted/60"
+          role="tablist"
+          aria-label="待办与工作日志"
+        >
+          {(
+            [
+              ['todos', '待办'],
+              ['logs', '工作日志'],
+            ] as const
+          ).map(([tab, label]) => (
             <button
+              key={tab}
               type="button"
-              onClick={() => void handleBatchComplete()}
-              className="flex items-center gap-1 px-2 py-0.5 text-ui-xs text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+              role="tab"
+              aria-selected={activeTab === tab}
+              onClick={() => handleTabChange(tab)}
+              className={`px-3 py-1 rounded text-ui-xs transition-colors ${
+                activeTab === tab
+                  ? 'bg-ui-card text-text shadow-sm'
+                  : 'text-text-muted hover:text-text'
+              }`}
+              data-testid={`todo-tab-${tab}`}
             >
-              <Check className="w-3 h-3" />
-              批量完成
+              {label}
             </button>
-            <button
-              type="button"
-              onClick={() => void handleBatchDelete()}
-              className="flex items-center gap-1 px-2 py-0.5 text-ui-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-            >
-              <Trash2 className="w-3 h-3" />
-              批量删除
-            </button>
-          </div>
-        )}
+          ))}
+        </div>
 
-        {error && (
-          <div className="mb-4 px-3 py-2 bg-red-50 text-red-700 text-sm rounded" role="alert">
-            {error}
-          </div>
-        )}
-
-        {loading && (
-          <div className="flex items-center gap-2 text-text-muted text-sm py-4" role="status">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            加载中...
-          </div>
-        )}
-
-        {!loading && todos.length === 0 && (
-          <p className="text-text-muted text-center py-8" data-testid="todo-empty">
-            {searchQuery ? '没有匹配的待办' : t('todos.empty')}
-          </p>
-        )}
-
-        {!loading && todos.length > 0 && (
+        {activeTab === 'logs' ? (
+          <TodoWorklogPanel />
+        ) : (
           <>
-            {/* Select all checkbox */}
-            <div className="flex items-center gap-2 mb-1.5 px-1">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={handleSelectAll}
-                className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer"
-                aria-label={allSelected ? '取消全选' : '全选'}
-              />
-              <span className="text-ui-xs text-text-muted">
-                {allSelected ? '取消全选' : '全选'}
-              </span>
-            </div>
+            {/* Enhanced creation form */}
+            <TodoCreateForm onCreate={handleCreate} busy={createBusy} specialists={specialists} />
 
-            {/* Todo list — hierarchical if subtasks exist, flat otherwise */}
-            {hasSubtasks ? (
-              <TodoSubtaskTree todos={todos} renderTodo={renderTodo} />
-            ) : (
-              <ul className="flex flex-col gap-1.5" data-testid="todo-page-list">
-                {todos.map((todo) => (
-                  <TodoRowEditor
-                    key={todo.id}
-                    todo={todo}
-                    selected={selectedIds.has(todo.id)}
-                    onSelect={handleSelect}
-                    onUpdate={handleUpdate}
-                    onComplete={handleComplete}
-                    onCancel={handleCancel}
-                    onDelete={handleDelete}
-                    onAddSubtask={todo.parent_id == null ? handleAddSubtask : undefined}
-                    onSnooze={handleSnooze}
+            {/* Filter / Sort toolbar */}
+            <TodoToolbar
+              params={params}
+              searchQuery={searchQuery}
+              specialists={specialists}
+              onParamsChange={handleParamsChange}
+              onSearchChange={setSearchQuery}
+            />
+
+            {/* 完成热力图（阶段 3，可折叠） */}
+            {showHeatmap && (
+              <div className="px-1">
+                <TodoHeatmap />
+              </div>
+            )}
+
+            {/* Batch operations bar */}
+            {someSelected && (
+              <div className="flex items-center gap-2 mb-2 px-3 py-1.5 bg-primary/5 border border-primary/20 rounded-radius-sm">
+                <span className="text-ui-xs text-text-muted">已选择 {selectedIds.size} 项</span>
+                <button
+                  type="button"
+                  onClick={() => void handleBatchComplete()}
+                  className="flex items-center gap-1 px-2 py-0.5 text-ui-xs text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                >
+                  <Check className="w-3 h-3" />
+                  批量完成
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleBatchDelete()}
+                  className="flex items-center gap-1 px-2 py-0.5 text-ui-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  批量删除
+                </button>
+              </div>
+            )}
+
+            {error && (
+              <div className="mb-4 px-3 py-2 bg-red-50 text-red-700 text-sm rounded" role="alert">
+                {error}
+              </div>
+            )}
+
+            {loading && (
+              <div className="flex items-center gap-2 text-text-muted text-sm py-4" role="status">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                加载中...
+              </div>
+            )}
+
+            {!loading && todos.length === 0 && (
+              <p className="text-text-muted text-center py-8" data-testid="todo-empty">
+                {searchQuery ? '没有匹配的待办' : t('todos.empty')}
+              </p>
+            )}
+
+            {!loading && todos.length > 0 && (
+              <>
+                {/* Select all checkbox */}
+                <div className="flex items-center gap-2 mb-1.5 px-1">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={handleSelectAll}
+                    className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer"
+                    aria-label={allSelected ? '取消全选' : '全选'}
                   />
-                ))}
-              </ul>
+                  <span className="text-ui-xs text-text-muted">
+                    {allSelected ? '取消全选' : '全选'}
+                  </span>
+                </div>
+
+                {/* Todo list — hierarchical if subtasks exist, flat otherwise */}
+                {hasSubtasks ? (
+                  <TodoSubtaskTree todos={todos} renderTodo={renderTodo} />
+                ) : (
+                  <ul className="flex flex-col gap-1.5" data-testid="todo-page-list">
+                    {todos.map((todo) => (
+                      <TodoRowEditor
+                        key={todo.id}
+                        todo={todo}
+                        selected={selectedIds.has(todo.id)}
+                        onSelect={handleSelect}
+                        onUpdate={handleUpdate}
+                        onComplete={handleComplete}
+                        onCancel={handleCancel}
+                        onDelete={handleDelete}
+                        onAddSubtask={todo.parent_id == null ? handleAddSubtask : undefined}
+                        onSnooze={handleSnooze}
+                        specialists={specialists}
+                        drag={{ handle: dragHandleFor(todo), row: dragRowFor(todo) }}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </>
         )}
@@ -461,10 +565,10 @@ export function TodoPage() {
         }}
       />
 
-      <TodoAiDialog
-        isOpen={aiDialog !== null}
-        mode={aiDialog ?? 'brief'}
-        onClose={() => setAiDialog(null)}
+      <TodoReportDialog
+        isOpen={reportDialog !== null}
+        mode={reportDialog ?? 'daily'}
+        onClose={() => setReportDialog(null)}
       />
     </div>
   );
