@@ -484,12 +484,12 @@ GET  /api/v1/reports/{id}
 
 ### P3 — 日报 / 周报
 
-- [ ] 步骤 P3.1：`database.py` 建 `reports` 表
-- [ ] 步骤 P3.2：`backend/services/report_service.py`（存档 / 列表 / 详情）
-- [ ] 步骤 P3.3：`backend/services/report_ai.py`（双来源汇总 → LLM Markdown；未配置 LLM → 降级纯模板）
-- [ ] 步骤 P3.4：`backend/api/report_router.py`（3 个端点）
-- [ ] 步骤 P3.5：升级 `/todos/brief` 与 `/todos/weekly-review` 内部实现（端点签名不变）
-- [ ] 步骤 P3.6：IPC 3 命令 + manifest
+- [x] 步骤 P3.1：`database.py` 建 `reports` 表
+- [x] 步骤 P3.2：`backend/services/report_service.py`（存档 / 列表 / 详情）
+- [x] 步骤 P3.3：`backend/services/report_ai.py`（双来源汇总 → LLM Markdown；未配置 LLM → 降级纯模板）
+- [x] 步骤 P3.4：`backend/api/report_router.py`（3 个端点）
+- [x] 步骤 P3.5：升级 `/todos/brief` 与 `/todos/weekly-review` 内部实现（端点签名不变）
+- [x] 步骤 P3.6：IPC 3 命令 + manifest
 - [ ] 步骤 P3.7：前端 `TodoReportDialog.tsx`（时间窗 + 统计块 + Markdown 预览 + 复制/导出/存档 + 历史抽屉）
 - [ ] 步骤 P3.8：`「简报」→「日报」`、`「周回顾」→「周报」` 原地改名
 - [ ] 步骤 P3.9：pytest + vitest 全绿
