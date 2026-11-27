@@ -1323,4 +1323,74 @@ describe('agent_* IPC commands', () => {
       });
     });
   });
+
+  // ===== P2: worklog (工作日志) IPC routes =====
+  describe('worklog IPC routes', () => {
+    const WORKLOG_COMMANDS = [
+      'worklog_list',
+      'worklog_summary',
+      'worklog_create',
+      'worklog_update',
+      'worklog_delete',
+      'worklog_confirm',
+      'worklog_dismiss',
+      'worklog_extract',
+    ];
+
+    it('registers all 8 worklog commands', () => {
+      for (const cmd of WORKLOG_COMMANDS) {
+        expect(COMMAND_ROUTES[cmd], `missing route for ${cmd}`).toBeDefined();
+      }
+    });
+
+    it('worklog_list aliases date_from/date_to to from/to', () => {
+      expect(COMMAND_ROUTES.worklog_list.method).toBe('GET');
+      expect(COMMAND_ROUTES.worklog_list.path({})).toBe('/api/v1/worklogs');
+      expect(
+        COMMAND_ROUTES.worklog_list.path({
+          status: 'pending',
+          kind: 'done',
+          date_from: '2026-11-20',
+          date_to: '2026-11-27',
+          todo_id: 7,
+          project_tag: 'sage',
+          session_id: 'sess-1',
+          limit: 20,
+          offset: 5,
+        }),
+      ).toBe(
+        '/api/v1/worklogs?status=pending&kind=done&from=2026-11-20&to=2026-11-27' +
+          '&todo_id=7&project_tag=sage&session_id=sess-1&limit=20&offset=5',
+      );
+    });
+
+    it('worklog_summary sends the date window under the alias keys', () => {
+      expect(COMMAND_ROUTES.worklog_summary.method).toBe('GET');
+      expect(COMMAND_ROUTES.worklog_summary.path({})).toBe('/api/v1/worklogs/summary');
+      expect(
+        COMMAND_ROUTES.worklog_summary.path({
+          date_from: '2026-11-20',
+          date_to: '2026-11-27',
+          project_tag: 'sage',
+        }),
+      ).toBe('/api/v1/worklogs/summary?from=2026-11-20&to=2026-11-27&project_tag=sage');
+    });
+
+    it('worklog_update strips id from the body (UpdateWorklogIn forbids extras)', () => {
+      expect(COMMAND_ROUTES.worklog_update.method).toBe('PUT');
+      expect(COMMAND_ROUTES.worklog_update.path({ id: 7 })).toBe('/api/v1/worklogs/7');
+      expect(COMMAND_ROUTES.worklog_update.body?.({ id: 7, content: 'x' })).toEqual({
+        content: 'x',
+      });
+    });
+
+    it('worklog_delete / confirm / dismiss / extract target their paths', () => {
+      expect(COMMAND_ROUTES.worklog_delete.method).toBe('DELETE');
+      expect(COMMAND_ROUTES.worklog_delete.path({ id: 7 })).toBe('/api/v1/worklogs/7');
+      expect(COMMAND_ROUTES.worklog_confirm.path({ id: 7 })).toBe('/api/v1/worklogs/7/confirm');
+      expect(COMMAND_ROUTES.worklog_dismiss.path({ id: 7 })).toBe('/api/v1/worklogs/7/dismiss');
+      expect(COMMAND_ROUTES.worklog_extract.method).toBe('POST');
+      expect(COMMAND_ROUTES.worklog_extract.path({})).toBe('/api/v1/worklogs/extract');
+    });
+  });
 });
