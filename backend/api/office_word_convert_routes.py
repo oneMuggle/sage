@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.office.path_safety import resolve_within
 from backend.office.storage import validate_workspace
@@ -29,7 +29,7 @@ class WordConvertRequest(BaseModel):
     target_format: Literal["docx", "doc"] = "docx"
     output_filename: Optional[str] = None
     overwrite: bool = False
-    timeout_seconds: int = 120
+    timeout_seconds: int = Field(default=120, ge=1, le=1800)
 
 
 @router.post("/convert")

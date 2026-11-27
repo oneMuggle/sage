@@ -36,7 +36,19 @@ _BLOCK_KINDS = ("h1", "h2", "h3", "body", "bold")
 _FORBIDDEN_TAGS = ("w:fldChar", "w:fldSimple")
 
 #: 克隆时从副本中移除的元素（避免重复 id / 陈旧分页标记）
-_STRIPPED_TAGS = ("w:bookmarkStart", "w:bookmarkEnd", "w:lastRenderedPageBreak")
+#:
+#: 脚注/尾注/批注引用一并剥离：克隆会让多个副本指向同一个 footnotes.xml /
+#: endnotes.xml / comments.xml 条目，Word 打开时报“文档内容有问题”并弹修复提示。
+_STRIPPED_TAGS = (
+    "w:bookmarkStart",
+    "w:bookmarkEnd",
+    "w:lastRenderedPageBreak",
+    "w:footnoteReference",
+    "w:endnoteReference",
+    "w:commentReference",
+    "w:commentRangeStart",
+    "w:commentRangeEnd",
+)
 
 
 # docx 仅在真正执行填充时加载（启动路径不触发）

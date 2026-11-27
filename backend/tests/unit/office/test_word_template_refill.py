@@ -217,6 +217,56 @@ def test_refill_strips_bookmarks_from_cloned_block(tmp_path: Path) -> None:
     assert output.element.body.find(qn("w:bookmarkEnd")) is None
 
 
+def test_refill_strips_note_and_comment_references(tmp_path: Path) -> None:
+    """克隆块必须剥离脚注/尾注/批注引用。
+
+    这些引用嵌在 run 裁剪够不到的位置（段落级 commentRange、超链接内的
+    footnoteReference），保留下来会让 Word 判定文档损坏并弹修复提示。
+    """
+    document = Document()
+    h1 = document.add_paragraph()
+    run = h1.add_run("1、引言")
+    run.bold = True
+    run.font.size = Pt(16)
+    _set_outline(h1, 0)
+
+    # 段落级批注范围标记：不是 w:r 子元素，裁剪首个 run 时碰不到
+    crs = OxmlElement("w:commentRangeStart")
+    crs.set(qn("w:id"), "0")
+    cre = OxmlElement("w:commentRangeEnd")
+    cre.set(qn("w:id"), "0")
+    pPr = h1._p.find(qn("w:pPr"))
+    h1._p.insert(list(h1._p).index(pPr) + 1, crs)
+    h1._p.append(cre)
+
+    # 超链接内的脚注引用：嵌在 w:hyperlink 里，同样不会被 run 裁剪清掉
+    hyperlink = OxmlElement("w:hyperlink")
+    inner_run = OxmlElement("w:r")
+    fn_ref = OxmlElement("w:footnoteReference")
+    fn_ref.set(qn("w:id"), "1")
+    inner_run.append(fn_ref)
+    hyperlink.append(inner_run)
+    h1._p.append(hyperlink)
+
+    template = tmp_path / "notes.docx"
+    document.save(str(template))
+
+    result = fill_word_template_blocks(
+        template,
+        [WordTemplateBlock(kind="h1", text="2、概述")],
+        "out.docx",
+        workspace_path=str(tmp_path),
+        anchors={"h1": 0},
+    )
+
+    assert result["ok"] is True
+    output = Document(str(tmp_path / "out.docx"))
+    body = output.element.body
+    assert body.find(".//" + qn("w:commentRangeStart")) is None
+    assert body.find(".//" + qn("w:commentRangeEnd")) is None
+    assert body.find(".//" + qn("w:footnoteReference")) is None
+
+
 def test_refill_rejects_block_template_with_field(tmp_path: Path) -> None:
     document = Document()
     h1 = document.add_paragraph("1、引言")
