@@ -158,3 +158,30 @@ def test_router_put_rejects_unknown_status(client, todo_service):
     response = client.put(f"/todos/{todo.id}", json={"status": "done"})
 
     assert response.status_code == 422
+
+
+def test_router_put_completed_with_invalid_parent_is_atomic(client):
+    """字段校验失败时不能留下「已标完成、字段未改」的半写入状态。"""
+    created = client.post("/todos", json={"title": "写方案"}).json()
+
+    response = client.put(
+        f"/todos/{created['id']}",
+        json={"status": "completed", "parent_id": 999999},
+    )
+
+    assert response.status_code == 400
+    detail = client.get(f"/todos/{created['id']}").json()
+    assert detail["status"] == "pending"
+    assert detail["completed_at"] is None
+
+
+def test_router_put_completed_twice_is_idempotent(client):
+    """详情面板重复保存同一份 payload 不应报错或改写完成时间。"""
+    created = client.post("/todos", json={"title": "写方案"}).json()
+
+    first = client.put(f"/todos/{created['id']}", json={"status": "completed"})
+    second = client.put(f"/todos/{created['id']}", json={"status": "completed"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["completed_at"] == first.json()["completed_at"]

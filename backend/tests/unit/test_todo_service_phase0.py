@@ -128,6 +128,24 @@ def test_complete_non_recurring_todo_spawns_nothing(todo_service):
     assert todo_service.list_todos() == []
 
 
+def test_complete_twice_does_not_spawn_duplicate_recurrence(todo_service):
+    """幂等：重复完成同一循环待办只派生一个下一实例。
+
+    PUT /todos/{id} 在详情面板保存时会带上当前 status，重复提交同一份
+    payload 不应凭空多出明天的任务副本。
+    """
+    created = todo_service.create_todo(title="每日站会", recurrence_rule="0 9 * * *")
+
+    todo_service.complete_todo(created.id)
+    twice = todo_service.complete_todo(created.id)
+
+    assert twice is not None
+    assert twice.status == "completed"
+    pending = todo_service.list_todos()
+    assert len(pending) == 1
+    assert pending[0].status == "pending"
+
+
 def test_complete_recurring_with_invalid_cron_still_completes(todo_service):
     """cron 非法时 fail-open：完成操作本身仍然成功，只是不生成实例。"""
     created = todo_service.create_todo(
