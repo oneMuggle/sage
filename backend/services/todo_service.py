@@ -421,6 +421,11 @@ class TodoService:
         existing = self.get_todo(todo_id)
         if existing is None:
             return None
+        # 幂等：已完成的任务再次「完成」不应重盖时间戳，更不应为循环待办
+        # 再派生一个实例。PUT /todos/{id} 在详情面板保存时会带上当前状态，
+        # 重复提交同一份 payload 必须安全。
+        if existing.status == todo_status.COMPLETED:
+            return existing
 
         now = datetime.now()
         now_iso = now.isoformat()

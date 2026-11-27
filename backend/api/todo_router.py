@@ -552,13 +552,18 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
         requested_status = changes.pop("status", None)
         try:
             if requested_status == todo_status.COMPLETED:
-                todo = svc.complete_todo(todo_id)
-                if todo is not None and changes:
+                # 先写普通字段：这一步可能因 parent_id 非法 / title 清空等抛
+                # ValueError。若先 complete 再更新，失败时会留下「已标完成、
+                # 但字段没改」的半写入状态。
+                if changes:
                     todo = svc.update_todo(todo_id, **changes)
+                    if todo is None:
+                        raise HTTPException(status_code=404, detail="todo not found")
+                todo = svc.complete_todo(todo_id)
             else:
+                if requested_status is not None:
+                    changes["status"] = requested_status
                 todo = svc.update_todo(todo_id, **changes)
-                if todo is not None and requested_status is not None:
-                    todo = svc.update_todo(todo_id, status=requested_status)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if todo is None:

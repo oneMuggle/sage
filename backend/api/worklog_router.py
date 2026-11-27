@@ -138,27 +138,32 @@ def build_router(get_service: Callable[[], Optional[WorklogService]]) -> APIRout
         offset: int = Query(default=0, ge=0),
         svc: WorklogService = Depends(service_dep),
     ) -> Dict[str, Any]:
-        items = svc.list_worklogs(
-            status=status_,
-            kind=kind,
-            date_from=date_from,
-            date_to=date_to,
-            todo_id=todo_id,
-            project_tag=project_tag,
-            session_id=session_id,
-            limit=limit,
-            offset=offset,
-        )
-        # ``total`` counts every row matching the filters, not this page.
-        total = svc.count_worklogs(
-            status=status_,
-            kind=kind,
-            date_from=date_from,
-            date_to=date_to,
-            todo_id=todo_id,
-            project_tag=project_tag,
-            session_id=session_id,
-        )
+        try:
+            items = svc.list_worklogs(
+                status=status_,
+                kind=kind,
+                date_from=date_from,
+                date_to=date_to,
+                todo_id=todo_id,
+                project_tag=project_tag,
+                session_id=session_id,
+                limit=limit,
+                offset=offset,
+            )
+            # ``total`` counts every row matching the filters, not this page.
+            total = svc.count_worklogs(
+                status=status_,
+                kind=kind,
+                date_from=date_from,
+                date_to=date_to,
+                todo_id=todo_id,
+                project_tag=project_tag,
+                session_id=session_id,
+            )
+        except ValueError as exc:
+            # 非法 ``from`` / ``to`` 日期 → 400，与 create/update 一致；
+            # 不拦截会冒泡成 500。
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {
             "items": [_worklog_to_dict(item) for item in items],
             "total": total,
@@ -174,12 +179,15 @@ def build_router(get_service: Callable[[], Optional[WorklogService]]) -> APIRout
         project_tag: Optional[str] = Query(default=None, max_length=100),
         svc: WorklogService = Depends(service_dep),
     ) -> Dict[str, Any]:
-        return svc.summarize(
-            date_from=date_from,
-            date_to=date_to,
-            todo_id=todo_id,
-            project_tag=project_tag,
-        )
+        try:
+            return svc.summarize(
+                date_from=date_from,
+                date_to=date_to,
+                todo_id=todo_id,
+                project_tag=project_tag,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @router.post("/worklogs/extract", response_model=ExtractWorklogsOut)
     async def extract_worklogs(payload: ExtractWorklogsIn) -> Dict[str, Any]:

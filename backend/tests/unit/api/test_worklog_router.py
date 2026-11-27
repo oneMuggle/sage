@@ -122,6 +122,20 @@ def test_list_worklogs_rejects_unknown_status(client):
     assert response.status_code == 422
 
 
+def test_list_worklogs_invalid_date_returns_400(client):
+    """非法 ``from`` 日期 → 400（服务层 ValueError），不能冒泡成 500。"""
+    response = client.get("/worklogs", params={"from": "2026-13-01"})
+
+    assert response.status_code == 400
+
+
+def test_summary_invalid_date_returns_400(client):
+    """``/worklogs/summary`` 同样把非法日期映射为 400。"""
+    response = client.get("/worklogs/summary", params={"to": "not-a-date"})
+
+    assert response.status_code == 400
+
+
 def test_get_worklog_returns_detail(client):
     """按 id 取详情。"""
     created = client.post("/worklogs", json={"content": "x"}).json()

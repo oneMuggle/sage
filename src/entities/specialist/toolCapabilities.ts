@@ -235,7 +235,7 @@ export const TOOL_CAPABILITY_PACKS: readonly ToolCapabilityPack[] = [
   {
     id: 'skills',
     label: '技能·子代理·待办',
-    description: '调用/保存技能，派生子代理，维护会话待办',
+    description: '调用/保存技能，派生子代理，维护会话待办与工作日志',
     tools: [
       'skill',
       'skill_save',
@@ -248,6 +248,8 @@ export const TOOL_CAPABILITY_PACKS: readonly ToolCapabilityPack[] = [
       'complete_todo',
       'update_todo',
       'delete_todo',
+      'add_worklog',
+      'list_worklogs',
     ],
     requiresMode: 'full_access',
   },
