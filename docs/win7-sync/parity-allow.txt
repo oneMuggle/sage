@@ -337,6 +337,16 @@ backend/tests/unit/test_chart_embedder.py
 # -- README 文档目录未随 main 重组（docs/technical → docs/），非功能差异 --
 README.md
 
+# ==== 2026-11-27 待办/工作日志同步后复核的遗留漂移（与本次功能无关） ====
+# 待办交互 + 工作日志 + 日报周报双分支合并后，parity 实测 actionable=10 > 7，
+# 新增 3 条均为既有差异，逐条审阅后登记：
+# - 仅 prettier 换行差异（win7 侧 printWidth 更窄），语义完全一致；
+src/widgets/skills/SkillEvolutionPanel.tsx
+# - win7 独有回归测试：向量库按存储维度打开，覆盖 cascade_delete_source；
+backend/tests/unit/wiki/test_cascade_delete.py
+# - win7 测试默认气隙（offline），用例内 monkeypatch load_network_policy 固定在线；
+backend/tests/unit/test_browser_session_ownership.py
+
 # ==== 2026-11-22 office 批次同步引入的 pydantic-v1 适配 ====
 # cherry-pick office M1–M6b 后新增/冲突解决的 v1 兼容点（仅垫片替换与 forward-ref 解析，无业务差异）。
 backend/office/models/_excel.py
