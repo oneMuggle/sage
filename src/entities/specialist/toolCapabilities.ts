@@ -103,6 +103,8 @@ export const TOOL_CAPABILITY_PACKS: readonly ToolCapabilityPack[] = [
       'office_fill_pdf_form',
       'office_analyze_word_template',
       'office_fill_word_template',
+      'office_refill_word_template',
+      'office_convert_word',
       'office_analyze_ppt_template',
       'office_fill_ppt_template',
       'office_analyze',

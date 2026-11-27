@@ -83,6 +83,7 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
         "office_batch_audit",
         "office_check_latex_compliance",
         "office_compile_latex",
+        "office_convert_word",
         "office_create",
         "office_delete",
         "office_extract_latex_project",
@@ -106,6 +107,7 @@ def test_primary_sees_all_office_tools(registry, bound_ctx):
         "office_read_latex",
         "office_read_pdf",
         "office_read_pdf_form",
+        "office_refill_word_template",
         "office_refresh_toc",
         "office_render_audit",
         "office_repair_word",
@@ -149,6 +151,7 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
         "office_batch_audit",
         "office_check_latex_compliance",
         "office_compile_latex",
+        "office_convert_word",
         "office_create",
         "office_extract_latex_project",
         "office_extract_rules",
@@ -171,6 +174,7 @@ def test_writer_sees_read_write_but_not_delete(registry, bound_ctx):
         "office_read_latex",
         "office_read_pdf",
         "office_read_pdf_form",
+        "office_refill_word_template",
         "office_refresh_toc",
         "office_render_audit",
         "office_repair_word",
@@ -202,6 +206,7 @@ def test_list_and_read_hidden_without_workspace_binding(registry):
     # 2026-09-11 Round 9: office_parse_bibtex 是纯文本解析（不触工作区），
     # requires_tool_context=False → 未绑定也可见。
     assert visible == [
+        "office_convert_word",
         "office_create",
         "office_delete",
         "office_fill_latex_template",
@@ -210,6 +215,7 @@ def test_list_and_read_hidden_without_workspace_binding(registry):
         "office_fill_word_template",
         "office_generate_pdf",
         "office_parse_bibtex",
+        "office_refill_word_template",
         "office_update",
     ]
 
