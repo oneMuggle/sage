@@ -65,6 +65,11 @@ export interface EndpointConfig {
   localModelPath: string;
   /** 端点限额 (选填; 后端 LEGAL_ENDPOINT_KEYS 已放行 quota 嵌套对象) */
   quota?: EndpointQuota;
+  /**
+   * 2026-11-26: 故障转移优先级（1 = 最高）。缺省 = 未排序（排在已排序端点之后）。
+   * 后端 llm_factory 构链时按 priority 升序排列；设置页上下移按钮会重排为 1..N。
+   */
+  priority?: number;
   discoveredModels: DiscoveredModel[];
   lastDiscoveredAt: number | null;
   /**
@@ -209,6 +214,28 @@ export interface RoutingSettings {
   mode: 'auto' | 'manual';
 }
 
+/**
+ * 端点故障转移配置 (2026-11-26)。
+ * 默认关闭；开启后当前端点失败会自动切到下一个 priority 端点。
+ * 与后端 LEGAL_FAILOVER_KEYS / endpoint_health.load_failover_config 对齐。
+ */
+export interface FailoverSettings {
+  enabled: boolean;
+  /** 失败端点后台探测间隔（毫秒），默认 5 分钟，最小 30000。 */
+  probeIntervalMs: number;
+  /** 失败端点冷却期（毫秒），默认 60 秒，最小 5000。 */
+  cooldownMs: number;
+  /** 连续失败判定 failed 的阈值，默认 2，范围 1–10。 */
+  consecutiveFailThreshold: number;
+}
+
+export const DEFAULT_FAILOVER_SETTINGS: FailoverSettings = {
+  enabled: false,
+  probeIntervalMs: 300_000,
+  cooldownMs: 60_000,
+  consecutiveFailThreshold: 2,
+};
+
 /** All application settings */
 export interface AppSettings {
   // General
@@ -266,6 +293,9 @@ export interface AppSettings {
 
   // Task 9 (2026-10-28) 智能路由模式。缺省 = manual（保持现有行为不变）。
   routing: RoutingSettings;
+
+  // 2026-11-26: 端点优先级故障转移配置（默认关闭）。
+  failover: FailoverSettings;
 
   // 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
   // 留空表示回退到聊天模型；后端 title_model_factory.load_title_llm_config 读取。
@@ -405,6 +435,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   // Task 9 (2026-10-28) 智能路由模式。默认 manual（保持与引入前行为一致）。
   routing: { mode: 'manual' },
+
+  // 2026-11-26: 端点故障转移默认关闭（单端点用户行为完全不变）。
+  failover: DEFAULT_FAILOVER_SETTINGS,
 
   // 2026-10-27: 会话标题专用模型默认留空 —— 回退到聊天模型。
   titleModelId: '',

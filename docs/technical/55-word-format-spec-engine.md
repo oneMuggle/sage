@@ -84,7 +84,7 @@ writer profile 的 system prompt 同步提示：用户明示的硬性格式要�
 
 ## 7. P0 扩展（2026-11-26）
 
-FormatSpec 增补以下字段（详见 [176 章](./176-word-template-refill-and-layout-p0.md)）：
+FormatSpec 增补以下字段（详见 [177 章](./177-word-template-refill-and-layout-p0.md)）：
 
 - `page.size` 扩展 A3/A5/B4/B5/legal + `width_cm`/`height_cm` 自定义纸张；
 - `page.line_numbering`（`w:lnNumType`：count_by/restart/start）；

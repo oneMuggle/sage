@@ -31,7 +31,7 @@
 | 结构填充 | `backend/office/word_template_refill.py`（新增）、`backend/api/office_word_template_profile_routes.py`（新增端点）、`backend/tools/office_template_tool.py`（新增工具）+ `backend/tools/tool_bundles.py` / `backend/tools/__init__.py`（注册） |
 | 文档转换 | `backend/office/word_convert.py`（新增，复用 `export_pdf` 的 soffice 定位）、`backend/api/office_word_convert_routes.py`（新增路由）、`backend/api/office_routes.py`（挂载）、`backend/tools/office_convert_tool.py`（新增工具） |
 | 测试 | `backend/tests/unit/office/test_word_layout_p0.py`、`test_word_template_refill.py`、`test_word_convert.py`；`test_word_template_profile.py`（补充） |
-| 文档 | `docs/technical/176-word-template-refill-and-layout-p0.md`、`docs/technical/README.md`（索引）、`docs/technical/55-word-format-spec-engine.md`（字段补充） |
+| 文档 | `docs/technical/177-word-template-refill-and-layout-p0.md`、`docs/technical/README.md`（索引）、`docs/technical/55-word-format-spec-engine.md`（字段补充） |
 
 ## 技术方案
 
@@ -90,7 +90,7 @@
 - 单元测试覆盖：新字段写入（纸张/行号/字符缩进/标题行距/页眉域/节级页眉）、
   块识别与克隆保真（模仿软著模板的直接格式）、输出安全、转换器失败契约（stub）；
 - 回归：既有 office 单元/集成测试全绿；`scripts/architecture-check.mjs` 无新增违规；
-- 技术文档新增第 176 章并在 README 索引登记；补 `55-word-format-spec-engine.md` 字段说明。
+- 技术文档新增第 177 章并在 README 索引登记；补 `55-word-format-spec-engine.md` 字段说明。
 
 ## 实施步骤
 
@@ -99,7 +99,7 @@
 - [x] M2.1 块模板识别与克隆填充服务（`word_template_refill.py`）+ 测试
 - [x] M2.2 API 端点 + Agent 工具 + 注册 + 测试
 - [x] M3 `.doc` 转换服务 + 路由 + 工具 + stub 测试
-- [x] M4 技术文档 176 + 索引 + 格式引擎章节补充
+- [x] M4 技术文档 177 + 索引 + 格式引擎章节补充
 - [x] 全量回归：office 单元/集成测试（1550 passed / 2 skipped）、架构棘轮、ruff
 
 ## 风险评估
@@ -120,4 +120,4 @@
 2. `POST /word/template/refill` 可对“无占位符、直接格式”的说明书模板完成 h1/h2/正文/加粗四类块的整块替换，克隆段落字号/缩进/加粗保持；
 3. `format_spec` 可产出：自定义纸张/行号/2 字符缩进/标题行距/带边框与右对齐页码的页眉/节级页眉；
 4. `/word/convert` 在无转换器的环境中返回明确错误而非异常；stub 环境下命令与输出正确；
-5. 架构棘轮与 ruff 通过；技术文档 176 章 + 索引更新。
+5. 架构棘轮与 ruff 通过；技术文档 177 章 + 索引更新。

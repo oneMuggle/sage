@@ -26,6 +26,25 @@ export interface ConnectionTestResult {
   discoveredModels?: DiscoveredModel[];
 }
 
+export interface EndpointHealthRow {
+  endpointId: string;
+  status: 'healthy' | 'degraded' | 'failed';
+  consecutiveFailures: number;
+  lastFailureAt: number | null;
+  lastSuccessAt: number | null;
+  lastFailureReason: string | null;
+  failoverCount: number;
+}
+
+/** 2026-11-26: 端点健康快照（设置页状态点与故障转移提示用）。 */
+export async function getEndpointHealth(): Promise<EndpointHealthRow[]> {
+  const data = await backendRequest<{ endpoints?: EndpointHealthRow[] }>({
+    path: '/api/v1/endpoints/health',
+    method: 'GET',
+  });
+  return Array.isArray(data?.endpoints) ? data.endpoints : [];
+}
+
 /**
  * Probe result from the model catalog service adapters.
  *
