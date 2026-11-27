@@ -16,7 +16,6 @@ import logging
 import os
 import subprocess
 import sys
-import threading
 import uuid
 from pathlib import Path
 from typing import Optional, Tuple
@@ -24,7 +23,7 @@ from typing import Optional, Tuple
 from pydantic import BaseModel, ConfigDict
 
 from .errors import OfficeError, OfficePathError
-from .export_pdf import _locate_soffice
+from .export_pdf import _EXPORT_LOCK, _locate_soffice
 from .path_safety import resolve_within
 from .storage import validate_workspace
 
@@ -32,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["WordConvertResult", "convert_word"]
 
-#: LibreOffice 并发实例共享 user profile 会互锁 —— 进程内串行化。
-_CONVERT_LOCK = threading.Lock()
+#: 转换超时上限（秒）——防止调用方传入超大值让 soffice 长时间挂起。
+_MAX_TIMEOUT_SECONDS = 1800
 
 _SOURCE_EXTENSIONS = (".doc", ".docx")
 _TARGET_FORMATS = ("docx", "doc")
@@ -67,7 +66,7 @@ def convert_word(
 
     Never raises: every failure path returns ``ok=False`` + ``error``.
     """
-    with _CONVERT_LOCK:
+    with _EXPORT_LOCK:
         try:
             return _convert_inner(
                 source,
@@ -106,6 +105,15 @@ def _convert_inner(  # noqa: PLR0911 — 逐条早退是失败契约的可读形
             ok=False,
             target_format=target_format,
             error=f"timeout_seconds 必须为正整数，收到 {timeout_seconds}",
+        )
+    if timeout_seconds > _MAX_TIMEOUT_SECONDS:
+        return WordConvertResult(
+            ok=False,
+            target_format=target_format,
+            error=(
+                f"timeout_seconds 超过上限（{_MAX_TIMEOUT_SECONDS}s），"
+                f"收到 {timeout_seconds}"
+            ),
         )
     try:
         workspace_path = validate_workspace(Path(workspace))
@@ -265,7 +273,10 @@ def _convert_with_libreoffice(
 def _convert_with_word_com(
     source: Path, target: Path, target_format: str
 ) -> Tuple[bool, str]:
-    """Windows 回退：Word COM ``SaveAs2``（FileFormat 0=doc / 12=docx）。"""
+    """Windows 回退：Word COM ``SaveAs2``（FileFormat 0=doc / 12=docx）。
+
+    Office 2007（Win7 LTS 常见）没有 ``SaveAs2``，回退到 ``SaveAs``。
+    """
     try:
         import win32com.client  # lazy: pywin32, Windows only
     except ImportError:
@@ -281,7 +292,13 @@ def _convert_with_word_com(
         word.Visible = False
         word.DisplayAlerts = 0
         document = word.Documents.Open(str(source), ReadOnly=True)
-        document.SaveAs2(str(temp_target), FileFormat=_WD_FORMATS[target_format])
+        _word_save_as(document, temp_target, target_format)
+        # 必须先关闭文档并退出 Word —— Word 持有输出文件的句柄，
+        # 未释放时 os.replace 在 Windows 上会 PermissionError（拒绝访问）。
+        document.Close(SaveChanges=False)
+        document = None
+        word.Quit()
+        word = None
         os.replace(temp_target, target)  # noqa: PTH105 — 与 LibreOffice 路径一致的原子替换
         logger.info("Word COM conversion succeeded: %s", target)
         return True, ""
@@ -298,6 +315,16 @@ def _convert_with_word_com(
         with contextlib.suppress(OSError):
             if temp_target.exists():
                 temp_target.unlink()
+
+
+def _word_save_as(document, target: Path, target_format: str) -> None:
+    """用 Word COM 保存为目标格式；Office 2007 无 ``SaveAs2`` 时回退 ``SaveAs``。"""
+    file_format = _WD_FORMATS[target_format]
+    save_as2 = getattr(document, "SaveAs2", None)
+    if save_as2 is not None:
+        save_as2(str(target), FileFormat=file_format)
+        return
+    document.SaveAs(str(target), FileFormat=file_format)
 
 
 def _tail(stream: Optional[bytes], limit: int = 400) -> str:

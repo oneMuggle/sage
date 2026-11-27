@@ -27,7 +27,13 @@ _PAGE_SIZES = {
 _RFONT_THEME_ATTRS = ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme")
 
 #: sectPr 子元素 schema 顺序（插入时按序落位，避免 Word 严格校验拒绝）
+#:
+#: CT_SectPr 是 xsd:sequence：EG_HdrFtrReferences（headerReference /
+#: footerReference）必须排在 EG_SectPrContents 全部子元素之前；缺了这一段
+#: 会让 headerReference 落到 pgSz 之后 —— Word 判定文档损坏并弹修复提示。
 _SECTPR_ORDER = (
+    "w:headerReference",
+    "w:footerReference",
     "w:footnotePr",
     "w:endnotePr",
     "w:type",
@@ -40,16 +46,20 @@ _SECTPR_ORDER = (
     "w:cols",
     "w:formProt",
     "w:vAlign",
+    "w:noEndnote",
     "w:titlePg",
     "w:textDirection",
     "w:bidi",
     "w:rtlGutter",
     "w:docGrid",
     "w:printerSettings",
+    "w:sectPrChange",
 )
 
-#: pPr 中位于 w:ind 之前的元素（用于按 schema 顺序插入）
-_PPR_BEFORE_IND = (
+#: pPr 子元素 schema 顺序（CT_PPrBase + CT_PPr 尾部元素）
+#:
+#: pBdr 必须排在 shd/tabs 之前 —— 直接 append 会让边框落到 tabs 之后。
+_PPR_ORDER = (
     "w:pStyle",
     "w:keepNext",
     "w:keepLines",
@@ -72,6 +82,63 @@ _PPR_BEFORE_IND = (
     "w:adjustRightInd",
     "w:snapToGrid",
     "w:spacing",
+    "w:ind",
+    "w:contextualSpacing",
+    "w:mirrorIndents",
+    "w:suppressOverlap",
+    "w:jc",
+    "w:textDirection",
+    "w:textAlignment",
+    "w:textboxTightWrap",
+    "w:outlineLvl",
+    "w:divId",
+    "w:cnfStyle",
+    "w:rPr",
+    "w:sectPr",
+    "w:pPrChange",
+)
+
+#: rPr 子元素 schema 顺序（rStyle 在 rFonts 前；sz/szCs 在 highlight/u 前）
+_RPR_ORDER = (
+    "w:rStyle",
+    "w:rFonts",
+    "w:b",
+    "w:bCs",
+    "w:i",
+    "w:iCs",
+    "w:caps",
+    "w:smallCaps",
+    "w:strike",
+    "w:dstrike",
+    "w:outline",
+    "w:shadow",
+    "w:emboss",
+    "w:imprint",
+    "w:noProof",
+    "w:snapToGrid",
+    "w:vanish",
+    "w:webHidden",
+    "w:color",
+    "w:spacing",
+    "w:w",
+    "w:kern",
+    "w:position",
+    "w:sz",
+    "w:szCs",
+    "w:highlight",
+    "w:u",
+    "w:effect",
+    "w:bdr",
+    "w:shd",
+    "w:fitText",
+    "w:vertAlign",
+    "w:rtl",
+    "w:cs",
+    "w:em",
+    "w:lang",
+    "w:eastAsianLayout",
+    "w:specVanish",
+    "w:oMath",
 )
 
 
@@ -93,11 +160,19 @@ def _local_name(tag: str) -> str:
 
 
 def _insert_in_order(parent, element, order: Tuple[str, ...]) -> None:
-    """按 schema 顺序把 element 插入 parent。"""
-    rank = order.index(_local_name(element.tag))
+    """按 schema 顺序把 element 插入 parent。
+
+    ``order`` 里没有的元素一律追加到末尾（未知 schema 位置时保守处理，
+    不抛异常打断生成流程）。
+    """
+    name = _local_name(element.tag)
+    if name not in order:
+        parent.append(element)
+        return
+    rank = order.index(name)
     for child in parent:
-        name = _local_name(child.tag)
-        if name in order and order.index(name) > rank:
+        child_name = _local_name(child.tag)
+        if child_name in order and order.index(child_name) > rank:
             child.addprevious(element)
             return
     parent.append(element)
@@ -137,21 +212,13 @@ def apply_first_line_indent_chars(
 
 
 def _insert_ppr_ind(ppr, ind) -> None:
-    for child in ppr:
-        name = _local_name(child.tag)
-        if name not in _PPR_BEFORE_IND:
-            child.addprevious(ind)
-            return
-    ppr.append(ind)
+    _insert_in_order(ppr, ind, _PPR_ORDER)
 
 
 def _write_rfonts(
     rpr, *, font_family: Optional[str], ascii_font: Optional[str]
 ) -> None:
-    rfonts = rpr.find(qn("w:rFonts"))
-    if rfonts is None:
-        rfonts = OxmlElement("w:rFonts")
-        rpr.insert(0, rfonts)
+    rfonts = _get_or_add_rfonts(rpr)
     for theme_attr in _RFONT_THEME_ATTRS:
         qualified = qn(f"w:{theme_attr}")
         if qualified in rfonts.attrib:
@@ -162,6 +229,35 @@ def _write_rfonts(
         rfonts.set(qn("w:ascii"), ascii_font)
         rfonts.set(qn("w:hAnsi"), ascii_font)
         rfonts.set(qn("w:cs"), ascii_font)
+
+
+def _get_or_add_rfonts(rpr):
+    """取（或按 schema 顺序插入）rPr 下的 w:rFonts。
+
+    python-docx 的 CT_RPr 提供 ``get_or_add_rFonts``（自带正确后继顺序），
+    优先复用；拿不到该接口时按本地 ``_RPR_ORDER`` 兜底插入。
+    """
+    getter = getattr(rpr, "get_or_add_rFonts", None)
+    if getter is not None:
+        return getter()
+    rfonts = rpr.find(qn("w:rFonts"))
+    if rfonts is None:
+        rfonts = OxmlElement("w:rFonts")
+        _insert_in_order(rpr, rfonts, _RPR_ORDER)
+    return rfonts
+
+
+def _get_or_add_rpr_size(rpr, tag: str):
+    """取（或按 schema 顺序插入）rPr 下的 w:sz / w:szCs（字号半磅值）。"""
+    accessor = "get_or_add_sz" if tag == "w:sz" else "get_or_add_szCs"
+    getter = getattr(rpr, accessor, None)
+    if getter is not None:
+        return getter()
+    el = rpr.find(qn(tag))
+    if el is None:
+        el = OxmlElement(tag)
+        _insert_in_order(rpr, el, _RPR_ORDER)
+    return el
 
 
 def _apply_spec_fonts(run_element, spec: WordHeaderFooterSpec) -> None:
@@ -179,10 +275,7 @@ def _apply_spec_fonts(run_element, spec: WordHeaderFooterSpec) -> None:
     if spec.font_size_pt is not None:
         half_points = str(int(round(float(spec.font_size_pt) * 2)))
         for tag in ("w:sz", "w:szCs"):
-            el = rPr.find(qn(tag))
-            if el is None:
-                el = OxmlElement(tag)
-                rPr.append(el)
+            el = _get_or_add_rpr_size(rPr, tag)
             el.set(qn("w:val"), half_points)
 
 
@@ -208,7 +301,9 @@ def _add_bottom_border(paragraph) -> None:
     bottom.set(qn("w:space"), "1")
     bottom.set(qn("w:color"), "auto")
     pBdr.append(bottom)
-    pPr.append(pBdr)
+    # pBdr 必须排在 shd/tabs 之前（CT_PPrBase 是 xsd:sequence），
+    # 直接 append 会让边框落到制表位之后，Word 判定文档损坏。
+    _insert_in_order(pPr, pBdr, _PPR_ORDER)
 
 
 def _append_simple_field(
