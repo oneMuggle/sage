@@ -203,22 +203,30 @@ def _apply_page_setup_to_section(section, page: WordPageSetupSpec) -> None:
     # Round 53：节内页码格式/起始号（w:pgNumType）。两者都未指定时
     # 不触碰（保持既有产物零变化）。
     if page.page_number_format is not None or page.page_number_start is not None:
+        from .word_layout_sections import _SECTPR_ORDER, _insert_in_order
+
         sect_pr = section._sectPr
         pg = sect_pr.find(qn("w:pgNumType"))
         if pg is None:
             pg = OxmlElement("w:pgNumType")
-            sect_pr.append(pg)
+            # CT_SectPr 是 xsd:sequence：pgNumType 必须排在 cols 之前，
+            # 直接 append 会落到 docGrid 之后 —— Word 判定文档损坏。
+            _insert_in_order(sect_pr, pg, _SECTPR_ORDER)
         if page.page_number_format is not None:
             pg.set(qn("w:fmt"), page.page_number_format)
         if page.page_number_start is not None:
             pg.set(qn("w:start"), str(page.page_number_start))
     # Round 58：脚注编号每节重排（w:footnotePr/numRestart=eachSect）。
     if getattr(page, "footnote_restart_each_section", False):
+        from .word_layout_sections import _SECTPR_ORDER, _insert_in_order
+
         sect_pr = section._sectPr
         fn_pr = sect_pr.find(qn("w:footnotePr"))
         if fn_pr is None:
             fn_pr = OxmlElement("w:footnotePr")
-            sect_pr.append(fn_pr)
+            # footnotePr 是 sectPr 的首个 EG_SectPrContents 元素，
+            # 必须排在 pgSz 之前。
+            _insert_in_order(sect_pr, fn_pr, _SECTPR_ORDER)
         num_restart = fn_pr.find(qn("w:numRestart"))
         if num_restart is None:
             num_restart = OxmlElement("w:numRestart")
