@@ -3,6 +3,8 @@
 > 文档编号：169
 > 代码范围：`backend/services/todo_*`、`backend/api/todo_router.py`、`backend/api/asr_router.py`、`backend/scheduler/todo_reminder.py`、`backend/tools/todo_mgmt_tool.py`、`src/pages/todo/*`、`src/pages/TodoPage.tsx`、`src/entities/todo/todoStore.ts`、`electron/commandRoutes/settings.ts`、`electron/schedulerNotifications.ts`
 > 运行基线：release/win7（Python 3.8.10 + pydantic 1.10.13）
+>
+> **本章已被 [182 · 待办交互升级与工作日志 / 日报周报](./182-todo-worklog-report.md) 部分超越**：待办侧新增详情编辑、三态循环、拖拽排序与拖拽嵌套；简报 / 周回顾升级为可存档的「日报 / 周报」，并新增「工作日志」事实层（`work_logs` 表）。本章保留仍然有效的待办表结构、提醒调度、对话提炼与全文检索内容。
 
 ## 1. 概述与边界
 
@@ -231,6 +233,8 @@ APScheduler（15 分钟扫描 + 精确一次性触发器）
 
 桌面端 IPC 命令表位于 `electron/commandRoutes/settings.ts`，`src/shared/api/todoClient.ts` 逐项映射：`todo_list`、`todo_create`、`todo_get`、`todo_update`、`todo_delete`、`todo_complete`、`todo_cancel`、`todo_summary`、`todo_stats`、`todo_tags`、`todo_batch_complete`、`todo_batch_delete`、`todo_export`、`todo_extract`、`todo_batch_create`、`todo_brief`、`todo_weekly_review`、`todo_heatmap`、`todo_snooze`。`todo_update` 与 `todo_snooze` 在构造请求体时会剔除 `id`——两个请求模型都声明了 `extra="forbid"`，而 `id` 只存在于 URL 路径。
 
+P2 / P3 又在同一张表上追加了工作日志与报告两组命令：`worklog_list`、`worklog_summary`、`worklog_create`、`worklog_update`、`worklog_delete`、`worklog_confirm`、`worklog_dismiss`、`worklog_extract`、`report_generate`、`report_list`、`report_get`。完整说明见 182 章。
+
 语音转写独立挂在 `/api/v1/asr/transcribe`：请求 `{audio_base64, format: webm|wav|ogg|mp3|m4a, language?}`，返回 `{text}`；音频上限 25MB，ASR 未配置返回 409，格式/大小非法返回 400，上游失败返回 502。临时文件处理完即删除。
 
 ## 5. 提醒调度与通知投递
@@ -273,7 +277,11 @@ APScheduler（15 分钟扫描 + 精确一次性触发器）
 
 ### 6.2 每日简报
 
-`GET /todos/brief` 以启动摘要（逾期、今日到期、未来 7 天、高优先级、今日完成）为输入，要求模型用中文给出最多 3 条、总长 ≤120 字的行动建议；空响应时返回固定兜底文案。`TodoAiDialog` 在打开时生成一次，可点「重新生成」。
+`GET /todos/brief` 以启动摘要（逾期、今日到期、未来 7 天、高优先级、今日完成）为输入，要求模型用中文给出最多 3 条、总长 ≤120 字的行动建议；空响应时返回固定兜底文案。
+
+P3.5 起该端点改走 `report_ai.build_report_context`（`backend/api/todo_router.py:420`），把**工作日志摘要**并入 `summary["worklogs"]` —— 只看待办会漏掉「没建待办但确实干了」的那部分工作。工作日志服务缺席时该段为空，不报错。生成文本仍由 `todo_ai.generate_daily_brief` 产出。
+
+前端弹窗已由 `TodoReportDialog` 取代原 `TodoAiDialog`（打开即生成，可重新生成），详见 182 章。
 
 ### 6.3 周回顾
 
@@ -285,6 +293,8 @@ APScheduler（15 分钟扫描 + 精确一次性触发器）
 - 推迟次数 ≥2 的未完成任务（取 5 条），格式为 `标题（推迟 N 次）`。
 
 模型返回 Markdown，要求包含「完成情况」「拖延提醒」「下周建议」三个小标题、总长 ≤300 字。这里没有独立的「推迟建议引擎」，建议来自周回顾提示词。
+
+P3.5 起该端点同样改走 `report_ai.build_report_context`（`backend/api/todo_router.py:447`）：`stats["worklogs"]` 注入工作日志摘要，且「本周完成」换成报告引擎口径的**窗口内真正完成项**。生成文本仍由 `todo_ai.generate_weekly_review` 产出。
 
 ### 6.4 本地自然语言快速录入
 
@@ -321,7 +331,7 @@ APScheduler（15 分钟扫描 + 精确一次性触发器）
 | `src/pages/todo/TodoRowEditor.tsx` | 行内编辑标题、循环切换优先级、日期弹层、标签 chips、来源/专家 chip、推迟徽标、提醒计数、添加子任务、取消、二次确认删除、右键菜单 |
 | `src/pages/todo/TodoSubtaskTree.tsx` | 按 `parent_id` 构树、折叠、完成进度 |
 | `src/pages/todo/TodoHeatmap.tsx` | 91 天、7 行网格、按全区间最大值分 4 档着色 |
-| `src/pages/todo/TodoAiDialog.tsx` | 简报/周回顾弹窗，打开即生成，可重新生成 |
+| `src/pages/todo/TodoReportDialog.tsx` | 日报 / 周报弹窗（取代原 `TodoAiDialog.tsx`，见 182 章），打开即生成，可重新生成 |
 | `src/pages/chat/TodoExtractDialog.tsx` | 对话提炼候选、勾选、改标题、批量创建 |
 | `src/widgets/chat/TodoListSection.tsx` / `src/widgets/todo/TodoItem.tsx` | 聊天内待办列表与条目展示 |
 
@@ -370,7 +380,7 @@ APScheduler（15 分钟扫描 + 精确一次性触发器）
 前端：
 
 - `src/pages/__tests__/TodoPage.test.tsx`、`TodoPage.p171.test.ts`；
-- `src/pages/todo/__tests__/parseQuickTodo.test.ts`、`TodoQuickAdd.test.tsx`、`TodoAiDialog.test.tsx`、`TodoHeatmap.test.tsx`、`TodoRowEditor.contextMenu.test.tsx`；
+- `src/pages/todo/__tests__/parseQuickTodo.test.ts`、`TodoQuickAdd.test.tsx`、`TodoReportDialog.test.tsx`、`TodoHeatmap.test.tsx`、`TodoRowEditor.contextMenu.test.tsx`；
 - `src/entities/todo/__tests__/todoStore.test.ts`、`todoStore.p156.test.ts`；
 - `src/shared/api/__tests__/todoClient.test.ts`、`todoClient.p177.test.ts`；
 - `src/pages/chat/__tests__/TodoExtractDialog.test.tsx`；
@@ -394,3 +404,5 @@ APScheduler（15 分钟扫描 + 精确一次性触发器）
 - **导出固定包含已完成**：页面导出按钮传 `include_completed=true`；需要仅导出未完成时只能直接调用 API。
 - **服务文件接近棘轮**：`todo_service.py` 791 行，新增逻辑应继续拆入子模块。
 - **模块加载**：win7 的 `backend/__init__.py` 会安装 `backend/compat/win7/pydantic_compat.py`，使 pydantic 1.10 能执行 `model_dump(exclude_unset=True)` 等 v2 风格调用；改动请求/响应模型时需同时验证两个分支。
+
+**延伸阅读**：[182 · 待办交互升级与工作日志 / 日报周报](./182-todo-worklog-report.md) —— 本章的后继章节，描述待办交互升级（P0/P1）、工作日志捕获子系统（P2）与日报 / 周报双源聚合与存档（P3）。
