@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { create } from 'zustand';
 
 import { todoClient } from '../../shared/api/todoClient';
@@ -5,10 +6,12 @@ import type {
   CreateTodoInput,
   Todo,
   TodoBatchCompleteResult,
+  TodoDropZone,
   TodoListParams,
   TodoSummary,
   UpdateTodoInput,
 } from '../../shared/api/types';
+import { applyOptimisticMove, buildMoveRequest } from '../../shared/lib/dnd/todoDrag';
 
 interface TodoState {
   todos: Todo[];
@@ -26,6 +29,12 @@ interface TodoState {
   batchComplete: (ids: number[]) => Promise<TodoBatchCompleteResult>;
   batchDelete: (ids: number[]) => Promise<number>;
   snooze: (id: number, minutes: number) => Promise<Todo>;
+  /**
+   * P1 拖拽移动：乐观重排 + 失败回滚。
+   *
+   * 落点非法时（找不到行 / 拖到自己）**不发请求**，直接返回 ``false``。
+   */
+  moveTodo: (draggedId: number, targetId: number, zone: TodoDropZone) => Promise<boolean>;
   loadSummary: () => Promise<void>;
 }
 
@@ -39,7 +48,7 @@ export const useTodoStore = create<TodoState>((set, get) => ({
   loading: false,
   error: null,
   summary: null,
-  params: {},
+  params: { sort_by: 'manual' },
 
   async load(params?: TodoListParams) {
     set({ loading: true, error: null });
@@ -107,6 +116,32 @@ export const useTodoStore = create<TodoState>((set, get) => ({
     const updated = await todoClient.snooze(id, minutes);
     set({ todos: get().todos.map((t) => (t.id === id ? updated : t)) });
     return updated;
+  },
+
+  /**
+   * P1 拖拽移动：先本地重排（乐观），请求失败则回滚原数组并 toast。
+   *
+   * 成功后**不**把服务端返回的 ``sort_order`` 合并回本地数组 ——
+   * 服务端的绝对值（中点插入，可能非常大）与本地的 1024 步进值不同源，
+   * 混用会算出错误的本地次序。两者的**相对次序**始终一致（服务端把目标
+   * 插在同一相对位置），渲染只关心次序，因此保留乐观数组即可。
+   */
+  async moveTodo(draggedId: number, targetId: number, zone: TodoDropZone) {
+    const previous = get().todos;
+    const optimistic = applyOptimisticMove(previous, draggedId, targetId, zone);
+    if (optimistic === previous) return false;
+
+    set({ todos: optimistic });
+    try {
+      await todoClient.move(draggedId, buildMoveRequest(targetId, zone));
+      return true;
+    } catch (error: unknown) {
+      set({ todos: previous });
+      const detail =
+        error instanceof Error && error.message.trim() ? error.message.trim() : String(error);
+      toast.error(`移动待办失败：${detail}`);
+      throw error;
+    }
   },
 
   async loadSummary() {

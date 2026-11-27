@@ -411,8 +411,43 @@ export interface Todo {
   is_recurring: boolean;
   recurrence_rule?: string | null;
   parent_id?: number | null;
+  /**
+   * 同层（同一 ``parent_id``）内的手工次序（P1 拖拽排序）。
+   * 旧数据默认 0，由 id 次序兜底；实际值由后端在 move 时分配。
+   */
+  sort_order?: number | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * 拖拽落点区域（P1 拖拽排序 / 拖拽嵌套）。
+ *
+ * - ``before`` / ``after`` —— 相对参照待办落位，目标层跟随参照待办所在层；
+ * - ``inside`` —— 成为参照待办的子任务（仅顶层行可作为落点）。
+ */
+export type TodoDropZone = 'before' | 'after' | 'inside';
+
+/**
+ * 拖拽移动请求体（P1）。
+ *
+ * ``target_parent_id`` 是三态，语义与后端一致：
+ *
+ * - 省略（key 不存在）→ 目标层跟随参照待办所在层；
+ * - 显式 ``null`` → 强制回顶层；
+ * - 给 id → 成为该待办的子任务。
+ */
+export interface TodoMoveRequest {
+  position: 'before' | 'after';
+  reference_id?: number;
+  target_parent_id?: number | null;
+}
+
+/** 拖拽移动响应（P1）。 */
+export interface TodoMoveResult {
+  todo: Todo;
+  /** 本次移动实际改写的行数（间距耗尽触发整层重排时会大于 1）。 */
+  affected: number;
 }
 
 export interface CreateTodoInput {
@@ -484,7 +519,7 @@ export interface TodoListParams {
   project_tag?: string;
   priority?: TodoPriority;
   include_completed?: boolean;
-  sort_by?: 'due_at' | 'priority' | 'created_at';
+  sort_by?: 'due_at' | 'priority' | 'created_at' | 'manual';
   sort_order?: 'asc' | 'desc';
   limit?: number;
   offset?: number;

@@ -17,6 +17,7 @@ import {
   Clock3,
   Copy,
   Flag,
+  GripVertical,
   Pencil,
   Play,
   Plus,
@@ -38,6 +39,7 @@ import { TwoStepDelete } from '../../widgets/sidebar/TwoStepDelete';
 
 import { TodoDetailPanel } from './TodoDetailPanel';
 import { toLocalDatetimeValue, toIsoString } from './todoDateUtils';
+import type { TodoDragHandleBinding, TodoDragRowBinding } from './useTodoDrag';
 
 interface TodoRowEditorProps {
   todo: Todo;
@@ -53,6 +55,16 @@ interface TodoRowEditorProps {
   onSnooze?: (id: number, minutes: number) => Promise<void>;
   /** 详情面板的负责人候选项（专家列表）。 */
   specialists?: Array<{ id: string; name: string }>;
+  /**
+   * P1 拖拽绑定：拖柄（行末）+ 行落点（整行）。
+   *
+   * 缺省时不渲染拖柄；``handle.draggable`` 为假时拖柄仍可见但禁用，
+   * 并用 title 说明原因（避免「拖了没反应」）。
+   */
+  drag?: {
+    handle: TodoDragHandleBinding;
+    row: TodoDragRowBinding;
+  };
 }
 
 const PRIORITY_CYCLE: TodoPriority[] = ['low', 'medium', 'high'];
@@ -123,6 +135,7 @@ export function TodoRowEditor({
   onAddSubtask,
   onSnooze,
   specialists = [],
+  drag,
 }: TodoRowEditorProps) {
   const { t } = useI18n();
   const [editingTitle, setEditingTitle] = useState(false);
@@ -356,7 +369,12 @@ export function TodoRowEditor({
       <li
         className={`relative flex flex-col px-3 py-2 border border-border rounded-radius-sm group transition-colors ${
           isInactive ? 'bg-bg-muted/20' : 'bg-surface hover:bg-bg-hover/30'
-        } ${selected ? 'ring-1 ring-primary/30' : ''}`}
+        } ${selected ? 'ring-1 ring-primary/30' : ''} ${
+          drag?.row.isDragging ? 'opacity-50' : ''
+        } ${drag?.row.dropZone === 'inside' ? 'ring-1 ring-primary/60' : ''}`}
+        onDragOver={drag?.row.onDragOver}
+        onDragLeave={drag?.row.onDragLeave}
+        onDrop={drag?.row.onDrop}
       >
         {/* 进行中的视觉标识：左侧主色竖条 */}
         {isInProgress && (
@@ -364,6 +382,29 @@ export function TodoRowEditor({
             className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary rounded-l-radius-sm"
             aria-hidden="true"
             data-testid={`todo-in-progress-bar-${todo.id}`}
+          />
+        )}
+
+        {/* 拖拽落点指示（P1）：上/下横线 = 前/后；左侧竖线 = 变成子任务 */}
+        {drag?.row.dropZone === 'before' && (
+          <span
+            className="absolute -top-px left-2 right-2 h-0.5 bg-primary rounded pointer-events-none"
+            aria-hidden="true"
+            data-testid={`todo-drop-before-${todo.id}`}
+          />
+        )}
+        {drag?.row.dropZone === 'after' && (
+          <span
+            className="absolute -bottom-px left-2 right-2 h-0.5 bg-primary rounded pointer-events-none"
+            aria-hidden="true"
+            data-testid={`todo-drop-after-${todo.id}`}
+          />
+        )}
+        {drag?.row.dropZone === 'inside' && (
+          <span
+            className="absolute left-1 top-1 bottom-1 w-0.5 bg-primary rounded pointer-events-none"
+            aria-hidden="true"
+            data-testid={`todo-drop-inside-${todo.id}`}
           />
         )}
         <div className="flex items-center gap-2">
@@ -618,6 +659,27 @@ export function TodoRowEditor({
             data-testid={`todo-delete-${todo.id}`}
             className="w-6 h-6 justify-center opacity-0 group-hover:opacity-100 flex-shrink-0"
           />
+
+          {/* 拖柄（P1）：行末。只有「手动排序」时可拖，否则禁用并说明原因。 */}
+          {drag && (
+            <button
+              type="button"
+              draggable={drag.handle.draggable}
+              onDragStart={drag.handle.onDragStart}
+              onDragEnd={drag.handle.onDragEnd}
+              title={drag.handle.title}
+              aria-label={`拖动调整 ${todo.title} 的顺序`}
+              aria-disabled={!drag.handle.draggable}
+              data-testid={`todo-drag-handle-${todo.id}`}
+              className={`w-6 h-6 flex items-center justify-center rounded flex-shrink-0 opacity-0 group-hover:opacity-100 transition-colors ${
+                drag.handle.draggable
+                  ? 'text-text-muted hover:text-primary hover:bg-bg-hover cursor-grab active:cursor-grabbing'
+                  : 'text-text-muted/40 cursor-not-allowed'
+              }`}
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Inline subtask creator */}

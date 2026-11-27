@@ -20,7 +20,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useTodoStore } from '../entities/todo/todoStore';
 import { agentsApi } from '../shared/api/agentsApi';
 import { todoClient } from '../shared/api/todoClient';
-import type { Todo, TodoListParams, UpdateTodoInput } from '../shared/api/types';
+import type { Todo, TodoDropZone, TodoListParams, UpdateTodoInput } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
 import { PageHeader } from '../shared/ui';
 
@@ -31,6 +31,7 @@ import { TodoQuickAdd } from './todo/TodoQuickAdd';
 import { TodoRowEditor } from './todo/TodoRowEditor';
 import { TodoSubtaskTree } from './todo/TodoSubtaskTree';
 import { TodoToolbar } from './todo/TodoToolbar';
+import { useTodoDrag } from './todo/useTodoDrag';
 
 /** 专家条目（阶段 3：专家专属待办的过滤/创建来源）。 */
 export interface TodoSpecialistOption {
@@ -58,6 +59,7 @@ export function TodoPage() {
   const batchComplete = useTodoStore((s) => s.batchComplete);
   const batchDelete = useTodoStore((s) => s.batchDelete);
   const snooze = useTodoStore((s) => s.snooze);
+  const moveTodo = useTodoStore((s) => s.moveTodo);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -69,7 +71,8 @@ export function TodoPage() {
   const lastSentQuery = useRef<string | undefined>(params.q);
 
   useEffect(() => {
-    void load();
+    // 默认按手工次序加载 —— 拖拽排序的前提是列表本身就是手工序。
+    void load({ sort_by: 'manual' });
   }, [load]);
 
   // 专家列表（阶段 3）：失败静默降级为不显示专家过滤/选择器。
@@ -119,6 +122,35 @@ export function TodoPage() {
 
   // Check if any subtasks exist to decide rendering mode
   const hasSubtasks = useMemo(() => todos.some((todo) => todo.parent_id != null), [todos]);
+
+  /**
+   * P1 拖拽落库：失败提示由 store 内部 toast 处理，这里只吞掉异常，
+   * 避免未处理的 Promise rejection。
+   */
+  const handleMove = useCallback(
+    async (draggedId: number, targetId: number, zone: TodoDropZone) => {
+      try {
+        await moveTodo(draggedId, targetId, zone);
+      } catch {
+        // 已提示，无需重复处理。
+      }
+    },
+    [moveTodo],
+  );
+
+  /**
+   * P1 拖拽交互：
+   *   - 仅「手动排序」时可拖（其他排序下拖柄禁用）；
+   *   - 树形视图下「前 / 后」只允许同层重排；
+   *   - 「变成子任务」两种视图都允许 —— 目标必须是顶层行（层级上限两层）。
+   */
+  const { handleFor: dragHandleFor, rowFor: dragRowFor } = useTodoDrag({
+    todos,
+    enabled: params.sort_by === 'manual',
+    allowNest: true,
+    sameLayerOnly: hasSubtasks,
+    onMove: handleMove,
+  });
 
   const handleParamsChange = useCallback(
     (newParams: TodoListParams) => {
@@ -257,6 +289,7 @@ export function TodoPage() {
         onAddSubtask={todo.parent_id == null ? handleAddSubtask : undefined}
         onSnooze={handleSnooze}
         specialists={specialists}
+        drag={{ handle: dragHandleFor(todo), row: dragRowFor(todo) }}
       />
     ),
     [
@@ -269,6 +302,8 @@ export function TodoPage() {
       handleAddSubtask,
       handleSnooze,
       specialists,
+      dragHandleFor,
+      dragRowFor,
     ],
   );
 
@@ -448,6 +483,7 @@ export function TodoPage() {
                     onAddSubtask={todo.parent_id == null ? handleAddSubtask : undefined}
                     onSnooze={handleSnooze}
                     specialists={specialists}
+                    drag={{ handle: dragHandleFor(todo), row: dragRowFor(todo) }}
                   />
                 ))}
               </ul>

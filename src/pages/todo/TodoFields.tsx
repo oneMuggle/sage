@@ -13,11 +13,7 @@ import { Bell, Calendar, Flag, Tag } from 'lucide-react';
 import type { TodoPriority } from '../../shared/api/types';
 
 /** 可提交（失焦即落库）的字段名。 */
-export type TodoFieldsField =
-  | 'description'
-  | 'dueAtLocal'
-  | 'projectTag'
-  | 'tagsText';
+export type TodoFieldsField = 'description' | 'dueAtLocal' | 'projectTag' | 'tagsText';
 
 export interface TodoFieldsValue {
   /** 详细描述（多行）。 */

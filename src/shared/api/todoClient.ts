@@ -15,6 +15,7 @@
  *   todo_batch_delete   → POST /api/v1/todos/batch/delete
  *   todo_export         → GET  /api/v1/todos/export
  *   todo_tags           → GET  /api/v1/todos/tags
+ *   todo_move           → POST /api/v1/todos/{id}/move
  *
  * All methods throw on IPC failure; callers wrap in try/catch and surface a
  * toast on failure.
@@ -31,6 +32,8 @@ import type {
   TodoHeatmapResult,
   TodoListParams,
   TodoListResponse,
+  TodoMoveRequest,
+  TodoMoveResult,
   TodoStats,
   TodoSummary,
   TodoTagCount,
@@ -123,6 +126,25 @@ export const todoClient = {
   async snooze(id: number, minutes: number): Promise<Todo> {
     return invoke<Todo>('todo_snooze', { id, minutes });
   },
+
+  /**
+   * P1：拖拽移动（排序 / 变子任务）。
+   *
+   * ``target_parent_id`` 的三态语义必须在**构造 body 时**就落地：
+   * 省略 = 目标层跟随参照待办所在层；显式 ``null`` = 强制回顶层。
+   * 若把 ``undefined`` 写成自有 key，IPC 的 JSON 序列化会把它丢掉 ——
+   * 效果虽同「省略」，但依赖序列化行为过于隐晦，这里直接不写这个 key。
+   */
+  async move(id: number, request: TodoMoveRequest): Promise<TodoMoveResult> {
+    return invoke<TodoMoveResult>('todo_move', {
+      id,
+      position: request.position,
+      ...(request.reference_id === undefined ? {} : { reference_id: request.reference_id }),
+      ...(request.target_parent_id === undefined
+        ? {}
+        : { target_parent_id: request.target_parent_id }),
+    });
+  },
 };
 
 export function formatTodoListSummary(
@@ -166,6 +188,7 @@ export function auditTodoClientGovernance(): string {
         'batchDelete',
         'exportTodos',
         'listTags',
+        'move',
       ],
       sampleSummary: formatTodoListSummary({ items: [], total: 0, limit: 20, offset: 0 }),
     },
