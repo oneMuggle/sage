@@ -58,6 +58,8 @@ _EXPECTED_ONLINE = [
     "office_fill_pdf_form",
     "office_analyze_word_template",
     "office_fill_word_template",
+    "office_refill_word_template",
+    "office_convert_word",
     "office_analyze_ppt_template",
     "office_fill_ppt_template",
     "office_analyze",
@@ -180,6 +182,8 @@ _EXPECTED_SCHEMA_NAMES = [
     "office_generate_pdf",
     "office_fill_pdf_form",
     "office_fill_word_template",
+    "office_refill_word_template",
+    "office_convert_word",
     "office_fill_ppt_template",
     "office_parse_bibtex",
     "office_fill_latex_template",
@@ -417,7 +421,7 @@ def test_standard_online_matches_golden_snapshot() -> None:
     registry = _install_via_facade()
 
     assert registry.list_names() == _EXPECTED_ONLINE
-    assert len(registry.list_names()) == len(set(registry.list_names())) == 125
+    assert len(registry.list_names()) == len(set(registry.list_names())) == 127
 
 
 def test_standard_risks_and_schemas_align_with_golden_snapshot() -> None:
@@ -441,7 +445,7 @@ def test_network_gating_counts_and_differences() -> None:
     intranet = _install_via_facade(NetworkMode.INTRANET).list_names()
     offline = _install_via_facade(NetworkMode.OFFLINE).list_names()
 
-    assert (len(online), len(intranet), len(offline)) == (125, 124, 120)
+    assert (len(online), len(intranet), len(offline)) == (127, 126, 122)
     assert set(online) - set(intranet) == {"web_search"}
     assert set(intranet) - set(offline) == {
         "web_fetch",
@@ -524,7 +528,7 @@ def test_headless_install_excludes_ask_user_only() -> None:
     registry = _install_bundles(_harness("headless"))
     names = registry.list_names()
 
-    assert len(names) == 124
+    assert len(names) == 126
     assert "ask_user_question" not in names
     assert set(_EXPECTED_ONLINE) - set(names) == {"ask_user_question"}
     _assert_subsequence(names)
@@ -561,7 +565,7 @@ def test_register_all_tools_reads_project_harness(tmp_path: Path) -> None:
 
     registry = _install_via_facade()
 
-    assert len(registry.list_names()) == 124
+    assert len(registry.list_names()) == 126
     assert "ask_user_question" not in registry.list_names()
 
 

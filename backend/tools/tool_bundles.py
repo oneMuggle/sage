@@ -75,6 +75,7 @@ from .ocr_image_tool import OcrImageTool
 from .office_analyze_tool import OfficeAnalyzeTool
 from .office_archive_tool import OfficeArchiveTool
 from .office_bibtex_tool import OfficeBibTexTool
+from .office_convert_tool import OfficeConvertWordTool
 from .office_create_tool import OfficeCreateTool
 from .office_delete_tool import OfficeDeleteTool
 from .office_journal_tool import (
@@ -110,6 +111,7 @@ from .office_restore_tool import OfficeRestoreTool
 from .office_template_tool import (
     OfficeAnalyzeWordTemplateTool,
     OfficeFillWordTemplateTool,
+    OfficeRefillWordTemplateTool,
 )
 from .office_toc_refresh_tool import OfficeRefreshTocTool
 from .office_tool import OfficeListTool, OfficeReadTool
@@ -235,6 +237,8 @@ def _install_office_template(ctx: ToolInstallContext) -> None:
     policy = ctx.policy
     ctx.registry.register(OfficeAnalyzeWordTemplateTool(policy=policy))
     ctx.registry.register(OfficeFillWordTemplateTool(policy=policy))
+    ctx.registry.register(OfficeRefillWordTemplateTool(policy=policy))
+    ctx.registry.register(OfficeConvertWordTool(policy=policy))
     ctx.registry.register(OfficeAnalyzePptTemplateTool(policy=policy))
     ctx.registry.register(OfficeFillPptTemplateTool(policy=policy))
 

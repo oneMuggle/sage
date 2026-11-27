@@ -35,6 +35,8 @@ _FILE_CHANGE_TOOLS = frozenset(
         "office_update",
         "office_restore",
         "office_fill_word_template",
+        "office_refill_word_template",
+        "office_convert_word",
         "office_fill_ppt_template",
         "office_fill_latex_template",
         "office_generate_pdf",
