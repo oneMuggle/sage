@@ -259,6 +259,10 @@ export const settingsRoutes: Record<string, CommandRoute> = {
       if (a?.view !== undefined && a?.view !== null) {
         params.set('view', String(a.view));
       }
+      // 专家过滤（阶段 3）。此前遗漏 → TodoToolbar 的专家下拉选了什么都不生效。
+      if (a?.specialist_id !== undefined && a?.specialist_id !== null) {
+        params.set('specialist_id', String(a.specialist_id));
+      }
       if (a?.sort_by !== undefined && a?.sort_by !== null) {
         params.set('sort_by', String(a.sort_by));
       }
@@ -373,6 +377,157 @@ export const settingsRoutes: Record<string, CommandRoute> = {
       delete body.id;
       return body;
     },
+  },
+
+  // P1 拖拽排序 / 拖拽嵌套
+  todo_move: {
+    method: 'POST',
+    path: (a) => `/api/v1/todos/${encodeURIComponent(String(a.id))}/move`,
+    // MoveTodoIn 声明 extra="forbid" — id 在 URL 路径中，body 不能带 id。
+    //
+    // body 里保留 ``target_parent_id`` 的三态语义：
+    //   - key 不存在 → 省略 → 后端按「跟随参照待办所在层」处理；
+    //   - key 存在且值为 null → 显式回顶层。
+    // 因此这里只删 ``id``，不碰其余 key（前端已保证不写入 undefined 值）。
+    body: (a) => {
+      const body: Record<string, unknown> = { ...a };
+      delete body.id;
+      return body;
+    },
+  },
+
+  // P2 工作日志（worklog）—— 记「已经做了什么」，与 todos 双源供日报/周报
+  worklog_list: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a?.status !== undefined && a?.status !== null) {
+        params.set('status', String(a.status));
+      }
+      if (a?.kind !== undefined && a?.kind !== null) {
+        params.set('kind', String(a.kind));
+      }
+      // 后端查询参数别名是 `from` / `to`（Python 里 `from` 是关键字，
+      // FastAPI 用过 Query(alias=...)），必须按别名发送，否则收不到。
+      if (a?.date_from !== undefined && a?.date_from !== null) {
+        params.set('from', String(a.date_from));
+      }
+      if (a?.date_to !== undefined && a?.date_to !== null) {
+        params.set('to', String(a.date_to));
+      }
+      if (a?.todo_id !== undefined && a?.todo_id !== null) {
+        params.set('todo_id', String(a.todo_id));
+      }
+      if (a?.project_tag !== undefined && a?.project_tag !== null) {
+        params.set('project_tag', String(a.project_tag));
+      }
+      if (a?.session_id !== undefined && a?.session_id !== null) {
+        params.set('session_id', String(a.session_id));
+      }
+      if (a?.limit !== undefined && a?.limit !== null) {
+        params.set('limit', String(a.limit));
+      }
+      if (a?.offset !== undefined && a?.offset !== null) {
+        params.set('offset', String(a.offset));
+      }
+      const qs = params.toString();
+      return `/api/v1/worklogs${qs ? `?${qs}` : ''}`;
+    },
+  },
+  worklog_summary: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a?.date_from !== undefined && a?.date_from !== null) {
+        params.set('from', String(a.date_from));
+      }
+      if (a?.date_to !== undefined && a?.date_to !== null) {
+        params.set('to', String(a.date_to));
+      }
+      if (a?.todo_id !== undefined && a?.todo_id !== null) {
+        params.set('todo_id', String(a.todo_id));
+      }
+      if (a?.project_tag !== undefined && a?.project_tag !== null) {
+        params.set('project_tag', String(a.project_tag));
+      }
+      const qs = params.toString();
+      return `/api/v1/worklogs/summary${qs ? `?${qs}` : ''}`;
+    },
+  },
+  worklog_create: {
+    method: 'POST',
+    path: () => '/api/v1/worklogs',
+  },
+  worklog_update: {
+    method: 'PUT',
+    path: (a) => `/api/v1/worklogs/${encodeURIComponent(String(a.id))}`,
+    // UpdateWorklogIn 声明 extra="forbid" — id 在 URL 路径中，body 不能带 id，
+    // 否则后端 422。status 不在可改白名单里，状态迁移只走 confirm / dismiss。
+    body: (a) => {
+      const body: Record<string, unknown> = { ...a };
+      delete body.id;
+      return body;
+    },
+  },
+  worklog_delete: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/worklogs/${encodeURIComponent(String(a.id))}`,
+  },
+  worklog_confirm: {
+    method: 'POST',
+    path: (a) => `/api/v1/worklogs/${encodeURIComponent(String(a.id))}/confirm`,
+  },
+  worklog_dismiss: {
+    method: 'POST',
+    path: (a) => `/api/v1/worklogs/${encodeURIComponent(String(a.id))}/dismiss`,
+  },
+  worklog_extract: {
+    method: 'POST',
+    path: () => '/api/v1/worklogs/extract',
+  },
+
+  // P3 报告（report）—— 日报 / 周报。生成即存档，返回的就是存好的那条。
+  report_generate: {
+    method: 'POST',
+    path: () => '/api/v1/reports/generate',
+    // GenerateReportIn 声明 extra="forbid" —— 只放这四个键，多传一个就 422。
+    body: (a) => {
+      const body: Record<string, unknown> = {};
+      if (a?.report_type !== undefined && a?.report_type !== null) {
+        body.report_type = String(a.report_type);
+      }
+      if (a?.period_start !== undefined && a?.period_start !== null) {
+        body.period_start = String(a.period_start);
+      }
+      if (a?.period_end !== undefined && a?.period_end !== null) {
+        body.period_end = String(a.period_end);
+      }
+      if (a?.title !== undefined && a?.title !== null) {
+        body.title = String(a.title);
+      }
+      return body;
+    },
+  },
+  report_list: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a?.report_type !== undefined && a?.report_type !== null) {
+        params.set('report_type', String(a.report_type));
+      }
+      if (a?.limit !== undefined && a?.limit !== null) {
+        params.set('limit', String(a.limit));
+      }
+      if (a?.offset !== undefined && a?.offset !== null) {
+        params.set('offset', String(a.offset));
+      }
+      const qs = params.toString();
+      return `/api/v1/reports${qs ? `?${qs}` : ''}`;
+    },
+  },
+  report_get: {
+    method: 'GET',
+    path: (a) => `/api/v1/reports/${encodeURIComponent(String(a.id))}`,
   },
 
   // custom CSS theme storage (themeCssClient)

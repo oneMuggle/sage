@@ -1296,5 +1296,159 @@ describe('agent_* IPC commands', () => {
         minutes: 60,
       });
     });
+
+    it('todo_move route strips id and preserves target_parent_id tri-state', () => {
+      expect(COMMAND_ROUTES.todo_move.method).toBe('POST');
+      expect(COMMAND_ROUTES.todo_move.path({ id: 7 })).toBe('/api/v1/todos/7/move');
+      // id 在路径里，body 里必须去掉（MoveTodoIn extra="forbid"）。
+      expect(
+        COMMAND_ROUTES.todo_move.body?.({
+          id: 7,
+          position: 'before',
+          reference_id: 9,
+          target_parent_id: null,
+        }),
+      ).toEqual({
+        position: 'before',
+        reference_id: 9,
+        target_parent_id: null,
+      });
+      // 省略 target_parent_id 时也不能凭空造出这个 key ——
+      // 「省略」与「显式 null」在后端语义不同。
+      expect(
+        COMMAND_ROUTES.todo_move.body?.({ id: 7, position: 'after', reference_id: 9 }),
+      ).toEqual({
+        position: 'after',
+        reference_id: 9,
+      });
+    });
+  });
+
+  // ===== P2: worklog (工作日志) IPC routes =====
+  describe('worklog IPC routes', () => {
+    const WORKLOG_COMMANDS = [
+      'worklog_list',
+      'worklog_summary',
+      'worklog_create',
+      'worklog_update',
+      'worklog_delete',
+      'worklog_confirm',
+      'worklog_dismiss',
+      'worklog_extract',
+    ];
+
+    it('registers all 8 worklog commands', () => {
+      for (const cmd of WORKLOG_COMMANDS) {
+        expect(COMMAND_ROUTES[cmd], `missing route for ${cmd}`).toBeDefined();
+      }
+    });
+
+    it('worklog_list aliases date_from/date_to to from/to', () => {
+      expect(COMMAND_ROUTES.worklog_list.method).toBe('GET');
+      expect(COMMAND_ROUTES.worklog_list.path({})).toBe('/api/v1/worklogs');
+      expect(
+        COMMAND_ROUTES.worklog_list.path({
+          status: 'pending',
+          kind: 'done',
+          date_from: '2026-11-20',
+          date_to: '2026-11-27',
+          todo_id: 7,
+          project_tag: 'sage',
+          session_id: 'sess-1',
+          limit: 20,
+          offset: 5,
+        }),
+      ).toBe(
+        '/api/v1/worklogs?status=pending&kind=done&from=2026-11-20&to=2026-11-27' +
+          '&todo_id=7&project_tag=sage&session_id=sess-1&limit=20&offset=5',
+      );
+    });
+
+    it('worklog_summary sends the date window under the alias keys', () => {
+      expect(COMMAND_ROUTES.worklog_summary.method).toBe('GET');
+      expect(COMMAND_ROUTES.worklog_summary.path({})).toBe('/api/v1/worklogs/summary');
+      expect(
+        COMMAND_ROUTES.worklog_summary.path({
+          date_from: '2026-11-20',
+          date_to: '2026-11-27',
+          project_tag: 'sage',
+        }),
+      ).toBe('/api/v1/worklogs/summary?from=2026-11-20&to=2026-11-27&project_tag=sage');
+    });
+
+    it('worklog_update strips id from the body (UpdateWorklogIn forbids extras)', () => {
+      expect(COMMAND_ROUTES.worklog_update.method).toBe('PUT');
+      expect(COMMAND_ROUTES.worklog_update.path({ id: 7 })).toBe('/api/v1/worklogs/7');
+      expect(COMMAND_ROUTES.worklog_update.body?.({ id: 7, content: 'x' })).toEqual({
+        content: 'x',
+      });
+    });
+
+    it('worklog_delete / confirm / dismiss / extract target their paths', () => {
+      expect(COMMAND_ROUTES.worklog_delete.method).toBe('DELETE');
+      expect(COMMAND_ROUTES.worklog_delete.path({ id: 7 })).toBe('/api/v1/worklogs/7');
+      expect(COMMAND_ROUTES.worklog_confirm.path({ id: 7 })).toBe('/api/v1/worklogs/7/confirm');
+      expect(COMMAND_ROUTES.worklog_dismiss.path({ id: 7 })).toBe('/api/v1/worklogs/7/dismiss');
+      expect(COMMAND_ROUTES.worklog_extract.method).toBe('POST');
+      expect(COMMAND_ROUTES.worklog_extract.path({})).toBe('/api/v1/worklogs/extract');
+    });
+  });
+
+  // ===== P3: report (日报 / 周报) IPC routes =====
+  describe('report IPC routes', () => {
+    const REPORT_COMMANDS = ['report_generate', 'report_list', 'report_get'];
+
+    it('registers all 3 report commands', () => {
+      for (const cmd of REPORT_COMMANDS) {
+        expect(COMMAND_ROUTES[cmd], `missing route for ${cmd}`).toBeDefined();
+      }
+    });
+
+    it('report_generate posts to the literal generate path', () => {
+      expect(COMMAND_ROUTES.report_generate.method).toBe('POST');
+      expect(COMMAND_ROUTES.report_generate.path({})).toBe('/api/v1/reports/generate');
+    });
+
+    it('report_generate sends only the four allowed body keys', () => {
+      // GenerateReportIn 声明 extra="forbid" —— 多传一个键后端就 422。
+      expect(
+        COMMAND_ROUTES.report_generate.body?.({
+          report_type: 'daily',
+          period_start: '2026-11-20',
+          period_end: '2026-11-26',
+          title: '我的复盘',
+          bogus: 1,
+        }),
+      ).toEqual({
+        report_type: 'daily',
+        period_start: '2026-11-20',
+        period_end: '2026-11-26',
+        title: '我的复盘',
+      });
+    });
+
+    it('report_generate omits absent optional keys', () => {
+      expect(COMMAND_ROUTES.report_generate.body?.({ report_type: 'weekly' })).toEqual({
+        report_type: 'weekly',
+      });
+      expect(COMMAND_ROUTES.report_generate.body?.({})).toEqual({});
+    });
+
+    it('report_list sends the filter and page window', () => {
+      expect(COMMAND_ROUTES.report_list.method).toBe('GET');
+      expect(COMMAND_ROUTES.report_list.path({})).toBe('/api/v1/reports');
+      expect(
+        COMMAND_ROUTES.report_list.path({
+          report_type: 'weekly',
+          limit: 20,
+          offset: 5,
+        }),
+      ).toBe('/api/v1/reports?report_type=weekly&limit=20&offset=5');
+    });
+
+    it('report_get targets the report by id', () => {
+      expect(COMMAND_ROUTES.report_get.method).toBe('GET');
+      expect(COMMAND_ROUTES.report_get.path({ id: 7 })).toBe('/api/v1/reports/7');
+    });
   });
 });

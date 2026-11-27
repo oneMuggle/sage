@@ -411,8 +411,43 @@ export interface Todo {
   is_recurring: boolean;
   recurrence_rule?: string | null;
   parent_id?: number | null;
+  /**
+   * 同层（同一 ``parent_id``）内的手工次序（P1 拖拽排序）。
+   * 旧数据默认 0，由 id 次序兜底；实际值由后端在 move 时分配。
+   */
+  sort_order?: number | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * 拖拽落点区域（P1 拖拽排序 / 拖拽嵌套）。
+ *
+ * - ``before`` / ``after`` —— 相对参照待办落位，目标层跟随参照待办所在层；
+ * - ``inside`` —— 成为参照待办的子任务（仅顶层行可作为落点）。
+ */
+export type TodoDropZone = 'before' | 'after' | 'inside';
+
+/**
+ * 拖拽移动请求体（P1）。
+ *
+ * ``target_parent_id`` 是三态，语义与后端一致：
+ *
+ * - 省略（key 不存在）→ 目标层跟随参照待办所在层；
+ * - 显式 ``null`` → 强制回顶层；
+ * - 给 id → 成为该待办的子任务。
+ */
+export interface TodoMoveRequest {
+  position: 'before' | 'after';
+  reference_id?: number;
+  target_parent_id?: number | null;
+}
+
+/** 拖拽移动响应（P1）。 */
+export interface TodoMoveResult {
+  todo: Todo;
+  /** 本次移动实际改写的行数（间距耗尽触发整层重排时会大于 1）。 */
+  affected: number;
 }
 
 export interface CreateTodoInput {
@@ -432,15 +467,25 @@ export interface CreateTodoInput {
 
 export interface UpdateTodoInput {
   title?: string;
-  description?: string;
-  due_at?: string;
+  /**
+   * 可空字段一律允许显式 ``null``：后端 PUT 是三态语义（缺省 = 不动、
+   * 显式 null = 清空）。传 ``undefined`` 会在 IPC 的 JSON 序列化阶段被
+   * 丢掉，等价于「不动」——想清空就必须传 ``null``。
+   */
+  description?: string | null;
+  due_at?: string | null;
   priority?: TodoPriority;
-  project_tag?: string;
-  status?: 'pending' | 'in_progress' | 'cancelled';
-  recurrence_rule?: string;
+  project_tag?: string | null;
+  /**
+   * 状态更新。与 `TodoItemStatus` 同源 —— 行内三态循环会把待办推到
+   * `completed`，因此这里必须允许完成态（此前漏掉，只能走单独的
+   * complete 接口）。
+   */
+  status?: TodoItemStatus;
+  recurrence_rule?: string | null;
   parent_id?: number | null;
-  tags?: string[];
-  reminder_offsets?: number[];
+  tags?: string[] | null;
+  reminder_offsets?: number[] | null;
   specialist_id?: string | null;
 }
 
@@ -474,7 +519,7 @@ export interface TodoListParams {
   project_tag?: string;
   priority?: TodoPriority;
   include_completed?: boolean;
-  sort_by?: 'due_at' | 'priority' | 'created_at';
+  sort_by?: 'due_at' | 'priority' | 'created_at' | 'manual';
   sort_order?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
@@ -546,6 +591,117 @@ export interface TodoExportResult {
   filename: string;
   format: 'json' | 'md';
   content: string;
+}
+
+// ============================================================================
+// Worklog subsystem (P2) —— 「已经做了什么」，与 todos 双源供日报 / 周报
+//
+// 与 todo 的差别：todo 记「要做什么」，worklog 记「做过了什么」。对话抽取
+// 的候选先落 ``pending``，**人工确认后**才进报告统计 —— 所以这里是
+// pending / confirmed / dismissed 三态，少了 todo 那一套完成语义。
+// ============================================================================
+
+/** 日志类型：进展 / 完成 / 阻塞 / 下一步。 */
+export type WorkLogKind = 'progress' | 'done' | 'blocker' | 'next';
+
+/** 日志状态：待确认候选 / 已确认（进报告）/ 已忽略。 */
+export type WorkLogStatus = 'pending' | 'confirmed' | 'dismissed';
+
+/** 来源：对话抽取 / 手动录入 / agent 工具。 */
+export type WorkLogSourceType = 'chat' | 'manual' | 'agent';
+
+export interface WorkLog {
+  id: number;
+  session_id?: string | null;
+  content: string;
+  kind: WorkLogKind;
+  progress_text?: string | null;
+  blocker?: string | null;
+  todo_id?: number | null;
+  project_id?: string | null;
+  project_tag?: string | null;
+  source_type: WorkLogSourceType;
+  source_ref?: string | null;
+  status: WorkLogStatus;
+  /** 本地 ISO8601，如 ``2026-11-27T14:32:05.123456``（无时区）。 */
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateWorkLogInput {
+  content: string;
+  kind?: WorkLogKind;
+  session_id?: string | null;
+  progress_text?: string | null;
+  blocker?: string | null;
+  todo_id?: number | null;
+  project_id?: string | null;
+  project_tag?: string | null;
+  source_type?: WorkLogSourceType;
+  source_ref?: string | null;
+}
+
+/**
+ * 编辑工作日志。
+ *
+ * **不含** ``status`` —— 状态迁移只走 confirm / dismiss 两个显式方法，
+ * 避免「改正文」意外改变一条记录是否进报告。可空字段显式 ``null`` = 清空。
+ */
+export interface UpdateWorkLogInput {
+  content?: string;
+  kind?: WorkLogKind;
+  session_id?: string | null;
+  progress_text?: string | null;
+  blocker?: string | null;
+  todo_id?: number | null;
+  project_id?: string | null;
+  project_tag?: string | null;
+  source_type?: WorkLogSourceType;
+  source_ref?: string | null;
+}
+
+/**
+ * 列表查询参数。
+ *
+ * 日期窗用 ``YYYY-MM-DD``（含边界当天整日）。注意后端查询参数别名是
+ * ``from`` / ``to``，IPC 层负责别名转换，这里保留可读的 snake_case 名。
+ */
+export interface WorkLogListParams {
+  status?: WorkLogStatus;
+  kind?: WorkLogKind;
+  date_from?: string;
+  date_to?: string;
+  todo_id?: number;
+  project_tag?: string;
+  session_id?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface WorkLogListResponse {
+  items: WorkLog[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** 时间窗内的统计快照 —— **只统计已确认**的记录。 */
+export interface WorkLogSummary {
+  total: number;
+  by_kind: Record<string, number>;
+  sessions: number;
+}
+
+/** 对话提炼候选（不落库，由用户逐条确认后 create）。 */
+export interface WorkLogExtractCandidate {
+  content: string;
+  kind: WorkLogKind;
+  progress_text?: string | null;
+  blocker?: string | null;
+}
+
+export interface WorkLogExtractResult {
+  candidates: WorkLogExtractCandidate[];
 }
 
 export function auditTemplateAndTaskTypesGovernance(

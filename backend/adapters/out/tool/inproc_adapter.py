@@ -42,6 +42,7 @@ from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_names import is_plugin_tool_name
 from backend.domain.tool_policy import ToolPolicy
 from backend.services.todo_service import get_todo_service
+from backend.services.worklog_service import get_worklog_service
 from backend.tools.bash_validation import validate_bash
 from backend.tools.executor import (
     TIMEOUT_EXCEPTIONS,
@@ -90,6 +91,7 @@ class InprocToolAdapter:
                 policy=self._policy,
                 scheduler_service_getter=scheduler_service_getter,
                 todo_service_getter=get_todo_service,
+                worklog_service_getter=get_worklog_service,
             )
             # 注入共享 MemoryManager：register_all_tools 创建的 MemorySearchTool /
             # MemorySaveTool 默认 self.memory=None，runtime 调用会返回

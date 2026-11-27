@@ -244,6 +244,9 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "update_todo": ToolCapability.WRITE,
     "complete_todo": ToolCapability.WRITE,
     "delete_todo": ToolCapability.WRITE,
+    # --- 工作日志（P2） ---
+    "list_worklogs": ToolCapability.READ,
+    "add_worklog": ToolCapability.WRITE,
     # --- 设计 ---
     "design_list_systems": ToolCapability.READ,
     "design_list_templates": ToolCapability.READ,

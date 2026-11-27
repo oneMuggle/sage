@@ -2557,6 +2557,9 @@ class Database:
                 is_recurring INTEGER DEFAULT 0,
                 recurrence_rule TEXT,
                 parent_id INTEGER,
+                -- 手工排序位（P1）：同层内的相对次序。REAL 步进值，相邻两项
+                -- 取中点插入；间距耗尽时整层重排。新行默认 0。
+                sort_order REAL DEFAULT 0,
                 reminder_24h_fired INTEGER DEFAULT 0,
                 reminder_1h_fired INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
@@ -2604,12 +2607,94 @@ class Database:
                 "ALTER TABLE todos ADD COLUMN snooze_count INTEGER DEFAULT 0"
             )
             _added = True
+        # Phase 4 (2026-11-27): sort_order —— 手工排序位（拖拽排序 / 拖拽嵌套）。
+        # 旧库幂等补列；新库由上方 CREATE TABLE 带上（DEFAULT 0，与「按 id
+        # 次序兜底」的历史数据兼容，无需回填）。
+        if "sort_order" not in _todo_cols:
+            cursor.execute("ALTER TABLE todos ADD COLUMN sort_order REAL DEFAULT 0")
+            _added = True
         if _added:
             conn.commit()
+
+        # 排序索引：必须在上面 ALTER 补列之后建 —— 旧库上 sort_order 列尚不存在时
+        # CREATE INDEX 会因 no such column 直接失败。
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_todos_sort_order "
+            "ON todos(parent_id, sort_order)"
+        )
+        conn.commit()
 
         # 待办全文搜索 FTS5（独立存内容表 + jieba 分词；行数不一致时幂等回填）
         ensure_todos_fts_schema(conn)
         backfill_todos_fts(conn)
+
+        # 工作日志表 (2026-11-27, P2): 「当天做了什么」的持久化 —— 与 todos 表
+        # 并列的另一条轨。todos 记「要做的事」，work_logs 记「已经做的事」。
+        #
+        # 双轨语义的关键在 status 列:
+        #   pending   = 待确认候选（对话 LLM 抽取的产物，人工确认前不算数）
+        #   confirmed = 正式记录（进日报/周报统计）
+        #   dismissed = 已忽略
+        # 未确认的行绝不进报告 —— 抽取误记由「确认」这一步拦住。
+        #
+        # 外键一律 ON DELETE SET NULL: 本库 PRAGMA foreign_keys=ON（见 434 行），
+        # SQLite 默认的 NO ACTION 会让「删待办 / 删项目」直接失败。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS work_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                content TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'progress',
+                progress_text TEXT,
+                blocker TEXT,
+                todo_id INTEGER,
+                project_id TEXT,
+                project_tag TEXT,
+                source_type TEXT NOT NULL DEFAULT 'chat',
+                source_ref TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE SET NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_work_logs_created ON work_logs(created_at)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_work_logs_status ON work_logs(status)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_work_logs_kind ON work_logs(kind)"
+        )
+        conn.commit()
+
+        # 报告存档表 (2026-11-27, P3): 日报 / 周报的落盘快照。
+        # 报告是一次生成、长期留存的产物 —— 生成时刻的统计与正文都要冻结在
+        # 这里，之后工作日志再改也不影响历史报告（复盘靠的是当时的结论）。
+        #
+        #   report_type  = daily / weekly
+        #   period_start / period_end = 统计时间窗（YYYY-MM-DD，两端含）
+        #   content      = Markdown 正文（LLM 生成或模板降级产物）
+        #   stats_json   = 统计快照 JSON（总量 / 分类计数 / 会话数等）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                report_type TEXT NOT NULL,
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                content TEXT NOT NULL,
+                stats_json TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at)"
+        )
+        conn.commit()
 
         # 定时任务表 (2026-10-16): 取代 scheduled_tasks.json。此前 JSON 无事务、
         # 无 WAL，文件损坏即全部任务丢失。所有时间字段为 epoch 毫秒 INTEGER，

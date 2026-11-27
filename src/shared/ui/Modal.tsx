@@ -10,9 +10,24 @@ export interface ModalProps {
   title?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /**
+   * 面板宽度档位 —— 默认 `'md'`（`max-w-md`）。
+   *
+   * 历史上本组件宽度写死 `'md'`，导致报告类宽内容（Markdown 正文 + 统计块）
+   * 只能另起炉灶复制一份弹窗（见 `widgets/session/ArchivesModal.tsx`）。
+   * 加档位后，宽内容可直接复用，存量调用方不传即保持原样。
+   */
+  size?: 'md' | 'lg' | 'xl';
 }
 
-export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) {
+/** 宽度档位 → Tailwind 类名。 */
+const SIZE_CLASSES: Record<NonNullable<ModalProps['size']>, string> = {
+  md: 'max-w-md',
+  lg: 'max-w-2xl',
+  xl: 'max-w-4xl',
+};
+
+export function Modal({ isOpen, onClose, title, children, footer, size = 'md' }: ModalProps) {
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
@@ -40,7 +55,9 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-xl bg-surface-elevated dark:bg-surface shadow-xl transition-all">
+              <Dialog.Panel
+                className={`w-full ${SIZE_CLASSES[size]} transform overflow-hidden rounded-xl bg-surface-elevated dark:bg-surface shadow-xl transition-all`}
+              >
                 {/* 头部 */}
                 {title && (
                   <div className="flex items-center justify-between px-6 py-4 border-b border-border">
