@@ -160,13 +160,13 @@ CREATE TABLE IF NOT EXISTS todos (
 
 `GET /api/v1/todos/brief` → `{content}`。以 `startup_summary`（逾期数 / 今日到期 / 未来 7 天 / 高优先级 / 各状态计数）为输入，由 `todo_ai.generate_daily_brief` 调用 LLM 生成**至多 3 条**建议，失败时回退为模板文本。未配置 LLM 返回 503，其他生成失败返回 502。
 
-P3.5 起该端点改走 `report_ai.build_report_context`（`backend/api/todo_router.py:410`），把**工作日志摘要**并入 `summary["worklogs"]` —— 只看待办会漏掉「没建待办但确实干了」的那部分工作。工作日志服务缺席时该段为空，不报错。生成文本仍由 `todo_ai.generate_daily_brief` 产出。
+P3.5 起该端点改走 `report_ai.build_report_context`（`backend/api/todo_router.py:420`），把**工作日志摘要**并入 `summary["worklogs"]` —— 只看待办会漏掉「没建待办但确实干了」的那部分工作。工作日志服务缺席时该段为空，不报错。生成文本仍由 `todo_ai.generate_daily_brief` 产出。
 
 ### 4.5 每周回顾
 
 `GET /api/v1/todos/weekly-review` → `{content}`。输入为：本周统计、最近 50 条已完成（按 `created_at` 降序）、至多 20 条高优先级待办、至多 5 条被推迟任务。LLM 输出 Markdown，包含「完成情况 / 拖延提醒 / 下周建议」三部分，总长 ≤300 字符。
 
-P3.5 起该端点同样改走 `report_ai.build_report_context`（`backend/api/todo_router.py:440`）：`stats["worklogs"]` 注入工作日志摘要，且「本周完成」换成报告引擎口径的**窗口内真正完成项**。生成文本仍由 `todo_ai.generate_weekly_review` 产出。
+P3.5 起该端点同样改走 `report_ai.build_report_context`（`backend/api/todo_router.py:447`）：`stats["worklogs"]` 注入工作日志摘要，且「本周完成」换成报告引擎口径的**窗口内真正完成项**。生成文本仍由 `todo_ai.generate_weekly_review` 产出。
 
 ## 5. 智能视图与热力图
 

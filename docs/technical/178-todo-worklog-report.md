@@ -1,4 +1,4 @@
-# 待办交互升级与工作日志 / 日报周报
+# 178 · 待办交互升级与工作日志 / 日报周报
 
 ## 1. 概览
 
@@ -370,7 +370,7 @@ CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at)
 
 ### 5.6 与旧简报端点的关系
 
-`GET /todos/brief` 与 `GET /todos/weekly-review` 的**端点签名不变**，但内部实现已升级：两者都改走 `report_ai.build_report_context`，把**工作日志摘要并入输入**，再交给原有的 `todo_ai.generate_daily_brief` / `generate_weekly_review` 生成文本（`backend/api/todo_router.py:410,440`）。因此旧简报现在也能看到「没建待办但确实干了」的那部分工作。旧的两条 IPC 命令（`todo_brief` / `todo_weekly_review`）与 `todoClient.dailyBrief` / `weeklyReview` 作为**已测公开 API 保留**，不删除。
+`GET /todos/brief` 与 `GET /todos/weekly-review` 的**端点签名不变**，但内部实现已升级：两者都改走 `report_ai.build_report_context`，把**工作日志摘要并入输入**，再交给原有的 `todo_ai.generate_daily_brief` / `generate_weekly_review` 生成文本（`backend/api/todo_router.py:420,447`）。因此旧简报现在也能看到「没建待办但确实干了」的那部分工作。旧的两条 IPC 命令（`todo_brief` / `todo_weekly_review`）与 `todoClient.dailyBrief` / `weeklyReview` 作为**已测公开 API 保留**，不删除。
 
 前端旧的 `TodoAiDialog`（"简报"弹窗）被 `TodoReportDialog` 取代并删除；"简报"→"日报"、"周回顾"→"周报"的改名在前端原地完成。
 
