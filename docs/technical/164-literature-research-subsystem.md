@@ -131,6 +131,26 @@
 - 因此 profile 声明 `pdf.interstitial`（`url_contains: cnki.net/docdown`、`host_fallbacks: [kns.cnki.net]`），由 `download_pdf` 的中间页路径完成「入口 href → 新标签 → 等跳转 → 主机回退 → 校验」；发现中间页标签的识别基于 URL 子串，不依赖固定时序。
 - 下载完成后新标签可能显示“页面不存在”，以 `DownloadResult.path` / 下载目录中的文件为准。
 
+#### 2026-11-27 真机端到端实测（`main`）
+
+在独立 worktree（`origin/main` 代码 + Electron 内嵌浏览器桥）上跑通完整链路，检索词 `人工智能 医学影像`：
+
+| 环节 | 实测结果 |
+|---|---|
+| 站点画像 | 用户级 `~/.sage/literature_sites/xueshu789.yaml` v0.4.0，`pdf.interstitial` 生效 |
+| 登录态 | `navigate(home_url)` 落到 `https://www.xueshu789.cc/dbList/1`（标题「文献下载_学术资源站」），快照含 `dbList` → 已登录 |
+| 检索 | `search_with_profile(..., limit=20)` → `http://82.157.23.222:5888/kns8s/defaultresult/index`（标题「检索-中国知网」），结果表 `table.result-table-list` 命中 |
+| 入口 href | `browser_interact(action="attr", attr_name="href")` 取到完整 `a.downloadlink` href（含 `&ddata=`） |
+| 下载 | `download_pdf(..., entry_selector="table.result-table-list tbody tr:nth-child(1) a.downloadlink")` → `ok=True`、`errors=[]` |
+| 产物 | `data/browser-downloads/8d6cbddae4c6/新兴医学影像技术在原发性骨肿瘤诊疗过程中的应用与发展_孙童.pdf`，907,103 B，文件头 `%PDF-1.6` |
+| 题名核对 | pymupdf 解析 5 页 —— 《中国骨与关节杂志》2026 年 11 月第 15 卷第 11 期 1039–1043 页，与文件名题名一致 |
+| 标签页 | 中间页标签由 `download_pdf` 关闭；结束后只剩 1 个工具标签（已被导航到候选下载 URL，遗留「页面不存在」属预期） |
+
+两个实操细节：
+
+- 结果行的 `td.name a` **没有 `title` 属性**，`browser_interact` 读 `title` 会报 `attribute-not-found`。此时 `expected_title` 传空串，`validate_pdf` 跳过题名比对，文件名依赖站点 `ddata` 参数自带（站点已给出题名，产物名与题名一致）。
+- 受控浏览器的站点访问确认（`needs_confirmation`）在真机上由用户在右栏浏览器面板点确认；脚本化跑链路时需在工具进程内 resolve 该确认项并 `grant_site(..., "session")` 后重试，否则首个域名就会中断链路。
+
 ## 3. 检索与交互执行（M1a / M1b）
 
 ### 3.1 运行目录与写入契约
