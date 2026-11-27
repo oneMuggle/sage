@@ -24,6 +24,28 @@ SORT_EXPRS = {
     "created_at": "created_at",
 }
 
+# 手工排序（P1 拖拽排序）：先按所属层分组（顶层 parent_id 为 NULL → 0），
+# 层内按 ``sort_order``，再用 ``id`` 兜底（旧行 sort_order 全为 0，靠 id
+# 保持稳定的创建次序）。
+# 三列都是真正的排序键 —— SQLite 的 ``ORDER BY a, b, c DESC`` 只把方向作用
+# 于最后一列，所以方向必须逐列给出，不能像单列表达式那样只拼一个。
+SORT_MANUAL_EXPRS = ("COALESCE(parent_id, 0)", "sort_order", "id")
+
+# 允许的 ``sort_by`` 取值（router 的 Query pattern 与本文件共用这一份）。
+SORT_KEYS = frozenset(SORT_EXPRS) | {"manual"}
+
+
+def sort_expression(sort_by: str, sort_order: str = "asc") -> str:
+    """返回 ORDER BY 片段（不含 ``ORDER BY`` 关键字）。
+
+    单列表达式沿用「表达式 + 方向」的旧拼法（生成 SQL 与改动前逐字一致）；
+    手工排序是三列表达式，方向逐列应用，否则升降序只影响最后一列。
+    """
+    direction = "DESC" if sort_order == "desc" else "ASC"
+    if sort_by == "manual":
+        return ", ".join(f"{col} {direction}" for col in SORT_MANUAL_EXPRS)
+    return f"{SORT_EXPRS[sort_by]} {direction}"
+
 
 def apply_common_filters(
     query: str,

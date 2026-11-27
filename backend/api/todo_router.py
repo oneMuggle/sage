@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
-from backend.services import todo_status
+from backend.services import todo_order, todo_status
 from backend.services.todo_service import Todo, TodoService
 
 logger = logging.getLogger(__name__)
@@ -78,6 +78,8 @@ class TodoOut(BaseModel):
     is_recurring: bool
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
+    # 同层内的手工次序（P1 拖拽排序）。旧行默认 0，由 id 次序兜底。
+    sort_order: float = 0.0
     created_at: str
     updated_at: str
 
@@ -186,6 +188,32 @@ class SnoozeIn(BaseModel):
         extra = "forbid"
 
 
+class MoveTodoIn(BaseModel):
+    """拖拽移动请求（P1 拖拽排序与拖拽嵌套）。
+
+    ``target_parent_id`` 是三态：
+
+    - 省略 → 目标层跟随参照待办所在层（``todo_order.INHERIT``）；
+    - 显式 ``null`` → 强制回顶层；
+    - 给 id → 成为该待办的子任务。
+
+    ``position`` 为 ``before`` / ``after``，相对 ``reference_id`` 落位；
+    ``reference_id`` 为 ``None`` 时追加到目标层末尾。
+    """
+
+    position: str = Field(pattern="^(before|after)$")
+    reference_id: Optional[int] = None
+    target_parent_id: Optional[int] = None
+
+    class Config:
+        extra = "forbid"
+
+
+class MoveTodoOut(BaseModel):
+    todo: TodoOut
+    affected: int
+
+
 def _todo_to_dict(todo: Todo) -> Dict[str, Any]:
     return todo.model_dump()
 
@@ -219,7 +247,9 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
         project_tag: Optional[str] = Query(default=None),
         priority: Optional[str] = Query(default=None, pattern="^(high|medium|low)$"),
         include_completed: bool = Query(default=False),
-        sort_by: str = Query(default="due_at", pattern="^(due_at|priority|created_at)$"),
+        sort_by: str = Query(
+            default="due_at", pattern="^(due_at|priority|created_at|manual)$"
+        ),
         sort_order: str = Query(default="asc", pattern="^(asc|desc)$"),
         limit: int = Query(default=50, ge=1, le=500),
         offset: int = Query(default=0, ge=0),
@@ -434,6 +464,36 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
         if todo is None:
             raise HTTPException(status_code=404, detail="todo not found")
         return _todo_to_dict(todo)
+
+    @router.post("/todos/{todo_id}/move", response_model=MoveTodoOut)
+    def move_todo(
+        todo_id: int,
+        payload: MoveTodoIn,
+        svc: TodoService = Depends(service_dep),
+    ) -> Dict[str, Any]:
+        """移动待办：同层排序 / 拖拽成子任务（P1 拖拽排序与嵌套）。"""
+        # ``exclude_unset`` 是这里的关键：``target_parent_id`` 省略与显式
+        # ``null`` 语义不同 —— 省略表示「目标层跟随参照待办所在层」，显式
+        # ``null`` 表示「强制回顶层」。``model_dump`` 会把没传的字段丢掉，
+        # 显式传 ``null`` 的字段仍在（值为 ``None``），两者因此可区分。
+        changes = payload.model_dump(exclude_unset=True)
+        target_parent_id = changes.get("target_parent_id", todo_order.INHERIT)
+        try:
+            result = svc.move_todo(
+                todo_id,
+                payload.position,
+                reference_id=changes.get("reference_id"),
+                target_parent_id=target_parent_id,
+            )
+        except ValueError as exc:
+            # 层级超限 / 自我嵌套 / 参照物不同层 —— 请求不合法，不是服务端故障。
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if result is None:
+            raise HTTPException(status_code=404, detail="todo not found")
+        return {
+            "todo": _todo_to_dict(result["todo"]),
+            "affected": result["affected"],
+        }
 
     @router.get("/todos/{todo_id}", response_model=TodoOut)
     def get_todo(

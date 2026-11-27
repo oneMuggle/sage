@@ -6,18 +6,19 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
-
 from backend.services import (
     todo_export,
     todo_filters,
     todo_fts,
     todo_insights,
+    todo_models,
+    todo_order,
     todo_recurrence,
     todo_stats,
     todo_status,
     todo_tags,
 )
+from backend.services.todo_models import Todo, dump_reminder_offsets
 
 logger = logging.getLogger(__name__)
 
@@ -39,36 +40,11 @@ def _to_local_naive_iso(value: str) -> str:
     return dt.isoformat()
 
 
-# ``todos`` columns that map onto :class:`Todo`, in model-field order.
-# Deliberately excludes ``reminder_24h_fired`` / ``reminder_1h_fired`` — those
-# are bookkeeping columns owned by the reminder scheduler, not model fields.
-_TODO_MODEL_FIELDS = (
-    "id",
-    "title",
-    "description",
-    "status",
-    "priority",
-    "effective_urgency",
-    "due_at",
-    "completed_at",
-    "project_tag",
-    "project_id",
-    "tags",
-    "reminder_offsets",
-    "source_type",
-    "source_ref",
-    "specialist_id",
-    "snooze_count",
-    "is_recurring",
-    "recurrence_rule",
-    "parent_id",
-    "created_at",
-    "updated_at",
-)
-
 # Columns ``update_todo`` is allowed to write. Used to build the SET clause, so
 # it doubles as the SQL-identifier whitelist — no caller-supplied key ever
 # reaches the query unvalidated.
+# ``sort_order`` 刻意不在此列：手工次序只能由 ``POST /todos/{id}/move`` 改写，
+# 走普通 PUT 会绕过同层合法性校验。
 _UPDATABLE_FIELDS = frozenset(
     {
         "title",
@@ -84,61 +60,6 @@ _UPDATABLE_FIELDS = frozenset(
         "specialist_id",
     }
 )
-
-
-class Todo(BaseModel):
-    """Todo item model"""
-    id: int
-    title: str
-    description: Optional[str] = None
-    status: str  # pending / in_progress / completed / cancelled
-    priority: str  # high / medium / low
-    effective_urgency: Optional[str] = None  # critical / urgent / normal
-    due_at: Optional[str] = None  # ISO8601
-    completed_at: Optional[str] = None
-    project_tag: Optional[str] = None
-    project_id: Optional[str] = None  # TEXT — projects.id is a hex/uuid string
-    tags: List[str] = Field(default_factory=list)
-    reminder_offsets: List[int] = Field(default_factory=list)
-    source_type: Optional[str] = None
-    source_ref: Optional[str] = None
-    specialist_id: Optional[str] = None
-    snooze_count: int = 0
-    is_recurring: bool = False
-    recurrence_rule: Optional[str] = None
-    parent_id: Optional[int] = None
-    created_at: str
-    updated_at: str
-
-
-# 自定义提醒档位：分钟偏移，上限 5 档、单档 ≤7 天。
-MAX_REMINDER_OFFSETS = 5
-MAX_REMINDER_OFFSET_MINUTES = 7 * 24 * 60
-
-
-def _normalize_reminder_offsets(offsets: Optional[List[int]]) -> List[int]:
-    """清洗提醒档位：取正整数、去重、升序、上限 5 档且单档 ≤7 天。"""
-    if not offsets:
-        return []
-    cleaned: List[int] = []
-    seen = set()
-    for raw in offsets:
-        try:
-            value = int(raw)
-        except (TypeError, ValueError):
-            continue
-        if value < 1 or value > MAX_REMINDER_OFFSET_MINUTES or value in seen:
-            continue
-        seen.add(value)
-        cleaned.append(value)
-        if len(cleaned) >= MAX_REMINDER_OFFSETS:
-            break
-    return sorted(cleaned)
-
-
-def _dump_reminder_offsets(offsets: Optional[List[int]]) -> Optional[str]:
-    normalized = _normalize_reminder_offsets(offsets)
-    return json.dumps(normalized) if normalized else None
 
 
 class TodoService:
@@ -185,16 +106,19 @@ class TodoService:
             due_at = _to_local_naive_iso(due_at)
 
         conn = self.db.get_connection()
+        # 新待办追加到所在层末尾（手工次序；P1 拖拽排序）。
+        sort_order = todo_order.next_sort_order(conn, parent_id)
         cursor = conn.execute(
             """INSERT INTO todos
                (title, description, due_at, priority, project_tag, project_id,
                 tags, reminder_offsets, source_type, source_ref, specialist_id,
-                is_recurring, recurrence_rule, parent_id, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                is_recurring, recurrence_rule, parent_id, sort_order,
+                created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (title, description, due_at, priority, project_tag, project_id,
-             todo_tags.dump_tags(tags), _dump_reminder_offsets(reminder_offsets),
+             todo_tags.dump_tags(tags), dump_reminder_offsets(reminder_offsets),
              source_type, source_ref, specialist_id, is_recurring,
-             recurrence_rule, parent_id, now, now)
+             recurrence_rule, parent_id, sort_order, now, now)
         )
         todo_id = cursor.lastrowid
         conn.commit()
@@ -266,9 +190,8 @@ class TodoService:
 
         query, params = todo_fts.apply_search_filter(self.db, query, params, q)
 
-        sort_expr = todo_filters.SORT_EXPRS[sort_by]
-        direction = "DESC" if sort_order == "desc" else "ASC"
-        query += f" ORDER BY {sort_expr} {direction} LIMIT ? OFFSET ?"
+        sort_expr = todo_filters.sort_expression(sort_by, sort_order)
+        query += f" ORDER BY {sort_expr} LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         conn = self.db.get_connection()
@@ -339,24 +262,41 @@ class TodoService:
 
         # parent_id 变更校验：禁止自引用、只允许挂在顶层行下、有子任务的行
         # 不能变成子任务（否则形成三级层级）。显式 None 允许清除父子关系。
-        if "parent_id" in updates and updates["parent_id"] is not None:
+        parent_changed = False
+        if "parent_id" in updates:
             new_parent_id = updates["parent_id"]
-            if new_parent_id == todo_id:
-                raise ValueError("a todo cannot be its own parent")
-            parent = self.get_todo(new_parent_id)
-            if parent is None:
-                raise ValueError(f"parent todo {new_parent_id} not found")
-            if parent.parent_id is not None:
-                raise ValueError("subtask depth exceeds 2 levels")
-            conn = self.db.get_connection()
-            has_children = conn.execute(
-                "SELECT 1 FROM todos WHERE parent_id = ? LIMIT 1", (todo_id,)
-            ).fetchone()
-            if has_children is not None:
-                raise ValueError("a todo with subtasks cannot become a subtask")
+            if new_parent_id is not None:
+                if new_parent_id == todo_id:
+                    raise ValueError("a todo cannot be its own parent")
+                parent = self.get_todo(new_parent_id)
+                if parent is None:
+                    raise ValueError(f"parent todo {new_parent_id} not found")
+                if parent.parent_id is not None:
+                    raise ValueError("subtask depth exceeds 2 levels")
+                conn = self.db.get_connection()
+                has_children = conn.execute(
+                    "SELECT 1 FROM todos WHERE parent_id = ? LIMIT 1", (todo_id,)
+                ).fetchone()
+                if has_children is not None:
+                    raise ValueError("a todo with subtasks cannot become a subtask")
+            # 换父级（含显式置空回到顶层）要重算手工次序 ——
+            # ``sort_order`` 是「同层内」的相对值，跨层没有意义。
+            current = self.get_todo(todo_id)
+            if current is not None and current.parent_id != new_parent_id:
+                parent_changed = True
 
         if not updates:
             return self.get_todo(todo_id)
+
+        # 换父级 → 重算手工次序。``sort_order`` 是「同层内」的相对值，
+        # 跨层沿用旧值会让新层出现空洞或与既有行撞值，所以落到新层末尾。
+        # （调用方不能直接写这一列 —— 它不在 ``_UPDATABLE_FIELDS`` 里。）
+        if parent_changed:
+            updates["sort_order"] = todo_order.next_sort_order(
+                self.db.get_connection(),
+                updates["parent_id"],
+                exclude_id=todo_id,
+            )
 
         # Auto-link / clear project when project_tag changed (None clears both)
         if "project_tag" in updates:
@@ -371,7 +311,7 @@ class TodoService:
 
         # 自定义提醒档位：清洗后序列化；任何改动都清空已触发书签。
         if "reminder_offsets" in updates:
-            updates["reminder_offsets"] = _dump_reminder_offsets(
+            updates["reminder_offsets"] = dump_reminder_offsets(
                 updates["reminder_offsets"]
             )
         if (
@@ -415,6 +355,43 @@ class TodoService:
                 self.db, updated.id, updated.title, updated.description
             )
         return updated
+
+    def move_todo(
+        self,
+        todo_id: int,
+        position: str,
+        reference_id: Optional[int] = None,
+        target_parent_id: Any = todo_order.INHERIT,
+    ) -> Optional[Dict[str, Any]]:
+        """移动待办：同层排序 / 拖拽成子任务（P1 拖拽排序与嵌套）。
+
+        ``position`` 为 ``before`` / ``after``，相对 ``reference_id`` 落位；
+        ``reference_id`` 为 ``None`` 时追加到目标层末尾。
+        ``target_parent_id`` 省略（``todo_order.INHERIT``）时目标层跟随参照待办
+        所在层，参照也没给时落到顶层末尾；显式给 ``None`` 表示强制回顶层。
+
+        返回 ``{"todo": Todo, "affected": int}``；待办不存在时返回 ``None``。
+        非法移动（层级超限 / 自我嵌套 / 参照物不同层）抛 :class:`ValueError`；
+        合法性校验全部前置，抛错时数据库没被动过。
+        """
+        conn = self.db.get_connection()
+        if conn.execute(
+            "SELECT 1 FROM todos WHERE id = ?", (todo_id,)
+        ).fetchone() is None:
+            return None
+        affected, _ = todo_order.move(
+            conn,
+            todo_id,
+            position,
+            reference_id=reference_id,
+            target_parent_id=target_parent_id,
+            now=datetime.now().isoformat(),
+        )
+        conn.commit()
+        todo = self.get_todo(todo_id)
+        if todo is None:  # pragma: no cover - 移动后行被并发删除（极端竞态）
+            raise RuntimeError(f"todo {todo_id} vanished immediately after move")
+        return {"todo": todo, "affected": affected}
 
     def delete_todo(self, todo_id: int) -> bool:
         """Delete todo by ID. Returns True if a row was removed."""
@@ -757,27 +734,10 @@ class TodoService:
     def _row_to_todo(self, row) -> Todo:
         """Convert a ``todos`` row to a Todo model.
 
-        Maps by column *name* rather than position, so adding a column to the
-        table cannot silently shift the model's fields. ``tags`` 存 JSON 数组
-        字符串，坏数据降级为空列表（不阻塞列表渲染）。
+        映射逻辑搬到 ``backend.services.todo_models.row_to_todo``；这里保留
+        这个方法是因为它作为回调被传给 ``todo_stats`` / ``todo_insights``。
         """
-        data = {name: row[name] for name in _TODO_MODEL_FIELDS}
-        data["is_recurring"] = bool(data["is_recurring"])
-        data["snooze_count"] = int(data.get("snooze_count") or 0)
-        data["tags"] = todo_tags.parse_tags(data.get("tags"))
-        try:
-            parsed_offsets = (
-                json.loads(data["reminder_offsets"])
-                if data.get("reminder_offsets")
-                else []
-            )
-        except (json.JSONDecodeError, TypeError):
-            parsed_offsets = []
-        data["reminder_offsets"] = _normalize_reminder_offsets(
-            parsed_offsets if isinstance(parsed_offsets, list) else []
-        )
-
-        return Todo(**data)
+        return todo_models.row_to_todo(row)
 
 
 # ---------- process-wide singleton ----------
