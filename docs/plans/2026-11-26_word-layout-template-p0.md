@@ -101,6 +101,10 @@
 - [x] M3 `.doc` 转换服务 + 路由 + 工具 + stub 测试
 - [x] M4 技术文档 181 + 索引 + 格式引擎章节补充
 - [x] 全量回归：office 单元/集成测试（1550 passed / 2 skipped）、架构棘轮、ruff
+- [x] M5 同步到 release/win7（pydantic 1.x shim 适配 `_word_gen.py`）+ 双分支回归
+- [x] M6 OOXML 顺序与健壮性修复：`sectPr`/`pPr`/`rPr` 按 schema 顺序落位、
+  克隆剥离脚注/批注引用、Word COM 句柄释放顺序与 `SaveAs` 回退、
+  `timeout_seconds` 双端上限、共用 `_EXPORT_LOCK`（main + win7 同步）
 
 ## 风险评估
 

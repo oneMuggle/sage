@@ -99,9 +99,36 @@ header/footer part；直接修改会串改前一节。写入新节页眉前必�
   `WordConvertResult(ok=False, error=...)`；
 - 源文件与输出限制在工作区内；默认输出 `<stem>.<目标格式>`，已存在需
   `overwrite=true`；LibreOffice 在临时子目录转换后原子移动到目标；
-- LibreOffice 并发实例共享 user profile 会互锁，进程内串行（`_CONVERT_LOCK`）。
+- 与 PDF 导出共用 `export_pdf._EXPORT_LOCK`（LibreOffice 并发实例共享 user
+  profile 会互锁）；不再自建 `_CONVERT_LOCK`，避免两条路径并发拉起 soffice；
+- `timeout_seconds` 双端设限：路由层 `Field(ge=1, le=1800)`，库层
+  `_MAX_TIMEOUT_SECONDS` 兜底（防止绕过路由直调导致 soffice 长时间挂起）；
+- Word COM 路径先 `document.Close()` + `word.Quit()` 再 `os.replace` ——
+  Word 持有输出文件句柄，未释放时 Windows 上替换会 `PermissionError`；
+  Office 2007（Win7 LTS 常见）没有 `SaveAs2`，自动回退 `SaveAs`。
 
-## 5. API 与 Agent 工具
+## 5. OOXML 子元素顺序（Word 修复提示的根因）
+
+`CT_SectPr` / `CT_PPrBase` / `CT_RPr` 都是 `xsd:sequence`，子元素顺序错乱
+会让 Word 判定文档损坏并弹「文档内容有问题需要修复」。本模块写入时一律
+按 schema 顺序落位：
+
+| 容器 | 顺序表 | 典型踩坑 |
+|---|---|---|
+| `w:sectPr` | `_SECTPR_ORDER`（`headerReference`/`footerReference` 最前） | `pgNumType` 追加到 `docGrid` 之后；`footnotePr` 挤在中间 |
+| `w:pPr` | `_PPR_ORDER` | `pBdr` 追加到 `tabs` 之后 |
+| `w:rPr` | `_RPR_ORDER` | `rFonts` 插到 `rStyle` 之前 |
+
+python-docx 的 `ZeroOrMore(..., successors=_tag_seq)` 按后继标签名列表顺序
+查找插入点，会被一个位置错误的 `footnotePr` 带偏，连带把 `headerReference`
+排到 `pgSz` 之后 —— 所以必须先保证自己写入的元素在 schema 位次上正确。
+
+模板整块克隆同样会剥离 `w:footnoteReference` / `w:endnoteReference` /
+`w:commentReference` / `w:commentRangeStart` / `w:commentRangeEnd`：这些引用
+嵌在 run 裁剪够不到的位置（段落级批注范围、超链接内的脚注引用），保留下来
+会让多个副本指向同一条 notes/comments 条目，同样触发 Word 修复提示。
+
+## 6. API 与 Agent 工具
 
 | 能力 | REST | Agent 工具 |
 |---|---|---|
@@ -112,13 +139,16 @@ header/footer part；直接修改会串改前一节。写入新节页眉前必�
 `office_create` 生效。本轮不新增前端 UI（模板填充对话框的“结构填充”页签
 与版式面板为后续 P1/P2）。
 
-## 6. 测试
+## 7. 测试
 
 - `backend/tests/unit/office/test_word_layout_p0.py`：自定义纸张/行号/
   字符缩进/标题行距/页眉域与边框/节级页眉独立/向后兼容的 plain 页脚；
+- `backend/tests/unit/office/test_word_ooxml_order.py`：以 ECMA-376 顺序表
+  为独立 oracle，断言 `sectPr` / `pPr` / `rPr` 子元素顺序（含分节符、
+  页眉页脚、已带 `rStyle` 的幂等路径）；
 - `backend/tests/unit/office/test_word_template_refill.py`：自动锚点识别、
   直接格式保真、区间锚点、显式 anchors、输出安全、缺块模板与含书签
-  块模板拒绝、端点委托；
+  块模板拒绝、脚注/批注引用剥离、端点委托；
 - `backend/tests/unit/office/test_word_convert.py`：LibreOffice stub 成功/
   自定义文件名/无转换器/超时/覆盖策略/工作区围栏/同格式拒绝/端点委托；
 - `backend/tests/unit/tools/test_office_convert_tool.py`：工具参数校验、
@@ -126,8 +156,11 @@ header/footer part；直接修改会串改前一节。写入新节页眉前必�
 - `test_tool_bundles_parity.py`：工具清单快照已登记两个新工具
   （online 127 / intranet 126 / offline 122 / headless 126）。
 
-## 7. Win7 / Python 3.8
+## 8. Win7 / Python 3.8
 
-本功能为新特性，**暂不 cherry-pick 到 release/win7**。代码沿用
+本功能已从 main cherry-pick 到 release/win7（Python 3.8 + pydantic 1.x），
+唯一适配点是 `_word_gen.py` 的模型定义（pydantic 1 无 `model_config`，
+win7 走 `backend/compat/win7/pydantic_compat.py` 的 shim，`extra="forbid"`）；
+其余服务/路由/工具文件两分支逐字节一致。代码沿用
 `from __future__ import annotations` + `typing.Optional/List/Dict` 注解风格；
-新增零依赖（python-docx、pydantic 已在两分支捆绑），未来 backport 成本低。
+新增零依赖（python-docx、pydantic 已在两分支捆绑）。
