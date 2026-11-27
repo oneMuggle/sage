@@ -379,6 +379,23 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     },
   },
 
+  // P1 拖拽排序 / 拖拽嵌套
+  todo_move: {
+    method: 'POST',
+    path: (a) => `/api/v1/todos/${encodeURIComponent(String(a.id))}/move`,
+    // MoveTodoIn 声明 extra="forbid" — id 在 URL 路径中，body 不能带 id。
+    //
+    // body 里保留 ``target_parent_id`` 的三态语义：
+    //   - key 不存在 → 省略 → 后端按「跟随参照待办所在层」处理；
+    //   - key 存在且值为 null → 显式回顶层。
+    // 因此这里只删 ``id``，不碰其余 key（前端已保证不写入 undefined 值）。
+    body: (a) => {
+      const body: Record<string, unknown> = { ...a };
+      delete body.id;
+      return body;
+    },
+  },
+
   // custom CSS theme storage (themeCssClient)
   // Backend theme_router 挂在 /api/v1/theme (与其他 IPC 路由一致)
   theme_list: { method: 'GET', path: () => '/api/v1/theme/list' },

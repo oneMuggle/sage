@@ -55,7 +55,14 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'all', label: '全部（含已完成）' },
 ];
 
+/**
+ * 排序依据。
+ *
+ * ``manual``（手动排序）是默认项 —— 拖拽排序只有在手工序下才有意义，
+ * 选其他排序时拖柄会禁用并提示原因（见 ``TodoRowEditor`` 的拖柄）。
+ */
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'manual', label: '手动排序' },
   { value: 'created_at', label: '创建时间' },
   { value: 'due_at', label: '截止日期' },
   { value: 'priority', label: '优先级' },
@@ -144,16 +151,23 @@ export function TodoToolbar({
   // 状态筛选生效时没有智能视图可言 —— 让视图按钮组全部呈现未选中，
   // 免得「已完成」按钮高亮着而列表其实是按 status 筛的。
   const activeView: TodoView | null = params.view ?? (params.status ? null : 'all');
+  // 「手动排序」是默认排序，不算「有筛选条件」—— 否则清除按钮永远显示。
   const hasFilters =
     Boolean(params.priority) ||
-    Boolean(params.sort_by) ||
+    (Boolean(params.sort_by) && params.sort_by !== 'manual') ||
     Boolean(params.tag) ||
     Boolean(params.status) ||
     params.view !== undefined;
 
+  /**
+   * 清除筛选。
+   *
+   * 排序基准要显式回到「手动排序」—— 若把 ``sort_by`` 一起清掉，服务端会退回
+   * 默认的 ``due_at``，拖柄随之失效（只有手工序才允许拖拽排序）。
+   */
   const clearFilters = () => {
     setSortOrder('asc');
-    onParamsChange({});
+    onParamsChange({ sort_by: 'manual' });
     onSearchChange('');
   };
 

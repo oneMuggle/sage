@@ -149,9 +149,7 @@ describe('TodoRowEditor — 行内详情面板', () => {
     expect(onUpdate).not.toHaveBeenCalled();
 
     fireEvent.blur(textarea);
-    await waitFor(() =>
-      expect(onUpdate).toHaveBeenCalledWith(7, { description: '新的描述' }),
-    );
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(7, { description: '新的描述' }));
   });
 
   it('清空描述必须发 null（发 undefined 等于「不动」）', async () => {
@@ -187,9 +185,7 @@ describe('TodoRowEditor — 行内详情面板', () => {
     fireEvent.change(input, { target: { value: '工作, 论文' } });
     fireEvent.blur(input);
 
-    await waitFor(() =>
-      expect(onUpdate).toHaveBeenCalledWith(7, { tags: ['工作', '论文'] }),
-    );
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(7, { tags: ['工作', '论文'] }));
   });
 
   it('收起面板时兜底提交还没失焦的字段', async () => {
@@ -202,9 +198,7 @@ describe('TodoRowEditor — 行内详情面板', () => {
 
     fireEvent.click(screen.getByTestId('todo-detail-close-7'));
 
-    await waitFor(() =>
-      expect(onUpdate).toHaveBeenCalledWith(7, { description: '没失焦就收起' }),
-    );
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(7, { description: '没失焦就收起' }));
   });
 
   it('已落库的字段不会因为收起面板被重复写', async () => {
@@ -309,10 +303,7 @@ describe('TodoToolbar — 状态筛选', () => {
     renderToolbar({ status: 'pending' });
 
     for (const label of ['全部', '今天', '近7天', '已完成']) {
-      expect(screen.getByRole('button', { name: label })).toHaveAttribute(
-        'aria-pressed',
-        'false',
-      );
+      expect(screen.getByRole('button', { name: label })).toHaveAttribute('aria-pressed', 'false');
     }
   });
 

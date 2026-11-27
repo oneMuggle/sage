@@ -22,9 +22,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Todo, UpdateTodoInput } from '../../shared/api/types';
 
-import { TodoFields } from './TodoFields';
 import type { TodoFieldsField, TodoFieldsValue } from './TodoFields';
-import { parseTagsText } from './TodoFields';
+import { TodoFields, parseTagsText } from './TodoFields';
 import { toIsoString, toLocalDatetimeValue } from './todoDateUtils';
 
 interface TodoDetailPanelProps {

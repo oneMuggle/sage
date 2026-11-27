@@ -1296,5 +1296,31 @@ describe('agent_* IPC commands', () => {
         minutes: 60,
       });
     });
+
+    it('todo_move route strips id and preserves target_parent_id tri-state', () => {
+      expect(COMMAND_ROUTES.todo_move.method).toBe('POST');
+      expect(COMMAND_ROUTES.todo_move.path({ id: 7 })).toBe('/api/v1/todos/7/move');
+      // id 在路径里，body 里必须去掉（MoveTodoIn extra="forbid"）。
+      expect(
+        COMMAND_ROUTES.todo_move.body?.({
+          id: 7,
+          position: 'before',
+          reference_id: 9,
+          target_parent_id: null,
+        }),
+      ).toEqual({
+        position: 'before',
+        reference_id: 9,
+        target_parent_id: null,
+      });
+      // 省略 target_parent_id 时也不能凭空造出这个 key ——
+      // 「省略」与「显式 null」在后端语义不同。
+      expect(
+        COMMAND_ROUTES.todo_move.body?.({ id: 7, position: 'after', reference_id: 9 }),
+      ).toEqual({
+        position: 'after',
+        reference_id: 9,
+      });
+    });
   });
 });

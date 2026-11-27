@@ -72,7 +72,7 @@ def test_new_child_appends_to_its_own_layer(todo_service):
 
 def test_move_before_reference(todo_service):
     a = todo_service.create_todo(title="A")
-    b = todo_service.create_todo(title="B")
+    todo_service.create_todo(title="B")  # 中间项：只占位，不参与断言
     c = todo_service.create_todo(title="C")
 
     result = todo_service.move_todo(c.id, "before", reference_id=a.id)
@@ -135,14 +135,14 @@ def test_move_unknown_todo_returns_none(todo_service):
 def test_cannot_reference_self(todo_service):
     a = todo_service.create_todo(title="A")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="a todo cannot reference itself"):
         todo_service.move_todo(a.id, "before", reference_id=a.id)
 
 
 def test_cannot_become_own_parent(todo_service):
     a = todo_service.create_todo(title="A")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="a todo cannot be its own parent"):
         todo_service.move_todo(a.id, "after", target_parent_id=a.id)
 
 
@@ -151,7 +151,7 @@ def test_cannot_nest_under_a_subtask(todo_service):
     child = todo_service.create_todo(title="子", parent_id=parent.id)
     other = todo_service.create_todo(title="别的")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="subtask depth exceeds 2 levels"):
         todo_service.move_todo(other.id, "after", target_parent_id=child.id)
 
 
@@ -160,14 +160,14 @@ def test_todo_with_children_cannot_be_nested(todo_service):
     todo_service.create_todo(title="子", parent_id=parent.id)
     other = todo_service.create_todo(title="别的")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="a todo with subtasks cannot become a subtask"):
         todo_service.move_todo(parent.id, "after", target_parent_id=other.id)
 
 
 def test_unknown_parent_rejected(todo_service):
     a = todo_service.create_todo(title="A")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="parent todo 9999 not found"):
         todo_service.move_todo(a.id, "after", target_parent_id=9999)
 
 
@@ -177,7 +177,7 @@ def test_reference_must_be_in_target_layer(todo_service):
     other = todo_service.create_todo(title="别的")
 
     # 参照物在「父」这一层，目标却是顶层 —— 跨层相对落位没有意义。
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="reference todo is not in the target layer"):
         todo_service.move_todo(
             other.id, "after", reference_id=child.id, target_parent_id=None
         )
@@ -188,7 +188,7 @@ def test_failed_move_leaves_database_untouched(todo_service):
     b = todo_service.create_todo(title="B")
     before = b.sort_order
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="a todo cannot reference itself"):
         todo_service.move_todo(a.id, "before", reference_id=a.id)
 
     assert todo_service.get_todo(b.id).sort_order == before
@@ -231,6 +231,7 @@ def test_list_sorted_by_manual(todo_service):
     items = todo_service.list_todos(sort_by="manual")
 
     assert [item.title for item in items] == ["C", "A", "B"]
+    assert [item.id for item in items] == [c.id, a.id, b.id]
 
 
 # --- HTTP 端点 ---

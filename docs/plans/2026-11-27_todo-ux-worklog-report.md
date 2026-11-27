@@ -15,26 +15,26 @@
 
 ### 1.2 目标
 
-| # | 目标 | 归属期 |
-|---|------|--------|
-| G1 | 待办详情可编辑（不只是标题） | P0 |
-| G2 | 待办可拖拽改变顺序 | P1 |
-| G3 | 待办可拖到另一待办下成为子待办 | P1 |
-| G4 | 待办支持「未开始 / 进行中 / 已完成」三态 | P0 |
-| G5 | 日常对话即可记录工作 / 进度 / 待办 | P2 |
-| G6 | 基于记录产出「已完成 / 未完成」日报周报 | P3 |
+| #   | 目标                                     | 归属期 |
+| --- | ---------------------------------------- | ------ |
+| G1  | 待办详情可编辑（不只是标题）             | P0     |
+| G2  | 待办可拖拽改变顺序                       | P1     |
+| G3  | 待办可拖到另一待办下成为子待办           | P1     |
+| G4  | 待办支持「未开始 / 进行中 / 已完成」三态 | P0     |
+| G5  | 日常对话即可记录工作 / 进度 / 待办       | P2     |
+| G6  | 基于记录产出「已完成 / 未完成」日报周报  | P3     |
 
 ### 1.3 主流 AI 应用对标结论
 
-| 能力 | 对标产品 | 关键设计 | Sage 采纳 |
-|---|---|---|---|
-| 状态机 | Linear / Todoist | 状态是**一等公民**，行内点击即流转 | 三态循环按钮（P0） |
-| 拖拽排序 | Linear / Notion / Todoist | 拖柄（grip）+ 位置指示线，落点即写序 | 独立拖柄 + 中点插入（P1） |
-| 拖拽嵌套 | Notion / Linear | 拖到行左缘 → 变子项；右缘 → 之后 | 三区判定（左=嵌套/中=前/右=后）（P1） |
-| 行内属性编辑 | Notion / Linear | 属性就地展开编辑，Enter 提交 | 详情面板展开行（P0） |
-| 每日站会 | Async Standup / DailyBot / Standups | 三个固定问题（昨天/今天/阻塞）→ AI 汇总 | 工作日志 kind = progress/blocker（P2） |
-| 对话→行动项 | ChatGPT Tasks / Notion Meeting Notes / Todoist MCP | 从会话自动提取候选，**人工确认后落库** | 抽取为 pending 待确认（P2） |
-| 报告留存 | Notion / Standups | 生成的报告可存档、可回看 | `reports` 表存档（P3） |
+| 能力         | 对标产品                                           | 关键设计                                | Sage 采纳                              |
+| ------------ | -------------------------------------------------- | --------------------------------------- | -------------------------------------- |
+| 状态机       | Linear / Todoist                                   | 状态是**一等公民**，行内点击即流转      | 三态循环按钮（P0）                     |
+| 拖拽排序     | Linear / Notion / Todoist                          | 拖柄（grip）+ 位置指示线，落点即写序    | 独立拖柄 + 中点插入（P1）              |
+| 拖拽嵌套     | Notion / Linear                                    | 拖到行左缘 → 变子项；右缘 → 之后        | 三区判定（左=嵌套/中=前/右=后）（P1）  |
+| 行内属性编辑 | Notion / Linear                                    | 属性就地展开编辑，Enter 提交            | 详情面板展开行（P0）                   |
+| 每日站会     | Async Standup / DailyBot / Standups                | 三个固定问题（昨天/今天/阻塞）→ AI 汇总 | 工作日志 kind = progress/blocker（P2） |
+| 对话→行动项  | ChatGPT Tasks / Notion Meeting Notes / Todoist MCP | 从会话自动提取候选，**人工确认后落库**  | 抽取为 pending 待确认（P2）            |
+| 报告留存     | Notion / Standups                                  | 生成的报告可存档、可回看                | `reports` 表存档（P3）                 |
 
 **核心洞察**：用户描述的「日报周报辅助」在主流产品里的标准形态是 **Standup 三问 + AI 汇总**，而不是「读待办表生成摘要」。Sage 现有的 `/todos/brief` 与 `/todos/weekly-review` 只读 `todos` 表，**没有记录"当天做了什么"的中间层**，所以无法产出真正的日报。缺的不是报告生成器，而是**工作日志（worklog）这一层实体**。
 
@@ -83,13 +83,13 @@
 
 ### 2.6 现状小结
 
-| 诉求 | 核查结论 | 实际工作量 |
-|---|---|---|
+| 诉求         | 核查结论                     | 实际工作量                                     |
+| ------------ | ---------------------------- | ---------------------------------------------- |
 | (a) 编辑详情 | 标题可编辑，**详情面板缺失** | 前端为主（新建 `TodoFields.tsx` 共享字段组件） |
-| (b) 拖拽排序 | **完全缺失** | 后端加列 + 排序表达式 + 前端 DnD |
-| (c) 拖拽嵌套 | 数据层齐备，**缺入口** | 前端 DnD + 一个 `move` 端点 |
-| (d) 三态 | 后端已支持，**前端未暴露** | 纯前端 |
-| (e) 日报周报 | **中间层缺失** | 新增 worklog + report 两个子系统 |
+| (b) 拖拽排序 | **完全缺失**                 | 后端加列 + 排序表达式 + 前端 DnD               |
+| (c) 拖拽嵌套 | 数据层齐备，**缺入口**       | 前端 DnD + 一个 `move` 端点                    |
+| (d) 三态     | 后端已支持，**前端未暴露**   | 纯前端                                         |
+| (e) 日报周报 | **中间层缺失**               | 新增 worklog + report 两个子系统               |
 
 ---
 
@@ -97,11 +97,11 @@
 
 ### 3.1 工作日志存储：三个候选
 
-| 方案 | 描述 | 优点 | 缺点 | 结论 |
-|---|---|---|---|---|
-| **A. 单表扩展** `todos` 加 `log_kind` 列 | 用 `todos` 表同时装"待办"和"日志" | 不加表 | 语义污染：日志无 `due_at`/`priority`/`parent_id` 语义；`todos` 已 26 列；report 查询要 `WHERE log_kind IS NULL` 处处防漏；FTS 表要同步过滤 | ❌ |
-| **B. 独立工作日志子系统** ✅ | 新表 `work_logs` + `worklog_service.py` + `worklog_ai.py` | 语义干净；独立字段（kind/session_id/progress/blocker）；可独立演进；report 生成只查两张表；避开 `todo_service.py` 791 行棘轮 | 多一张表 + 一套 API/工具/前端 | ✅ **采纳** |
-| **C. 事件溯源** 单一事件流 | 所有 todo/log 变更都是事件 | 审计能力强 | 远超当前需求；查询复杂；迁移成本高 | ❌ |
+| 方案                                     | 描述                                                      | 优点                                                                                                                         | 缺点                                                                                                                                       | 结论        |
+| ---------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
+| **A. 单表扩展** `todos` 加 `log_kind` 列 | 用 `todos` 表同时装"待办"和"日志"                         | 不加表                                                                                                                       | 语义污染：日志无 `due_at`/`priority`/`parent_id` 语义；`todos` 已 26 列；report 查询要 `WHERE log_kind IS NULL` 处处防漏；FTS 表要同步过滤 | ❌          |
+| **B. 独立工作日志子系统** ✅             | 新表 `work_logs` + `worklog_service.py` + `worklog_ai.py` | 语义干净；独立字段（kind/session_id/progress/blocker）；可独立演进；report 生成只查两张表；避开 `todo_service.py` 791 行棘轮 | 多一张表 + 一套 API/工具/前端                                                                                                              | ✅ **采纳** |
+| **C. 事件溯源** 单一事件流               | 所有 todo/log 变更都是事件                                | 审计能力强                                                                                                                   | 远超当前需求；查询复杂；迁移成本高                                                                                                         | ❌          |
 
 **采纳 B**，理由：① 用户诉求本质是两类不同实体（要做的事 vs 已做的事），塞一张表会让所有既有查询都要加 `AND kind='todo'` 条件，是典型的语义污染；② 双轨存储让日报生成逻辑清晰——`work_logs`（做了什么）+ `todos`（未完成什么）两个来源，恰好对应用户说的"整理完成的工作和未完成的工作"；③ 新表独立演进，不动 `todo_service.py`（已在 791/800 行棘轮边缘）。
 
@@ -114,6 +114,7 @@
 ### 3.3 子任务层级：维持两级 ✅（已确认）
 
 后端已硬校验两级，P1 拖拽嵌套遵循同一约束：
+
 - 拖到**顶层行**左缘 → 成为其子任务；
 - 拖到**子任务行**左缘 → **禁止**（会超两层），拖拽时该行不显示"变子任务"指示区；
 - 拖到子任务行右/中 → 只在子任务**同级**重排（保持父不变）。
@@ -125,17 +126,33 @@
 - `cancelled` 保留在行尾 ✗ 按钮（显式动作，非循环态）。
 - 「标记完成」动作仍可从**右键菜单**直达（`contextMenu.todo.complete`），保持既有路径。
 
-### 3.5 树形视图拖拽：仅同级重排 ✅（已确认）
+### 3.5 树形视图拖拽：同级重排 + 嵌套入口 ✅（已确认，实施中修订）
 
 `TodoSubtaskTree.tsx` 渲染两层树，跨层级拖拽会让"缩进层级 ↔ parent_id"双向同步复杂化且易错。规则：
 
-- 树形视图内：仅允许**同级重排**（拖子任务到另一子任务前后 / 顶层到顶层前后）；
-- **嵌套（变子任务）只在扁平列表视图可用**，拖到目标行左缘触发；
-- 树形视图的拖柄仍可拖，但落区只有"前/后"，无"变子任务"。
+- 树形视图内：**「前 / 后」落区仅限同级**（拖子任务到另一子任务前后 / 顶层到顶层前后）；
+- **嵌套（变子任务）在树形视图同样可用** —— 拖到目标行左缘触发（见下方修订）；
+- 拖到**子任务**行左缘不可嵌套（两级上限），提示「已达两层上限」。
+
+> 🔧 **实施期修订（原方案把嵌套限定在扁平列表，实施中推翻）**
+>
+> 原方案：嵌套只在扁平列表视图可用。
+>
+> **问题**：扁平列表只在「当前无任何子待办」时渲染（`TodoPage` 的 `hasSubtasks` 判定）。
+> 用户第一次拖出子任务后，视图立刻切到树形 —— 于是「嵌套」这个能力**恰好只在
+> 第一次拖拽前可用**，用一次就再也够不着了。这是把能力绑死在了一个瞬态视图上。
+>
+> **修订**：两种视图都开放左缘嵌套区。
+>
+> - 树形视图：左缘落在**顶层行**上 → 成为其子任务；落在**子任务行**上 → 拒绝并提示两层上限；
+> - 扁平视图：左缘落在任意行上 → 成为其子任务（该视图下所有行都是顶层）。
+>
+> 两级上限、跨层参照校验均不变。
 
 ### 3.6 报告入口：原地升级既有「AI 简报 / 周回顾」 ✅（已确认）
 
 不新增页头按钮，避免工具栏膨胀：
+
 - `「简报」` → **`「日报」`**：内部引擎换成新的 report 引擎（双来源：work_logs + todos）；
 - `「周回顾」` → **`「周报」`**：同上，时间窗改为最近 7 天；
 - 两个弹窗内加**时间窗选择器**（今天 / 昨天 / 最近 7 天 / 自定义区间）。
@@ -215,18 +232,31 @@ PUT /api/v1/todos/{todo_id}
 ```
 POST /api/v1/todos/{todo_id}/move
 {
-  "target_parent_id": null | int,   -- null = 顶层；int = 成为该 todo 的子任务
-  "position": "before" | "after",    -- 相对同层参照物
-  "before_id": int | null            -- 参照物 id：落点在其之前(before)或之后(after)
+  "position": "before" | "after",      -- 相对同层参照物
+  "reference_id": int | null,           -- 参照物 id；null = 追加到目标层末尾
+  "target_parent_id": int | null        -- 目标父级；三态，见下
 }
 → 200 { "todo": TodoOut, "affected": int }
 ```
 
-语义说明：
-- `target_parent_id` = 落点所在父级（`null` = 顶层）；
-- `before_id` = 同层参照物；`position='before'` 表示插到 `before_id` 之前，`'after'` 表示插到之后；
-- 若只给 `before_id` 不给 `target_parent_id`，服务端以 `before_id` 的 `parent_id` 推断；
-- 服务端做**全部合法性校验**：父存在、父是顶层（两级上限）、不拖到自己/自己的子孙、参照物同层。
+**`target_parent_id` 三态语义**（实施定稿）：
+
+| 请求体形态             | 含义                                                |
+| ---------------------- | --------------------------------------------------- |
+| key **不存在**（省略） | 目标层**跟随参照待办所在层**；参照也没给 → 顶层末尾 |
+| key 存在，值为 `null`  | 显式**强制回顶层**                                  |
+| key 存在，值为 int     | 成为该待办的子任务                                  |
+
+三态必须在整条链路上保持区分：后端用 `model_dump(exclude_unset=True)` + 内部
+`INHERIT` 哨兵表达「省略」；前端 `buildMoveRequest` 在 before/after 落区**不写这个
+key**；IPC 的 `JSON.stringify` 会丢弃 `undefined`，因此「省略」只能靠**根本不写该
+key** 实现，写 `undefined` 等价于「显式 null」。
+
+其他语义说明：
+
+- `reference_id` = 同层参照物；`position='before'` 表示插到 `reference_id` 之前，`'after'` 表示插到之后；
+- 服务端做**全部合法性校验**：父存在、父是顶层（两级上限）、不拖到自己、参照物同层、带子任务的行不下沉；
+- 校验全部前置 —— 抛错时数据库没被动过。
 
 > ⚠️ **路由顺序**：`/todos/{todo_id}/move` 插在 `todo_router.py:319-335` 的 `/todos/batch/*` 之后、`:437` 的 `/todos/{todo_id}` 之前即可（FastAPI 按注册顺序匹配，`{todo_id}` 是路径参数，不会吞掉 `/move` 后缀，但保持"先具体后泛化"的既有约定更安全）。
 
@@ -257,25 +287,26 @@ GET  /api/v1/reports/{id}
 
 ### 4.5 IPC 映射（新增命令）
 
-| 命令 | 端点 |
-|---|---|
-| `todo_move` | `POST /todos/{id}/move` |
-| `worklog_list` | `GET /worklogs` |
-| `worklog_create` | `POST /worklogs` |
-| `worklog_update` | `PUT /worklogs/{id}` |
-| `worklog_delete` | `DELETE /worklogs/{id}` |
+| 命令              | 端点                          |
+| ----------------- | ----------------------------- |
+| `todo_move`       | `POST /todos/{id}/move`       |
+| `worklog_list`    | `GET /worklogs`               |
+| `worklog_create`  | `POST /worklogs`              |
+| `worklog_update`  | `PUT /worklogs/{id}`          |
+| `worklog_delete`  | `DELETE /worklogs/{id}`       |
 | `worklog_confirm` | `POST /worklogs/{id}/confirm` |
 | `worklog_dismiss` | `POST /worklogs/{id}/dismiss` |
-| `worklog_extract` | `POST /worklogs/extract` |
-| `report_generate` | `POST /reports/generate` |
-| `report_list` | `GET /reports` |
-| `report_get` | `GET /reports/{id}` |
+| `worklog_extract` | `POST /worklogs/extract`      |
+| `report_generate` | `POST /reports/generate`      |
+| `report_list`     | `GET /reports`                |
+| `report_get`      | `GET /reports/{id}`           |
 
 改动 IPC 后**必须**执行 `npm run ipc:manifest` 重生成 manifest，并同步更新 `electron/__tests__/commands.test.ts`（在棘轮基线里）。
 
 ### 4.6 Agent 工具（P2）
 
 在既有 todo 工具包中新增两个 LLM 工具：
+
 - `add_worklog(content, kind='progress', todo_id?, project_tag?)` —— 供 agent 在对话中随手记录工作；
 - `list_worklogs(from?, to?, kind?)` —— 供 agent 回答"我这两天做了什么"。
 
@@ -288,6 +319,7 @@ GET  /api/v1/reports/{id}
 **5.1.1 抽出共享字段组件 `src/pages/todo/TodoFields.tsx`**
 
 把 `TodoCreateForm.tsx`（278 行）里的字段块抽成可复用组件：
+
 - `DescriptionField`（多行文本，blur / Ctrl+Enter 提交）
 - `TagsField`（chip 输入）
 - `ProjectTagField`
@@ -307,12 +339,14 @@ GET  /api/v1/reports/{id}
 **5.1.3 三态循环**
 
 行首圆形按钮改为：
+
 - `pending`：空心圆（hover 显示 ▶ 提示）
 - `in_progress`：蓝色半填充圆（`CircleDot`/`Loader` 图标）
 - `completed`：绿色实心 ✓
 - 点击循环 `pending → in_progress → completed → pending`
 
 实现细节：
+
 - 组件加 `cycleStatus` 回调，`TodoPage` 调 `todoStore.update(id, { status })`。
 - `UpdateTodoInput.status` 类型加 `'completed'`（当前缺）。
 - `completed` 行仍是灰底+删除线；`in_progress` 行加**左侧 2px 主色竖条**标识（视觉上一眼可辨）。
@@ -333,16 +367,18 @@ GET  /api/v1/reports/{id}
 
 **5.2.2 落点判定（三区）**
 
-拖动时对目标行计算鼠标 X 相对该行宽度的位置：
+拖动时对目标行计算鼠标 X 相对该行宽度的比例 `ratio = (clientX - rect.left) / rect.width`：
 
-| 区域 | 判定 | 视觉反馈 | 结果 |
-|---|---|---|---|
-| 左 1/3 | `x < 1/3` | 左侧出现 ▸ 缩进标记 | 变为该行的**子任务** |
-| 中 1/3 | `1/3 ≤ x < 2/3` | 目标行**上/下**插入指示线 | 插到目标行**之前** |
-| 右 1/3 | `x ≥ 2/3` | 目标行**下**插入指示线 | 插到目标行**之后** |
+| 区域   | 判定                | 视觉反馈               | 结果                                    |
+| ------ | ------------------- | ---------------------- | --------------------------------------- |
+| 左 1/3 | `ratio < 1/3`       | 左侧出现 ▸ 缩进标记    | 变为该行的**子任务**（`zone='inside'`） |
+| 中 1/3 | `1/3 ≤ ratio < 2/3` | 目标行**上**插入指示线 | 插到目标行**之前**（`zone='before'`）   |
+| 右 1/3 | `ratio ≥ 2/3`       | 目标行**下**插入指示线 | 插到目标行**之后**（`zone='after'`）    |
 
-- 树形视图：只有"前/后"两区（左区不显示嵌套提示）。
-- 子任务行的左区禁用嵌套（两级上限），改为提示「已达两层上限」。
+- 两种视图都开放左缘嵌套区（见 §3.5 修订）；
+- 目标行**本身是子任务**时左区禁用嵌套（两层上限），改为提示「已达两层上限」；
+- 被拖行**自带子任务**时左区同样禁用（下沉会变成第三层）；
+- 树形视图的「前/后」落区仅限**同层**（`sameLayerOnly`）。
 
 **5.2.3 落点算法**
 
@@ -357,11 +393,36 @@ GET  /api/v1/reports/{id}
 **5.2.4 store 改造**
 
 `todoStore` 增加：
-- `moveTodo(id, targetParentId, position, beforeId)` action：乐观重排 → 调 API → 失败回滚。
 
-排序依据为「手动」时，列表请求带 `sort_by=manual`（新增排序表达式，`todo_filters.py:21-25` 加 `"manual": "COALESCE(parent_id, 0), sort_order"`）。
+- `moveTodo(id, request)` action：乐观重排 → 调 API → 失败回滚 + toast。
+
+排序依据为「手动」时，列表请求带 `sort_by=manual`（新增排序表达式，`todo_filters.py` 的 `SORT_EXPRS` 加 `"manual": "COALESCE(parent_id, 0), sort_order, id"`）。
 
 > ⚠️ `TodoListParams.sort_by` 类型是闭合联合 `'due_at' | 'priority' | 'created_at'`（`templateAndTaskTypes.ts:477`），需扩 `'manual'`。
+>
+> ⚠️ **默认排序基准**：后端 `list` 默认 `sort_by='due_at'`，而拖拽排序只在手工序下有意义。
+> 因此 `TodoPage` 挂载时显式 `load({ sort_by: 'manual' })`，且 `TodoToolbar.clearFilters`
+> 也显式回到 `'manual'`（若把 `sort_by` 一起清掉，服务端退回 `due_at`，拖柄随之失效）。
+> 同理 `hasFilters` 不把 `'manual'` 计入筛选条件，否则「清除」按钮会常驻。
+
+**5.2.5 纯函数模块 `src/shared/lib/dnd/todoDrag.ts`**
+
+不依赖 React / DOM，可直接单测；所有函数 immutable：
+
+| 函数                                                    | 职责                                              |
+| ------------------------------------------------------- | ------------------------------------------------- |
+| `computeDropZone(clientX, rect, allowNest)`             | 三分区（禁嵌套时退化为两分区）落点判定            |
+| `canNestInto(dragged, target, draggedHasChildren)`      | 嵌套合法性（两层上限 / 不拖自己）                 |
+| `layerOf(entry)`                                        | 所属层（顶层归一为 0）                            |
+| `isValidDropTarget(dragged, target, opts)`              | 目标行是否合法落点                                |
+| `buildMoveRequest(targetId, zone)`                      | 构造后端 move 请求（**三态 `target_parent_id`**） |
+| `sortByManualOrder(todos)`                              | 层 → `sort_order` → `id` 排序（与服务端口径一致） |
+| `applyOptimisticMove(todos, draggedId, targetId, zone)` | 乐观重排；落点非法时原样返回入参                  |
+
+**5.2.6 拖拽编排 `src/pages/todo/useTodoDrag.ts`**
+
+把「DOM 事件 → 落点判定 → 请求构造」串起来：`handleFor(todo)` 返回拖柄 props，
+`rowFor(todo)` 返回行级 props，`draggingId` 暴露当前拖拽项。
 
 ### 5.3 P2：工作日志面板
 
@@ -400,15 +461,15 @@ GET  /api/v1/reports/{id}
 
 ### P1 — 拖拽排序与拖拽嵌套
 
-- [ ] 步骤 P1.1：`database.py` 加 `sort_order REAL DEFAULT 0` + `idx_todos_sort_order`（幂等迁移）
-- [ ] 步骤 P1.2：新模块 `backend/services/todo_order.py`（中点分配 / renormalize / 同层取序）
-- [ ] 步骤 P1.3：`todo_filters.py` 的 `SORT_EXPRS` 加 `"manual"`
-- [ ] 步骤 P1.4：`POST /todos/{todo_id}/move` 端点（**注册在 `/todos/{todo_id}` 之前**）+ 全部合法性校验
-- [ ] 步骤 P1.5：`Todo` / `TodoOut` 加 `sort_order`；`TodoListParams.sort_by` 加 `'manual'`
-- [ ] 步骤 P1.6：前端 `GripVertical` 拖柄（仅拖柄 draggable）+ 三区落点判定 + 幽灵行指示
-- [ ] 步骤 P1.7：`todoStore.moveTodo` 乐观更新 + 失败回滚 + toast
-- [ ] 步骤 P1.8：IPC `todo_move` + `npm run ipc:manifest` + `commands.test.ts` 更新
-- [ ] 步骤 P1.9：pytest（move 端点全场景）+ vitest（拖拽判定纯函数）全绿
+- [x] 步骤 P1.1：`database.py` 加 `sort_order REAL DEFAULT 0` + `idx_todos_sort_order`（幂等迁移）
+- [x] 步骤 P1.2：新模块 `backend/services/todo_order.py`（中点分配 / renormalize / 同层取序）
+- [x] 步骤 P1.3：`todo_filters.py` 的 `SORT_EXPRS` 加 `"manual"`
+- [x] 步骤 P1.4：`POST /todos/{todo_id}/move` 端点（**注册在 `/todos/{todo_id}` 之前**）+ 全部合法性校验
+- [x] 步骤 P1.5：`Todo` / `TodoOut` 加 `sort_order`；`TodoListParams.sort_by` 加 `'manual'`
+- [x] 步骤 P1.6：前端 `GripVertical` 拖柄（仅拖柄 draggable）+ 三区落点判定 + 幽灵行指示
+- [x] 步骤 P1.7：`todoStore.moveTodo` 乐观更新 + 失败回滚 + toast
+- [x] 步骤 P1.8：IPC `todo_move` + `npm run ipc:manifest` + `commands.test.ts` 更新
+- [x] 步骤 P1.9：pytest（move 端点全场景）+ vitest（拖拽判定纯函数）全绿
 
 ### P2 — 工作日志捕获子系统
 
@@ -445,46 +506,51 @@ GET  /api/v1/reports/{id}
 
 ## 7. 风险与缓解
 
-| 风险 | 影响 | 缓解 |
-|---|---|---|
-| `sort_order` REAL 精度耗尽 | 排序错乱 | 相邻差 < `1e-9` 触发同层 renormalize（1024 步长）；服务端强制执行 |
-| 拖拽与行内点击/文本选择冲突 | 误触发 | 仅拖柄 draggable；`dragstart` 时阻止默认；行首复选框与按钮 `draggable=false` |
-| 拖拽后端校验失败（父是子任务 / 自拖） | 顺序错乱 | 前端落点计算即过滤非法目标；服务端二次校验并回滚 |
-| `todo_service.py` 791/800 行触棘轮 | CI 红 | **新逻辑一律放新模块**（`todo_order.py` / `worklog_*` / `report_*`），`todo_service.py` 只加委托 |
-| LLM 抽取误记工作日志 | 报告失真 | 候选进 `pending`，**人工确认后才进报告**；未确认行不进统计 |
-| LLM 未配置 | 日报生成失败 | fail-open：降级为**纯模板**汇总（工作日志 + 未完成待办列表），不报错 |
-| 对话抽取开销 | 响应变慢 | 沿用 `todo_ai.py` 的预算常量（`MAX_MESSAGES=80` / `MAX_MESSAGE_CHARS=2000` / 总预算 12000 字符），后台异步触发 |
-| 双分支语法漂移 | win7 CI 红 | 写 py38 兼容代码（`Optional`/`List`，禁 `X \| None` / `list[int]`）；win7 用 `sage-backend-py38` 跑测 |
-| IPC manifest 未重生成 | 运行期命令缺失 | 每次改 IPC 后必跑 `npm run ipc:manifest`，并更新 `commands.test.ts` |
-| 前端文件超 800 行 | 棘轮红 | `TodoRowEditor.tsx` 568 行已近上限 → **详情面板拆到独立 `TodoDetailPanel.tsx`**，行内编辑逻辑留在行组件 |
+| 风险                                  | 影响           | 缓解                                                                                                           |
+| ------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------- |
+| `sort_order` REAL 精度耗尽            | 排序错乱       | 相邻差 < `1e-9` 触发同层 renormalize（1024 步长）；服务端强制执行                                              |
+| 拖拽与行内点击/文本选择冲突           | 误触发         | 仅拖柄 draggable；`dragstart` 时阻止默认；行首复选框与按钮 `draggable=false`                                   |
+| 拖拽后端校验失败（父是子任务 / 自拖） | 顺序错乱       | 前端落点计算即过滤非法目标；服务端二次校验并回滚                                                               |
+| `todo_service.py` 791/800 行触棘轮    | CI 红          | **新逻辑一律放新模块**（`todo_order.py` / `worklog_*` / `report_*`），`todo_service.py` 只加委托               |
+| LLM 抽取误记工作日志                  | 报告失真       | 候选进 `pending`，**人工确认后才进报告**；未确认行不进统计                                                     |
+| LLM 未配置                            | 日报生成失败   | fail-open：降级为**纯模板**汇总（工作日志 + 未完成待办列表），不报错                                           |
+| 对话抽取开销                          | 响应变慢       | 沿用 `todo_ai.py` 的预算常量（`MAX_MESSAGES=80` / `MAX_MESSAGE_CHARS=2000` / 总预算 12000 字符），后台异步触发 |
+| 双分支语法漂移                        | win7 CI 红     | 写 py38 兼容代码（`Optional`/`List`，禁 `X \| None` / `list[int]`）；win7 用 `sage-backend-py38` 跑测          |
+| IPC manifest 未重生成                 | 运行期命令缺失 | 每次改 IPC 后必跑 `npm run ipc:manifest`，并更新 `commands.test.ts`                                            |
+| 前端文件超 800 行                     | 棘轮红         | `TodoRowEditor.tsx` 568 行已近上限 → **详情面板拆到独立 `TodoDetailPanel.tsx`**，行内编辑逻辑留在行组件        |
 
 ---
 
 ## 8. 验收标准
 
 ### P0
+
 1. 任意待办行点击 📝 可展开详情面板，描述 blur/Ctrl+Enter 保存并持久化；
 2. 行首圆形按钮依次点击，状态按 `未开始 → 进行中 → 已完成 → 未开始` 循环，`in_progress` 行有可见标识；
 3. 工具栏状态筛选可选「进行中」，列表只显示进行中项；
 4. `pytest backend/tests/{unit,integration}/*todo*` 全绿；`npx vitest run src/pages/__tests__/TodoPage.test.tsx` 全绿。
 
 ### P1
+
 5. 拖柄可拖动，行落点出现插入指示线，松手后顺序持久化（刷新后不变）；
 6. 拖到另一行左缘 → 该行成为其子任务，树形视图正确显示；
 7. 拖到子任务行左缘被拒绝并提示两层上限；
 8. `POST /todos/{id}/move` 覆盖：移到顶层 / 成为子任务 / 前插 / 后插 / 非法父 / 自拖 / 越层，各返回预期（400/404/200）；
-9. 「手动」排序为默认时刷新顺序保持。
+9. 「手动」排序为默认时刷新顺序保持；
+10. `target_parent_id` 三态可区分：省略 → 跟随参照待办所在层；显式 `null` → 强制回顶层；给 id → 成为该待办的子任务。
 
 ### P2
-10. 对话后可抽取工作日志候选 → 收件箱可确认/编辑/忽略；
-11. 确认后的日志出现在按天分组的日志流，带 kind 徽标与来源会话深链；
-12. 未确认的候选**不出现在**报告统计中。
+
+11. 对话后可抽取工作日志候选 → 收件箱可确认/编辑/忽略；
+12. 确认后的日志出现在按天分组的日志流，带 kind 徽标与来源会话深链；
+13. 未确认的候选**不出现在**报告统计中。
 
 ### P3
-13. 「日报」弹窗能按时间窗生成 Markdown，含「已完成 / 未完成」两段；
-14. 「周报」同上，覆盖 7 天；
-15. 报告可存档、列表可查、可复制 / 导出 `.md`；
-16. LLM 未配置时降级为模板汇总，不报错。
+
+14. 「日报」弹窗能按时间窗生成 Markdown，含「已完成 / 未完成」两段；
+15. 「周报」同上，覆盖 7 天；
+16. 报告可存档、列表可查、可复制 / 导出 `.md`；
+17. LLM 未配置时降级为模板汇总，不报错。
 
 ---
 
@@ -502,32 +568,48 @@ GET  /api/v1/reports/{id}
 
 ## 10. 附录：关键代码位置索引
 
-| 关注点 | 位置 |
-|---|---|
-| `todos` 表 DDL | `backend/data/database.py:2507-2540` |
-| `todos` 索引 | `backend/data/database.py:2543-2546` |
-| 幂等列回填模式 | `backend/data/database.py:2556-2576` |
-| `Todo` 模型 | `backend/services/todo_service.py:88-110` |
-| `_UPDATABLE_FIELDS` | `backend/services/todo_service.py:71-85` |
-| `create_todo`（父校验 / 两级上限） | `backend/services/todo_service.py:149-207` |
-| `update_todo` | `backend/services/todo_service.py:320` |
-| 排序白名单 | `backend/services/todo_filters.py:21-25` |
-| 状态/视图过滤 | `backend/services/todo_filters.py:42-66` |
-| 待办路由（19 端点） | `backend/api/todo_router.py:212-489` |
-| LLM 抽取（不落库） | `backend/services/todo_ai.py:137` |
-| AI 简报 | `backend/services/todo_ai.py:173` |
-| 周回顾 | `backend/services/todo_ai.py:190` |
-| 会话 recap（不持久） | `backend/chat/recap.py` |
-| 行内标题编辑 | `src/pages/todo/TodoRowEditor.tsx:352-381` |
-| 状态按钮（仅"完成"） | `src/pages/todo/TodoRowEditor.tsx:329-338` |
-| 📝 指示器（不可点） | `src/pages/todo/TodoRowEditor.tsx:383-388` |
-| 行尾 ＋ 子任务 | `src/pages/todo/TodoRowEditor.tsx:550-563` |
-| 行尾操作区 | `src/pages/todo/TodoRowEditor.tsx:513-546` |
-| 工具栏（无状态筛选） | `src/pages/todo/TodoToolbar.tsx:39-68` |
-| 树形渲染 | `src/pages/todo/TodoSubtaskTree.tsx` |
-| store（扁平无序） | `src/entities/todo/todoStore.ts` |
-| 类型定义 | `src/shared/api/types/templateAndTaskTypes.ts:384-518` |
-| 原生 DnD 参考（重排） | `src/widgets/chat/PendingQueuePanel.tsx:118-153` |
-| 原生 DnD 参考（指示线） | `src/pages/settings/PromptTemplatesTab.tsx:504-512` |
-| IPC 映射 | `electron/commandRoutes/settings.ts:233-366` |
-| 既有路线图（四阶段已交付） | `docs/plans/2026-11-16_todo-ai-native-roadmap.md` |
+| 关注点                             | 位置                                                   |
+| ---------------------------------- | ------------------------------------------------------ |
+| `todos` 表 DDL                     | `backend/data/database.py:2507-2540`                   |
+| `todos` 索引                       | `backend/data/database.py:2543-2546`                   |
+| 幂等列回填模式                     | `backend/data/database.py:2556-2576`                   |
+| `Todo` 模型                        | `backend/services/todo_service.py:88-110`              |
+| `_UPDATABLE_FIELDS`                | `backend/services/todo_service.py:71-85`               |
+| `create_todo`（父校验 / 两级上限） | `backend/services/todo_service.py:149-207`             |
+| `update_todo`                      | `backend/services/todo_service.py:320`                 |
+| 排序白名单                         | `backend/services/todo_filters.py:21-25`               |
+| 状态/视图过滤                      | `backend/services/todo_filters.py:42-66`               |
+| 待办路由（19 端点）                | `backend/api/todo_router.py:212-489`                   |
+| LLM 抽取（不落库）                 | `backend/services/todo_ai.py:137`                      |
+| AI 简报                            | `backend/services/todo_ai.py:173`                      |
+| 周回顾                             | `backend/services/todo_ai.py:190`                      |
+| 会话 recap（不持久）               | `backend/chat/recap.py`                                |
+| 行内标题编辑                       | `src/pages/todo/TodoRowEditor.tsx:352-381`             |
+| 状态按钮（仅"完成"）               | `src/pages/todo/TodoRowEditor.tsx:329-338`             |
+| 📝 指示器（不可点）                | `src/pages/todo/TodoRowEditor.tsx:383-388`             |
+| 行尾 ＋ 子任务                     | `src/pages/todo/TodoRowEditor.tsx:550-563`             |
+| 行尾操作区                         | `src/pages/todo/TodoRowEditor.tsx:513-546`             |
+| 工具栏（无状态筛选）               | `src/pages/todo/TodoToolbar.tsx:39-68`                 |
+| 树形渲染                           | `src/pages/todo/TodoSubtaskTree.tsx`                   |
+| store（扁平无序）                  | `src/entities/todo/todoStore.ts`                       |
+| 类型定义                           | `src/shared/api/types/templateAndTaskTypes.ts:384-518` |
+| 原生 DnD 参考（重排）              | `src/widgets/chat/PendingQueuePanel.tsx:118-153`       |
+| 原生 DnD 参考（指示线）            | `src/pages/settings/PromptTemplatesTab.tsx:504-512`    |
+| IPC 映射                           | `electron/commandRoutes/settings.ts:233-366`           |
+| 既有路线图（四阶段已交付）         | `docs/plans/2026-11-16_todo-ai-native-roadmap.md`      |
+
+### P1 新增位置（P1 实施后追加）
+
+| 关注点                                    | 位置                                               |
+| ----------------------------------------- | -------------------------------------------------- |
+| 同层次序分配 / 层级校验                   | `backend/services/todo_order.py`                   |
+| `TodoService.move_todo` 委托              | `backend/services/todo_service.py:359-394`         |
+| `MoveTodoIn`（三态 `target_parent_id`）   | `backend/api/todo_router.py:191-215`               |
+| `POST /todos/{todo_id}/move` 端点         | `backend/api/todo_router.py:468-496`               |
+| 拖拽纯函数（落点/嵌套/请求构造/乐观重排） | `src/shared/lib/dnd/todoDrag.ts`                   |
+| 拖拽编排 hook                             | `src/pages/todo/useTodoDrag.ts`                    |
+| 拖柄 + 落点指示线                         | `src/pages/todo/TodoRowEditor.tsx`                 |
+| `todoClient.move`                         | `src/shared/api/todoClient.ts`                     |
+| IPC `todo_move` 路由                      | `electron/commandRoutes/settings.ts:382-397`       |
+| 纯函数单测                                | `src/shared/lib/dnd/__tests__/todoDrag.P1.test.ts` |
+| move 端点 / 层序单测                      | `backend/tests/unit/test_todo_move_order.py`       |
