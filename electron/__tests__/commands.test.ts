@@ -1393,4 +1393,62 @@ describe('agent_* IPC commands', () => {
       expect(COMMAND_ROUTES.worklog_extract.path({})).toBe('/api/v1/worklogs/extract');
     });
   });
+
+  // ===== P3: report (日报 / 周报) IPC routes =====
+  describe('report IPC routes', () => {
+    const REPORT_COMMANDS = ['report_generate', 'report_list', 'report_get'];
+
+    it('registers all 3 report commands', () => {
+      for (const cmd of REPORT_COMMANDS) {
+        expect(COMMAND_ROUTES[cmd], `missing route for ${cmd}`).toBeDefined();
+      }
+    });
+
+    it('report_generate posts to the literal generate path', () => {
+      expect(COMMAND_ROUTES.report_generate.method).toBe('POST');
+      expect(COMMAND_ROUTES.report_generate.path({})).toBe('/api/v1/reports/generate');
+    });
+
+    it('report_generate sends only the four allowed body keys', () => {
+      // GenerateReportIn 声明 extra="forbid" —— 多传一个键后端就 422。
+      expect(
+        COMMAND_ROUTES.report_generate.body?.({
+          report_type: 'daily',
+          period_start: '2026-11-20',
+          period_end: '2026-11-26',
+          title: '我的复盘',
+          bogus: 1,
+        }),
+      ).toEqual({
+        report_type: 'daily',
+        period_start: '2026-11-20',
+        period_end: '2026-11-26',
+        title: '我的复盘',
+      });
+    });
+
+    it('report_generate omits absent optional keys', () => {
+      expect(COMMAND_ROUTES.report_generate.body?.({ report_type: 'weekly' })).toEqual({
+        report_type: 'weekly',
+      });
+      expect(COMMAND_ROUTES.report_generate.body?.({})).toEqual({});
+    });
+
+    it('report_list sends the filter and page window', () => {
+      expect(COMMAND_ROUTES.report_list.method).toBe('GET');
+      expect(COMMAND_ROUTES.report_list.path({})).toBe('/api/v1/reports');
+      expect(
+        COMMAND_ROUTES.report_list.path({
+          report_type: 'weekly',
+          limit: 20,
+          offset: 5,
+        }),
+      ).toBe('/api/v1/reports?report_type=weekly&limit=20&offset=5');
+    });
+
+    it('report_get targets the report by id', () => {
+      expect(COMMAND_ROUTES.report_get.method).toBe('GET');
+      expect(COMMAND_ROUTES.report_get.path({ id: 7 })).toBe('/api/v1/reports/7');
+    });
+  });
 });
