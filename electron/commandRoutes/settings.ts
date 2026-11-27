@@ -486,6 +486,50 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/worklogs/extract',
   },
 
+  // P3 报告（report）—— 日报 / 周报。生成即存档，返回的就是存好的那条。
+  report_generate: {
+    method: 'POST',
+    path: () => '/api/v1/reports/generate',
+    // GenerateReportIn 声明 extra="forbid" —— 只放这四个键，多传一个就 422。
+    body: (a) => {
+      const body: Record<string, unknown> = {};
+      if (a?.report_type !== undefined && a?.report_type !== null) {
+        body.report_type = String(a.report_type);
+      }
+      if (a?.period_start !== undefined && a?.period_start !== null) {
+        body.period_start = String(a.period_start);
+      }
+      if (a?.period_end !== undefined && a?.period_end !== null) {
+        body.period_end = String(a.period_end);
+      }
+      if (a?.title !== undefined && a?.title !== null) {
+        body.title = String(a.title);
+      }
+      return body;
+    },
+  },
+  report_list: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a?.report_type !== undefined && a?.report_type !== null) {
+        params.set('report_type', String(a.report_type));
+      }
+      if (a?.limit !== undefined && a?.limit !== null) {
+        params.set('limit', String(a.limit));
+      }
+      if (a?.offset !== undefined && a?.offset !== null) {
+        params.set('offset', String(a.offset));
+      }
+      const qs = params.toString();
+      return `/api/v1/reports${qs ? `?${qs}` : ''}`;
+    },
+  },
+  report_get: {
+    method: 'GET',
+    path: (a) => `/api/v1/reports/${encodeURIComponent(String(a.id))}`,
+  },
+
   // custom CSS theme storage (themeCssClient)
   // Backend theme_router 挂在 /api/v1/theme (与其他 IPC 路由一致)
   theme_list: { method: 'GET', path: () => '/api/v1/theme/list' },
