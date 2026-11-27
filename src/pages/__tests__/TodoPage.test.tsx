@@ -15,7 +15,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Todo } from '../../shared/api/types';
+import type { Report, Todo } from '../../shared/api/types';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { TodoPage } from '../TodoPage';
 
@@ -32,8 +32,9 @@ const mocks = vi.hoisted(() => ({
   batchDelete: vi.fn(),
   exportTodos: vi.fn(),
   listTags: vi.fn(),
-  dailyBrief: vi.fn(),
-  weeklyReview: vi.fn(),
+  reportGenerate: vi.fn(),
+  reportList: vi.fn(),
+  reportGet: vi.fn(),
   heatmap: vi.fn(),
   snooze: vi.fn(),
   worklogList: vi.fn(),
@@ -50,10 +51,17 @@ vi.mock('../../shared/api/todoClient', () => ({
   todoClient: {
     exportTodos: mocks.exportTodos,
     listTags: mocks.listTags,
-    dailyBrief: mocks.dailyBrief,
-    weeklyReview: mocks.weeklyReview,
     heatmap: mocks.heatmap,
     snooze: mocks.snooze,
+  },
+}));
+
+// 日报/周报弹窗（P3）：打开即拉历史，点「生成并存档」才调 generate。
+vi.mock('../../shared/api/reportClient', () => ({
+  reportClient: {
+    generate: mocks.reportGenerate,
+    list: mocks.reportList,
+    get: mocks.reportGet,
   },
 }));
 
@@ -119,8 +127,8 @@ beforeEach(() => {
     content: '- [ ] 示例',
   });
   mocks.listTags.mockResolvedValue([]);
-  mocks.dailyBrief.mockResolvedValue({ content: '• 处理逾期项' });
-  mocks.weeklyReview.mockResolvedValue({ content: '## 完成情况' });
+  mocks.reportList.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+  mocks.reportGenerate.mockResolvedValue(makeReport({ id: 1 }));
   mocks.heatmap.mockResolvedValue({
     days: [{ date: '2026-11-18', count: 2 }],
     total: 2,
@@ -296,13 +304,33 @@ describe('TodoPage', () => {
     });
   });
 
-  it('opens the AI brief dialog from the header', async () => {
+  it('opens the daily report dialog from the header', async () => {
     renderPage();
 
-    fireEvent.click(screen.getByTestId('todo-ai-brief'));
+    fireEvent.click(screen.getByTestId('todo-report-daily'));
 
-    expect(await screen.findByTestId('todo-ai-content')).toHaveTextContent('处理逾期项');
-    expect(mocks.dailyBrief).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId('report-generate')).toBeInTheDocument();
+    expect(mocks.reportList).toHaveBeenCalledWith({ report_type: 'daily', limit: 50 });
+    // 打开不自动生成 —— 否则每开一次弹窗就往库里塞一条记录。
+    expect(mocks.reportGenerate).not.toHaveBeenCalled();
+  });
+
+  it('generates and archives a report on demand', async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByTestId('todo-report-daily'));
+    await screen.findByTestId('report-generate');
+    fireEvent.click(screen.getByTestId('report-generate'));
+
+    await waitFor(() => {
+      expect(mocks.reportGenerate).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.reportGenerate).toHaveBeenCalledWith({
+      report_type: 'daily',
+      period_start: expect.any(String),
+      period_end: expect.any(String),
+    });
+    expect(await screen.findByTestId('report-content')).toHaveTextContent('处理逾期项');
   });
 
   it('toggles the completion heatmap', async () => {
@@ -327,7 +355,7 @@ describe('TodoPage', () => {
 
     expect(await screen.findByTestId('todo-worklog-panel')).toBeInTheDocument();
     expect(screen.getByTestId('todo-tab-logs')).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByTestId('todo-ai-brief')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('todo-report-daily')).not.toBeInTheDocument();
     expect(mocks.worklogList).toHaveBeenCalledWith({ status: 'pending', limit: 50 });
     expect(mocks.worklogList).toHaveBeenCalledWith({ status: 'confirmed', limit: 200 });
   });
@@ -349,6 +377,26 @@ function makeTodo(overrides: Partial<Todo> = {}): Todo {
     is_recurring: false,
     created_at: '2026-09-21T00:00:00Z',
     updated_at: '2026-09-21T00:00:00Z',
+    ...overrides,
+  };
+}
+
+/** 合成报告记录（日期为合成值，非生产数据）。 */
+function makeReport(overrides: Partial<Report> = {}): Report {
+  return {
+    id: 1,
+    title: '日报 · 2026-11-27',
+    report_type: 'daily',
+    period_start: '2026-11-27',
+    period_end: '2026-11-27',
+    content: '# 日报\n\n## 完成\n- 处理逾期项',
+    stats: {
+      ai_generated: false,
+      worklogs: { total: 3, by_kind: { done: 2, progress: 1 }, sessions: 1 },
+      todos: { completed: ['处理逾期项'], completed_count: 1, pending_high: [], overdue: [], pending_count: 2 },
+    },
+    created_at: '2026-11-27T20:30:00.123456',
+    updated_at: '2026-11-27T20:30:00.123456',
     ...overrides,
   };
 }
