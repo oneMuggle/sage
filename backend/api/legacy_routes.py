@@ -956,9 +956,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as exc:  # noqa: BLE001 — 编排判定失败必须降级 single
                     logger.warning("编排语义判定失败，降级 single: %s", exc)
                     mode = "single"
+            # 2026-11-27: 事实侦察清单落库载荷（messages.client_meta）。
+            # 只用于气泡回显，不参与 LLM 上下文；序列化失败或超 32 KiB 时
+            # 丢弃展示元数据，但不影响消息本身落库。声明前置到 multi 分支
+            # 之前 —— 否则会被后面的初始化覆盖掉 preflight 回填的值。
+            scout_facts_client_meta_json: Optional[str] = None
+            scout_facts_client_meta_written = False
             if mode == "multi":
                 from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
                 from backend.orchestration.planner import Planner
+                from backend.orchestration.scout_facts import (
+                    build_client_meta_json as build_scout_client_meta_json,
+                )
                 from backend.orchestration.task_registry import TaskRegistry
                 from backend.orchestration.team_registry import TeamRegistry
                 from backend.tools.replan_tool import (
@@ -1026,6 +1035,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 session_id=data.session_id,
                             )
                             if isinstance(preflight_context, dict):
+                                # 事实清单仅供前端展示 —— 从 planner context 摘除，
+                                # 避免与 scout_facts 原文重复进 prompt（planner 只
+                                # 需要原文那份）。
+                                _scout_detail = preflight_context.pop(
+                                    "scout_facts_detail", None
+                                )
+                                if isinstance(_scout_detail, dict):
+                                    scout_facts_client_meta_json = (
+                                        build_scout_client_meta_json(_scout_detail)
+                                    )
                                 _complexity_info = preflight_context.get("complexity")
                                 if isinstance(_complexity_info, dict):
                                     _level = _complexity_info.get("complexity")
@@ -2484,6 +2503,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 nonlocal steps_completed, accumulated_tool_calls
                 nonlocal streamed_partial_parts, r38_memory_refs_written
                 nonlocal r81_rag_citations_written, r81_pushed_sources_len
+                # 2026-11-27: 事实侦察清单挂本轮首条 assistant 行（首写语义）
+                nonlocal scout_facts_client_meta_written
                 # 2026-10-22: _producer_error 在 _consume_run_loop 内赋值,
                 # 缺 nonlocal 会创建函数局部变量,外层 finally 读到的仍是 None →
                 # sessions.last_error 降级为 "运行失败" 而非真实原因。
@@ -2643,6 +2664,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                         if not r81_rag_citations_written
                                         else None
                                     ),
+                                    # 2026-11-27: 事实侦察清单同挂首条 assistant 行
+                                    client_meta=(
+                                        scout_facts_client_meta_json
+                                        if not scout_facts_client_meta_written
+                                        else None
+                                    ),
                                     created_at=step_now,
                                     model=(llm_config.get("model") if llm_config else "local"),
                                 ),
@@ -2651,6 +2678,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 r38_memory_refs_written = True
                             if r81_rag_citations_json and not r81_rag_citations_written:
                                 r81_rag_citations_written = True
+                            if (
+                                scout_facts_client_meta_json
+                                and not scout_facts_client_meta_written
+                            ):
+                                scout_facts_client_meta_written = True
                             steps_completed += 1
                         except Exception as step_db_err:
                             logger.warning(
@@ -2771,6 +2803,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 if not r81_rag_citations_written
                                 else None
                             ),
+                            # 2026-11-27: 事实侦察清单 —— 单步 run 无 STEP_DONE，
+                            # 清单挂这条终稿行。
+                            client_meta=(
+                                scout_facts_client_meta_json
+                                if not scout_facts_client_meta_written
+                                else None
+                            ),
                             sources=r81_sources_json,
                             finish_reason=getattr(done_event, "finish_reason", None),  # B2 截断标记
                             generation_stats=getattr(done_event, "generation_stats_json", None),
@@ -2796,6 +2835,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         r38_memory_refs_written = True
                     if r81_rag_citations_json and not r81_rag_citations_written:
                         r81_rag_citations_written = True
+                    if (
+                        scout_facts_client_meta_json
+                        and not scout_facts_client_meta_written
+                    ):
+                        scout_facts_client_meta_written = True
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
                 # WS-C P0-2: 统一记忆写入路径 — assistant 落盘**成功后**才触发
@@ -3040,10 +3084,23 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     if r81_turn_sources
                                     else None
                                 ),
+                                # 2026-11-27: 用户中断且首个 STEP_DONE 尚未发生时,
+                                # 事实侦察清单挂这条 partial 行 —— 否则刷新后该轮
+                                # 没有任何气泡能渲染「事实侦察」区块。
+                                client_meta=(
+                                    scout_facts_client_meta_json
+                                    if not scout_facts_client_meta_written
+                                    else None
+                                ),
                                 created_at=int(time.time() * 1000),
                                 model=(llm_config.get("model") if llm_config else "local"),
                             )
                         )
+                        if (
+                            scout_facts_client_meta_json
+                            and not scout_facts_client_meta_written
+                        ):
+                            scout_facts_client_meta_written = True
                         await entry.queue.put(
                             {"state": "partial_persisted", "content": partial_text}
                         )

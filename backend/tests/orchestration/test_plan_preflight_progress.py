@@ -118,6 +118,126 @@ def test_medium_task_wraps_scout(monkeypatch):
     assert scout_done, events
 
 
+def test_medium_scout_done_event_carries_fact_detail(monkeypatch):
+    """lite scout 完成的 done 事件带 detail.facts —— 前端据此渲染事实区块。"""
+    classifier_module = _patch_common(monkeypatch)
+
+    async def fake_classify(message, context=None):
+        return ComplexityClassification(
+            complexity="medium", research_needed=True, reasoning=""
+        )
+
+    async def fake_clarify(client, message, emit):
+        return []
+
+    async def fake_scout(
+        client, message, emit, clarifications, max_iterations=3, fallback_client=None
+    ):
+        return "- 事实甲在这里（来源：文档 A）\n- 事实乙在这里"
+
+    monkeypatch.setattr(classifier_module, "classify_complexity", fake_classify)
+    monkeypatch.setattr(plan_preflight, "_clarify", fake_clarify)
+    monkeypatch.setattr(plan_preflight, "_scout", fake_scout)
+
+    events, emit = _collect()
+    asyncio.run(plan_preflight.run_plan_preflight("重构模块", emit=emit))
+
+    scout_done = [
+        e["plan_progress"]
+        for e in events
+        if e["state"] == "plan_progress"
+        and e["plan_progress"]["stage"] == "scout"
+        and e["plan_progress"]["status"] == "done"
+    ]
+    assert scout_done, events
+    detail = scout_done[0].get("detail") or {}
+    assert detail.get("fact_count") == 2
+    assert detail.get("facts") == [
+        {"text": "事实甲在这里", "source": "文档 A"},
+        {"text": "事实乙在这里", "source": ""},
+    ]
+
+
+def test_medium_result_carries_structured_fact_detail(monkeypatch):
+    """run_plan_preflight 返回值带 scout_facts_detail —— 供前端展示与落库。"""
+    classifier_module = _patch_common(monkeypatch)
+
+    async def fake_classify(message, context=None):
+        return ComplexityClassification(
+            complexity="medium", research_needed=True, reasoning=""
+        )
+
+    async def fake_clarify(client, message, emit):
+        return []
+
+    async def fake_scout(
+        client, message, emit, clarifications, max_iterations=3, fallback_client=None
+    ):
+        return "- 事实甲在这里（来源：文档 A）\n- 事实乙在这里"
+
+    monkeypatch.setattr(classifier_module, "classify_complexity", fake_classify)
+    monkeypatch.setattr(plan_preflight, "_clarify", fake_clarify)
+    monkeypatch.setattr(plan_preflight, "_scout", fake_scout)
+
+    events, emit = _collect()
+    result = asyncio.run(plan_preflight.run_plan_preflight("重构模块", emit=emit))
+
+    assert result is not None
+    detail = result["scout_facts_detail"]
+    assert detail["fact_count"] == 2
+    assert detail["facts"] == [
+        {"text": "事实甲在这里", "source": "文档 A"},
+        {"text": "事实乙在这里", "source": ""},
+    ]
+    # 原文那份同时保留 —— planner 靠它做拆解
+    assert "事实甲在这里" in result["scout_facts"]
+
+
+def test_scout_deep_success_does_not_emit_fact_detail(monkeypatch):
+    """scout_deep 成功 → 不产出 scout_facts_detail（调研报告走 ResearchSummaryCard）。
+
+    scout_deep 成功时 ``scout_facts`` 装的是调研报告上下文（语义与 lite scout
+    的事实清单不同），若复用同一键会把调研内容误标成事实清单。
+    """
+    import backend.orchestration.scout_deep as scout_deep_module
+
+    classifier_module = _patch_common(monkeypatch)
+
+    async def fake_classify(message, context=None):
+        return ComplexityClassification(
+            complexity="complex", research_needed=True, reasoning=""
+        )
+
+    async def fake_clarify(client, message, emit):
+        return []
+
+    class _FakeReport:
+        confidence = 0.8
+        findings = ["发现一"]
+
+        def to_dict(self):
+            return {"confidence": 0.8, "findings": ["发现一"]}
+
+        def to_planner_context(self, limit):
+            return "调研报告上下文"
+
+    async def fake_research(**kwargs):
+        return _FakeReport()
+
+    monkeypatch.setattr(classifier_module, "classify_complexity", fake_classify)
+    monkeypatch.setattr(plan_preflight, "_clarify", fake_clarify)
+    monkeypatch.setattr(scout_deep_module, "research", fake_research)
+
+    events, emit = _collect()
+    result = asyncio.run(plan_preflight.run_plan_preflight("复杂调研", emit=emit))
+
+    assert result is not None
+    assert "scout_facts_detail" not in result, (
+        "scout_deep 成功时不应产出 lite scout 的事实清单"
+    )
+    assert result["scout_facts"] == "调研报告上下文"
+
+
 def test_scout_event_to_progress_maps_thinking_and_tool():
     from backend.orchestration.plan_preflight import _scout_event_to_progress
 

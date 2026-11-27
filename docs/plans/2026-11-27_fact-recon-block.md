@@ -75,8 +75,8 @@
 
 | 文件 | 改动 |
 |---|---|
-| `docs/technical/178-fact-recon-block.md`（新增） | 技术说明 |
-| `docs/user-manual/62-fact-recon-block.md`（新增） | 用户手册 |
+| `docs/technical/179-fact-recon-block.md`（新增） | 技术说明 |
+| `docs/user-manual/63-fact-recon-block.md`（新增） | 用户手册 |
 | `docs/technical/README.md` / `docs/user-manual/README.md` | 目录表补一行 |
 
 ## 4. 技术方案
@@ -140,8 +140,8 @@ lite scout 两处调用点（`_fallback_scout_lite` 与 medium 主路径）挂�
 detail_result=lambda facts: scout_facts.to_detail(facts)  # {"facts": [...], "fact_count": n}
 ```
 
-`emit_plan_progress` 的 `detail` 增加体积守卫（序列化 > 16 KiB 则丢弃 detail 并记 warning），
-避免 detail 撑爆 NDJSON 行。
+`emit_plan_progress` 的 `detail` 增加体积守卫（序列化 > 32 KiB 则丢弃 detail 并记 warning ——
+与 `client_meta` 落库预算同口径），避免 detail 撑爆 NDJSON 行。
 
 ### 4.4 后端 · 落库
 
@@ -182,7 +182,8 @@ props: { sessionId, messageId, persistedFacts?: ScoutFactsMeta | null }
   - 折叠头：`事实侦察 · N 条事实 · 12.3s` + chevron 按钮（`aria-expanded`）；
   - 展开体：有序列表，序号 + 事实正文（**完整换行显示，不截断**）+ 来源 chip（弱化色）；
   - 底部二级折叠：`侦察过程（N）` → 过程行列表（thinking / 工具调用 / 结果）；
-- **展开态策略**：默认由阶段状态决定（侦察进行中自动展开、完成后自动收起）；
+- **展开态策略**：scout 一旦启动过就锁定为自动展开（facts 只在 `done` 事件到达，
+  完成瞬间收起会让用户看到「刚填满就收起」）；落库回读态默认折叠；
   用户手动切换后以用户选择为准（`manual !== null ? manual : auto`）。
 
 **主流应用对照**（设计取舍来源）：
@@ -210,14 +211,14 @@ props: { sessionId, messageId, persistedFacts?: ScoutFactsMeta | null }
 ## 5. 实施步骤（里程碑）
 
 - [x] **M0 计划**：本文档（`docs/plans/2026-11-27_fact-recon-block.md`）
-- [ ] **M1 后端解析器**：`scout_facts.py` + 单测（`backend/tests/unit/test_scout_facts.py`）
-- [ ] **M2 后端协议**：`plan_progress.detail_result` + detail 体积守卫 + 单测
-- [ ] **M3 后端下发**：preflight 两处挂 `detail_result` + 单测（done 事件含 facts）
-- [ ] **M4 后端落库**：`legacy_routes` 首条 assistant 行 `client_meta.scout_facts` + 单测
-- [ ] **M5 前端类型 + reducer**：`ScoutFact` / `ScoutFactsMeta` / `PlanStageState.facts` + vitest
-- [ ] **M6 前端组件**：`FactReconBlock.tsx` + vitest（折叠/展开/来源/回落/无障碍）
-- [ ] **M7 前端集成**：`Message.tsx` 注入 + `PlanningTimeline` scout 去重 + vitest
-- [ ] **M8 文档**：技术 178 / 用户手册 62 + 两份 README 目录
+- [x] **M1 后端解析器**：`scout_facts.py` + 单测（`backend/tests/unit/test_scout_facts.py`）
+- [x] **M2 后端协议**：`plan_progress.detail_result` + detail 体积守卫 + 单测
+- [x] **M3 后端下发**：preflight 两处挂 `detail_result` + 单测（done 事件含 facts）
+- [x] **M4 后端落库**：`legacy_routes` 首条 assistant 行 `client_meta.scout_facts` + 单测
+- [x] **M5 前端类型 + reducer**：`ScoutFact` / `ScoutFactsMeta` / `PlanStageState.facts` + vitest
+- [x] **M6 前端组件**：`FactReconBlock.tsx` + vitest（折叠/展开/来源/回落/无障碍）
+- [x] **M7 前端集成**：`Message.tsx` 注入 + `PlanningTimeline` scout 去重 + vitest
+- [x] **M8 文档**：技术 179 / 用户手册 63 + 两份 README 目录
 - [ ] **M9 验收**：`sage-backend` 跑 pytest；前端 vitest + typecheck + `npm run verify:pre-push`
 - [ ] **M10 合并**：PR → main（CI 绿）→ 合并 → cherry-pick 到 `release/win7` + py38 适配
 - [ ] **M11 归档**：功能点并入技术/用户手册后删除本计划文件

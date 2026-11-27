@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -41,7 +42,29 @@ KIND_ERROR = "error"
 
 MAX_PROGRESS_TEXT = 500
 
+#: plan_progress.detail 的序列化字节上限 —— 超限丢弃 detail（正文仍在），
+#: 避免单条 NDJSON 行被撑爆。与 ``SCOUT_CLIENT_META_MAX_BYTES`` 同口径：
+#: 落库与实时下发用同一预算，避免"实时无清单、刷新后却有"的不一致。
+MAX_PROGRESS_DETAIL_BYTES = 32768
+
 Emit = Callable[[Dict[str, Any]], Awaitable[None]]
+
+
+def _safe_detail(detail: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """裁剪 detail：不可序列化或超限时丢弃（正文 text 不受影响）。"""
+    if not detail:
+        return {}
+    try:
+        encoded = json.dumps(detail, ensure_ascii=False)
+    except (TypeError, ValueError):
+        logger.warning("plan_progress detail 不可序列化，已丢弃")
+        return {}
+    if len(encoded.encode("utf-8")) > MAX_PROGRESS_DETAIL_BYTES:
+        logger.warning(
+            "plan_progress detail 超过 %d 字节，已丢弃", MAX_PROGRESS_DETAIL_BYTES
+        )
+        return {}
+    return detail
 
 
 async def emit_plan_progress(
@@ -62,7 +85,7 @@ async def emit_plan_progress(
         "status": status,
         "kind": kind,
         "text": text[:MAX_PROGRESS_TEXT],
-        "detail": detail or {},
+        "detail": _safe_detail(detail),
     }
     if elapsed_ms is not None:
         payload["elapsed_ms"] = int(elapsed_ms)
@@ -96,11 +119,15 @@ async def run_planning_stage(
     runner: Callable[[], Awaitable[Any]],
     heartbeat_interval_s: float = 5.0,
     describe_result: Optional[Callable[[Any], str]] = None,
+    detail_result: Optional[Callable[[Any], Dict[str, Any]]] = None,
 ) -> Any:
     """包裹单个规划阶段：started → (heartbeat…) → done/failed。
 
     runner 的返回值原样返回；异常原样上抛（调用方保留既有降级语义）。
     外层取消时取消内层 task 并补发 failed 事件后继续上抛 CancelledError。
+
+    ``detail_result``（2026-11-27）：把 runner 结果转成 done 事件的结构化
+    ``detail``（如侦察事实清单）—— 前端据此渲染可展开的事实区块。
 
     注意：``asyncio.wait`` 只接受 Task/Future 集合 —— py3.10 传 coroutine
     会直接 TypeError（py3.8 只是弃用告警），因此必须 ``ensure_future``。
@@ -119,11 +146,21 @@ async def run_planning_stage(
             if task in done:
                 result = task.result()
                 text = describe_result(result) if describe_result is not None else ""
+                detail: Optional[Dict[str, Any]] = None
+                if detail_result is not None:
+                    try:
+                        detail = detail_result(result)
+                    except Exception:  # noqa: BLE001 — detail 构造失败不阻断规划
+                        logger.warning(
+                            "plan_progress detail_result 失败: stage=%s", stage, exc_info=True
+                        )
+                        detail = None
                 await emit_plan_progress(
                     emit,
                     stage=stage,
                     status=STATUS_DONE,
                     text=text or "",
+                    detail=detail,
                     elapsed_ms=_elapsed_ms(),
                 )
                 return result

@@ -41,8 +41,19 @@ describe('PlanningTimeline', () => {
       '评估任务复杂度',
     );
     expect(screen.getByTestId('planning-stage-complexity_classify')).toHaveTextContent('1.2s');
-    expect(screen.getByTestId('planning-stage-scout')).toHaveTextContent('read_file');
+    // 非 scout 阶段仍展示最近行
+    expect(screen.getByTestId('planning-stage-complexity_classify')).toHaveTextContent('medium');
+    // 2026-11-27: scout 阶段的过程行移交「事实侦察」区块（FactReconBlock），
+    // 时间线不再重复渲染同一内容。
+    expect(screen.getByTestId('planning-stage-scout')).not.toHaveTextContent('read_file');
     expect(screen.getByTestId('planning-timeline')).toHaveTextContent('规划中');
+  });
+
+  it('scout 阶段的过程行不在时间线渲染（移交事实侦察区块）', () => {
+    seed();
+    render(<PlanningTimeline sessionId="s1" messageId="m1" />);
+    expect(screen.getByTestId('planning-stage-scout')).toHaveTextContent('事实侦察');
+    expect(screen.getByTestId('planning-stage-scout')).not.toHaveTextContent('read_file');
   });
 
   it('可折叠', () => {
