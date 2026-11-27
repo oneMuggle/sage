@@ -479,8 +479,8 @@ GET  /api/v1/reports/{id}
 - [x] 步骤 P2.4：`backend/api/worklog_router.py`（9 个端点）
 - [x] 步骤 P2.5：agent 工具 `add_worklog` / `list_worklogs`
 - [x] 步骤 P2.6：IPC 8 命令 + manifest
-- [ ] 步骤 P2.7：前端 `TodoWorklogPanel.tsx`（收件箱 + 日志流 + 手动添加）+ `TodoPage` 分段控件
-- [ ] 步骤 P2.8：pytest + vitest 全绿
+- [x] 步骤 P2.7：前端 `TodoWorklogPanel.tsx`（收件箱 + 日志流 + 手动添加）+ `TodoPage` 分段控件
+- [x] 步骤 P2.8：pytest + vitest 全绿
 
 ### P3 — 日报 / 周报
 
