@@ -105,6 +105,7 @@ from ._word_gen import (
     WordHeadingStyleSpec,
     WordImageSpec,
     WordIndexSpec,
+    WordLineNumberingSpec,
     WordLintIssue,
     WordLintRequest,
     WordLintResult,
@@ -130,6 +131,13 @@ from ._word_read import (
     WordParagraphContent,
     WordTableContent,
     WordTrackedChange,
+)
+
+# ── Word template refill models (P0) ──────────────────────────────────
+from ._word_refill import (
+    BlockKind,
+    WordTemplateBlock,
+    WordTemplateRefillResult,
 )
 
 __all__ = [
@@ -173,6 +181,7 @@ __all__ = [
     "WordTableSpec",
     "WordTableTextStyleSpec",
     "WordPageMarginsSpec",
+    "WordLineNumberingSpec",
     "WordPageSetupSpec",
     "WordBodyStyleSpec",
     "WordCaptionStyleSpec",
@@ -188,6 +197,10 @@ __all__ = [
     "WordLintRequest",
     "WordRepairResult",
     "WordRepairRequest",
+    # Word template refill (P0)
+    "BlockKind",
+    "WordTemplateBlock",
+    "WordTemplateRefillResult",
     # Excel
     "ExcelSheetContent",
     "OfficeExcelReadResult",

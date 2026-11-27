@@ -141,6 +141,8 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "office_generate_pdf": ToolCapability.WRITE,
     "office_fill_pdf_form": ToolCapability.WRITE,
     "office_fill_word_template": ToolCapability.WRITE,
+    "office_refill_word_template": ToolCapability.WRITE,
+    "office_convert_word": ToolCapability.WRITE,
     "office_fill_ppt_template": ToolCapability.WRITE,
     "office_fill_latex_template": ToolCapability.WRITE,
     "office_fix_word": ToolCapability.WRITE,
@@ -656,6 +658,8 @@ _BOUNDARY_SPECS: Dict[str, Tuple[Tuple[str, Optional[str]], ...]] = {
     "office_repair_word": (("file_path", None),),
     "office_refresh_toc": (("file_path", None),),
     "office_fill_word_template": (("file_path", None), ("output_path", None)),
+    "office_refill_word_template": (("file_path", None), ("output_path", None)),
+    "office_convert_word": (("file_path", None),),
     "office_fill_ppt_template": (("file_path", None),),
     # generate_pdf 的 file_path 是 output_path 的别名（LLM 偶尔叫错名），
     # 两个字段都纳入校验，避免用别名绕过边界检查。

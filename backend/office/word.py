@@ -1757,7 +1757,12 @@ def generate_docx(req, output_dir: Optional[str] = None) -> Path:
             ].start_paragraph == pi:
                 from .word_layout import apply_section_break
 
-                apply_section_break(doc, pending_breaks[break_idx].page_setup)
+                apply_section_break(
+                    doc,
+                    pending_breaks[break_idx].page_setup,
+                    header=pending_breaks[break_idx].header,
+                    footer=pending_breaks[break_idx].footer,
+                )
                 break_idx += 1
             # Round 45/46：交叉引用占位符——有占位符走分段写 run 路径
             # （ref 段为 REF 复杂域，更新域自动同步题注重排）；无占位符

@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-179；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-181；本索引以目录中的实际文件为准。
 
 
 ## 章节目录
@@ -154,6 +154,7 @@
 | 178 | [自部署服务通用化（P0–P2）](./178-selfhosted-service-framework.md) | DrawIO 激活（MCP → pool → Puppeteer）；统一富媒体契约（MediaStore + `/api/v1/media` + SVG 交互查看器）；声明式服务注册（Spec/SecretBox/状态路由/通用卡片） |
 | 179 | [编排规划可见性（plan_progress）](./179-planning-visibility.md) | 统一 `plan_progress` 事件族（6 阶段 × 5 状态 × 8 类型）+ `run_planning_stage` 心跳包装 + 前端 `PlanningTimeline` 实时时间线 + 小前置任务走 utility 客户端关闭思考 |
 | 180 | [端点优先级故障转移](./180-endpoint-failover.md) | 优先级端点链 + 可重试/认证错误自动切换 + 健康状态机与冷却 + 后台轻量探测 failback（默认关闭） |
+| 181 | [Word 版式控制与模板填充 P0](./181-word-template-refill-and-layout-p0.md) | 整块结构填充（无占位符模板克隆）+ 行号/字符缩进/节级页眉/自定义纸张 + .doc↔.docx 转换 |
 ---
 
 ## 核心章节（基础架构）

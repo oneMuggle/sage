@@ -769,6 +769,12 @@ from backend.api.office_word_template_profile_routes import (  # noqa: E402
 
 router.include_router(_word_template_profile_router)
 
+from backend.api.office_word_convert_routes import (  # noqa: E402
+    router as _word_convert_router,
+)
+
+router.include_router(_word_convert_router)
+
 from backend.api.office_word_audit_routes import (  # noqa: E402
     router as _word_audit_router,
 )

@@ -243,14 +243,38 @@ class WordPageMarginsSpec(BaseModel):
     right: Optional[float] = Field(default=None, ge=0.0, le=10.0)
 
 
-class WordPageSetupSpec(BaseModel):
-    """页面设置：纸张/方向/页边距。"""
+class WordLineNumberingSpec(BaseModel):
+    """行号设置（P0）：映射到节属性 ``w:lnNumType``。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    size: Optional[Literal["A4", "letter"]] = Field(default=None)
+    count_by: int = Field(default=1, ge=1, le=10, description="每隔几行显示行号")
+    restart: Literal["continuous", "newPage", "newSection"] = Field(
+        default="continuous", description="行号重排方式"
+    )
+    start: Optional[int] = Field(default=None, ge=1, description="起始行号")
+
+
+class WordPageSetupSpec(BaseModel):
+    """页面设置：纸张/方向/页边距/行号。
+
+    P0（2026-11-26）：``size`` 支持 A3/B4/B5/legal；``width_cm``/``height_cm``
+    表达自定义纸张（优先于命名纸张）；``line_numbering`` 写 ``w:lnNumType``
+    （源程序/审计留档类文档）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    size: Optional[Literal["A3", "A4", "A5", "B4", "B5", "legal", "letter"]] = Field(
+        default=None
+    )
     orientation: Optional[Literal["portrait", "landscape"]] = Field(default=None)
     margins_cm: Optional[WordPageMarginsSpec] = Field(default=None)
+    #: 自定义纸张（厘米），两者同时给出时优先于 ``size``
+    width_cm: Optional[float] = Field(default=None, ge=1.0, le=200.0)
+    height_cm: Optional[float] = Field(default=None, ge=1.0, le=200.0)
+    #: 行号（w:lnNumType）：源程序/软著材料场景常用连续行号
+    line_numbering: Optional[WordLineNumberingSpec] = Field(default=None)
     # Round 53：节内页码格式/起始号（w:pgNumType，论文前置罗马页码场景）
     page_number_format: Optional[
         Literal["decimal", "upperRoman", "lowerRoman", "upperLetter", "lowerLetter"]
@@ -259,6 +283,7 @@ class WordPageSetupSpec(BaseModel):
     # Round 58：该节脚注编号每节重排（w:footnotePr/numRestart=eachSect；
     # 论文/书籍分章脚注场景）。默认 False 零触碰。
     footnote_restart_each_section: bool = Field(default=False)
+
 
 
 class WordBodyStyleSpec(BaseModel):
@@ -287,6 +312,8 @@ class WordBodyStyleSpec(BaseModel):
         description="固定行距（磅）；与 line_spacing 同时给出时优先",
     )
     first_line_indent_cm: Optional[float] = Field(default=None, ge=0.0, le=5.0)
+    #: 按字符的首行缩进（写 w:firstLineChars，中文公文“缩进 2 字符”）；优先于 cm
+    first_line_indent_chars: Optional[int] = Field(default=None, ge=1, le=20)
     space_before_pt: Optional[float] = Field(default=None, ge=0.0, le=48.0)
     space_after_pt: Optional[float] = Field(default=None, ge=0.0, le=48.0)
     align: Optional[Literal["left", "center", "right", "justify"]] = None
@@ -314,6 +341,9 @@ class WordHeadingStyleSpec(BaseModel):
     align: Optional[Literal["left", "center", "right", "justify"]] = None
     space_before_pt: Optional[float] = Field(default=None, ge=0.0, le=96.0)
     space_after_pt: Optional[float] = Field(default=None, ge=0.0, le=96.0)
+    #: 标题行距（P0）：倍数或固定磅，固定磅优先
+    line_spacing: Optional[float] = Field(default=None, ge=1.0, le=3.0)
+    line_spacing_pt: Optional[float] = Field(default=None, ge=1.0, le=200.0)
 
 
 class WordCaptionStyleSpec(BaseModel):
@@ -340,24 +370,43 @@ class WordTableTextStyleSpec(BaseModel):
 
 
 class WordHeaderFooterSpec(BaseModel):
-    """页眉/页脚设置。``page_number`` 仅在 footer 上生效（居中 PAGE 域）。"""
+    """页眉/页脚设置。
+
+    P0（2026-11-26）扩展：``page_number_style`` 支持中文“第 X 页 共 Y 页”
+    （PAGE + NUMPAGES 域，页眉页脚均可）；``tab_right`` 把页码块推到右对齐
+    制表位；``border_bottom`` 为页眉加下边框；字体字段作用于整段。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     text: Optional[str] = Field(default=None, max_length=200)
     align: Optional[Literal["left", "center", "right", "justify"]] = None
     page_number: bool = False
+    #: 页码形态：''plain'' = 仅页码；''zh'' = “第 X 页 共 Y 页”（NUMPAGES 域）
+    page_number_style: Optional[Literal["plain", "zh"]] = Field(default=None)
+    #: 页码块前插入制表符，并在右边距处对齐（页眉“左标题 + 右页码”）
+    tab_right: bool = Field(default=False)
+    #: 页眉/页脚段落底部边框（公文/软著页眉常见）
+    border_bottom: bool = Field(default=False)
+    font_size_pt: Optional[float] = Field(default=None, ge=1.0, le=72.0)
+    font_family: Optional[str] = Field(default=None, max_length=100)
+    ascii_font: Optional[str] = Field(default=None, max_length=100)
 
 
 class WordSectionBreakSpec(BaseModel):
     """分节设置（Round 26）：start_paragraph 前插入 NEW_PAGE 分节，
-    新节应用 page_setup（横排宽表/财务页场景）。复用 WordPageSetupSpec。
+    新节应用 page_setup（横排宽表/财务页场景）。
+
+    P0（2026-11-26）：``page_setup`` 改为可选；``header``/``footer`` 为该节
+    独立的页眉页脚（封面/正文不同页眉场景），未给时沿用前一节。
     """
 
     model_config = ConfigDict(extra="forbid")
 
     start_paragraph: int = Field(ge=0, description="该 0-based 段落下标起进入新节")
-    page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
+    page_setup: Optional[WordPageSetupSpec] = Field(default=None, description="新节的页面设置")
+    header: Optional[WordHeaderFooterSpec] = Field(default=None)
+    footer: Optional[WordHeaderFooterSpec] = Field(default=None)
 
 
 class WordFormatSpec(BaseModel):

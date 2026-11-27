@@ -30,8 +30,6 @@ from typing import Any, Dict, Optional
 from ._docx_lazy import (
     Cm,
     Document,
-    Inches,
-    Mm,
     OxmlElement,
     Pt,
     align_map_ltr,
@@ -172,12 +170,10 @@ def _apply_page_setup_to_section(section, page: WordPageSetupSpec) -> None:
     """
     from docx.enum.section import WD_ORIENT
 
-    width = None
-    height = None
-    if page.size == "A4":
-        width, height = Mm(210), Mm(297)
-    elif page.size == "letter":
-        width, height = Inches(8.5), Inches(11)
+    from .word_layout_sections import page_size_for
+
+    size = page_size_for(page)
+    width, height = size if size is not None else (None, None)
     if width is not None and height is not None:
         if page.orientation == "landscape":
             width, height = height, width
@@ -228,6 +224,11 @@ def _apply_page_setup_to_section(section, page: WordPageSetupSpec) -> None:
             num_restart = OxmlElement("w:numRestart")
             fn_pr.append(num_restart)
         num_restart.set(qn("w:val"), "eachSect")
+    # P0：行号（w:lnNumType）——源程序/软著材料场景。
+    if getattr(page, "line_numbering", None) is not None:
+        from .word_layout_sections import apply_line_numbering
+
+        apply_line_numbering(section, page.line_numbering)
 
 
 def _apply_body_style(doc: Document, body: WordBodyStyleSpec) -> None:
@@ -245,7 +246,13 @@ def _apply_body_style(doc: Document, body: WordBodyStyleSpec) -> None:
         paragraph_format.line_spacing = Pt(body.line_spacing_pt)
     elif body.line_spacing is not None:
         paragraph_format.line_spacing = body.line_spacing
-    if body.first_line_indent_cm is not None:
+    if body.first_line_indent_chars is not None:
+        from .word_layout_sections import apply_first_line_indent_chars
+
+        apply_first_line_indent_chars(
+            style, body.first_line_indent_chars, body.font_size_pt
+        )
+    elif body.first_line_indent_cm is not None:
         paragraph_format.first_line_indent = Cm(body.first_line_indent_cm)
     if body.space_before_pt is not None:
         paragraph_format.space_before = Pt(body.space_before_pt)
@@ -274,6 +281,11 @@ def _apply_heading_style(doc: Document, style_name: str, spec: WordHeadingStyleS
         style.font.color.rgb = _hex_to_rgb(spec.color)
         _clear_color_theme(style)
     paragraph_format = style.paragraph_format
+    # P0：标题行距（固定磅优先于倍数）
+    if spec.line_spacing_pt is not None:
+        paragraph_format.line_spacing = Pt(spec.line_spacing_pt)
+    elif spec.line_spacing is not None:
+        paragraph_format.line_spacing = spec.line_spacing
     if spec.space_before_pt is not None:
         paragraph_format.space_before = Pt(spec.space_before_pt)
     if spec.space_after_pt is not None:
@@ -282,39 +294,16 @@ def _apply_heading_style(doc: Document, style_name: str, spec: WordHeadingStyleS
         paragraph_format.alignment = align_map_ltr()[spec.align]
 
 
-def _use_header_part(section, part_attr: str):
-    """取页眉/页脚部件并断开链接（对首节是显式创建空部件），返回其首段。"""
-    part = getattr(section, part_attr)
-    if part.is_linked_to_previous:
-        part.is_linked_to_previous = False
-    return part.paragraphs[0]
-
-
 def _apply_header(doc: Document, header: WordHeaderFooterSpec) -> None:
-    paragraph = _use_header_part(doc.sections[0], "header")
-    if header.text is not None:
-        paragraph.text = header.text
-    if header.align is not None:
-        paragraph.alignment = align_map_ltr()[header.align]
+    from .word_layout_sections import write_header_footer
+
+    write_header_footer(doc.sections[0], kind="header", spec=header)
 
 
 def _apply_footer(doc: Document, footer: WordHeaderFooterSpec) -> None:
-    paragraph = _use_header_part(doc.sections[0], "footer")
-    if footer.text is not None:
-        paragraph.text = footer.text
-    if footer.align is not None:
-        paragraph.alignment = align_map_ltr()[footer.align]
-    if footer.page_number:
-        # w:fldSimple 携带占位 run，Word/WPS/LibreOffice 打开即显示页码，
-        # 无需"打开后更新域"步骤（对比 fldChar 复杂域）。
-        fld = OxmlElement("w:fldSimple")
-        fld.set(qn("w:instr"), "PAGE")
-        run = OxmlElement("w:r")
-        text = OxmlElement("w:t")
-        text.text = "1"
-        run.append(text)
-        fld.append(run)
-        paragraph._p.append(fld)
+    from .word_layout_sections import write_header_footer
+
+    write_header_footer(doc.sections[0], kind="footer", spec=footer)
 
 
 def apply_format_spec(doc: Document, spec: Optional[WordFormatSpec]) -> None:
@@ -754,13 +743,27 @@ def apply_table_header_style(table: Any) -> None:
         tc_pr.append(shd)
 
 
-def apply_section_break(doc: Document, page: WordPageSetupSpec) -> None:
-    """插入 NEW_PAGE 分节并对新节应用 page setup（Round 26 横排分节）。
+def apply_section_break(
+    doc: Document,
+    page: Optional[WordPageSetupSpec] = None,
+    *,
+    header: Optional[WordHeaderFooterSpec] = None,
+    footer: Optional[WordHeaderFooterSpec] = None,
+) -> None:
+    """插入 NEW_PAGE 分节并对新节应用页面设置与独立页眉页脚（P0 扩展）。
 
     调用方（word.py body 循环）在写 start_paragraph 段落之前调用；
-    新节页面属性由 page_setup 决定（横排宽表/财务页场景）。
+    ``header``/``footer`` 给出时为新节写独立页眉页脚（封面/正文不同）。
     """
     from docx.enum.section import WD_SECTION
 
     new_section = doc.add_section(WD_SECTION.NEW_PAGE)
-    _apply_page_setup_to_section(new_section, page)
+    if page is not None:
+        _apply_page_setup_to_section(new_section, page)
+    if header is not None or footer is not None:
+        from .word_layout_sections import write_header_footer
+
+        if header is not None:
+            write_header_footer(new_section, kind="header", spec=header, fresh=True)
+        if footer is not None:
+            write_header_footer(new_section, kind="footer", spec=footer, fresh=True)
