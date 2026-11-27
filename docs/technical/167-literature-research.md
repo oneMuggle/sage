@@ -258,6 +258,29 @@ YAML 并记录 warning，`get(site_id)` 命中无效 profile 时抛 `SiteProfile
 因此 xueshu789 profile 声明 `pdf.interstitial`（`url_contains: cnki.net/docdown`、
 `host_fallbacks: [kns.cnki.net]`）。
 
+**2026-11-27 真机端到端实测（`release/win7`，Python 3.8 + Electron 内嵌浏览器桥）**：
+在独立 worktree（`origin/release/win7` 代码）上跑通同一条链路，检索词 `人工智能 医学影像`：
+
+| 环节 | 实测结果 |
+|---|---|
+| 登录态 | `navigate(home_url)` 落到 `https://www.xueshu789.cc/dbList/1`（标题「文献下载_学术资源站」），快照含 `dbList` → 已登录 |
+| 检索 | `search_with_profile(..., limit=20)` → `http://82.157.23.222:5888/kns8s/defaultresult/index`（标题「检索-中国知网」），结果表 `table.result-table-list` 命中 |
+| 下载 | `download_pdf(..., entry_selector="table.result-table-list tbody tr:nth-child(1) a.downloadlink")` → `ok=True`、`errors=[]` |
+| 产物 | `data/browser-downloads/e842f03b4268/人工智能助力医患诊后沟通_本报记者__张志锋__田先进.pdf`，51,120 B，文件头 `%PDF-1.6` |
+| 题名核对 | pymupdf 解析 1 页 —— 《人民日报》2026-11-25 第 002 版「要闻」版面文章，题名与文件名一致 |
+| 标签页 | 中间页标签由 `download_pdf` 关闭；结束后只剩 1 个工具标签（已被导航到候选下载 URL） |
+
+两个实操细节：
+
+- 结果行的 `td.name a` **没有 `title` 属性**，`browser_interact` 读 `title` 会报 `attribute-not-found`。此时 `expected_title` 传空串，`validate_pdf` 跳过题名比对，文件名依赖站点 `ddata` 参数自带。
+- 受控浏览器的站点访问确认（`needs_confirmation`）在真机上由用户在右栏浏览器面板点确认；脚本化跑链路时需在工具进程内 resolve 该确认项并 `grant_site(..., "session")` 后重试，否则首个域名就会中断链路。
+
+**win7 真机跑出网链路的前置条件**：本分支的 `backend/tools/network_config.py` 在配置缺失
+或解析失败时**回退 OFFLINE（气隔模式）**（`main` 回退 ONLINE），因此未显式配置网络策略的
+实例会拒绝一切 http/https 导航，报 `network_mode_offline: 当前为气隔模式，禁止一切出网访问`。
+跑文献链路前需把网络策略置为「在线」（`preferences.network_policy = {"mode": "online"}`），
+或由管理员以 `SAGE_DEPLOYMENT_MODE` / `SAGE_NETWORK_ALLOWED_HOSTS` 下发内网白名单。
+
 合规边界固定在 skill 与 profile 中：仅使用本人账号或机构授权；不代填密码、不导出
 cookie、不绕过付费墙；验证码/滑块交还用户在可见窗口完成；第三方站点默认禁用，
 需用户显式同意。
@@ -412,7 +435,8 @@ GB/T 7714 引用的 docx，再用 `office_lint_word` 自检；文献子系统不
   `/dbItem/2` 会触发知网滑块验证，需要用户在可见窗口人工完成。2026-11-26 起下载为
   两段式中间页且最终主机写死 `oversea.cnki.net`（国内库 404），由 profile
   `pdf.interstitial.host_fallbacks` 回退 `kns.cnki.net` 修复；下载完成后中间页标签可能
-  显示「页面不存在」，以 `DownloadResult.path` / 浏览器下载目录为准。
+  显示「页面不存在」，以 `DownloadResult.path` / 浏览器下载目录为准。该中间页路径已于
+  2026-11-27 在 `main` 与 `release/win7` 两个分支真机跑通端到端下载（见 §5.5）。
 - **登录态**：`is_logged_in` 只按配置的 URL/标题规则判断，未配置时返回 `None`；
   登录本身必须由用户通过 `browser_login` 完成。
 - **项目层 profile 位置**：以进程 cwd 为基准；后端 cwd 不是工作区时，项目层
