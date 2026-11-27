@@ -2628,6 +2628,48 @@ class Database:
         ensure_todos_fts_schema(conn)
         backfill_todos_fts(conn)
 
+        # 工作日志表 (2026-11-27, P2): 「当天做了什么」的持久化 —— 与 todos 表
+        # 并列的另一条轨。todos 记「要做的事」，work_logs 记「已经做的事」。
+        #
+        # 双轨语义的关键在 status 列:
+        #   pending   = 待确认候选（对话 LLM 抽取的产物，人工确认前不算数）
+        #   confirmed = 正式记录（进日报/周报统计）
+        #   dismissed = 已忽略
+        # 未确认的行绝不进报告 —— 抽取误记由「确认」这一步拦住。
+        #
+        # 外键一律 ON DELETE SET NULL: 本库 PRAGMA foreign_keys=ON（见 434 行），
+        # SQLite 默认的 NO ACTION 会让「删待办 / 删项目」直接失败。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS work_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                content TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'progress',
+                progress_text TEXT,
+                blocker TEXT,
+                todo_id INTEGER,
+                project_id TEXT,
+                project_tag TEXT,
+                source_type TEXT NOT NULL DEFAULT 'chat',
+                source_ref TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE SET NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_work_logs_created ON work_logs(created_at)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_work_logs_status ON work_logs(status)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_work_logs_kind ON work_logs(kind)"
+        )
+        conn.commit()
+
         # 定时任务表 (2026-10-16): 取代 scheduled_tasks.json。此前 JSON 无事务、
         # 无 WAL，文件损坏即全部任务丢失。所有时间字段为 epoch 毫秒 INTEGER，
         # schedule 为 JSON 编码 TEXT，enabled 为 0/1 INTEGER。

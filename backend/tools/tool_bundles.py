@@ -473,6 +473,18 @@ def _install_todo(ctx: ToolInstallContext) -> None:
     ctx.registry.register(DeleteTodoTool(todo_service_getter=getter, policy=policy))
 
 
+def _install_worklog(ctx: ToolInstallContext) -> None:
+    # 工作日志工具（P2）：记录「当天做了什么」，供日报/周报聚合。
+    # 与 todo bundle 同款：service-getter 延迟解析，未就绪时返回
+    # 「未初始化」ToolResult 而非 AttributeError。
+    from .worklog_mgmt_tool import AddWorklogTool, ListWorklogsTool
+
+    policy = ctx.policy
+    getter = ctx.worklog_service_getter
+    ctx.registry.register(AddWorklogTool(worklog_service_getter=getter, policy=policy))
+    ctx.registry.register(ListWorklogsTool(worklog_service_getter=getter, policy=policy))
+
+
 def _install_design(ctx: ToolInstallContext) -> None:
     # Design Studio tools (Task 13): HTML/CSS 原型与演示文稿生成。
     policy = ctx.policy
@@ -518,6 +530,7 @@ BUNDLES: Tuple[ToolBundle, ...] = (
     ToolBundle("mcp", _install_mcp, critical=False),
     ToolBundle("plugins", _install_plugins, critical=False),
     ToolBundle("todo", _install_todo),
+    ToolBundle("worklog", _install_worklog),
     ToolBundle("design", _install_design),
     ToolBundle("self_status", _install_self_status),
 )
@@ -544,6 +557,7 @@ def build_context(
     network_policy: Any,
     scheduler_service_getter: Any = None,
     todo_service_getter: Any = None,
+    worklog_service_getter: Any = None,
 ) -> ToolInstallContext:
     """按 ``register_all_tools`` 的入参构造安装上下文（含能力表）。"""
     capabilities: Dict[str, bool] = {
@@ -556,6 +570,7 @@ def build_context(
         network_policy=network_policy,
         scheduler_service_getter=scheduler_service_getter,
         todo_service_getter=todo_service_getter,
+        worklog_service_getter=worklog_service_getter,
         capabilities=capabilities,
     )
 
@@ -566,6 +581,7 @@ def install_default_bundles(
     network_policy: Any,
     scheduler_service_getter: Any = None,
     todo_service_getter: Any = None,
+    worklog_service_getter: Any = None,
     *,
     harness: Optional[HarnessConfig] = None,
     strict: bool = True,
@@ -577,6 +593,11 @@ def install_default_bundles(
     内部的工具顺序或网络能力门控。
     """
     ctx = build_context(
-        registry, policy, network_policy, scheduler_service_getter, todo_service_getter
+        registry,
+        policy,
+        network_policy,
+        scheduler_service_getter,
+        todo_service_getter,
+        worklog_service_getter,
     )
     return install_bundles(ctx, select_bundle_objects(harness), strict=strict)

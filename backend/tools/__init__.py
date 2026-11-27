@@ -16,6 +16,7 @@ from backend.domain.network_policy import NetworkPolicy
 from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
 from backend.services.todo_service import TodoService  # forward-ref for register_all_tools
+from backend.services.worklog_service import WorklogService  # forward-ref for register_all_tools
 
 from .base import BaseTool, ToolResult, ToolSchema
 from .network_config import load_network_policy
@@ -204,6 +205,7 @@ def register_all_tools(
     network_policy: Optional[NetworkPolicy] = None,
     scheduler_service_getter: Optional[Callable[[], Optional[SchedulerServicePort]]] = None,
     todo_service_getter: Optional[Callable[[], Optional[TodoService]]] = None,
+    worklog_service_getter: Optional[Callable[[], Optional[WorklogService]]] = None,
 ) -> None:
     """按 harness 选择结果注册内置工具到注册表。
 
@@ -219,6 +221,7 @@ def register_all_tools(
             是否注册 —— 内网/气隙模式下不注册比返回错误更省 token。
         scheduler_service_getter: 定时任务服务延迟获取器。
         todo_service_getter: 待办服务延迟获取器。
+        worklog_service_getter: 工作日志服务延迟获取器。
     """
     policy = policy or ToolPolicy()
     network_policy = network_policy if network_policy is not None else load_network_policy()
@@ -232,6 +235,7 @@ def register_all_tools(
         network_policy,
         scheduler_service_getter,
         todo_service_getter,
+        worklog_service_getter,
         harness=harness,
     )
     logging.getLogger(__name__).info(
@@ -364,6 +368,7 @@ __all__ = [
     "UpdateSageConfigTool",
     "WebFetchTool",
     "WebSearchTool",
+    "WorklogService",
     "WriteFileTool",
     "load_network_policy",
     "register_all_tools",
