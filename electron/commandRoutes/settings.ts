@@ -259,6 +259,10 @@ export const settingsRoutes: Record<string, CommandRoute> = {
       if (a?.view !== undefined && a?.view !== null) {
         params.set('view', String(a.view));
       }
+      // 专家过滤（阶段 3）。此前遗漏 → TodoToolbar 的专家下拉选了什么都不生效。
+      if (a?.specialist_id !== undefined && a?.specialist_id !== null) {
+        params.set('specialist_id', String(a.specialist_id));
+      }
       if (a?.sort_by !== undefined && a?.sort_by !== null) {
         params.set('sort_by', String(a.sort_by));
       }

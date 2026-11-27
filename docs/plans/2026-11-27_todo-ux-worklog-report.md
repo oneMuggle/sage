@@ -390,13 +390,13 @@ GET  /api/v1/reports/{id}
 
 ### P0 — 交互欠账清零
 
-- [ ] 步骤 P0.1：抽 `src/pages/todo/TodoFields.tsx`（描述/标签/项目/提醒/负责人），`TodoCreateForm` 改用它
-- [ ] 步骤 P0.2：`TodoRowEditor` 加可展开详情面板（📝 → 按钮，blur/Ctrl+Enter 提交）
-- [ ] 步骤 P0.3：行首圆形按钮改三态循环（`pending → in_progress → completed`），`in_progress` 视觉标识
-- [ ] 步骤 P0.4：类型扩展 `UpdateTodoInput.status` 加 `'completed'`；`Todo` 加 `status` 渲染分支
-- [ ] 步骤 P0.5：`TodoToolbar` 加状态筛选下拉（与智能视图互斥）
-- [ ] 步骤 P0.6：vitest 覆盖（三态循环 / 详情提交 / 状态筛选）+ pytest 覆盖 `PUT /todos/{id}` 改 status
-- [ ] 步骤 P0.7：ruff / tsc / vitest / pytest 全绿
+- [x] 步骤 P0.1：抽 `src/pages/todo/TodoFields.tsx`（描述/标签/项目/提醒/负责人），`TodoCreateForm` 改用它
+- [x] 步骤 P0.2：`TodoRowEditor` 加可展开详情面板（📝 → 按钮，blur/Ctrl+Enter 提交）
+- [x] 步骤 P0.3：行首圆形按钮改三态循环（`pending → in_progress → completed`），`in_progress` 视觉标识
+- [x] 步骤 P0.4：类型扩展 `UpdateTodoInput.status` 加 `'completed'`；`Todo` 加 `status` 渲染分支
+- [x] 步骤 P0.5：`TodoToolbar` 加状态筛选下拉（与智能视图互斥）
+- [x] 步骤 P0.6：vitest 覆盖（三态循环 / 详情提交 / 状态筛选）+ pytest 覆盖 `PUT /todos/{id}` 改 status
+- [x] 步骤 P0.7：ruff / tsc / vitest / pytest 全绿
 
 ### P1 — 拖拽排序与拖拽嵌套
 

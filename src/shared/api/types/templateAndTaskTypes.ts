@@ -432,15 +432,25 @@ export interface CreateTodoInput {
 
 export interface UpdateTodoInput {
   title?: string;
-  description?: string;
-  due_at?: string;
+  /**
+   * 可空字段一律允许显式 ``null``：后端 PUT 是三态语义（缺省 = 不动、
+   * 显式 null = 清空）。传 ``undefined`` 会在 IPC 的 JSON 序列化阶段被
+   * 丢掉，等价于「不动」——想清空就必须传 ``null``。
+   */
+  description?: string | null;
+  due_at?: string | null;
   priority?: TodoPriority;
-  project_tag?: string;
-  status?: 'pending' | 'in_progress' | 'cancelled';
-  recurrence_rule?: string;
+  project_tag?: string | null;
+  /**
+   * 状态更新。与 `TodoItemStatus` 同源 —— 行内三态循环会把待办推到
+   * `completed`，因此这里必须允许完成态（此前漏掉，只能走单独的
+   * complete 接口）。
+   */
+  status?: TodoItemStatus;
+  recurrence_rule?: string | null;
   parent_id?: number | null;
-  tags?: string[];
-  reminder_offsets?: number[];
+  tags?: string[] | null;
+  reminder_offsets?: number[] | null;
   specialist_id?: string | null;
 }
 

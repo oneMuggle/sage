@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
+from backend.services import todo_status
 from backend.services.todo_service import Todo, TodoService
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class UpdateTodoIn(BaseModel):
     priority: Optional[str] = Field(default=None, pattern="^(high|medium|low)$")
     project_tag: Optional[str] = None
     status: Optional[str] = Field(
-        default=None, pattern="^(pending|in_progress|cancelled)$"
+        default=None, pattern="^(pending|in_progress|completed|cancelled)$"
     )
     recurrence_rule: Optional[str] = None
     parent_id: Optional[int] = None
@@ -456,8 +457,19 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
         # "clear this field" into "leave it alone", so no nullable column
         # could ever be cleared over REST.
         changes = payload.model_dump(exclude_unset=True)
+        # ``completed`` 走 ``complete_todo``：与 ``POST /todos/{id}/complete``
+        # 同语义（补 completed_at + 为循环待办派生下一个实例）。否则「行内
+        # 三态循环」和「标记完成」两条路径会给出不同的完成副作用。
+        requested_status = changes.pop("status", None)
         try:
-            todo = svc.update_todo(todo_id, **changes)
+            if requested_status == todo_status.COMPLETED:
+                todo = svc.complete_todo(todo_id)
+                if todo is not None and changes:
+                    todo = svc.update_todo(todo_id, **changes)
+            else:
+                todo = svc.update_todo(todo_id, **changes)
+                if todo is not None and requested_status is not None:
+                    todo = svc.update_todo(todo_id, status=requested_status)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if todo is None:

@@ -256,6 +256,7 @@ export function TodoPage() {
         onDelete={handleDelete}
         onAddSubtask={todo.parent_id == null ? handleAddSubtask : undefined}
         onSnooze={handleSnooze}
+        specialists={specialists}
       />
     ),
     [
@@ -267,6 +268,7 @@ export function TodoPage() {
       handleDelete,
       handleAddSubtask,
       handleSnooze,
+      specialists,
     ],
   );
 
@@ -445,6 +447,7 @@ export function TodoPage() {
                     onDelete={handleDelete}
                     onAddSubtask={todo.parent_id == null ? handleAddSubtask : undefined}
                     onSnooze={handleSnooze}
+                    specialists={specialists}
                   />
                 ))}
               </ul>

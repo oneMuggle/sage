@@ -36,6 +36,25 @@ const PRIORITY_OPTIONS: Array<{ value: TodoPriority | ''; label: string }> = [
   { value: 'low', label: '🟢 低' },
 ];
 
+/**
+ * 状态筛选。
+ *
+ * 与智能视图互斥：后端 ``todo_filters`` 里 ``view`` 优先于 ``status``，
+ * 两者同时传时状态筛选会静默失效 —— 所以切状态要清掉 ``view``，切视图要
+ * 清掉 ``status``。
+ *
+ * ``all`` 是后端认的「含已完成/已取消」的逃逸口（router 会把它翻译成
+ * ``include_completed=True``）；空串 = 不加状态条件，沿用当前视图语义。
+ */
+const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: '不限状态' },
+  { value: 'pending', label: '未开始' },
+  { value: 'in_progress', label: '进行中' },
+  { value: 'completed', label: '已完成' },
+  { value: 'cancelled', label: '已取消' },
+  { value: 'all', label: '全部（含已完成）' },
+];
+
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'created_at', label: '创建时间' },
   { value: 'due_at', label: '截止日期' },
@@ -85,6 +104,26 @@ export function TodoToolbar({
     onParamsChange(next);
   };
 
+  /**
+   * 状态筛选：与智能视图互斥。
+   *
+   * 后端 ``todo_filters`` 里 ``view`` 的优先级高于 ``status``，两个都传时
+   * 状态条件会被 view 分支吃掉（表现为「选了没反应」）。所以这里必须清掉
+   * ``view`` / ``include_completed``，反之 ``handleViewChange`` 清掉
+   * ``status``。
+   */
+  const handleStatusChange = (status: string) => {
+    const next: TodoListParams = { ...params };
+    if (status) {
+      next.status = status;
+    } else {
+      delete next.status;
+    }
+    delete next.view;
+    delete next.include_completed;
+    onParamsChange(next);
+  };
+
   const handleSortChange = (sortBy: string) => {
     const next: TodoListParams = {
       ...params,
@@ -102,11 +141,14 @@ export function TodoToolbar({
     }
   };
 
-  const activeView: TodoView = params.view ?? 'all';
+  // 状态筛选生效时没有智能视图可言 —— 让视图按钮组全部呈现未选中，
+  // 免得「已完成」按钮高亮着而列表其实是按 status 筛的。
+  const activeView: TodoView | null = params.view ?? (params.status ? null : 'all');
   const hasFilters =
     Boolean(params.priority) ||
     Boolean(params.sort_by) ||
     Boolean(params.tag) ||
+    Boolean(params.status) ||
     params.view !== undefined;
 
   const clearFilters = () => {
@@ -196,6 +238,21 @@ export function TodoToolbar({
         className="rounded-radius-sm border border-border bg-surface px-2 py-1.5 text-xs text-text focus:outline-none focus:border-primary"
       >
         {PRIORITY_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+
+      {/* Status filter（与智能视图互斥） */}
+      <select
+        value={params.status ?? ''}
+        onChange={(e) => handleStatusChange(e.target.value)}
+        aria-label="按状态过滤"
+        data-testid="todo-status-filter"
+        className="rounded-radius-sm border border-border bg-surface px-2 py-1.5 text-xs text-text focus:outline-none focus:border-primary"
+      >
+        {STATUS_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>
             {opt.label}
           </option>
