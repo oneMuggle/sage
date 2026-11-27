@@ -2525,6 +2525,9 @@ class Database:
                 is_recurring INTEGER DEFAULT 0,
                 recurrence_rule TEXT,
                 parent_id INTEGER,
+                -- 手工排序位（P1）：同层内的相对次序。REAL 步进值，相邻两项
+                -- 取中点插入；间距耗尽时整层重排。新行默认 0。
+                sort_order REAL DEFAULT 0,
                 reminder_24h_fired INTEGER DEFAULT 0,
                 reminder_1h_fired INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
@@ -2572,8 +2575,22 @@ class Database:
                 "ALTER TABLE todos ADD COLUMN snooze_count INTEGER DEFAULT 0"
             )
             _added = True
+        # Phase 4 (2026-11-27): sort_order —— 手工排序位（拖拽排序 / 拖拽嵌套）。
+        # 旧库幂等补列；新库由上方 CREATE TABLE 带上（DEFAULT 0，与「按 id
+        # 次序兜底」的历史数据兼容，无需回填）。
+        if "sort_order" not in _todo_cols:
+            cursor.execute("ALTER TABLE todos ADD COLUMN sort_order REAL DEFAULT 0")
+            _added = True
         if _added:
             conn.commit()
+
+        # 排序索引：必须在上面 ALTER 补列之后建 —— 旧库上 sort_order 列尚不存在时
+        # CREATE INDEX 会因 no such column 直接失败。
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_todos_sort_order "
+            "ON todos(parent_id, sort_order)"
+        )
+        conn.commit()
 
         # 待办全文搜索 FTS5（独立存内容表 + jieba 分词；行数不一致时幂等回填）
         ensure_todos_fts_schema(conn)
