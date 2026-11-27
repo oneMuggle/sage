@@ -156,17 +156,56 @@ def _todo_titles(items: Any, limit: int = 5) -> str:
     return "、".join(titles) or "无"
 
 
+def _worklog_lines(source: Dict[str, Any], limit: int = 6) -> str:
+    """把工作日志摘要压成提示词里的一行。
+
+    ``source`` 是启动摘要 / 统计字典，其中 ``worklogs`` 键由报告引擎
+    （``report_ai.build_report_context``）填充 —— P3.5 的「双来源」入口。
+    键缺席或为空时返回「无」，老调用方不受影响。
+    """
+    digest = source.get("worklogs") or {}
+    if not isinstance(digest, dict):
+        return "无"
+    total = int(digest.get("total", 0) or 0)
+    if total <= 0:
+        return "无"
+    by_kind = digest.get("by_kind") or {}
+    breakdown = " / ".join(
+        f"{label} {int(by_kind.get(key, 0) or 0)}"
+        for key, label in (
+            ("done", "完成"),
+            ("progress", "进展"),
+            ("blocker", "阻塞"),
+            ("next", "下一步"),
+        )
+    )
+    highlights: List[str] = []
+    for item in (digest.get("items") or [])[:limit]:
+        content = item.get("content") if isinstance(item, dict) else None
+        if content:
+            highlights.append(str(content))
+    headline = f"{total} 条（{breakdown}）"
+    if highlights:
+        return f"{headline}：{'；'.join(highlights)}"
+    return headline
+
+
 async def generate_daily_brief(summary: Dict[str, Any]) -> str:
-    """基于启动摘要生成「今日行动建议」（≤3 条短列表）。"""
+    """基于启动摘要生成「今日行动建议」（≤3 条短列表）。
+
+    ``summary`` 里额外带了报告引擎填充的 ``worklogs`` 段（当天已确认的
+    工作日志）—— 只看待办会漏掉「没建待办但确实干了」的工作。
+    """
     client = _client()
     prompt = (
-        "你是个人效率教练。根据下面的待办概况，用中文给出今日行动建议"
+        "你是个人效率教练。根据下面的待办概况与工作日志，用中文给出今日行动建议"
         "（最多 3 条，每行以「• 」开头，总长 ≤120 字，不要客套和标题）。\n\n"
         f"逾期：{len(summary.get('overdue') or [])} 条（{_todo_titles(summary.get('overdue'))}）\n"
         f"今日到期：{len(summary.get('today') or [])} 条（{_todo_titles(summary.get('today'))}）\n"
         f"未来 7 天：{len(summary.get('upcoming') or [])} 条（{_todo_titles(summary.get('upcoming'))}）\n"
         f"高优先级：{len(summary.get('high_priority') or [])} 条（{_todo_titles(summary.get('high_priority'))}）\n"
         f"今日已完成：{summary.get('total_completed_today', 0)} 条\n"
+        f"今日工作日志：{_worklog_lines(summary)}\n"
     )
     content = await client.complete(prompt)
     text = str(content or "").strip()
@@ -179,20 +218,25 @@ async def generate_weekly_review(
     pending_high: List[str],
     snoozed_titles: Optional[List[str]] = None,
 ) -> str:
-    """生成周回顾（Markdown 短段落）。"""
+    """生成周回顾（Markdown 短段落）。
+
+    ``stats`` 里额外带了报告引擎填充的 ``worklogs`` 段（近 7 天已确认的
+    工作日志）—— 待办说「要做什么」，工作日志说「实际做了什么」。
+    """
     client = _client()
     completed_text = "、".join(completed_titles[:10]) or "无"
     pending_text = "、".join(pending_high[:10]) or "无"
     snoozed_text = "、".join((snoozed_titles or [])[:5]) or "无"
     prompt = (
-        "你是个人效率教练。根据下面的待办数据写一段中文周回顾"
+        "你是个人效率教练。根据下面的待办数据与工作日志写一段中文周回顾"
         "（Markdown，包含「完成情况」「拖延提醒」「下周建议」三个小标题，总长 ≤300 字，不要客套）。\n\n"
         f"- 总数：{stats.get('total', 0)}，逾期：{stats.get('overdue', 0)}，"
         f"今日完成：{stats.get('completed_today', 0)}\n"
         f"- 状态分布：{stats.get('by_status', {})}\n"
-        f"- 最近完成：{completed_text}\n"
+        f"- 本周完成：{completed_text}\n"
         f"- 积压高优先级：{pending_text}\n"
         f"- 多次推迟的任务：{snoozed_text}\n"
+        f"- 本周工作日志：{_worklog_lines(stats)}\n"
     )
     content = await client.complete(prompt)
     return str(content or "").strip() or "暂无足够数据生成周回顾。"

@@ -2670,6 +2670,32 @@ class Database:
         )
         conn.commit()
 
+        # 报告存档表 (2026-11-27, P3): 日报 / 周报的落盘快照。
+        # 报告是一次生成、长期留存的产物 —— 生成时刻的统计与正文都要冻结在
+        # 这里，之后工作日志再改也不影响历史报告（复盘靠的是当时的结论）。
+        #
+        #   report_type  = daily / weekly
+        #   period_start / period_end = 统计时间窗（YYYY-MM-DD，两端含）
+        #   content      = Markdown 正文（LLM 生成或模板降级产物）
+        #   stats_json   = 统计快照 JSON（总量 / 分类计数 / 会话数等）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                report_type TEXT NOT NULL,
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                content TEXT NOT NULL,
+                stats_json TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at)"
+        )
+        conn.commit()
+
         # 定时任务表 (2026-10-16): 取代 scheduled_tasks.json。此前 JSON 无事务、
         # 无 WAL，文件损坏即全部任务丢失。所有时间字段为 epoch 毫秒 INTEGER，
         # schedule 为 JSON 编码 TEXT，enabled 为 0/1 INTEGER。

@@ -142,6 +142,7 @@ from backend.api.project_rules_routes import router as project_rules_router
 from backend.api.prompt_routes import router as prompt_router
 from backend.api.question_routes import router as question_router
 from backend.api.request_body_limit import MaxRequestBodyMiddleware
+from backend.api.report_router import build_router as build_report_router
 from backend.api.rules_import_routes import router as rules_import_router
 from backend.api.rules_routes import router as rules_router
 from backend.api.runtime_routes import router as runtime_router
@@ -173,6 +174,10 @@ from backend.scheduler.todo_reminder import (
     init_todo_reminder_scheduler,
 )
 from backend.services.endpoint_probe import start_endpoint_probe_task
+from backend.services.report_service import (
+    get_report_service,
+    init_report_service,
+)
 from backend.services.scheduler import (
     get_scheduler_service,
     init_scheduler_service,
@@ -656,6 +661,13 @@ async def _deferred_startup_init(
         app.state.worklog_service = worklog_service
         logger.info("[deferred] WorklogService initialised")
         _startup_mark("worklog_service")
+
+        # ── Report service (P3 日报/周报) ──
+        # 与 TodoService / WorklogService 同款：进程级单例，路由层按需取用。
+        report_service = init_report_service(get_database())
+        app.state.report_service = report_service
+        logger.info("[deferred] ReportService initialised")
+        _startup_mark("report_service")
 
         # ── 标题回补 ──
         from backend.scheduler.title_backfill import TitleBackfill
@@ -1881,6 +1893,11 @@ app.include_router(build_todo_router(get_todo_service), prefix="/api/v1")
 
 # Worklog —— 「当天做了什么」的持久化（P2 工作日志捕获子系统）
 app.include_router(build_worklog_router(get_worklog_service), prefix="/api/v1")
+
+# Report —— 日报 / 周报生成与存档（P3）
+app.include_router(
+    build_report_router(get_report_service, get_worklog_service), prefix="/api/v1"
+)
 
 app.include_router(build_asr_router(), prefix="/api/v1")
 

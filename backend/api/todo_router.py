@@ -18,6 +18,17 @@ from backend.services.todo_service import Todo, TodoService
 logger = logging.getLogger(__name__)
 
 
+def _worklog_service() -> Optional[Any]:
+    """取工作日志服务；未初始化时返回 ``None``。
+
+    日报 / 周报是「双来源」聚合（待办 + 工作日志）。工作日志子系统缺席
+    时（早期启动、单测）简报退化成「纯待办版」，而不是整条端点报错。
+    """
+    from backend.services.worklog_service import get_worklog_service
+
+    return get_worklog_service()
+
+
 # ---------- request / response models ----------
 
 
@@ -400,10 +411,23 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
     async def daily_brief(
         svc: TodoService = Depends(service_dep),
     ) -> Dict[str, Any]:
-        from backend.services import todo_ai
+        from backend.services import report_ai, todo_ai
 
+        # 双来源（P3.5）：报告引擎把「工作日志 + 待办」聚成一份上下文，
+        # 其中工作日志段并进启动摘要 —— 只看待办会漏掉「没建待办但确实
+        # 干了」的工作。工作日志服务缺席时该段为空，不报错。
+        period_start, period_end = report_ai.today_period()
+        context = report_ai.build_report_context(
+            db=svc.db,
+            worklog_service=_worklog_service(),
+            report_type="daily",
+            period_start=period_start,
+            period_end=period_end,
+        )
+        summary = svc.get_startup_summary()
+        summary["worklogs"] = context["worklogs"]
         try:
-            content = await todo_ai.generate_daily_brief(svc.get_startup_summary())
+            content = await todo_ai.generate_daily_brief(summary)
         except todo_ai.LLMNotConfiguredError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except Exception as exc:  # noqa: BLE001
@@ -417,22 +441,27 @@ def build_router(get_service: Callable[[], Optional[TodoService]]) -> APIRouter:
     async def weekly_review(
         svc: TodoService = Depends(service_dep),
     ) -> Dict[str, Any]:
-        from backend.services import todo_ai
+        from backend.services import report_ai, todo_ai
 
-        stats = svc.get_todo_stats()
-        completed = svc.list_todos(
-            status="completed",
-            include_completed=True,
-            limit=50,
-            sort_by="created_at",
-            sort_order="desc",
+        period_start, period_end = report_ai.week_period()
+        context = report_ai.build_report_context(
+            db=svc.db,
+            worklog_service=_worklog_service(),
+            report_type="weekly",
+            period_start=period_start,
+            period_end=period_end,
         )
+        stats = svc.get_todo_stats()
+        # 双来源（P3.5）：工作日志摘要进统计字典，「本周完成」换成窗口内
+        # 真正完成的待办（报告引擎口径）。
+        stats["worklogs"] = context["worklogs"]
+        completed = context["todos"]["completed"]
         high_pending = svc.list_todos(priority="high", limit=20)
         snoozed = svc.get_most_snoozed(5)
         try:
             content = await todo_ai.generate_weekly_review(
                 stats,
-                [t.title for t in completed],
+                list(completed),
                 [t.title for t in high_pending],
                 [f"{t.title}（推迟 {t.snooze_count} 次）" for t in snoozed],
             )
