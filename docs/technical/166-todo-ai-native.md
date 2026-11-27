@@ -1,6 +1,8 @@
 # 166 · 待办 AI 原生
 
 > 本章描述 Sage 个人待办子系统（`todos` 表 + `/api/v1/todos` + agent 工具 + 提醒调度器）的实现，以及围绕它的 AI 增强：对话提炼、每日简报、每周回顾。面向需要修改待办行为、排查提醒或扩展工具的开发者。
+>
+> **本章已被 [178 · 待办交互升级与工作日志 / 日报周报](./178-todo-worklog-report.md) 部分超越**：待办侧新增详情编辑、三态循环、拖拽排序与拖拽嵌套；简报 / 周回顾升级为可存档的「日报 / 周报」，并新增「工作日志」事实层（`work_logs` 表）。本章保留仍然有效的待办表结构、提醒调度、对话提炼与全文检索内容。
 
 ## 1. 背景与定位
 
@@ -11,7 +13,7 @@
 | 链路 | 依赖 | 触发方式 | 是否落库 |
 | --- | --- | --- | --- |
 | 对话提炼待办 | LLM | 用户在聊天头部点「提取待办」 | 否，确认后才批量落库 |
-| 每日简报 / 每周回顾 | LLM | 用户在待办页点「简报」/「周回顾」 | 否，只读统计后生成文本 |
+| 每日简报 / 每周回顾 | LLM | 用户在待办页点「日报」/「周报」（前端已改名，原为「简报」/「周回顾」，见 178 章） | 旧端点只读统计后生成文本；新日报 / 周报会并存档 |
 | 快速录入自然语言解析 | 纯本地规则 | 快捷键 `N` / 命令面板 / `?quickadd=1` | 是 |
 
 其中「快速录入」刻意**不依赖 LLM**：常见的中文时间/优先级/标签表达由前端纯规则解析，离线可用、零延迟、零成本。LLM 只用在「需要理解一整段对话」的提炼场景。
@@ -158,9 +160,13 @@ CREATE TABLE IF NOT EXISTS todos (
 
 `GET /api/v1/todos/brief` → `{content}`。以 `startup_summary`（逾期数 / 今日到期 / 未来 7 天 / 高优先级 / 各状态计数）为输入，由 `todo_ai.generate_daily_brief` 调用 LLM 生成**至多 3 条**建议，失败时回退为模板文本。未配置 LLM 返回 503，其他生成失败返回 502。
 
+P3.5 起该端点改走 `report_ai.build_report_context`（`backend/api/todo_router.py:410`），把**工作日志摘要**并入 `summary["worklogs"]` —— 只看待办会漏掉「没建待办但确实干了」的那部分工作。工作日志服务缺席时该段为空，不报错。生成文本仍由 `todo_ai.generate_daily_brief` 产出。
+
 ### 4.5 每周回顾
 
 `GET /api/v1/todos/weekly-review` → `{content}`。输入为：本周统计、最近 50 条已完成（按 `created_at` 降序）、至多 20 条高优先级待办、至多 5 条被推迟任务。LLM 输出 Markdown，包含「完成情况 / 拖延提醒 / 下周建议」三部分，总长 ≤300 字符。
+
+P3.5 起该端点同样改走 `report_ai.build_report_context`（`backend/api/todo_router.py:440`）：`stats["worklogs"]` 注入工作日志摘要，且「本周完成」换成报告引擎口径的**窗口内真正完成项**。生成文本仍由 `todo_ai.generate_weekly_review` 产出。
 
 ## 5. 智能视图与热力图
 
@@ -269,7 +275,9 @@ FTS 重建失败只记 warning、不阻断启动——搜索会降级到 LIKE。
 | `src/pages/todo/TodoHeatmap.tsx` | 91 天完成热力图 |
 | `src/pages/todo/TodoRowEditor.tsx` | 行内编辑、snooze 菜单、徽标 |
 | `src/pages/todo/TodoSubtaskTree.tsx` | 两级子任务渲染 |
-| `src/pages/todo/TodoAiDialog.tsx` | 简报 / 周回顾弹窗 |
+| `src/pages/todo/TodoReportDialog.tsx` | 日报 / 周报弹窗（取代原 `TodoAiDialog.tsx`，见 178 章） |
 | `src/pages/chat/TodoExtractDialog.tsx` | 对话提炼候选确认弹窗 |
 | `electron/commandRoutes/settings.ts` | 待办相关 IPC 路由表 |
 | `electron/schedulerNotifications.ts` | 轮询 `/scheduled/notifications/pending` 并转发 OS 通知 |
+
+**延伸阅读**：[178 · 待办交互升级与工作日志 / 日报周报](./178-todo-worklog-report.md) —— 本章的后继章节，描述待办交互升级（P0/P1）、工作日志捕获子系统（P2）与日报 / 周报双源聚合与存档（P3）。
