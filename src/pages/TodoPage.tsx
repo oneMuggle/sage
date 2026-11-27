@@ -20,14 +20,20 @@ import { useSearchParams } from 'react-router-dom';
 import { useTodoStore } from '../entities/todo/todoStore';
 import { agentsApi } from '../shared/api/agentsApi';
 import { todoClient } from '../shared/api/todoClient';
-import type { Todo, TodoDropZone, TodoListParams, UpdateTodoInput } from '../shared/api/types';
+import type {
+  ReportType,
+  Todo,
+  TodoDropZone,
+  TodoListParams,
+  UpdateTodoInput,
+} from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
 import { PageHeader } from '../shared/ui';
 
-import { TodoAiDialog } from './todo/TodoAiDialog';
 import { TodoCreateForm } from './todo/TodoCreateForm';
 import { TodoHeatmap } from './todo/TodoHeatmap';
 import { TodoQuickAdd } from './todo/TodoQuickAdd';
+import { TodoReportDialog } from './todo/TodoReportDialog';
 import { TodoRowEditor } from './todo/TodoRowEditor';
 import { TodoSubtaskTree } from './todo/TodoSubtaskTree';
 import { TodoToolbar } from './todo/TodoToolbar';
@@ -69,7 +75,7 @@ export function TodoPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [createBusy, setCreateBusy] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const [aiDialog, setAiDialog] = useState<null | 'brief' | 'weekly'>(null);
+  const [reportDialog, setReportDialog] = useState<null | ReportType>(null);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [specialists, setSpecialists] = useState<TodoSpecialistOption[]>([]);
   const lastSentQuery = useRef<string | undefined>(params.q);
@@ -341,24 +347,24 @@ export function TodoPage() {
                 )}
                 <button
                   type="button"
-                  onClick={() => setAiDialog('brief')}
-                  title="AI 今日简报"
-                  aria-label="AI 简报"
-                  data-testid="todo-ai-brief"
+                  onClick={() => setReportDialog('daily')}
+                  title="生成日报"
+                  aria-label="日报"
+                  data-testid="todo-report-daily"
                   className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
                 >
                   <Sparkles className="w-3 h-3" />
-                  简报
+                  日报
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAiDialog('weekly')}
-                  title="周回顾"
-                  aria-label="周回顾"
-                  data-testid="todo-ai-weekly"
+                  onClick={() => setReportDialog('weekly')}
+                  title="生成周报"
+                  aria-label="周报"
+                  data-testid="todo-report-weekly"
                   className="flex items-center gap-1 px-2 py-1 rounded border border-border hover:border-primary hover:text-primary"
                 >
-                  周回顾
+                  周报
                 </button>
                 <button
                   type="button"
@@ -559,10 +565,10 @@ export function TodoPage() {
         }}
       />
 
-      <TodoAiDialog
-        isOpen={aiDialog !== null}
-        mode={aiDialog ?? 'brief'}
-        onClose={() => setAiDialog(null)}
+      <TodoReportDialog
+        isOpen={reportDialog !== null}
+        mode={reportDialog ?? 'daily'}
+        onClose={() => setReportDialog(null)}
       />
     </div>
   );
