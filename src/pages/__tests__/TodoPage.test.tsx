@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   weeklyReview: vi.fn(),
   heatmap: vi.fn(),
   snooze: vi.fn(),
+  worklogList: vi.fn(),
   state: {
     todos: [] as Todo[],
     loading: false,
@@ -58,6 +59,18 @@ vi.mock('../../shared/api/todoClient', () => ({
 
 vi.mock('../../shared/api/agentsApi', () => ({
   agentsApi: { list: vi.fn().mockResolvedValue([]) },
+}));
+
+// 工作日志分段只用到 list（收件箱 + 已确认流各一次）。
+vi.mock('../../shared/api/worklogClient', () => ({
+  worklogClient: {
+    list: mocks.worklogList,
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    confirm: vi.fn(),
+    dismiss: vi.fn(),
+  },
 }));
 
 // Mock the zustand store hook so callers receive our controlled `state`.
@@ -114,6 +127,7 @@ beforeEach(() => {
     max: 2,
   });
   mocks.snooze.mockResolvedValue({} as Todo);
+  mocks.worklogList.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
   Object.defineProperty(URL, 'createObjectURL', {
     writable: true,
     value: vi.fn(() => 'blob:mock'),
@@ -128,9 +142,9 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderPage() {
+function renderPage(initialEntry = '/todos') {
   return render(
-    <MemoryRouter initialEntries={['/todos']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <I18nProvider>
         <TodoPage />
       </I18nProvider>
@@ -303,6 +317,26 @@ describe('TodoPage', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('todo-heatmap')).not.toBeInTheDocument();
     });
+  });
+
+  it('switches to the worklog tab and hides todo-only header actions', async () => {
+    renderPage();
+
+    expect(screen.getByTestId('todo-tab-todos')).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByTestId('todo-tab-logs'));
+
+    expect(await screen.findByTestId('todo-worklog-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('todo-tab-logs')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByTestId('todo-ai-brief')).not.toBeInTheDocument();
+    expect(mocks.worklogList).toHaveBeenCalledWith({ status: 'pending', limit: 50 });
+    expect(mocks.worklogList).toHaveBeenCalledWith({ status: 'confirmed', limit: 200 });
+  });
+
+  it('opens the worklog tab directly from ?tab=logs', async () => {
+    renderPage('/todos?tab=logs');
+
+    expect(await screen.findByTestId('todo-worklog-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('todo-create-title')).not.toBeInTheDocument();
   });
 });
 
