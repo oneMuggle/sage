@@ -15,6 +15,7 @@ from backend.services import (
     todo_insights,
     todo_recurrence,
     todo_stats,
+    todo_status,
     todo_tags,
 )
 
@@ -383,6 +384,11 @@ class TodoService:
         # Normalize due_at: naive pass-through, tz-aware → naive local
         if updates.get("due_at") is not None:
             updates["due_at"] = _to_local_naive_iso(updates["due_at"])
+
+        # 状态变更同步 completed_at：完成态打戳，其余态（含重开一条已完成的
+        # 待办）清空。该列不在 ``_UPDATABLE_FIELDS`` 里 —— 调用方不能直接写
+        # 它，``todo_status`` 是唯一入口。
+        todo_status.apply_completion_stamp(updates, datetime.now())
 
         # A new due_at or status redefines this todo's reminder schedule, so
         # both latches reset — otherwise a rescheduled or reopened todo would

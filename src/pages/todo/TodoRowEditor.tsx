@@ -13,18 +13,21 @@ import {
   Calendar,
   Check,
   CheckCircle2,
+  CircleDot,
   Clock3,
   Copy,
   Flag,
   Pencil,
+  Play,
   Plus,
+  Settings2,
   Trash2,
   X,
   XCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { Todo, TodoPriority, UpdateTodoInput } from '../../shared/api/types';
+import type { Todo, TodoItemStatus, TodoPriority, UpdateTodoInput } from '../../shared/api/types';
 import { copyToClipboard } from '../../shared/lib/clipboard';
 import { fillTemplate } from '../../shared/lib/formatTemplate';
 import { useI18n } from '../../shared/lib/i18n';
@@ -33,6 +36,7 @@ import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 import type { ContextMenuItemSpec } from '../../shared/ui/ContextMenu/types';
 import { TwoStepDelete } from '../../widgets/sidebar/TwoStepDelete';
 
+import { TodoDetailPanel } from './TodoDetailPanel';
 import { toLocalDatetimeValue, toIsoString } from './todoDateUtils';
 
 interface TodoRowEditorProps {
@@ -47,9 +51,30 @@ interface TodoRowEditorProps {
   onAddSubtask?: (parentId: number, title: string) => Promise<void>;
   /** 阶段 3：稍后提醒（due_at 后移 N 分钟）。 */
   onSnooze?: (id: number, minutes: number) => Promise<void>;
+  /** 详情面板的负责人候选项（专家列表）。 */
+  specialists?: Array<{ id: string; name: string }>;
 }
 
 const PRIORITY_CYCLE: TodoPriority[] = ['low', 'medium', 'high'];
+
+/**
+ * 三态循环：未开始 → 进行中 → 已完成 → 未开始。
+ *
+ * 与后端 ``todo_status.next_cycle_status`` 同口径；``cancelled`` 不在循环内
+ * （取消只能显式触发，右上角的 ✕ 按钮负责）。
+ */
+const STATUS_CYCLE: Partial<Record<TodoItemStatus, TodoItemStatus>> = {
+  pending: 'in_progress',
+  in_progress: 'completed',
+  completed: 'pending',
+};
+
+/** 三态按钮的悬浮提示 —— 说明「点一下会变成什么」。 */
+const STATUS_CYCLE_HINT: Record<'pending' | 'in_progress' | 'completed', string> = {
+  pending: '未开始（点击标记为进行中）',
+  in_progress: '进行中（点击标记为已完成）',
+  completed: '已完成（点击重新打开为未开始）',
+};
 
 const PRIORITY_DISPLAY: Record<TodoPriority, { label: string; color: string; bg: string }> = {
   high: { label: '高', color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-900/20' },
@@ -97,6 +122,7 @@ export function TodoRowEditor({
   onDelete,
   onAddSubtask,
   onSnooze,
+  specialists = [],
 }: TodoRowEditorProps) {
   const { t } = useI18n();
   const [editingTitle, setEditingTitle] = useState(false);
@@ -104,6 +130,7 @@ export function TodoRowEditor({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [subtaskDraft, setSubtaskDraft] = useState('');
+  const [showDetail, setShowDetail] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
   const datePickerRef = useRef<HTMLDivElement>(null);
@@ -113,6 +140,7 @@ export function TodoRowEditor({
   const isDone = todo.status === 'completed';
   const isCancelled = todo.status === 'cancelled';
   const isInactive = isDone || isCancelled;
+  const isInProgress = todo.status === 'in_progress';
 
   useEffect(() => {
     if (editingTitle && titleInputRef.current) {
@@ -163,14 +191,29 @@ export function TodoRowEditor({
     void onUpdate(todo.id, { priority: nextPriority });
   };
 
+  /**
+   * 三态循环：未开始 → 进行中 → 已完成 → 未开始。
+   *
+   * 走 PUT /todos/{id} 的 status 字段而不是单独的 complete 接口：后端在
+   * status='completed' 时分派到 complete_todo，完成打戳与重复任务的下一次
+   * 派生都照旧发生；已完成再点一次回到未开始时后端会清掉完成时间戳。
+   */
+  const cycleStatus = () => {
+    const next = STATUS_CYCLE[todo.status];
+    if (!next) return;
+    void onUpdate(todo.id, { status: next });
+  };
+
   const handleDueDateChange = (localValue: string) => {
     const iso = localValue ? toIsoString(localValue) : '';
-    void onUpdate(todo.id, { due_at: iso || undefined });
+    // 清空必须发 null：IPC 的 JSON 序列化会丢掉 undefined，
+    // 发 undefined 等于「不动」，清空会静默失效。
+    void onUpdate(todo.id, { due_at: iso || null });
     setShowDatePicker(false);
   };
 
   const clearDueDate = () => {
-    void onUpdate(todo.id, { due_at: undefined });
+    void onUpdate(todo.id, { due_at: null });
     setShowDatePicker(false);
   };
 
@@ -311,10 +354,18 @@ export function TodoRowEditor({
   return (
     <ContextMenu items={menuItems} enabled={!editingTitle && !showDatePicker}>
       <li
-        className={`flex flex-col px-3 py-2 border border-border rounded-radius-sm group transition-colors ${
+        className={`relative flex flex-col px-3 py-2 border border-border rounded-radius-sm group transition-colors ${
           isInactive ? 'bg-bg-muted/20' : 'bg-surface hover:bg-bg-hover/30'
         } ${selected ? 'ring-1 ring-primary/30' : ''}`}
       >
+        {/* 进行中的视觉标识：左侧主色竖条 */}
+        {isInProgress && (
+          <span
+            className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary rounded-l-radius-sm"
+            aria-hidden="true"
+            data-testid={`todo-in-progress-bar-${todo.id}`}
+          />
+        )}
         <div className="flex items-center gap-2">
           {/* Checkbox */}
           <input
@@ -325,25 +376,36 @@ export function TodoRowEditor({
             aria-label={`选择 ${todo.title}`}
           />
 
-          {/* Status toggle */}
-          {!isInactive && (
+          {/* 状态按钮：三态循环（未开始 → 进行中 → 已完成 → 未开始） */}
+          {!isCancelled ? (
             <button
               type="button"
-              onClick={() => void onComplete(todo.id)}
-              title="标记完成"
-              aria-label={`完成 ${todo.title}`}
-              className="w-5 h-5 flex items-center justify-center rounded-full border border-border hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 text-text-muted hover:text-green-600 flex-shrink-0"
+              onClick={() => void cycleStatus()}
+              title={STATUS_CYCLE_HINT[todo.status as 'pending' | 'in_progress' | 'completed']}
+              aria-label={`${STATUS_CYCLE_HINT[todo.status as 'pending' | 'in_progress' | 'completed']} ${todo.title}`}
+              data-testid={`todo-status-${todo.id}`}
+              className={`w-5 h-5 flex items-center justify-center rounded-full flex-shrink-0 transition-colors ${
+                todo.status === 'completed'
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-600'
+                  : todo.status === 'in_progress'
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600'
+                    : 'border border-border text-text-muted hover:border-primary hover:text-primary'
+              }`}
             >
-              <Check className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+              {todo.status === 'completed' ? (
+                <Check className="w-3 h-3" />
+              ) : todo.status === 'in_progress' ? (
+                <CircleDot className="w-3 h-3" />
+              ) : (
+                <Play className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100" />
+              )}
             </button>
-          )}
-          {isDone && (
-            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 flex-shrink-0">
-              <Check className="w-3 h-3" />
-            </span>
-          )}
-          {isCancelled && (
-            <span className="w-5 h-5 flex items-center justify-center rounded-full bg-bg-muted text-text-muted flex-shrink-0">
+          ) : (
+            <span
+              className="w-5 h-5 flex items-center justify-center rounded-full bg-bg-muted text-text-muted flex-shrink-0"
+              title="已取消"
+              data-testid={`todo-status-${todo.id}`}
+            >
               <X className="w-3 h-3" />
             </span>
           )}
@@ -380,11 +442,23 @@ export function TodoRowEditor({
             )}
           </div>
 
-          {/* Description indicator */}
-          {todo.description && !editingTitle && (
-            <span className="text-ui-xs text-text-muted px-1" title={todo.description}>
-              📝
-            </span>
+          {/* 详情开关（行内可编辑：描述 / 截止日期 / 项目 / 标签 / 提醒 / 负责人） */}
+          {!editingTitle && (
+            <button
+              type="button"
+              onClick={() => setShowDetail((prev) => !prev)}
+              title="编辑待办详情"
+              aria-label={`编辑 ${todo.title} 的详情`}
+              aria-expanded={showDetail}
+              data-testid={`todo-detail-toggle-${todo.id}`}
+              className={`w-6 h-6 flex items-center justify-center rounded flex-shrink-0 transition-colors ${
+                showDetail
+                  ? 'text-primary bg-primary/10'
+                  : 'text-text-muted hover:text-primary hover:bg-bg-hover'
+              }`}
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+            </button>
           )}
 
           {/* Priority badge (clickable to cycle) */}
@@ -561,6 +635,16 @@ export function TodoRowEditor({
               className="w-full text-xs px-2 py-1 border border-primary rounded bg-background focus:outline-none"
             />
           </div>
+        )}
+
+        {/* 行内详情面板（可改描述 / 截止日期 / 项目 / 标签 / 提醒 / 负责人） */}
+        {showDetail && (
+          <TodoDetailPanel
+            todo={todo}
+            specialists={specialists}
+            onUpdate={onUpdate}
+            onClose={() => setShowDetail(false)}
+          />
         )}
       </li>
     </ContextMenu>

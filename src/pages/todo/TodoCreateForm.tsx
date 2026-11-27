@@ -4,12 +4,17 @@
  * Notion-style: title always visible, extra fields (description, priority,
  * due_at, project_tag) collapsed behind a "更多选项" toggle. Submit creates
  * via store.create() and resets the form.
+ *
+ * 字段块复用 ``TodoFields`` —— 与行内详情面板同一套控件，「建的时候能填的
+ * 字段，事后也必须能改」不会各自漂移。
  */
-import { Bell, Calendar, ChevronDown, ChevronUp, Flag, Plus, Tag } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import { useState } from 'react';
 
-import type { CreateTodoInput, TodoPriority } from '../../shared/api/types';
+import type { CreateTodoInput } from '../../shared/api/types';
 
+import { EMPTY_TODO_FIELDS, TodoFields, parseTagsText } from './TodoFields';
+import type { TodoFieldsValue } from './TodoFields';
 import { toIsoString } from './todoDateUtils';
 
 interface TodoCreateFormProps {
@@ -19,72 +24,33 @@ interface TodoCreateFormProps {
   specialists?: Array<{ id: string; name: string }>;
 }
 
-const PRIORITY_CONFIG: Array<{
-  value: TodoPriority;
-  label: string;
-  color: string;
-  icon: string;
-}> = [
-  { value: 'low', label: '低', color: 'text-green-600', icon: '🟢' },
-  { value: 'medium', label: '中', color: 'text-yellow-600', icon: '🟡' },
-  { value: 'high', label: '高', color: 'text-red-600', icon: '🔴' },
-];
-
-/** 自定义提醒档位预设（分钟）。可多选。 */
-const REMINDER_PRESETS: Array<{ minutes: number; label: string }> = [
-  { minutes: 1440, label: '提前1天' },
-  { minutes: 60, label: '提前1小时' },
-  { minutes: 10, label: '提前10分钟' },
-];
-
 export function TodoCreateForm({ onCreate, busy, specialists = [] }: TodoCreateFormProps) {
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState<TodoPriority>('medium');
-  const [dueAtLocal, setDueAtLocal] = useState('');
-  const [projectTag, setProjectTag] = useState('');
-  const [tagsText, setTagsText] = useState('');
-  const [reminderOffsets, setReminderOffsets] = useState<number[]>([]);
-  const [specialistId, setSpecialistId] = useState('');
+  const [fields, setFields] = useState<TodoFieldsValue>(EMPTY_TODO_FIELDS);
 
   const canSubmit = title.trim().length > 0 && !busy;
-
-  const toggleReminderOffset = (minutes: number) => {
-    setReminderOffsets((prev) =>
-      prev.includes(minutes) ? prev.filter((v) => v !== minutes) : [...prev, minutes],
-    );
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
 
     const input: CreateTodoInput = { title: title.trim() };
-    if (description.trim()) input.description = description.trim();
-    if (priority !== 'medium') input.priority = priority;
-    if (dueAtLocal) input.due_at = toIsoString(dueAtLocal);
-    if (projectTag.trim()) input.project_tag = projectTag.trim();
-    // 标签以逗号/空白分隔，去空后交给后端清洗（去重/上限）。
-    const tags = tagsText
-      .split(/[,，\s]+/)
-      .map((tag) => tag.trim())
-      .filter(Boolean);
+    if (fields.description.trim()) input.description = fields.description.trim();
+    if (fields.priority !== 'medium') input.priority = fields.priority;
+    if (fields.dueAtLocal) input.due_at = toIsoString(fields.dueAtLocal);
+    if (fields.projectTag.trim()) input.project_tag = fields.projectTag.trim();
+    // 标签以逗号/空白分隔，清洗口径与后端 todo_tags 一致。
+    const tags = parseTagsText(fields.tagsText);
     if (tags.length > 0) input.tags = tags;
-    if (reminderOffsets.length > 0) input.reminder_offsets = reminderOffsets;
-    if (specialistId) input.specialist_id = specialistId;
+    if (fields.reminderOffsets.length > 0) input.reminder_offsets = fields.reminderOffsets;
+    if (fields.specialistId) input.specialist_id = fields.specialistId;
 
     await onCreate(input);
 
     // Reset form
     setTitle('');
-    setDescription('');
-    setPriority('medium');
-    setDueAtLocal('');
-    setProjectTag('');
-    setTagsText('');
-    setReminderOffsets([]);
-    setSpecialistId('');
+    setFields(EMPTY_TODO_FIELDS);
   };
 
   return (
@@ -132,145 +98,15 @@ export function TodoCreateForm({ onCreate, busy, specialists = [] }: TodoCreateF
         更多选项
       </button>
 
-      {/* Expanded fields */}
+      {/* Expanded fields — 与行内详情面板共用 TodoFields */}
       {expanded && (
-        <div className="px-3 pb-3 pt-1 space-y-2.5 border-t border-border/50">
-          {/* Description */}
-          <div>
-            <label className="block text-ui-xs text-text-muted mb-1">描述</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="添加详细描述..."
-              rows={2}
-              className="w-full px-2.5 py-1.5 text-xs border border-border rounded-radius-sm bg-background focus:outline-none focus:border-primary resize-none placeholder:text-text-muted"
-            />
-          </div>
-
-          {/* Priority */}
-          <div>
-            <label className="flex items-center gap-1 text-ui-xs text-text-muted mb-1">
-              <Flag className="w-3 h-3" />
-              优先级
-            </label>
-            <div className="flex gap-1.5">
-              {PRIORITY_CONFIG.map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  onClick={() => setPriority(p.value)}
-                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded-radius-sm border transition-colors ${
-                    priority === p.value
-                      ? `border-primary bg-primary/10 ${p.color}`
-                      : 'border-border text-text-muted hover:border-primary/50'
-                  }`}
-                  aria-pressed={priority === p.value}
-                >
-                  <span>{p.icon}</span>
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex gap-3">
-            {/* Due date */}
-            <div className="flex-1">
-              <label className="flex items-center gap-1 text-ui-xs text-text-muted mb-1">
-                <Calendar className="w-3 h-3" />
-                截止日期
-              </label>
-              <input
-                type="datetime-local"
-                value={dueAtLocal}
-                onChange={(e) => setDueAtLocal(e.target.value)}
-                className="w-full px-2 py-1.5 text-xs border border-border rounded-radius-sm bg-background focus:outline-none focus:border-primary"
-              />
-            </div>
-
-            {/* Project tag */}
-            <div className="flex-1">
-              <label className="flex items-center gap-1 text-ui-xs text-text-muted mb-1">
-                <Tag className="w-3 h-3" />
-                项目标签
-              </label>
-              <input
-                type="text"
-                value={projectTag}
-                onChange={(e) => setProjectTag(e.target.value)}
-                placeholder="关联项目..."
-                className="w-full px-2.5 py-1.5 text-xs border border-border rounded-radius-sm bg-background focus:outline-none focus:border-primary placeholder:text-text-muted"
-              />
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div>
-            <label className="flex items-center gap-1 text-ui-xs text-text-muted mb-1">
-              <Tag className="w-3 h-3" />
-              标签
-            </label>
-            <input
-              type="text"
-              value={tagsText}
-              onChange={(e) => setTagsText(e.target.value)}
-              placeholder="逗号或空格分隔，如：工作 论文"
-              data-testid="todo-create-tags"
-              className="w-full px-2.5 py-1.5 text-xs border border-border rounded-radius-sm bg-background focus:outline-none focus:border-primary placeholder:text-text-muted"
-            />
-          </div>
-
-          {/* Reminder offsets */}
-          <div>
-            <label className="flex items-center gap-1 text-ui-xs text-text-muted mb-1">
-              <Bell className="w-3 h-3" />
-              提醒（可多选）
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {REMINDER_PRESETS.map((preset) => {
-                const active = reminderOffsets.includes(preset.minutes);
-                return (
-                  <button
-                    key={preset.minutes}
-                    type="button"
-                    onClick={() => toggleReminderOffset(preset.minutes)}
-                    aria-pressed={active}
-                    data-testid={`todo-reminder-${preset.minutes}`}
-                    className={`px-2 py-1 text-xs rounded-radius-sm border transition-colors ${
-                      active
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border text-text-muted hover:border-primary/50'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 专家归属（阶段 3，仅有专家时显示） */}
-          {specialists.length > 0 && (
-            <div>
-              <label className="flex items-center gap-1 text-ui-xs text-text-muted mb-1">
-                专家
-              </label>
-              <select
-                value={specialistId}
-                onChange={(e) => setSpecialistId(e.target.value)}
-                aria-label="专家归属"
-                data-testid="todo-create-specialist"
-                className="w-full px-2.5 py-1.5 text-xs border border-border rounded-radius-sm bg-background focus:outline-none focus:border-primary"
-              >
-                <option value="">全局待办（不限专家）</option>
-                {specialists.map((specialist) => (
-                  <option key={specialist.id} value={specialist.id}>
-                    {specialist.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+        <div className="px-3 pb-3 pt-2 border-t border-border/50">
+          <TodoFields
+            value={fields}
+            onChange={setFields}
+            specialists={specialists}
+            testIdPrefix=""
+          />
         </div>
       )}
     </form>
