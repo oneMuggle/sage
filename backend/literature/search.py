@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import contextlib
-import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional, Protocol
 
 from .guidance import render_search_guidance
+from .http_download import download_pdf_http
 from .interstitial import rewrite_host_candidates
 from .models import SiteProfile, render_search_url
+from .pdf_check import validate_pdf
 
 
 class BrowserDriver(Protocol):
@@ -122,26 +123,9 @@ class DownloadResult:
     path: Optional[str]
     ok: bool
     errors: List[str] = field(default_factory=list)
-
-
-def _normalize(text: str) -> str:
-    return re.sub(r"[\s\W_]+", "", text or "")
-
-
-def validate_pdf(path: Path, expected_title: str, magic: str = "%PDF-") -> List[str]:
-    errors: List[str] = []
-    if not path.is_file():
-        return [f"下载文件不存在: {path}"]
-    with path.open("rb") as handle:
-        head = handle.read(len(magic))
-    if head != magic.encode("ascii"):
-        errors.append(f"文件头不是 {magic}")
-    if expected_title:
-        expected = _normalize(expected_title)
-        actual = _normalize(path.stem)
-        if expected and expected not in actual and actual not in expected:
-            errors.append(f"文件名与题名不匹配: {path.name!r} vs {expected_title!r}")
-    return errors
+    transport: str = "browser"
+    fallback_reason: str = ""
+    access_status: str = "unknown"
 
 
 def _candidate_download_urls(url: str, hosts: List[str]) -> List[str]:
@@ -253,12 +237,65 @@ def download_pdf(
     driver: BrowserDriver,
     expected_title: str,
     dest_dir: Path,
+    timeout_s: int = 60,
+    *,
+    entry_url: str = "",
+    entry_selector: str = "",
+    http_fetch: Optional[object] = None,
+) -> DownloadResult:
+    """下载并校验 PDF（HTTP 快路径优先，失败后一次性降级到浏览器路径）。
+
+    ``http_fetch`` 为 ``(url, referer) -> FetchResult`` 取数函数时先走
+    ``http_download.download_pdf_http``；失败只降级一次，不在两条路径间
+    来回切换，``fallback_reason`` 记录 HTTP 侧放弃的原因。
+    """
+    if http_fetch is not None:
+        http_result = download_pdf_http(
+            profile,
+            entry_url,
+            expected_title,
+            dest_dir,
+            http_fetch,  # type: ignore[arg-type]
+        )
+        if http_result.ok:
+            return DownloadResult(
+                path=http_result.path,
+                ok=True,
+                errors=list(http_result.errors),
+                transport="http",
+                access_status="subscription",
+            )
+        # 只降级一次：记原因后走浏览器路径，不来回切
+        browser_result = _download_via_browser_path(
+            profile, driver, expected_title, dest_dir, timeout_s,
+            entry_url=entry_url, entry_selector=entry_selector,
+        )
+        browser_result.transport = "browser"
+        browser_result.fallback_reason = http_result.fallback_reason
+        if browser_result.ok:
+            browser_result.access_status = "subscription"
+        return browser_result
+
+    result = _download_via_browser_path(
+        profile, driver, expected_title, dest_dir, timeout_s,
+        entry_url=entry_url, entry_selector=entry_selector,
+    )
+    if result.ok:
+        result.access_status = "subscription"
+    return result
+
+
+def _download_via_browser_path(
+    profile: SiteProfile,
+    driver: BrowserDriver,
+    expected_title: str,
+    dest_dir: Path,
     timeout_s: float = 60,
     *,
     entry_url: str = "",
     entry_selector: str = "",
 ) -> DownloadResult:
-    """下载并校验 PDF。
+    """下载并校验 PDF（浏览器路径）。
 
     站点声明了 ``pdf.interstitial`` 时走「中间页 + 主机回退」路径：
     读取入口 href → 新标签打开 → 等中间页跳转 → 按回退主机重写 URL 导航 →
