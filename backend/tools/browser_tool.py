@@ -589,6 +589,7 @@ def _site_access_gate(
             options=list(browser_safety.SITE_ACCESS_OPTIONS),
             screenshot_path=_capture_step_thumbnail(session) or "",
             fingerprint=site_fingerprint,
+            conversation_id=_current_owner(),
         )
         get_browser_control().set_state(session.browser_id, BrowserControlState.PAUSED)
         _record_browser_audit(
@@ -2377,6 +2378,7 @@ class BrowserInteractTool(BaseTool):
                         options=list(browser_safety.SENSITIVE_ACTION_OPTIONS),
                         screenshot_path=_capture_step_thumbnail(session) or "",
                         fingerprint=fingerprint,
+                        conversation_id=_current_owner(),
                     )
                     get_browser_control().set_state(
                         session.browser_id, BrowserControlState.PAUSED

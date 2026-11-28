@@ -1,6 +1,10 @@
 # 技术专题文档总览
 
+<<<<<<< HEAD
 > Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-185；本索引以目录中的实际文件为准。
+=======
+> Sage 技术文档总览。本目录包含核心章节（01-14 基础架构）与 15-181 横切专题，后者聚焦质量门禁、可观测性、架构约束等。当前专题编号为 15-181；本索引以目录中的实际文件为准。
+>>>>>>> origin/main
 
 
 ## 章节目录
@@ -123,9 +127,47 @@
 | 144 | [Win7 内网救援工具（Rescue Doctor）](./144-win7-rescue-doctor.md) | 不依赖前端的 CLI（体检/端点配置/修复/诊断包/放行清单）+ 启动看门狗（last-run/崩溃 journal/心跳/原生恢复对话框）+ 兼容档位 L0–L3 + 遗留管控软件处置（备份/恢复/审计） |
 | 145 | [记忆质量优化（Phase 1–4）](./145-memory-quality-optimization.md) | 提取门槛升级 + 否定词 NOOP 修复 + 写入冲突消解（ADD/UPDATE/NOOP）+ 已知事实过滤 + 主题簇巩固 + 五维质量评分器 + 质量可视化/批量清理/来源会话追踪/记忆级反馈 + P0 修复 PR-A（枚举串号 / recall 访问计数 / 组长方向与整组保护 / LLM 缺失标记 `skipped_no_llm`） |
 | 146 | [渲染层 BackendNotReadyError 自愈](./146-backend-ready-renderer-recovery.md) | 方案 A 队列之上的渲染层兜底：`backendReadySignal` 单例订阅 `backend:ready` 事件 + `useBackendReadyTick` 驱动 Chat/Sidebar/SessionWorkspaceProvider 启动期失败自动重放；`desktopInvoke` 剥离 IPC 包装前缀；`ProjectsOverview` 错误横幅 + 重试按钮 |
+<<<<<<< HEAD
 | 183 | [事实侦察区块](./183-fact-recon-block.md) | lite scout 事实结构化解析（12 条上限）+ plan_progress.detail 实时下发 + client_meta 落库回读 + FactReconBlock 折叠区块（全文不截断 / 来源 chip / 侦察过程二级折叠） |
 | 184 | [文献站点知识沉淀与 HTTP 快路径](./184-literature-site-knowledge.md) | profile `notes[]`/`backends[]` + `references/` 接线 + 下载 HTTP 快路径与合规闸门 |
 | 185 | [PPT Master 集成](./185-ppt-master-integration.md) | 原位调用 ppt-master 技能（不拷贝，守卫相对技能根校验）+ 质量门禁阻塞即停（200 + success=false）+ SVG → DrawingML 原生可编辑 PPTX + Office 页对话框与任务中心接入 + win7 的 Python 3.8 → ≥3.9 解释器守卫与空列表 422 |
+=======
+| 147 | [项目工作台 IA 与交互](./147-project-workbench-ia.md) | `/projects` 单列表重做 + 治理页五章 IA（概览下一步 / 设置去自动 LLM / 资料语义检索折叠 / 文件章 i18n）+ 共享 Radix `Select` 迁移 + 规则页文案收敛 |
+| 148 | [侧边栏任务中心](./148-sidebar-task-center.md) | 六源任务归一（registry / chat / lane / goal / todo / scheduled）+ 侧边栏分区与 `/tasks` 页面 + 闲时目标终态通知队列 + panelRegistry 槽位迁移 |
+| 149 | [权限对话框 UX 优化](./149-permission-dialog-ux.md) | 来源会话标签（多会话并行辨识请求来源）+ 长命令完整展示（截断常量 1000→4000 / 对话框加宽） |
+| 150 | [TDD Subagent Workflow](./100-tdd-workflow.md) | 借鉴 Claude Code：TddGuard 状态机 + workflow_mode 优先级链（explicit > text > env > default）+ TDD 循环（max=3）+ `lane.tdd.evidence` 事件 + LaneDetailDrawer 证据展示 |
+| 151 | [Design Studio 内容库与 Craft 工艺规范](./151-design-studio-content-craft.md) | 四平面架构（设计系统/模板/工艺规范/生成）+ 17 设计系统 / 13 Deck 模板 / 4 原型模板 / 5 条 Craft 规则 + `CraftRuleRegistry` 解析器 + Prompt 注入链路 + 导出管道（PDF/PPTX/ZIP）+ Design Lint + Office 融合（Word→大纲 / 图表嵌入 / Live Artifact）+ 单屏创作器 / 版本恢复 / 迭代消息持久化 / 内联下载导出 |
+| 152 | [Web Fallback 模式（Win7 兼容）](./152-web-fallback-mode.md) | Win7 管控环境下 Electron 被拦截时的浏览器降级方案：`SAGE_WEB_MODE` 环境变量 + FastAPI 静态文件服务 + URL param token 认证 + `SageWeb.cmd`（安装版） / `sage-web.bat`（源码）启动器 |
+| 153 | [本地 AI 模型内置与离线导入](./153-local-ai-models.md) | OCR（6MB）+ Embedding（91MB）随安装包内置：`extraResources` 打包 `resources/models/` + 路径优先级链（userData > bundled > repo）+ 本地导入 IPC（目录选择 + SHA-256 校验）+ CI 缓存下载 |
+| 154 | [MinerU 内网独立部署](./154-mineru-deployment.md) | A6000 服务器独立部署 MinerU 4.1（便携 CPython 3.12 + vLLM，`--tier standard`）：离线包 `scripts/mineru-offline-bundle/`（`build-bundle.sh` 构建 / `install.sh` 安装 / `verify.sh` 验收）+ 模型离线搬运 + `source: local` 零外网依赖 + V1 异步 API 契约（create→PUT→poll→download）+ 鉴权坑与 `--api-key` 包装脚本 + `--auth-mode bearer|anonymous` + Sage `parse_document` 工具与状态 API |
+| 155 | [项目健康监控与 AI 辅助规程定制](./155-project-health-ai-stages.md) | M1 主动告警（桌面通知 + 24h 节流）+ M2 对话式规程定制（多轮迭代 / 目录推断 / git 推断 / LLM 降级）+ M3 定时健康检查（每天 09:00 cron + HealthReport） |
+| 156 | [PDF 页码引用与图表内联引用](./156-pdf-figure-citation.md) | 页标记文本（`--- page N ---`）+ 图表抽取/图注/清单缓存 + `<attached_figures>` 注入 + RAG 页码反查 + Markdown 图片白名单 + 工具结果 dataclass 序列化修复 |
+| 157 | [启动分层就绪与后台自检](./157-startup-progressive-readiness.md) | L0–L3 分层就绪（StartupRegistry + `/health/ready`）+ MCP 后台发现（不阻塞 lifespan）+ 会话三态/防闪烁骨架 + 启动状态指示条 + last-run 启动瀑布（backend_spawned/ready/sessions_loaded） |
+| 158 | [记忆页面详情化与结构化标题](./158-memory-page-detail.md) | 卡片可展开查看全文 + 结构化 `title` 列（LLM 提取 / 确定性推导 / 读取兜底）+ `PUT /memory/{id}` 单条编辑（FTS 重建与旧向量清理） |
+| 159 | [受控浏览器使用](./159-controlled-browser-use.md) | 纯 CDP 浏览器工具面（10 个 `browser_*` 工具）+ 无障碍树快照 v2 / ref 协议 + 可见窗口 / 步骤时间线 / 暂停·接管状态机 + 站点策略·敏感动作确认·一次性指纹·注入警告 + 视觉兜底（临时图像 / OCR） |
+| 160 | [Firefox 浏览器兜底（多浏览器支持）](./160-firefox-browser-fallback.md) | 对齐 release/win7：发现优先级增加 `SAGE_FIREFOX_PATH` 与平台扫描 + 固定端口 9229 `-start-debugger-server` 启动 + `/json/version` 握手 + cookie 归一化（剥离 Chromium 特有字段） |
+| 161 | [Word 样式模板](./161-word-style-template.md) | 样式画像（按级字体/精确行距/题注/表格文字）+ 命名预设（公文/论文/报告）+ 参考文档（reference.docx）+ 规则包→样式画像转换 + 已有文档批量套用样式 |
+| 162 | [MinerU 文档解析](./162-mineru-document-parse.md) | 可插拔解析引擎 / async API 客户端 / 质量路由 / 缓存 / 双阶段附件 |
+| 163 | [Office 结构化提取与 PDF 复杂表格兜底](./163-office-extract-pdf-tables.md) | 提取适配器分层（测量/策略/适配/编排）+ 表格形状诊断（`table_diagnostics`）+ 无边框探测（列数判别式，只探测不产正文）+ 复杂度原因码 + 结构化后端兜底路由（auto/off/force，失败保留原结果） |
+| 164 | [文献研究子系统](./164-literature-research-subsystem.md) | 声明式站点画像 / 交互检索 / 核验报告 / 导出 |
+| 165 | [智能体编排对标](./165-agent-orchestration-parity.md) | 子代理派发、过程落盘脱敏、失败重规划、统一运行目录、成本账本、复合主键 |
+| 166 | [待办 AI 原生](./166-todo-ai-native.md) | 待办的数据模型、工具、提醒、视图与全文检索 |
+| 167 | [压缩包只读预览](./167-archive-file-preview.md) | 压缩包目录 / 条目读取 + 预览 entry + 限额防穿越 |
+| 168 | [会话模型与端点路由](./168-session-model-endpoint-routing.md) | 模型与凭据成对路由：会话覆盖重解析端点，前后端双保险 |
+| 169 | [渲染器 CSP 与高保真预览](./169-renderer-csp.md) | 生产 CSP 指令表 + dataUrlToBlob 本地解码，修复高保真预览 |
+| 170 | [对标迭代 SOP](./170-parity-loop-sop.md) | 对标迭代闭环 SOP：步骤 / py38 兼容 / 验证矩阵 / 踩坑与红线 |
+| 171 | [Composer 状态条](./171-composer-status-bar.md) | 用量 / 响应速度 / 上下文三块观测指标下沉到输入框下方 + `useSessionUsage` 统一取数（单次请求 / 流中轮询 / 流末补拉 / 迟到响应守卫）+ 受控徽章与上下文条 + 空会话引导语互斥 |
+| 172 | [规则抽取草稿审阅 + AI 精炼](./172-rule-extraction-draft.md) | 抽取结果先预览再落库（置信度色标 + 冲突并排对比）+ 侧栏对话式 AI 精炼（自然语言 → add/modify/delete diff 卡片 + 逐条接受）+ 草稿 zustand 状态（localStorage 持久化 + 恢复横幅）+ 置信度筛选/批量选择 + 手动添加 + 追加已有组同名跳过 + v22 迁移新增结构化元数据列 |
+| 173 | [技能整理优化与去重进化机制](./173-skill-evolution.md) | 结构化去重（embedding + TF-IDF 降级）+ 5 维质量评分与 hot/warm/cold 分层 + 三级渐进式加载（token 预算）+ 执行反馈自进化（建议 → 人工批准） |
+| 174 | [自部署服务通用化（P0–P2）](./174-selfhosted-service-framework.md) | DrawIO 激活（MCP → pool → Puppeteer）；统一富媒体契约（MediaStore + `/api/v1/media` + SVG 交互查看器）；声明式服务注册（Spec/SecretBox/状态路由/通用卡片） |
+| 175 | [编排规划可见性](./175-planning-visibility.md) | plan_progress 统一事件 + 纯 reducer 合并 + PlanningTimeline 内联气泡 + orch_preflight 字段名修复 |
+| 176 | [端点优先级故障转移](./176-endpoint-failover.md) | 优先级端点链 + 可重试/认证错误自动切换 + 健康状态机与冷却 + 后台轻量探测 failback（默认关闭） |
+| 177 | [Word 版式控制与模板填充 P0](./177-word-template-refill-and-layout-p0.md) | 整块结构填充（无占位符模板克隆）+ 行号/字符缩进/节级页眉/自定义纸张 + .doc↔.docx 转换 |
+| 178 | [待办交互升级与工作日志 / 日报周报](./178-todo-worklog-report.md) | 三层结构（计划 `todos` / 事实 `work_logs` / 汇报 `reports`）+ 详情面板与三态循环 + `sort_order` 拖拽排序与嵌套 + 工作日志捕获（候选待确认闸门）+ 日报/周报双源聚合与存档 |
+| 179 | [事实侦察区块](./179-fact-recon-block.md) | lite scout 事实结构化解析（12 条上限）+ plan_progress.detail 实时下发 + client_meta 落库回读 + FactReconBlock 折叠区块（全文不截断 / 来源 chip / 侦察过程二级折叠） |
+| 180 | [文献站点知识沉淀与 HTTP 快路径](./180-literature-site-knowledge.md) | profile `notes[]`/`backends[]` + `references/` 接线 + 下载 HTTP 快路径与合规闸门 |
+| 181 | [PPT Master 集成](./181-ppt-master-integration.md) | 原位调用 ppt-master 技能（不拷贝，守卫相对技能根校验）+ 质量门禁阻塞即停（200 + success=false）+ SVG → DrawingML 原生可编辑 PPTX + Office 页对话框与任务中心接入 |
+>>>>>>> origin/main
 ---
 
 ## 核心章节（基础架构）
@@ -154,7 +196,11 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 基础架构   | 本目录 01-14                                                |
+<<<<<<< HEAD
 | 横切关注点 | 本目录 15-185                                               |
+=======
+| 横切关注点 | 本目录 15-181                                               |
+>>>>>>> origin/main
 
 ---
 

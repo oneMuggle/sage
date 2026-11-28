@@ -109,14 +109,18 @@ def test_resolve_skill_root_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 # --------------------------------------------------------------------------- #
 # 环境 / 完整性
 # --------------------------------------------------------------------------- #
+<<<<<<< HEAD
 @pytest.mark.skipif(
     sys.version_info < (3, 9), reason="技能脚本要求 Python >= 3.9，py38 下环境检查按设计拒绝"
 )
+=======
+>>>>>>> origin/main
 def test_check_environment_ok(tmp_path: Path):
     root = _make_skill(tmp_path)
     info = _adapter(root).check_environment()
     assert info["skill_root"] == str(root.resolve())
     assert info["python"] == sys.executable
+<<<<<<< HEAD
     assert info["python_version"].startswith(f"{sys.version_info[0]}.")
 
 
@@ -127,6 +131,8 @@ def test_check_environment_rejects_old_python(tmp_path: Path):
     root = _make_skill(tmp_path)
     with pytest.raises(PptMasterEnvError, match="需要 Python >="):
         _adapter(root).check_environment()
+=======
+>>>>>>> origin/main
 
 
 def test_check_environment_guard_failure(tmp_path: Path):

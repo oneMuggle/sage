@@ -36,6 +36,8 @@ export interface SitePolicy {
 export interface BrowserPendingConfirmation {
   id: string;
   session_id: string;
+  /** 所属聊天对话；旧后端/旧条目可能缺失，前端回退按 session_id 归属。 */
+  conversation_id?: string;
   kind: 'site_access' | 'sensitive_action';
   code: string;
   domain: string;
@@ -149,30 +151,43 @@ export async function deleteSitePolicy(domain: string): Promise<void> {
   });
 }
 
-/** 列举待确认项；传 sessionId 时只返回该会话的条目。 */
+/**
+ * 列举待确认项；传 sessionId 只返回该会话的条目，传 conversationId 只返回
+ * 该对话的条目（服务端按对话归属过滤，优先于 session_id）。
+ */
 export async function fetchPendingConfirmations(
   sessionId?: string,
+  conversationId?: string,
 ): Promise<BrowserPendingConfirmation[]> {
-  const query = sessionId ? '?session_id=' + encodeURIComponent(sessionId) : '';
+  const params: string[] = [];
+  if (sessionId) params.push('session_id=' + encodeURIComponent(sessionId));
+  if (conversationId) params.push('conversation_id=' + encodeURIComponent(conversationId));
+  const query = params.length > 0 ? '?' + params.join('&') : '';
   const data = await requestJson<{ confirmations?: BrowserPendingConfirmation[] }>(
     '/api/v1/browser/confirmations' + query,
   );
   return data.confirmations ?? [];
 }
 
-/** 裁决一条待确认项；后端会把控制状态恢复为 agent。 */
+/**
+ * 裁决一条待确认项；后端会把控制状态恢复为 agent。
+ * 带 conversationId 时后端校验该条目归属本对话，不匹配 → 404。
+ */
 export async function resolveConfirmation(
   id: string,
   decision: ConfirmationDecision,
+  conversationId?: string,
 ): Promise<{
   confirmation_id: string;
   kind: string;
   decision: string;
   control_state: 'agent';
 }> {
+  const body: { decision: ConfirmationDecision; conversation_id?: string } = { decision };
+  if (conversationId) body.conversation_id = conversationId;
   return requestJson('/api/v1/browser/confirmations/' + encodeURIComponent(id), {
     method: 'POST',
-    body: JSON.stringify({ decision }),
+    body: JSON.stringify(body),
   });
 }
 

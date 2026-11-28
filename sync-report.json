@@ -1,21 +1,49 @@
 {
-  "timestamp": "2026-11-09T13:52:03",
+  "timestamp": "2026-11-28T13:01:40",
   "source": "origin/main",
   "target": "origin/release/win7",
   "branch": "sync/win7-main",
-  "status": "CONFLICT（2 个文件需人工处理）",
+  "status": "CONFLICT（9 个文件需人工处理）",
   "conflicts": [
     {
       "path": "architecture-baseline.json",
       "cls": "A"
     },
     {
-      "path": "backend/main.py",
+      "path": "backend/api/presentation_routes.py",
+      "cls": "B"
+    },
+    {
+      "path": "backend/services/ppt_master_adapter.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/presentation/test_ppt_master_adapter.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/presentation/test_ppt_master_real_smoke.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tests/unit/test_http_site_gate.py",
+      "cls": "A"
+    },
+    {
+      "path": "backend/tools/http_site_gate.py",
+      "cls": "A"
+    },
+    {
+      "path": "docs/technical/README.md",
+      "cls": "A"
+    },
+    {
+      "path": "docs/user-manual/README.md",
       "cls": "A"
     }
   ],
   "auto_resolved": [],
-  "source_sha": "6c0ab03d",
-  "target_sha": "afb537a5",
-  "commits_behind": 3
+  "source_sha": "11ca137ce",
+  "target_sha": "833a1ccfb",
+  "commits_behind": 4
 }

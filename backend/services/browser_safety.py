@@ -517,6 +517,8 @@ class PendingConfirmation:
     options: List[str] = field(default_factory=list)
     screenshot_path: str = ""
     fingerprint: str = ""
+    # 创建时所属聊天对话（服务端裁决归属校验用）；旧条目为空串。
+    conversation_id: str = ""
     created_at: float = 0.0
 
     def to_public_dict(self) -> Dict[str, Any]:
@@ -530,6 +532,7 @@ class PendingConfirmation:
             "description": self.description,
             "options": list(self.options),
             "screenshot_path": self.screenshot_path,
+            "conversation_id": self.conversation_id,
             "created_at": self.created_at,
         }
         thumbnail = _thumbnail_for_path(self.screenshot_path)
@@ -571,6 +574,7 @@ class ConfirmationRegistry:
         options: Optional[List[str]] = None,
         screenshot_path: str = "",
         fingerprint: str = "",
+        conversation_id: str = "",
     ) -> PendingConfirmation:
         now = _now()
         pending = PendingConfirmation(
@@ -583,6 +587,7 @@ class ConfirmationRegistry:
             options=list(options or ()),
             screenshot_path=screenshot_path or "",
             fingerprint=fingerprint or "",
+            conversation_id=conversation_id or "",
             created_at=time.time(),
         )
         with self._lock:
@@ -597,12 +602,23 @@ class ConfirmationRegistry:
             item = self._pending.get(confirmation_id)
             return item[0] if item else None
 
-    def list(self, session_id: Optional[str] = None) -> List[PendingConfirmation]:
+    def list(
+        self,
+        session_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+    ) -> List[PendingConfirmation]:
+        """列举待确认项；``conversation_id`` 给出时按对话过滤并优先于 session。
+
+        HTTP 出网门禁创建的确认项没有浏览器实例（``session_id`` 为空），
+        仅按对话过滤才能让右栏面板看到它们。
+        """
         now = _now()
         with self._lock:
             self._purge(now)
             items = [item for item, _exp in self._pending.values()]
-        if session_id is not None:
+        if conversation_id is not None:
+            items = [item for item in items if item.conversation_id == conversation_id]
+        elif session_id is not None:
             items = [item for item in items if item.session_id == session_id]
         return sorted(items, key=lambda item: item.created_at)
 

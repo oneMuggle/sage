@@ -243,8 +243,16 @@
 - 前端通过 `POST /api/v1/browser/confirmations/{id}` 提交决定；`approve` 后仅当
   会话处于 `paused` 才恢复为 `agent`（迟到的裁决不会夺回 `user_takeover`），
   被阻塞的工具在下一轮重试时可消费批准并执行（审计 `approval=approved`）。
-- 确认项公开字段不含指纹：`id / session_id / kind / code / domain / description /
-  options / screenshot_path / thumbnail_data_url / thumbnail_unavailable / created_at`。
+- **对话归属（P2-1）**：`PendingConfirmation.conversation_id` 记录创建时的聊天会话
+  （`ToolExecutionContext.session_id`）：浏览器工具取 `_current_owner()`，HTTP 出网
+  门禁（`web_fetch` / `http_download`）取 `current_tool_context().session_id`。
+  列表接口按 `conversation_id` 过滤（优先于 `session_id`，HTTP 确认项 `session_id`
+  为空也能被所属对话看到）；裁决接口校验归属，带非空 `conversation_id` 的条目被
+  其他对话裁决时返回 404 `confirmation_not_found`（不泄露存在性）。无归属的旧条目
+  （TTL 窗口内）保持可列举、可裁决，滚动升级无感知。
+- 确认项公开字段不含指纹：`id / session_id / conversation_id / kind / code / domain /
+  description / options / screenshot_path / thumbnail_data_url / thumbnail_unavailable /
+  created_at`。
   截图位于数据目录（不在 `sage-file://` 白名单内），因此后端把截图压成 ≤100KB 的
   内联 data URL（Pillow 可用时降采样到最长边 320px，PNG→JPEG 质量阶梯；Pillow
   不可用时仅当原文件 ≤100KB 才直接 base64）；无法生成时标记
@@ -303,8 +311,8 @@
 | `GET /browser/site-policies` | → `{policies:[{domain, mode, updated_at}]}` | 持久站点策略列表（对象包装） |
 | `PUT /browser/site-policies/{domain}` | 体 `{mode}` → 策略 | `allow` / `block` |
 | `DELETE /browser/site-policies/{domain}` | → 删除结果 | 移除策略 |
-| `GET /browser/confirmations?session_id=` | → 待确认项列表 | 面板 2 秒轮询；公开字段不含指纹 |
-| `POST /browser/confirmations/{confirmation_id}` | 体 `{decision}` → 结果 | `session` / `always` / `approve` / `deny`；按确认类型校验可选项；批准后控制状态回 `agent`，站点类 `session`/`always` 同时授予站点访问 |
+| `GET /browser/confirmations?session_id=&conversation_id=` | → 待确认项列表 | 面板 2 秒轮询；`conversation_id` 优先于 `session_id`；公开字段不含指纹 |
+| `POST /browser/confirmations/{confirmation_id}` | 体 `{decision, conversation_id?}` → 结果 | `session` / `always` / `approve` / `deny`；按确认类型校验可选项；带归属条目被其他对话裁决 → 404 `confirmation_not_found`；批准后控制状态回 `agent`，站点类 `session`/`always` 同时授予站点访问 |
 | `GET /browser/audit?session_id=&limit=50` | → 审计行 | 面板「操作审计」懒加载 |
 
 渲染层客户端封装在 `src/shared/api/browserControlClient.ts`。窗口「定位」不经过后端，走 Electron IPC
@@ -388,9 +396,15 @@
 共享标签页动作全局串行（等待上限 120s）。`/browser/status.sessions[]` 增加
 `owner` / `busy` 字段。
 
+**P2-1（2026-11-28）**：确认项服务端按对话二次校验——`PendingConfirmation`
+记录 `conversation_id`，列表按对话过滤（HTTP 出网确认项在没有浏览器实例时也能被
+所属对话面板看到），裁决校验归属（不匹配 404 不泄露存在性）；前端
+`BrowserPanel` 以对话维度轮询并透传 `conversation_id`，旧条目回退按
+`session_id` 归属过滤。
+
 已知限制（P2 计划）：内嵌浏览器（Electron）所有窗口仍共享
-`persist:sage-agent-browser` 分区，cookie/localStorage 跨会话；确认项服务端
-仍按 `browser_id` 隔离（未按 conversation 二次校验）；并行多账号实例池。
+`persist:sage-agent-browser` 分区，cookie/localStorage 跨会话；并行多账号
+实例池。
 
 ## 知网 KNS 5.5 真机验收清单
 

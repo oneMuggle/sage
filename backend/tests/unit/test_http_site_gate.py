@@ -59,6 +59,42 @@ def test_confirm_verdict_registers_a_confirmation(policy_store):
     assert pending.domain == "unknown-site.example"
 
 
+<<<<<<< HEAD
+=======
+def test_confirm_verdict_binds_conversation_from_tool_context(policy_store):
+    from backend.tools.context import (
+        ToolExecutionContext,
+        reset_tool_context,
+        set_tool_context,
+    )
+
+    token = set_tool_context(
+        ToolExecutionContext(
+            session_id="c1",
+            stream_id="test-stream",
+            binding_generation=0,
+            office_doc_scope=frozenset(),
+        )
+    )
+    try:
+        verdict = gate_http_url("https://unknown-site.example/a", session_id="")
+    finally:
+        reset_tool_context(token)
+
+    pending = browser_safety.get_confirmation_registry().get(verdict.confirmation_id)
+    assert pending is not None
+    assert pending.conversation_id == "c1"
+
+
+def test_confirm_verdict_without_context_has_empty_conversation(policy_store):
+    verdict = gate_http_url("https://unknown-site.example/b", session_id="sess-5")
+
+    pending = browser_safety.get_confirmation_registry().get(verdict.confirmation_id)
+    assert pending is not None
+    assert pending.conversation_id == ""
+
+
+>>>>>>> origin/main
 def test_url_without_host_is_allowed(policy_store):
     verdict = gate_http_url("about:blank", session_id="sess-4")
     assert verdict.allowed is True
