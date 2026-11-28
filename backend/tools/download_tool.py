@@ -382,8 +382,9 @@ class HttpDownloadTool(BaseTool):
                     "credential_domain": {
                         "type": "string",
                         "description": (
-                            "凭据档案 domain（如 .cnki.net）：browser_cookies 导出的 cookie "
-                            "或 credential_set 设置的头部凭据，命中域自动附加、跨域剥离；"
+                            "凭据档案 domain（如 .cnki.net）：browser_cookies "
+                            "action=export 导出的 cookie 或 action=set_header 存档的"
+                            "头部凭据，命中域自动附加、跨域剥离；"
                             "不传时自动从 URL hostname 推断；"
                             "过期报 credential_expired，被送到登录页报 login_required"
                         ),
@@ -452,6 +453,12 @@ class HttpDownloadTool(BaseTool):
         if url_error:
             return ToolResult(success=False, error=url_error)
 
+        from .http_site_gate import gate_error_message, gate_http_url
+
+        gate = gate_http_url(url, session_id="")
+        if not gate.allowed:
+            return ToolResult(success=False, error=gate_error_message(gate))
+
         # 自动推断凭据域（对齐 web_fetch 行为）：
         # browser_login 导出 cookie 后，http_download 访问同域自动带态。
         # 多账号：account_id 给定 → 解析为 vault 维度（默认账号 → None）。
@@ -489,8 +496,8 @@ class HttpDownloadTool(BaseTool):
                     error=(
                         f"credential_expired: {credential_domain!r} 的凭据已全部过期"
                         f"（{', '.join(resolution.expired_names[:5])}）。"
-                        "请在浏览器重新登录后 browser_cookies action=export，"
-                        "或 credential_set 重新设置头部凭据"
+                        "请在浏览器重新登录后 browser_cookies action=export 重新导出，"
+                        "或 action=set_header 重新设置头部凭据"
                     ),
                 )
             if resolution.status == "insecure_scheme":
@@ -506,7 +513,8 @@ class HttpDownloadTool(BaseTool):
                     success=False,
                     error=(
                         f"credential_not_found: 无 {credential_domain!r} 的凭据档案"
-                        "（先 browser_cookies action=export 导出，或 credential_set 设置头部凭据）"
+                        "（先 browser_cookies action=export 导出，"
+                        "或 action=set_header 设置头部凭据）"
                     ),
                 )
             credential_headers = resolution.headers

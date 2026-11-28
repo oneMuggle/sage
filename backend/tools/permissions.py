@@ -201,6 +201,14 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "skill": ToolCapability.EXECUTE,
     # skill_save 只产出 pending 草稿, 生效仍需用户在 UI 审批, 属本地写。
     "skill_save": ToolCapability.WRITE,
+    # skill_read_resource 只读技能内白名单资源（references/scripts/assets/
+    # templates），与渲染路径同口径 —— 无副作用，按 READ 对待。
+    "skill_read_resource": ToolCapability.READ,
+    # --- 站点知识沉淀（spec §7.1 / §6.2）---
+    # profile_record_note 只写用户目录下的 notes sidecar，本地副作用。
+    "profile_record_note": ToolCapability.WRITE,
+    # profile_discover_backends 只写用户目录下的 backends sidecar，本地副作用。
+    "profile_discover_backends": ToolCapability.WRITE,
     # --- 多模态 ---
     "text_to_speech": ToolCapability.WRITE,
     "generate_image": ToolCapability.WRITE,

@@ -49,7 +49,12 @@ from .run_store import (
     save_outline,
 )
 from .support import apply_claim_support, summarize_claim_support
-from .verify import apply_evidence_support, default_lookups, verify_run_metadata
+from .verify import (
+    apply_evidence_support,
+    default_lookups,
+    verify_run_access,
+    verify_run_metadata,
+)
 
 
 def _print(data: Any) -> None:
@@ -156,6 +161,22 @@ def _build_parser() -> argparse.ArgumentParser:
     record.add_argument("--observation", required=True)
     record.add_argument("--out", required=True)
 
+    verify_access = sub.add_parser(
+        "verify-access", help="Unpaywall OA 可得性轴（无 email 时全部 unknown）"
+    )
+    verify_access.add_argument("--run", required=True)
+    verify_access.add_argument(
+        "--site", default="", help="站点 id；读取 compliance.contact_email 装配 OA 轴"
+    )
+
+    discover = sub.add_parser(
+        "discover-backends", help="枚举站点可用文献库并写回 backends sidecar"
+    )
+    discover.add_argument("--site", required=True, help="站点 id")
+    discover.add_argument("--snapshot", required=True, help="库清单页快照文件路径")
+    discover.add_argument("--entry-url", default="", help="库清单页 URL")
+    discover.add_argument("--backend-id", default="", help="只探测这一个后端")
+
     return parser
 
 
@@ -194,6 +215,41 @@ def _dispatch(args: argparse.Namespace) -> int:  # noqa: PLR0911 — 每个子�
                 "path": args.out,
             }
         )
+        return 0
+
+    if args.command == "discover-backends":
+        from .backends import parse_backend_entries
+        from .knowledge import read_sidecar, sidecar_path, write_sidecar
+        from .models import parse_backends
+        from .profile_store import user_sites_dir
+
+        snapshot_text = Path(args.snapshot).read_text(encoding="utf-8")
+        discovered = parse_backend_entries(snapshot_text, args.entry_url or "https://")
+        if args.backend_id:
+            discovered = [item for item in discovered if item.id == args.backend_id]
+        target = sidecar_path(user_sites_dir(), args.site, "backends")
+        existing = parse_backends(read_sidecar(target).get("backends"))
+        existing_by_id = {backend.id: backend for backend in existing}
+        merged = [existing_by_id.get(item.id, item) for item in discovered]
+        write_sidecar(
+            target,
+            {
+                "backends": [
+                    {
+                        "id": backend.id,
+                        "label": backend.label,
+                        "entry_url": backend.entry_url,
+                        "status": backend.status,
+                        "reason": backend.reason,
+                        "capabilities": dict(backend.capabilities),
+                        "overrides": dict(backend.overrides),
+                        "checked_at": backend.checked_at,
+                    }
+                    for backend in merged
+                ]
+            },
+        )
+        _print({"ok": True, "path": str(target), "total": len(merged)})
         return 0
 
     run = load_run(Path(args.run))
@@ -252,6 +308,12 @@ def _dispatch(args: argparse.Namespace) -> int:  # noqa: PLR0911 — 每个子�
             }
         )
         return 0 if not verdicts.get("unresolved") and not verdicts.get("unsupported") else 1
+
+    if args.command == "verify-access":
+        profile = get_default_store().get(args.site) if args.site else None
+        report = verify_run_access(run, profile=profile)
+        _print({"ok": True, **report})
+        return 0
 
     if args.command == "verify-metadata":
         report = verify_run_metadata(run, default_lookups(), args.min_consensus)

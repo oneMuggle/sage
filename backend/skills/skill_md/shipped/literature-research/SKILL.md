@@ -32,6 +32,11 @@ triggers: []
                      # verification_report.{md,json} / rubric_review.{md,json}
 ```
 
+meta.json / papers.jsonl / evidence.jsonl / claims.jsonl / outline.json /
+draft.md / verification.json 的字段定义见 `{baseDir}/references/pipeline.md`，
+需要时用 `skill_read_resource` 读取
+（`skill="literature-research", path="references/pipeline.md"`）。
+
 ## 工作流（按顺序，不要跳步）
 
 ### 0. 选择站点与确认合规
@@ -240,6 +245,33 @@ docx；生成后跑 `office_lint_word` 自检。不要在本技能里重复实�
 - 站点改版时用 `validate-profile` 与一次 dry-run 检索定位问题，不要改
   pipeline 代码。
 
+## HTTP 快路径（下载优先走 HTTP）
+
+检索页必须用浏览器（JS 渲染 + WAF，不可 HTTP 化）。**下载**可以走 HTTP：
+
+1. 浏览器读结果行的元素 href —— 用 `browser_interact action=attr attr_name=href`，
+   不要用快照里被截断的 URL。
+2. `browser_cookies action=export` 把登录态写入 vault。
+3. HTTP 取 `doDownload` 入口（带 Referer）→ 解析中间页的 `downurl` →
+   按 profile 的 `pdf.interstitial.host_fallbacks` 换主机 → 下载并校验 magic + 题名。
+4. HTTP 失败**自动回退浏览器路径一次**，并在 `query_log` 记 `fallback_reason`。
+
+## 经验沉淀（把坑点固化下来）
+
+一次失败且根因已定位时，调用 `profile_record_note` 把经验写进 profile 的
+`notes` sidecar。下次运行时该经验会自动出现在检索指导文本的「站点经验」段里
+（按严重度排序，blocker 在前）—— 不用重蹈覆辙。
+
+## 文献库枚举（多后端）
+
+站点的可用文献库在 `profile.backends` 里；`status` 取值：
+`ready`（可用）/ `blocked`（需人工完成滑块或验证码，**不自动重试**，请用户在
+可见窗口操作）/ `unavailable`（站点侧报错）/ `unknown`（未探测）。
+
+库清单**只能在登录态下枚举**：用 `browser_snapshot` 拿库清单页快照，再调用
+`profile_discover_backends` 解析并写回 `backends` sidecar。已存在的条目**保留**
+人工判定的状态。
+
 ## 快速命令（本地调试）
 
 ```bash
@@ -254,12 +286,12 @@ python -m backend.literature.cli export --run runs/<id> [--style ieee]
 ## 附录：站点 profile 示例
 
 `docs/templates/literature-sites/` 提供可复制的示例 profile（如浏览器登录+检索+PDF
-下载的 `xueshu789.yaml`）。这些模板**不参与运行时自动加载**，仅供理解 profile 字段
+下载的 `<site>.yaml`）。这些模板**不参与运行时自动加载**，仅供理解 profile 字段
 形态和快速创建新站点：
 
 ```bash
 mkdir -p ~/.sage/literature_sites
-cp docs/templates/literature-sites/xueshu789.yaml ~/.sage/literature_sites/
+cp docs/templates/literature-sites/<site>.yaml ~/.sage/literature_sites/
 ```
 
 字段完整清单见 `backend/literature/README.md` 与 `backend/literature/models.py`。

@@ -60,6 +60,25 @@ RPC_FORBIDDEN_TOOLS = frozenset(
     }
 )
 
+#: EXECUTE 面里「允许经 RPC 调用」的显式白名单（spec §8.1 / B1）。
+#:
+#: 这些工具的写操作仍受 browser_safety 的站点策略与确认闸约束 ——
+#: 确认在主循环注册，子进程只需把 needs_confirmation 错误传回并退出，
+#: 由主循环裁决。因此放行的是「调用能力」，不是「跳过审批」。
+#:
+#: 白名单之外的 EXECUTE 工具（browser_launch / browser_login / bash /
+#: skill 等）依旧静态拒绝，引导 LLM 改在主循环直接调用。
+RPC_ALLOWED_EXECUTE_TOOLS = frozenset(
+    {
+        "browser_cookies",
+        "browser_downloads",
+        "browser_interact",
+        "browser_navigate",
+        "browser_snapshot",
+        "browser_tabs",
+    }
+)
+
 
 def _rpc_denial_reason(tool_name: str) -> Optional[str]:
     """返回静态拒绝原因；``None`` 表示允许经 RPC 调用。"""
@@ -71,6 +90,8 @@ def _rpc_denial_reason(tool_name: str) -> Optional[str]:
             "请在主循环直接调用，以便经用户审批"
         )
     if classify_tool(tool_name) is ToolCapability.EXECUTE:
+        if tool_name in RPC_ALLOWED_EXECUTE_TOOLS:
+            return None
         return (
             f"execute_code RPC 禁止调用执行面工具 {tool_name}；"
             "请在主循环直接调用，以便经用户审批"

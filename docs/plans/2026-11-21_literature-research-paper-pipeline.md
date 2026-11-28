@@ -372,6 +372,10 @@ compliance:
 
 ### M0：学术源与统一文献模型（1–2 周）
 
+> **承接说明（2026-11-28）**：以下 M0 未勾选项已由
+> `docs/superpowers/specs/2026-11-28-literature-site-knowledge-and-http-fastpath-design.md`
+> 及其配套实施计划承接（HTTP 快路径 / 多后端 / 经验沉淀 / OA 轴），本计划不再重复实现。
+
 > **M0a 已完成（2026-11-21，分支 `feat/literature-research-pipeline`）**：
 > `backend/literature/` 领域模型 + 三级 profile 加载器 + LLM 检索指导 +
 > `ProfileBackedAdapter` + `xueshu789` profile 草稿。测试：

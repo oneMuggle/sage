@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple
+from datetime import date
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlparse
 
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -116,10 +117,48 @@ class RateLimitSpec:
     max_batch: int = 20
 
 
+#: 站点经验的严重级别（spec §3.1）。
+NOTE_SEVERITIES = ("blocker", "degraded", "cosmetic")
+
+#: 单个检索后端的可用性状态（spec §3.2）。
+BACKEND_STATUSES = ("ready", "blocked", "unavailable", "unknown")
+
+
+@dataclass(frozen=True)
+class SiteNote:
+    """一条结构化站点经验。"""
+
+    id: str
+    title: str
+    symptom: str
+    workaround: str
+    cause: str = ""
+    severity: str = "degraded"
+    applies_to: Tuple[str, ...] = ()
+    learned_at: str = ""
+    verified_at: str = ""
+    source_run: str = ""
+
+
+@dataclass(frozen=True)
+class SiteBackend:
+    """站点内的单个检索后端（文献库）。"""
+
+    id: str
+    label: str
+    entry_url: str
+    status: str = "unknown"
+    reason: str = ""
+    capabilities: Dict[str, bool] = field(default_factory=dict)
+    overrides: Dict[str, Any] = field(default_factory=dict)
+    checked_at: str = ""
+
+
 @dataclass(frozen=True)
 class ComplianceSpec:
     note: str = ""
     default_enabled: bool = False
+    contact_email: str = ""
 
 
 @dataclass(frozen=True)
@@ -140,6 +179,8 @@ class SiteProfile:
     last_verified_at: Optional[str] = None
     source_path: Optional[str] = None
     source_layer: str = "builtin"
+    notes: Tuple[SiteNote, ...] = ()
+    backends: Tuple[SiteBackend, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -314,6 +355,118 @@ def _parse_pdf(raw: Any) -> Optional[PdfSpec]:
     )
 
 
+def _parse_iso_date(value: Any, field_name: str) -> str:
+    """可选 ISO 日期（YYYY-MM-DD）；空值返回空串。"""
+    text = _require_str(value, field_name)
+    if not text:
+        return ""
+    try:
+        date.fromisoformat(text)
+    except ValueError as exc:
+        raise SiteProfileError(f"{field_name} 必须是 YYYY-MM-DD: {text!r}") from exc
+    return text
+
+
+def _parse_notes(raw: Any) -> Tuple[SiteNote, ...]:
+    """解析 notes[]；同 id 多条时后者覆盖前者且保留首次出现的位置。"""
+    if raw is None:
+        return ()
+    if not isinstance(raw, (list, tuple)):  # noqa: UP038 — py38 兼容 tuple isinstance
+        raise SiteProfileError("notes 必须是数组")
+    order: List[str] = []
+    by_id: Dict[str, SiteNote] = {}
+    for index, item in enumerate(raw):
+        data = _require_dict(item, f"notes[{index}]")
+        note_id = _require_str(data.get("id"), f"notes[{index}].id", required=True)
+        if not _ID_RE.match(note_id):
+            raise SiteProfileError(
+                f"notes[{index}].id 必须是小写字母/数字/连字符（且以字母或数字开头）: "
+                f"{note_id!r}"
+            )
+        severity = _require_str(data.get("severity"), f"notes[{index}].severity") or "degraded"
+        if severity not in NOTE_SEVERITIES:
+            raise SiteProfileError(
+                f"notes[{index}].severity 必须是 {list(NOTE_SEVERITIES)} 之一，"
+                f"收到 {severity!r}"
+            )
+        learned_at = _parse_iso_date(data.get("learned_at"), f"notes[{index}].learned_at")
+        if not learned_at:
+            raise SiteProfileError(f"notes[{index}].learned_at 必填（YYYY-MM-DD）")
+        note = SiteNote(
+            id=note_id,
+            title=_require_str(data.get("title"), f"notes[{index}].title", required=True),
+            symptom=_require_str(
+                data.get("symptom"), f"notes[{index}].symptom", required=True
+            ),
+            workaround=_require_str(
+                data.get("workaround"), f"notes[{index}].workaround", required=True
+            ),
+            cause=_require_str(data.get("cause"), f"notes[{index}].cause"),
+            severity=severity,
+            applies_to=_str_tuple(data.get("applies_to"), f"notes[{index}].applies_to"),
+            learned_at=learned_at,
+            verified_at=_parse_iso_date(
+                data.get("verified_at"), f"notes[{index}].verified_at"
+            ),
+            source_run=_require_str(data.get("source_run"), f"notes[{index}].source_run"),
+        )
+        if note_id not in by_id:
+            order.append(note_id)
+        by_id[note_id] = note
+    return tuple(by_id[note_id] for note_id in order)
+
+
+def _parse_backends(raw: Any) -> Tuple[SiteBackend, ...]:
+    """解析 backends[]；同 id 多条时后者覆盖前者且保留首次出现的位置。"""
+    if raw is None:
+        return ()
+    if not isinstance(raw, (list, tuple)):  # noqa: UP038 — py38 兼容 tuple isinstance
+        raise SiteProfileError("backends 必须是数组")
+    order: List[str] = []
+    by_id: Dict[str, SiteBackend] = {}
+    for index, item in enumerate(raw):
+        data = _require_dict(item, f"backends[{index}]")
+        backend_id = _require_str(data.get("id"), f"backends[{index}].id", required=True)
+        if not _ID_RE.match(backend_id):
+            raise SiteProfileError(
+                f"backends[{index}].id 必须是小写字母/数字/连字符（且以字母或数字开头）: "
+                f"{backend_id!r}"
+            )
+        status = _require_str(data.get("status"), f"backends[{index}].status") or "unknown"
+        if status not in BACKEND_STATUSES:
+            raise SiteProfileError(
+                f"backends[{index}].status 必须是 {list(BACKEND_STATUSES)} 之一，"
+                f"收到 {status!r}"
+            )
+        capabilities = {
+            str(key): bool(value)
+            for key, value in _require_dict(
+                data.get("capabilities"), f"backends[{index}].capabilities"
+            ).items()
+        }
+        backend = SiteBackend(
+            id=backend_id,
+            label=_require_str(data.get("label"), f"backends[{index}].label") or backend_id,
+            entry_url=_validate_http_url(
+                _require_str(
+                    data.get("entry_url"), f"backends[{index}].entry_url", required=True
+                ),
+                f"backends[{index}].entry_url",
+            ),
+            status=status,
+            reason=_require_str(data.get("reason"), f"backends[{index}].reason"),
+            capabilities=capabilities,
+            overrides=dict(_require_dict(data.get("overrides"), f"backends[{index}].overrides")),
+            checked_at=_parse_iso_date(
+                data.get("checked_at"), f"backends[{index}].checked_at"
+            ),
+        )
+        if backend_id not in by_id:
+            order.append(backend_id)
+        by_id[backend_id] = backend
+    return tuple(by_id[backend_id] for backend_id in order)
+
+
 def profile_from_dict(
     raw: Dict[str, Any],
     source_path: Optional[str] = None,
@@ -446,12 +599,17 @@ def profile_from_dict(
         compliance=ComplianceSpec(
             note=_require_str(compliance_raw.get("note"), "compliance.note"),
             default_enabled=bool(compliance_raw.get("default_enabled", False)),
+            contact_email=_require_str(
+                compliance_raw.get("contact_email"), "compliance.contact_email"
+            ),
         ),
         version=_require_str(raw.get("version"), "version") or "1",
         status=status,
         last_verified_at=last_verified_at,
         source_path=source_path,
         source_layer=source_layer,
+        notes=_parse_notes(raw.get("notes")),
+        backends=_parse_backends(raw.get("backends")),
     )
 
 
@@ -466,7 +624,30 @@ def is_allowed_host(host: str, domains: Tuple[str, ...]) -> bool:
     return False
 
 
-def render_search_url(profile: SiteProfile, query: str, limit: int = 10) -> str:
+def select_backend(profile: SiteProfile, backend_id: str = "") -> Optional[SiteBackend]:
+    """选择检索后端：显式 id 优先，否则第一个 ready，否则第一个。"""
+    if not profile.backends:
+        return None
+    if backend_id:
+        for backend in profile.backends:
+            if backend.id == backend_id:
+                return backend
+        return None
+    for backend in profile.backends:
+        if backend.status == "ready":
+            return backend
+    return profile.backends[0]
+
+
+def select_backend_id(profile: SiteProfile) -> str:
+    """返回默认检索后端 id；站点未声明 backends 时返回空串。"""
+    backend = select_backend(profile)
+    return backend.id if backend is not None else ""
+
+
+def render_search_url(
+    profile: SiteProfile, query: str, limit: int = 10, backend_id: str = ""
+) -> str:
     """渲染检索 URL；校验 scheme 与域名，防止 profile 指向任意主机。"""
     text = (query or "").strip()
     if not text:
@@ -474,9 +655,14 @@ def render_search_url(profile: SiteProfile, query: str, limit: int = 10) -> str:
     template = profile.search.url_template
     if not template:
         raise SiteProfileError(f"站点 {profile.id} 未配置 search.url_template")
+    resolved_backend_id = backend_id or select_backend_id(profile)
 
     try:
-        url = template.format(query=quote(text, safe=""), limit=str(int(limit)))
+        url = template.format(
+            query=quote(text, safe=""),
+            limit=str(int(limit)),
+            backend_id=resolved_backend_id,
+        )
     except (KeyError, ValueError) as exc:
         raise SiteProfileError(
             f"站点 {profile.id} 的 search.url_template 渲染失败: {exc}"
@@ -507,3 +693,8 @@ def is_logged_in(
     if not checks:
         return None
     return all(checks)
+
+
+# 公共别名：知识合并（knowledge.py）需要对 notes/backends 做同样的校验。
+parse_notes = _parse_notes
+parse_backends = _parse_backends

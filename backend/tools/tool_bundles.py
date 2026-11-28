@@ -318,6 +318,24 @@ def _install_runtime(ctx: ToolInstallContext) -> None:
 def _install_skill(ctx: ToolInstallContext) -> None:
     # M2 part B: in-loop 技能调用（EXECUTE，M1 审批闸口按模式矩阵拦截）
     ctx.registry.register(SkillTool(policy=ctx.policy))
+    # skill_read_resource：读取技能内白名单资源（READ，渐进披露）
+    from .skill_resource_tool import SkillReadResourceTool
+
+    ctx.registry.register(SkillReadResourceTool(policy=ctx.policy))
+
+
+def _install_profile(ctx: ToolInstallContext) -> None:
+    """站点知识沉淀工具（WRITE_LOCAL，只写用户目录下的 sidecar）。"""
+    from .profile_note_tool import ProfileRecordNoteTool
+
+    ctx.registry.register(ProfileRecordNoteTool(policy=ctx.policy))
+
+
+def _install_profile_backends(ctx: ToolInstallContext) -> None:
+    """文献库枚举工具（WRITE_LOCAL，只写用户目录下的 backends sidecar）。"""
+    from .profile_backend_tool import ProfileDiscoverBackendsTool
+
+    ctx.registry.register(ProfileDiscoverBackendsTool(policy=ctx.policy))
 
 
 def _install_ask_user(ctx: ToolInstallContext) -> None:
@@ -533,6 +551,8 @@ BUNDLES: Tuple[ToolBundle, ...] = (
     ToolBundle("worklog", _install_worklog),
     ToolBundle("design", _install_design),
     ToolBundle("self_status", _install_self_status),
+    ToolBundle("profile", _install_profile),
+    ToolBundle("profile_backends", _install_profile_backends),
 )
 
 
