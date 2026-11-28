@@ -116,7 +116,8 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
         db.init_db()  # v1-v18 自动注册（runner.py 模块级）
         versions = applied_versions(db.get_connection())
         # v1 基线 + v2-v21 迁移（v18 归一化历史秒级时间戳；v19 浏览器动作审计；
-        # v20 usage_events.run_id 归因回填；v21 orch_tasks 复合主键重建）
+        # v20 usage_events.run_id 归因回填；v21 orch_tasks 复合主键重建；
+        # v23 presentation_templates 模板库索引）
         assert versions == {
             1,
             2,
@@ -140,6 +141,7 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
             20,
             21,
             22,
+            23,
         }
         # schema_version 表已建（账本就绪）
     finally:

@@ -213,6 +213,35 @@ class PptMasterAdapter:
         )
 
     # ------------------------------------------------------------------ #
+    # 模板安装
+    # ------------------------------------------------------------------ #
+    def apply_templates(self, project_dir: Path, roots: Sequence[Path]) -> None:
+        """把模板库 workspace 安装进项目（转换前调用）。
+
+        每个 root 是一个模板库条目目录（含 ``templates/design_spec.md``）。
+        使用 ``--skip-validation``：内置模板随技能发布时已由上游校验，避免
+        每次渲染重复跑一遍质量检查。失败抛 PptMasterRunError。
+        """
+        roots = [Path(root) for root in roots]
+        if not roots:
+            return
+        project_dir = Path(project_dir)
+        script = self.skill_root / "scripts" / "apply_template.py"
+        if not script.is_file():
+            raise PptMasterEnvError(f"技能目录缺少模板安装脚本：{script}")
+        argv = [self.python_executable, str(script), str(project_dir)]
+        for root in roots:
+            argv.extend(["--root", str(root)])
+        argv.append("--skip-validation")
+        result = self._run(argv)
+        if result.returncode != 0:
+            raise PptMasterRunError(
+                "模板安装失败。"
+                f"退出码={result.returncode} "
+                f"stdout={result.stdout.strip()} stderr={result.stderr.strip()}"
+            )
+
+    # ------------------------------------------------------------------ #
     # 内部
     # ------------------------------------------------------------------ #
     def _run(self, argv: Sequence[str]) -> subprocess.CompletedProcess:

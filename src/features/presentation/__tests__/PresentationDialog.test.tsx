@@ -6,6 +6,7 @@ import { presentationApi } from '../../../shared/api/presentationApi';
 import type {
   PresentationEnvironment,
   PresentationRenderResult,
+  PresentationTemplate,
 } from '../../../shared/api/presentationApi';
 import { useTaskCenterStore } from '../../task-center/taskCenterStore';
 import { PresentationDialog } from '../PresentationDialog';
@@ -14,18 +15,39 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('../../../shared/api/presentationApi', () => ({
   presentationApi: {
     getEnvironment: vi.fn(),
+    getTemplates: vi.fn(),
+    refreshTemplates: vi.fn(),
     renderFromSvgs: vi.fn(),
   },
 }));
 
 const mockedEnv = vi.mocked(presentationApi.getEnvironment);
+const mockedTemplates = vi.mocked(presentationApi.getTemplates);
+const mockedRefresh = vi.mocked(presentationApi.refreshTemplates);
 const mockedRender = vi.mocked(presentationApi.renderFromSvgs);
 const mockedToastSuccess = vi.mocked(toast.success);
 
 const SVG_A = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>';
 const SVG_B = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="5"/></svg>';
+const SVG_STRUCTURED =
+  '<svg xmlns="http://www.w3.org/2000/svg" data-pptx-layout="cover"><rect/></svg>';
 
 const READY_ENV: PresentationEnvironment = { ready: true, skill_root: '/skills/ppt-master' };
+const NO_TEMPLATES = { available: true, error: null, templates: [] };
+
+function template(kind: string, id: string): PresentationTemplate {
+  return {
+    kind,
+    template_id: id,
+    name: id,
+    summary: `${id} 摘要`,
+    primary_color: null,
+    canvas_format: kind === 'layout' ? '16:9' : null,
+    page_count: null,
+    page_types: ['cover'],
+    root_path: `/fake/templates/${kind}s/${id}`,
+  };
+}
 
 const SUCCESS_RESULT: PresentationRenderResult = {
   success: true,
@@ -35,6 +57,7 @@ const SUCCESS_RESULT: PresentationRenderResult = {
   warnings: [],
   summary: { total: 1, passed: 1, warnings: 0, errors: 0 },
   message: '转换完成',
+  templates_applied: [],
 };
 
 const BLOCKED_RESULT: PresentationRenderResult = {
@@ -45,6 +68,7 @@ const BLOCKED_RESULT: PresentationRenderResult = {
   warnings: [],
   summary: { total: 1, passed: 0, warnings: 0, errors: 1 },
   message: '质量门禁未通过',
+  templates_applied: [],
 };
 
 function renderDialog(workspacePath = '/ws') {
@@ -62,7 +86,10 @@ function addPastedSlide(text: string) {
 beforeEach(() => {
   mockedEnv.mockReset();
   mockedRender.mockReset();
+  mockedTemplates.mockReset();
+  mockedRefresh.mockReset();
   mockedToastSuccess.mockReset();
+  mockedTemplates.mockResolvedValue(NO_TEMPLATES);
   useTaskCenterStore.setState({ tasks: {} });
 });
 
@@ -183,5 +210,122 @@ describe('PresentationDialog', () => {
     expect(firstName()).toBe('粘贴的幻灯片 1');
     fireEvent.click(items()[1].querySelector('button[aria-label="上移"]') as HTMLElement);
     expect(firstName()).toBe('粘贴的幻灯片 2');
+  });
+
+  it('模板库为空时不显示选择器', async () => {
+    mockedEnv.mockResolvedValue(READY_ENV);
+    renderDialog();
+    await waitFor(() => expect(mockedTemplates).toHaveBeenCalled());
+
+    expect(screen.queryByTestId('presentation-templates')).toBeNull();
+    expect(mockedRefresh).not.toHaveBeenCalled();
+  });
+
+  it('按种类分组渲染模板选择器', async () => {
+    mockedEnv.mockResolvedValue(READY_ENV);
+    mockedTemplates.mockResolvedValue({
+      available: true,
+      error: null,
+      templates: [template('brand', 'acme'), template('layout', 'brief')],
+    });
+    renderDialog();
+
+    await waitFor(() => expect(screen.getByTestId('presentation-template-brand')).toBeTruthy());
+    expect(screen.getByTestId('presentation-template-layout')).toBeTruthy();
+    expect(screen.queryByTestId('presentation-template-style')).toBeNull();
+    expect(screen.queryByTestId('presentation-template-deck')).toBeNull();
+  });
+
+  it('选中模板后提交 template_ids', async () => {
+    mockedEnv.mockResolvedValue(READY_ENV);
+    mockedTemplates.mockResolvedValue({
+      available: true,
+      error: null,
+      templates: [template('brand', 'acme'), template('layout', 'brief')],
+    });
+    mockedRender.mockResolvedValue({ ...SUCCESS_RESULT, templates_applied: ['acme', 'brief'] });
+    renderDialog();
+
+    await waitFor(() => expect(screen.getByTestId('presentation-template-brand')).toBeTruthy());
+    addPastedSlide(SVG_STRUCTURED);
+    fireEvent.change(screen.getByTestId('presentation-template-brand'), {
+      target: { value: 'brand:acme' },
+    });
+    fireEvent.change(screen.getByTestId('presentation-template-layout'), {
+      target: { value: 'layout:brief' },
+    });
+    fireEvent.click(screen.getByText('生成 PPTX'));
+
+    await waitFor(() => expect(mockedRender).toHaveBeenCalledTimes(1));
+    expect(mockedRender).toHaveBeenCalledWith({
+      workspace_path: '/ws',
+      filename: 'presentation.pptx',
+      svg_slides: [SVG_STRUCTURED],
+      template_ids: ['brand:acme', 'layout:brief'],
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('presentation-quality-templates')).toHaveTextContent('acme、brief'),
+    );
+  });
+
+  it('选版式但 SVG 缺少结构元数据时给出提示', async () => {
+    mockedEnv.mockResolvedValue(READY_ENV);
+    mockedTemplates.mockResolvedValue({
+      available: true,
+      error: null,
+      templates: [template('layout', 'brief')],
+    });
+    renderDialog();
+
+    await waitFor(() => expect(screen.getByTestId('presentation-template-layout')).toBeTruthy());
+    addPastedSlide(SVG_A);
+    fireEvent.change(screen.getByTestId('presentation-template-layout'), {
+      target: { value: 'layout:brief' },
+    });
+
+    expect(screen.getByTestId('presentation-template-hint')).toHaveTextContent('data-pptx-layout');
+  });
+
+  it('SVG 含结构元数据时不做提示', async () => {
+    mockedEnv.mockResolvedValue(READY_ENV);
+    mockedTemplates.mockResolvedValue({
+      available: true,
+      error: null,
+      templates: [template('layout', 'brief')],
+    });
+    renderDialog();
+
+    await waitFor(() => expect(screen.getByTestId('presentation-template-layout')).toBeTruthy());
+    addPastedSlide(SVG_STRUCTURED);
+    fireEvent.change(screen.getByTestId('presentation-template-layout'), {
+      target: { value: 'layout:brief' },
+    });
+
+    expect(screen.queryByTestId('presentation-template-hint')).toBeNull();
+  });
+
+  it('刷新模板库后重新加载列表', async () => {
+    mockedEnv.mockResolvedValue(READY_ENV);
+    mockedTemplates.mockResolvedValueOnce({
+      available: true,
+      error: null,
+      templates: [template('brand', 'acme')],
+    });
+    mockedRefresh.mockResolvedValue({ available: true, count: 2, error: null });
+    mockedTemplates.mockResolvedValueOnce({
+      available: true,
+      error: null,
+      templates: [template('brand', 'acme'), template('brand', 'beta')],
+    });
+    renderDialog();
+
+    await waitFor(() => expect(screen.getByTestId('presentation-templates-refresh')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('presentation-templates-refresh'));
+
+    await waitFor(() => expect(mockedRefresh).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const options = screen.getByTestId('presentation-template-brand').querySelectorAll('option');
+      expect(options).toHaveLength(3); // 不使用 + acme + beta
+    });
   });
 });

@@ -15,6 +15,8 @@ import { presentationApi } from '../../shared/api/presentationApi';
 import type {
   PresentationEnvironment,
   PresentationRenderResult,
+  PresentationTemplate,
+  PresentationTemplateKind,
 } from '../../shared/api/presentationApi';
 import { Button } from '../../shared/ui/Button';
 import { Modal } from '../../shared/ui/Modal';
@@ -26,6 +28,18 @@ const TASK_ID = 'presentation:render';
 const DEFAULT_FILENAME = 'presentation.pptx';
 
 const inputClass = 'w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text';
+
+/** 模板选择器分组顺序与中文名。 */
+const TEMPLATE_GROUPS: Array<{ kind: PresentationTemplateKind; label: string }> = [
+  { kind: 'brand', label: '品牌' },
+  { kind: 'style', label: '风格' },
+  { kind: 'layout', label: '版式' },
+  { kind: 'deck', label: '整套' },
+];
+
+/** 依赖页面结构解析的模板种类：缺少结构元数据时按扁平方式导出。 */
+const STRUCTURAL_TEMPLATE_KINDS: ReadonlySet<string> = new Set(['layout', 'deck']);
+const STRUCTURE_MARKER = 'data-pptx-layout';
 
 interface SlideEntry {
   id: string;
@@ -73,6 +87,11 @@ export function PresentationDialog({ isOpen, onClose, workspacePath }: Presentat
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<PresentationRenderResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<PresentationTemplate[]>([]);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesRefreshing, setTemplatesRefreshing] = useState(false);
+  const [selected, setSelected] = useState<Partial<Record<PresentationTemplateKind, string>>>({});
 
   const registerTask = useTaskCenterStore((s) => s.registerTask);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -83,6 +102,7 @@ export function PresentationDialog({ isOpen, onClose, workspacePath }: Presentat
     if (!isOpen) return;
     setResult(null);
     setError(null);
+    setSelected({});
     setEnvLoading(true);
     setEnvError(null);
     presentationApi
@@ -93,7 +113,40 @@ export function PresentationDialog({ isOpen, onClose, workspacePath }: Presentat
         setEnvError(e instanceof Error ? e.message : String(e));
       })
       .finally(() => setEnvLoading(false));
+
+    setTemplatesLoading(true);
+    setTemplateError(null);
+    presentationApi
+      .getTemplates()
+      .then((list) => {
+        setTemplates(list.templates);
+        setTemplateError(list.error ?? null);
+      })
+      .catch((e: unknown) => {
+        setTemplates([]);
+        setTemplateError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setTemplatesLoading(false));
   }, [isOpen]);
+
+  const handleRefreshTemplates = async () => {
+    setTemplatesRefreshing(true);
+    try {
+      const res = await presentationApi.refreshTemplates();
+      if (res.available) {
+        toast.success(`模板库已刷新：${res.count} 个模板`);
+        const list = await presentationApi.getTemplates();
+        setTemplates(list.templates);
+        setTemplateError(list.error ?? null);
+      } else {
+        setTemplateError(res.error ?? '模板库不可用');
+      }
+    } catch (e) {
+      setTemplateError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTemplatesRefreshing(false);
+    }
+  };
 
   const addSlide = (name: string, content: string, size: number) => {
     setSlides((prev) => [...prev, { id: randomId(), name, content, size }]);
@@ -149,6 +202,22 @@ export function PresentationDialog({ isOpen, onClose, workspacePath }: Presentat
 
   const canSubmit = !busy && Boolean(workspacePath) && slides.length > 0 && env?.ready === true;
 
+  const templateGroups = TEMPLATE_GROUPS.map((group) => ({
+    ...group,
+    items: templates.filter((t) => t.kind === group.kind),
+  })).filter((group) => group.items.length > 0);
+
+  const selectedTemplateIds = TEMPLATE_GROUPS.map((group) => selected[group.kind]).filter(
+    (value): value is string => Boolean(value),
+  );
+
+  const structuralHint =
+    slides.length > 0 &&
+    selectedTemplateIds.some((id) => STRUCTURAL_TEMPLATE_KINDS.has(id.split(':')[0])) &&
+    !slides.some((slide) => slide.content.includes(STRUCTURE_MARKER))
+      ? '所选的版式/整套模板依赖页面的结构化元数据（data-pptx-layout），当前 SVG 未检测到，导出可能不应用其版式。'
+      : null;
+
   const handleRender = async () => {
     if (!canSubmit) return;
     const outputName = ensurePptxSuffix(filename);
@@ -161,6 +230,7 @@ export function PresentationDialog({ isOpen, onClose, workspacePath }: Presentat
         workspace_path: workspacePath,
         filename: outputName,
         svg_slides: slides.map((s) => s.content),
+        ...(selectedTemplateIds.length > 0 ? { template_ids: selectedTemplateIds } : {}),
       });
       setResult(res);
       if (res.success) {
@@ -252,6 +322,69 @@ export function PresentationDialog({ isOpen, onClose, workspacePath }: Presentat
             data-testid="presentation-filename"
           />
         </div>
+
+        {/* 模板库（可选） */}
+        {templateGroups.length > 0 ? (
+          <div className="space-y-2" data-testid="presentation-templates">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-medium text-text-secondary">
+                模板库（可选，每类最多一个）
+              </label>
+              <button
+                type="button"
+                className="text-xs text-muted hover:text-text disabled:opacity-40"
+                onClick={() => void handleRefreshTemplates()}
+                disabled={busy || templatesRefreshing}
+                data-testid="presentation-templates-refresh"
+              >
+                {templatesRefreshing ? '刷新中…' : '刷新模板库'}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {templateGroups.map((group) => (
+                <label key={group.kind} className="block text-xs text-text-secondary">
+                  {group.label}
+                  <select
+                    className={`${inputClass} mt-1`}
+                    value={selected[group.kind] ?? ''}
+                    onChange={(e) =>
+                      setSelected((prev) => ({
+                        ...prev,
+                        [group.kind]: e.target.value || undefined,
+                      }))
+                    }
+                    disabled={busy}
+                    data-testid={`presentation-template-${group.kind}`}
+                  >
+                    <option value="">不使用</option>
+                    {group.items.map((item) => (
+                      <option
+                        key={item.template_id}
+                        value={`${item.kind}:${item.template_id}`}
+                        title={item.summary}
+                      >
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+            {structuralHint ? (
+              <p className="text-xs text-warning" data-testid="presentation-template-hint">
+                {structuralHint}
+              </p>
+            ) : null}
+          </div>
+        ) : templatesLoading ? (
+          <p className="text-xs text-muted" data-testid="presentation-templates-loading">
+            正在加载模板库…
+          </p>
+        ) : templateError ? (
+          <p className="text-xs text-muted" data-testid="presentation-templates-error">
+            模板库不可用：{templateError}
+          </p>
+        ) : null}
 
         {/* 导入 SVG */}
         <div className="flex flex-wrap items-center gap-2">
@@ -364,6 +497,7 @@ export function PresentationDialog({ isOpen, onClose, workspacePath }: Presentat
             summary={result.summary}
             message={result.message}
             outputPath={result.output_path}
+            templatesApplied={result.templates_applied}
           />
         ) : null}
       </div>

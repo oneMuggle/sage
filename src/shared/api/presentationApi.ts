@@ -24,10 +24,39 @@ export interface PresentationEnvironment {
   error?: string | null;
 }
 
+/** 模板种类：品牌 / 风格 / 版式 / 整套。 */
+export type PresentationTemplateKind = 'brand' | 'style' | 'layout' | 'deck';
+
+export interface PresentationTemplate {
+  kind: PresentationTemplateKind | string;
+  template_id: string;
+  name: string;
+  summary: string;
+  primary_color?: string | null;
+  canvas_format?: string | null;
+  page_count?: number | null;
+  page_types: string[];
+  root_path: string;
+}
+
+export interface PresentationTemplateList {
+  available: boolean;
+  error?: string | null;
+  templates: PresentationTemplate[];
+}
+
+export interface PresentationTemplateRefreshResult {
+  available: boolean;
+  count: number;
+  error?: string | null;
+}
+
 export interface PresentationRenderRequest {
   workspace_path: string;
   filename: string;
   svg_slides: string[];
+  /** ``kind:id`` 选择；缺省或空数组表示不使用模板库。 */
+  template_ids?: string[];
 }
 
 export interface PresentationRenderResult {
@@ -38,6 +67,7 @@ export interface PresentationRenderResult {
   warnings: PresentationIssue[];
   summary: Record<string, unknown>;
   message: string;
+  templates_applied: string[];
 }
 
 function asIssueList(value: unknown): PresentationIssue[] {
@@ -50,6 +80,15 @@ function normalizeResult(raw: PresentationRenderResult): PresentationRenderResul
     blocking_errors: asIssueList(raw.blocking_errors),
     warnings: asIssueList(raw.warnings),
     summary: raw.summary ?? {},
+    templates_applied: Array.isArray(raw.templates_applied) ? raw.templates_applied : [],
+  };
+}
+
+function normalizeTemplateList(raw: PresentationTemplateList): PresentationTemplateList {
+  return {
+    available: Boolean(raw.available),
+    error: raw.error ?? null,
+    templates: Array.isArray(raw.templates) ? raw.templates : [],
   };
 }
 
@@ -73,6 +112,32 @@ export const presentationApi = {
         body: req,
       });
       return normalizeResult(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 模板库列表；技能目录缺失时后端返回 available=false 而非报错。 */
+  async getTemplates(kind?: PresentationTemplateKind): Promise<PresentationTemplateList> {
+    try {
+      const query = kind ? `?kind=${encodeURIComponent(kind)}` : '';
+      const raw = await backendRequest<PresentationTemplateList>({
+        path: `/api/v1/presentation/templates${query}`,
+        method: 'GET',
+      });
+      return normalizeTemplateList(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 重扫模板库（技能目录新增/删除模板后由用户显式触发）。 */
+  async refreshTemplates(): Promise<PresentationTemplateRefreshResult> {
+    try {
+      return await backendRequest<PresentationTemplateRefreshResult>({
+        path: '/api/v1/presentation/templates/refresh',
+        method: 'POST',
+      });
     } catch (error) {
       throw handleApiError(error);
     }
