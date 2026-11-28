@@ -42,9 +42,10 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
 
-from .resources import render_body_with_resources
+from .resources import ResourceIndex, render_body_with_resources
 from .skill import SkillMdDocument
 from .validation import SkillMdSecurityError
 
@@ -130,6 +131,48 @@ def _matches(message_lower: str, when_to_use: str) -> Tuple[str, ...]:
     )
 
 
+#: 资源清单的引导语 —— 与 skill_read_resource 工具描述用同一个名字，
+#: 模型据此知道「有文档可读、怎么读」。
+_RESOURCE_MANIFEST_HEADER = "本技能可用资源（用 skill_read_resource 读取）："
+
+
+def _count_lines(path: Path) -> int:
+    """统计文件行数；失败返回 0（不因行数统计阻断清单渲染）。"""
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            return sum(1 for _ in handle)
+    except OSError:
+        return 0
+
+
+def render_resource_manifest(base_dir: Path, index: ResourceIndex) -> List[str]:
+    """渲染技能可用资源清单行（spec §4.4）。
+
+    只列索引里的白名单资源，每行格式 ``- <相对路径>（<行数> 行）``；
+    没有资源时返回空列表 —— 调用方不注入任何清单块。
+    """
+    if base_dir is None or index is None:
+        return []
+    try:
+        # 索引里存的是 canonical 绝对路径（build_resource_index 用
+        # base_dir.resolve(strict=True) 产出），而 doc.base_dir 未必已解析；
+        # 必须先解析 base 再算相对路径，否则 relative_to 抛 ValueError。
+        resolved_base = Path(base_dir).resolve()
+    except OSError:
+        return []
+    entries: List[str] = []
+    for category in ("references", "scripts", "assets", "templates"):
+        for resource in getattr(index, category, ()) or ():
+            try:
+                relative = Path(resource).relative_to(resolved_base).as_posix()
+            except ValueError:
+                continue
+            entries.append(f"- {relative}（{_count_lines(Path(resource))} 行）")
+    if not entries:
+        return []
+    return [_RESOURCE_MANIFEST_HEADER, *entries]
+
+
 def build_context_block(activated: Sequence[SkillMdDocument]) -> str:
     """把命中的技能文档组装成可注入 system prompt 的上下文块。
 
@@ -166,6 +209,9 @@ def build_context_block(activated: Sequence[SkillMdDocument]) -> str:
                 doc.name,
             )
             continue
+        manifest = render_resource_manifest(doc.base_dir, doc.resources)
+        if manifest:
+            body = body + "\n\n" + "\n".join(manifest)
         parts.append(
             "<system-reminder>\n"
             f"Skill '{doc.name}' auto-activated: {doc.description}\n"

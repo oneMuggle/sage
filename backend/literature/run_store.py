@@ -131,7 +131,12 @@ def record_query(
     site_id: str,
     result_count: int,
     note: Optional[str] = None,
+    *,
+    transport: str = "browser",
+    fallback_reason: str = "",
+    backend_id: str = "",
 ) -> None:
+    """记录一次检索（spec §7.4 扩展了 transport / fallback_reason / backend_id）。"""
     append_jsonl(
         run.run_dir / "query_log.jsonl",
         [
@@ -140,10 +145,42 @@ def record_query(
                 "site_id": site_id,
                 "result_count": int(result_count),
                 "note": note,
+                "transport": transport,
+                "fallback_reason": fallback_reason,
+                "backend_id": backend_id,
                 "at": _now_iso(),
             }
         ],
     )
+
+
+def record_download(
+    run: LiteratureRun,
+    domain: str,
+    url: str,
+    ok: bool,
+    transport: str,
+    reason: str = "",
+) -> None:
+    """记录一次下载尝试（用于批量上限判定与事后排查）。"""
+    append_jsonl(
+        run.run_dir / "downloads.jsonl",
+        [
+            {
+                "domain": domain,
+                "url": url,
+                "ok": bool(ok),
+                "transport": transport,
+                "reason": reason,
+                "at": _now_iso(),
+            }
+        ],
+    )
+
+
+def count_downloads(run: LiteratureRun) -> int:
+    """统计运行目录内**成功**的下载次数（批量上限判定用）。"""
+    return sum(1 for row in read_jsonl(run.run_dir / "downloads.jsonl") if row.get("ok"))
 
 
 def record_papers(run: LiteratureRun, rows: Sequence[Dict[str, Any]]) -> int:

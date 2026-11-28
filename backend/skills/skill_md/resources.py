@@ -24,7 +24,7 @@ import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 from .validation import SkillMdSecurityError
 
@@ -255,6 +255,56 @@ def validate_resource_path(path: Path, base_dir: Path) -> Path:
         return resolved_path
 
     raise SkillMdSecurityError(f"resource path {path} is not under base_dir {base_dir}")
+
+
+def resolve_indexed_resource(
+    index: ResourceIndex,
+    base_dir: Path,
+    relative_path: str,
+) -> Optional[Path]:
+    """把技能内相对路径解析为已索引的普通文件路径。
+
+    与 :func:`render_body_with_resources` 同口径地复用
+    :func:`_indexed_regular_resources` 的完整策略（白名单子目录、隐藏项、
+    符号链接 / reparse point、regular file 复核），因此「能渲染」与「能读取」
+    不会分叉。
+
+    Args:
+        index: 技能的资源索引（由 :func:`build_resource_index` 产出）。
+        base_dir: 技能根目录。
+        relative_path: 技能内相对路径，如 ``references/pipeline.md``。
+
+    Returns:
+        规范化后的绝对路径；不合法或未索引时返回 ``None``。
+    """
+    text = str(relative_path or "").strip()
+    relative = Path(text)
+    # 一次性判掉所有非法相对路径：空串、NUL、反斜杠、绝对、无段、
+    # ``..``/``.`` 段、首段不在白名单、任意段以 ``.`` 开头。
+    if (
+        not text
+        or "\x00" in text
+        or "\\" in text
+        or relative.is_absolute()
+        or not relative.parts
+        or ".." in relative.parts
+        or "." in relative.parts
+        or relative.parts[0] not in ALLOWED_RESOURCE_DIRS
+        or any(part.startswith(".") for part in relative.parts)
+    ):
+        return None
+
+    try:
+        resolved_base = base_dir.resolve(strict=True)
+        candidate = resolved_base / relative
+        resolved = validate_resource_path(candidate, base_dir=resolved_base)
+    except (OSError, RuntimeError, SkillMdSecurityError):
+        return None
+
+    authorized = _indexed_regular_resources(index, resolved_base)
+    if resolved not in authorized:
+        return None
+    return resolved
 
 
 def _indexed_regular_resources(index: ResourceIndex, base_dir: Path) -> Set[Path]:

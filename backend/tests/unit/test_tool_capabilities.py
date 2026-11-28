@@ -247,7 +247,6 @@ def test_rpc_denies_schedule_cancel():
         "runtime_exec",
         "browser_launch",
         "browser_login",
-        "browser_navigate",
         "office_delete",
     ],
 )

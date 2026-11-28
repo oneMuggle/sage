@@ -59,6 +59,24 @@ def _ensure_usable_event_loop():
         asyncio.set_event_loop(asyncio.new_event_loop())
 
 
+@pytest.fixture(autouse=True)
+def _allow_http_site_gate_in_tests(monkeypatch):
+    """HTTP 出网站点策略闸测试期默认放行。
+
+    未授权域名在生产返回 ``confirm``（交用户在面板裁决），既有
+    web_fetch / http_download 单测不预置站点授权 —— 测试期把闸门换成放行
+    stub。闸门自身语义与工具接线的拒绝路径由
+    ``backend/tests/unit/test_http_site_gate.py`` 直接测真实函数。
+    """
+    import backend.tools.http_site_gate as gate_mod
+
+    monkeypatch.setattr(
+        gate_mod,
+        "gate_http_url",
+        lambda url, session_id="": gate_mod.SiteGateVerdict(True, "allow", domain=""),
+    )
+
+
 _SSL_BOOTSTRAP_TEST = os.path.join("backend", "tests", "unit", "test_ssl_bootstrap.py")
 
 

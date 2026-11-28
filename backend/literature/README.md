@@ -49,13 +49,10 @@ search:
 
 ## 中间页下载（`pdf.interstitial`）
 
-部分站点的下载入口先落「准备中」中间页、再由页面 JS 跳到带时效签名的最终
-地址，且最终地址主机可能写错（xueshu789 即如此：oversea 网关对国内库 404）。
-在 profile 里声明两段式下载后，`download_pdf` 会：读取入口元素完整 `href` →
-新标签打开 → 等 URL 命中 `url_contains` → 按 `host_fallbacks` 重写主机逐个
-导航 → 等下载并校验。标签页用 `browser_tabs create` 打开（工具可见）；**不要
-依赖站点 `window.open` 弹窗**（弹窗不在桥注册表里，工具看不到）。字段细节见
-`docs/templates/literature-sites/README.md`。
+中间页下载采用「两段式」：先请求下载入口，得到一个含最终下载地址的中间页，
+再解析出最终地址并下载。最终地址的主机名可能与入口不一致 —— 需按 profile
+声明的 `pdf.interstitial.host_fallbacks` 逐个回退，直到拿到通过 magic 与题名校验的文件。
+具体站点的回退主机列表写在该站 profile 里，不要写进本文件。
 
 ## Claims 账本与核验（M2a）
 
@@ -145,7 +142,7 @@ python -m backend.literature.cli export --run runs/<id> --style ieee
 
 ## 设计规则
 
-- 站点差异只写在这里或 skill 的 `references/`，禁止写进 pipeline 代码。
+- 站点差异只写在 profile（`notes` / `backends` / `pdf.*` / `search.*`）；通用机制写在本文件与 skill `references/`
 - 选择器未实测前用空字符串 + `status: draft`，由"录制模式"补齐。
 - 第三方站点默认 `compliance.default_enabled: false`，用户显式启用。
 - 不代填密码、不导出 cookie、不绕过付费墙；验证码交还用户。
