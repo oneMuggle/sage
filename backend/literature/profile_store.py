@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List, NamedTuple, Optional, Sequence
 
 import yaml
 
-from .models import SiteProfile, SiteProfileError, profile_from_dict
+from .knowledge import (
+    is_sidecar_filename,
+    merge_backends,
+    merge_notes,
+    read_sidecar,
+    sidecar_path,
+)
+from .models import SiteProfile, SiteProfileError, parse_backends, parse_notes, profile_from_dict
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +29,8 @@ class ProfileRoot(NamedTuple):
     layer: str
 
 
-def _user_sites_dir() -> Path:
+def user_sites_dir() -> Path:
+    """用户层站点目录（``$SAGE_LITERATURE_SITES_DIR`` 或 ``~/.sage/literature_sites``）。"""
     env_dir = os.environ.get("SAGE_LITERATURE_SITES_DIR", "").strip()
     if env_dir:
         return Path(env_dir).expanduser()
@@ -41,7 +50,7 @@ class SiteProfileStore:
         return cls(
             [
                 ProfileRoot(Path(__file__).parent / "sites", "builtin"),
-                ProfileRoot(_user_sites_dir(), "user"),
+                ProfileRoot(user_sites_dir(), "user"),
                 ProfileRoot(Path.cwd() / ".sage" / "literature_sites", "project"),
             ]
         )
@@ -69,6 +78,9 @@ class SiteProfileStore:
             for path in entries:
                 if path.name.startswith(".") or path.suffix.lower() not in _YAML_SUFFIXES:
                     continue
+                if is_sidecar_filename(path.name):
+                    # sidecar 不是站点 profile 主文件；它随主 profile 一起合并
+                    continue
                 if not path.is_file():
                     continue
                 try:
@@ -87,6 +99,12 @@ class SiteProfileStore:
                 except OSError as exc:
                     errors[path.stem] = SiteProfileError(f"读取失败: {exc}")
                     logger.warning("读取站点 profile 失败 %s: %s", path, exc)
+                    continue
+                try:
+                    profile = _merge_sidecars(profile, path.parent)
+                except SiteProfileError as exc:
+                    errors[path.stem] = exc
+                    logger.warning("站点 profile sidecar 无效 %s: %s", path, exc)
                     continue
                 profiles[profile.id] = profile
 
@@ -112,6 +130,21 @@ class SiteProfileStore:
         self.discover()
         assert self._profiles is not None
         return sorted(self._profiles)
+
+
+def _merge_sidecars(profile: SiteProfile, directory: Path) -> SiteProfile:
+    """把同目录的 notes / backends sidecar 合并进 profile。"""
+    notes_raw = read_sidecar(sidecar_path(directory, profile.id, "notes"))
+    backends_raw = read_sidecar(sidecar_path(directory, profile.id, "backends"))
+    if not notes_raw and not backends_raw:
+        return profile
+    notes = parse_notes(notes_raw.get("notes"))
+    backends = parse_backends(backends_raw.get("backends"))
+    return replace(
+        profile,
+        notes=merge_notes(profile.notes, notes),
+        backends=merge_backends(profile.backends, backends),
+    )
 
 
 _DEFAULT_STORE: Optional[SiteProfileStore] = None

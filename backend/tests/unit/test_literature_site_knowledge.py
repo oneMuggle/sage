@@ -219,3 +219,107 @@ def test_compliance_contact_email_is_parsed() -> None:
 def test_enum_constants() -> None:
     assert NOTE_SEVERITIES == ("blocker", "degraded", "cosmetic")
     assert BACKEND_STATUSES == ("ready", "blocked", "unavailable", "unknown")
+
+
+def _write_main_profile(directory, site_id="demo", extra=""):
+    directory.mkdir(parents=True, exist_ok=True)
+    payload = (
+        "id: demo\n"
+        "display_name: 演示站\n"
+        "home_url: https://demo.example\n"
+        "domains:\n  - demo.example\n"
+        "search:\n"
+        "  url_template: https://demo.example/s?q={query}&n={limit}\n"
+        "  mode: url\n"
+        "  submit_key: Enter\n"
+        "  result_hint: ''\n" + extra
+    )
+    path = directory / f"{site_id}.yaml"
+    path.write_text(payload, encoding="utf-8")
+    return path
+
+
+def test_sidecar_suffixes() -> None:
+    from backend.literature.knowledge import (
+        BACKENDS_SIDECAR_SUFFIX,
+        NOTES_SIDECAR_SUFFIX,
+    )
+
+    assert NOTES_SIDECAR_SUFFIX == ".notes.yaml"
+    assert BACKENDS_SIDECAR_SUFFIX == ".backends.yaml"
+
+
+def test_is_sidecar_filename() -> None:
+    from backend.literature.knowledge import is_sidecar_filename
+
+    assert is_sidecar_filename("demo.notes.yaml") is True
+    assert is_sidecar_filename("demo.backends.yaml") is True
+    assert is_sidecar_filename("demo.yaml") is False
+
+
+def test_profile_store_skips_sidecar_files(tmp_path) -> None:
+    from backend.literature.profile_store import ProfileRoot, SiteProfileStore
+
+    _write_main_profile(tmp_path)
+    (tmp_path / "demo.notes.yaml").write_text("notes: []\n", encoding="utf-8")
+    store = SiteProfileStore([ProfileRoot(tmp_path, "user")])
+    assert store.list_ids() == ["demo"]
+
+
+def test_profile_store_merges_sidecar_notes(tmp_path) -> None:
+    from backend.literature.profile_store import ProfileRoot, SiteProfileStore
+
+    _write_main_profile(
+        tmp_path,
+        extra=(
+            "notes:\n"
+            "  - id: base-note\n"
+            "    title: 基线\n"
+            "    symptom: s\n"
+            "    workaround: w\n"
+            "    severity: degraded\n"
+            "    learned_at: '2026-01-01'\n"
+        ),
+    )
+    (tmp_path / "demo.notes.yaml").write_text(
+        "notes:\n"
+        "  - id: base-note\n"
+        "    title: 覆盖版\n"
+        "    symptom: s2\n"
+        "    workaround: w2\n"
+        "    severity: blocker\n"
+        "    learned_at: '2026-02-01'\n"
+        "  - id: extra-note\n"
+        "    title: 新增\n"
+        "    symptom: s3\n"
+        "    workaround: w3\n"
+        "    severity: cosmetic\n"
+        "    learned_at: '2026-02-02'\n",
+        encoding="utf-8",
+    )
+    store = SiteProfileStore([ProfileRoot(tmp_path, "user")])
+    profile = store.get("demo")
+    ids = [note.id for note in profile.notes]
+    assert "extra-note" in ids
+    titles = {note.id: note.title for note in profile.notes}
+    assert titles["base-note"] == "覆盖版"
+
+
+def test_broken_sidecar_raises_explicit_error(tmp_path) -> None:
+    from backend.literature.models import SiteProfileError
+    from backend.literature.profile_store import ProfileRoot, SiteProfileStore
+
+    _write_main_profile(tmp_path)
+    (tmp_path / "demo.notes.yaml").write_text("notes: [\n  - broken\n", encoding="utf-8")
+    store = SiteProfileStore([ProfileRoot(tmp_path, "user")])
+    with pytest.raises(SiteProfileError):
+        store.get("demo")
+
+
+def test_write_sidecar_is_atomic(tmp_path) -> None:
+    from backend.literature.knowledge import write_sidecar
+
+    target = tmp_path / "demo.notes.yaml"
+    write_sidecar(target, {"notes": []})
+    assert target.is_file()
+    assert not list(tmp_path.glob(".tmp-*"))
