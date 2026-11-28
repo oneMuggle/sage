@@ -201,6 +201,9 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "skill": ToolCapability.EXECUTE,
     # skill_save 只产出 pending 草稿, 生效仍需用户在 UI 审批, 属本地写。
     "skill_save": ToolCapability.WRITE,
+    # skill_read_resource 只读技能内白名单资源（references/scripts/assets/
+    # templates），与渲染路径同口径 —— 无副作用，按 READ 对待。
+    "skill_read_resource": ToolCapability.READ,
     # --- 多模态 ---
     "text_to_speech": ToolCapability.WRITE,
     "generate_image": ToolCapability.WRITE,

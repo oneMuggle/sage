@@ -197,7 +197,7 @@ BROWSER_TOOLS = (
 # （EXECUTE，M1 审批闸口按模式矩阵拦截），``skill_save`` 是显式把跑通的
 # 工具调用序列沉淀为 SQLite 草稿（WRITE_LOCAL 写本地文件）。两者都通过
 # 启动期白名单校验防止 profile 漂移。
-SKILL_TOOLS = ("skill", "skill_save")
+SKILL_TOOLS = ("skill", "skill_read_resource", "skill_save")
 
 # 多模态工具（2026-09-12 multimodal capabilities）：TTS 文本转语音 /
 # ASR 语音识别 / 图像生成。全部 EXTERNAL（调用外部 API），requires_tool_context=True。
