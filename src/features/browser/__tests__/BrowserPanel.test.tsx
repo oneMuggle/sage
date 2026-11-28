@@ -371,6 +371,79 @@ describe('BrowserPanel M4 安全确认', () => {
     );
   });
 
+  it('有归属实例时按对话与会话双维度轮询', async () => {
+    statusMocks.fetchBrowserStatus.mockResolvedValue({
+      active: 1,
+      max: 4,
+      lruEvict: false,
+      sessions: [
+        {
+          id: 's1',
+          name: '',
+          last_used_at: '',
+          alive: true,
+          persistent: false,
+          profile_name: '',
+          owner: 'conv1',
+        },
+      ],
+    });
+    controlMocks.fetchPendingConfirmations.mockResolvedValue([
+      pendingConfirmation({ conversation_id: 'conv1' }),
+    ]);
+    installElectronApi(panel);
+    renderPanel([], 'conv1');
+
+    await waitFor(() =>
+      expect(controlMocks.fetchPendingConfirmations).toHaveBeenCalledWith('s1', 'conv1'),
+    );
+    expect(await screen.findByTestId('browser-confirm-bar')).toBeTruthy();
+  });
+
+  it('无浏览器实例时按对话展示并裁决 HTTP 出网确认项', async () => {
+    controlMocks.fetchPendingConfirmations.mockResolvedValue([
+      pendingConfirmation({ session_id: '', conversation_id: 'conv1' }),
+    ]);
+    installElectronApi(panel);
+    renderPanel([], 'conv1');
+
+    const bar = await screen.findByTestId('browser-confirm-bar');
+    expect(bar.textContent).toContain('允许 Sage 访问 example.com？');
+    expect(controlMocks.fetchPendingConfirmations).toHaveBeenCalledWith(undefined, 'conv1');
+
+    fireEvent.click(screen.getByTestId('browser-confirm-option-always'));
+    await waitFor(() =>
+      expect(controlMocks.resolveConfirmation).toHaveBeenCalledWith('c1', 'always', 'conv1'),
+    );
+  });
+
+  it('拒绝展示其他对话名下的确认项（即使同实例仍在）', async () => {
+    statusMocks.fetchBrowserStatus.mockResolvedValue({
+      active: 1,
+      max: 4,
+      lruEvict: false,
+      sessions: [
+        {
+          id: 's1',
+          name: '',
+          last_used_at: '',
+          alive: true,
+          persistent: false,
+          profile_name: '',
+          owner: 'conv1',
+        },
+      ],
+    });
+    controlMocks.fetchPendingConfirmations.mockResolvedValue([
+      pendingConfirmation({ conversation_id: 'conv2' }),
+    ]);
+    installElectronApi(panel);
+    renderPanel([], 'conv1');
+
+    await waitFor(() => expect(controlMocks.fetchPendingConfirmations).toHaveBeenCalled());
+    expect(screen.queryByTestId('browser-confirm-bar')).toBeNull();
+  });
+
   it('时间线按安全门禁前缀渲染等待确认 / 已拦截 / 用户已拒绝徽章', () => {
     installElectronApi(panel);
     renderPanel([
