@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from datetime import date, datetime, timezone
+from typing import List, Optional
 
-from .models import SiteField, SiteProfile, is_logged_in, render_search_url
+from .models import SiteField, SiteNote, SiteProfile, is_logged_in, render_search_url
 
 
 def _selector_text(field: SiteField) -> str:
@@ -17,12 +18,81 @@ def _fields_lines(fields: dict) -> str:
     return "\n".join(f"- {name}: {_selector_text(field)}" for name, field in fields.items())
 
 
+#: 经验超过该天数未复验即在文本中标注「未复验」（spec §3.1）。
+STALE_AFTER_DAYS = 180
+
+#: 严重级别排序：blocker 在前。
+_SEVERITY_ORDER = {"blocker": 0, "degraded": 1, "cosmetic": 2}
+
+
+def _is_stale(note: SiteNote, today: Optional[date] = None) -> bool:
+    """经验是否已超过 ``STALE_AFTER_DAYS`` 未复验。"""
+    if note.verified_at:
+        return False
+    if not note.learned_at:
+        return True
+    reference = today or datetime.now(timezone.utc).date()  # noqa: UP017 — py38 兼容
+    try:
+        learned = date.fromisoformat(note.learned_at)
+    except ValueError:
+        return True
+    return (reference - learned).days > STALE_AFTER_DAYS
+
+
+def _relevant_notes(profile: SiteProfile, phase: str) -> List[SiteNote]:
+    """筛出与当前阶段相关的经验，按严重级别排序。"""
+    selected = [
+        note
+        for note in profile.notes
+        if not note.applies_to or phase in note.applies_to
+    ]
+    return sorted(selected, key=lambda note: (_SEVERITY_ORDER.get(note.severity, 9), note.id))
+
+
+def render_notes_section(profile: SiteProfile, phase: str = "search") -> str:
+    """渲染「站点经验」段；无相关内容时返回空串。"""
+    notes = _relevant_notes(profile, phase)
+    if not notes:
+        return ""
+    lines = ["## 站点经验（按严重度排序，仅列与当前阶段相关的条目）"]
+    for note in notes:
+        stale = "（未复验）" if _is_stale(note) else ""
+        lines.append(f"- [{note.severity}] {note.title}{stale}")
+        lines.append(f"  - 现象: {note.symptom}")
+        if note.cause:
+            lines.append(f"  - 根因: {note.cause}")
+        lines.append(f"  - 做法: {note.workaround}")
+    return "\n".join(lines)
+
+
+def render_backends_section(profile: SiteProfile) -> str:
+    """渲染「可用检索后端」段；无后端时返回空串。"""
+    if not profile.backends:
+        return ""
+    lines = ["## 可用检索后端"]
+    for backend in profile.backends:
+        if backend.status == "blocked":
+            lines.append(
+                f"- {backend.id}（{backend.label}）: 需人工完成验证"
+                f"（{backend.reason or '站点侧要求人工交互'}），"
+                "请用户在可见窗口操作后自行改为 ready"
+            )
+        elif backend.status == "unavailable":
+            lines.append(f"- {backend.id}（{backend.label}）: 不可用（{backend.reason or '站点侧报错'}）")
+        elif backend.status == "unknown":
+            lines.append(f"- {backend.id}（{backend.label}）: 未探测，可执行一次探测")
+        else:
+            lines.append(f"- {backend.id}（{backend.label}）: 可用，入口 {backend.entry_url}")
+    return "\n".join(lines)
+
+
 def render_search_guidance(
     profile: SiteProfile,
     query: str,
     limit: int = 10,
     page_url: Optional[str] = None,
     page_title: Optional[str] = None,
+    phase: str = "search",
 ) -> str:
     """生成检索阶段的 LLM 指导文本；真实页面解析仍由 LLM 基于 snapshot 完成。"""
     interactive = profile.search.mode == "interactive"
@@ -88,6 +158,14 @@ def render_search_guidance(
             f"{'；备注: ' + profile.pdf.note if profile.pdf.note else ''}"
         )
 
+    notes_block = render_notes_section(profile, phase)
+    backends_block = render_backends_section(profile)
+    extra = ""
+    if backends_block:
+        extra += backends_block + "\n"
+    if notes_block:
+        extra += notes_block + "\n"
+
     return (
         f"站点: {profile.display_name} ({profile.id})\n"
         f"profile 状态: {profile.status}"
@@ -104,7 +182,8 @@ def render_search_guidance(
         f"限速: 每篇间隔 >= {profile.rate_limit.min_interval_s}s；"
         f"单批 <= {profile.rate_limit.max_batch} 篇\n"
         f"合规: {profile.compliance.note or '遵守站点条款与机构授权'}\n\n"
-        "请基于 browser_snapshot 解析结果，输出 JSON 数组，每项字段: "
+        + extra
+        + "请基于 browser_snapshot 解析结果，输出 JSON 数组，每项字段: "
         "paper_key, title, authors, year, venue, abstract, url, doi。"
         "不要编造页面中不存在的文献或字段；不确定的字段留空并在 extra 标注。"
     )
