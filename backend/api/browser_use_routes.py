@@ -81,6 +81,8 @@ class ConfirmationDecisionBody(BaseModel):
     """POST confirmations 请求体：session / always / approve / deny。"""
 
     decision: str
+    # 聊天对话归属：待确认项带 conversation_id 时强校验，防止跨对话裁决。
+    conversation_id: str = ""
 
     class Config:
         extra = Extra.forbid
@@ -266,12 +268,16 @@ def delete_browser_site_policy(request: Request, domain: str) -> Any:
 
 
 @router.get("/browser/confirmations")
-def list_browser_confirmations(request: Request, session_id: str = "") -> Any:
-    """列举待确认项（可按会话过滤）。"""
+def list_browser_confirmations(
+    request: Request, session_id: str = "", conversation_id: str = ""
+) -> Any:
+    """列举待确认项（可按会话或对话过滤；对话优先）。"""
     guard = _origin_guard(request)
     if guard is not None:
         return guard
-    items = browser_safety.get_confirmation_registry().list(session_id or None)
+    items = browser_safety.get_confirmation_registry().list(
+        session_id or None, conversation_id or None
+    )
     return {"confirmations": [item.to_public_dict() for item in items]}
 
 
@@ -292,6 +298,12 @@ def resolve_browser_confirmation(  # noqa: PLR0911 — 每个校验门一个返�
     registry = browser_safety.get_confirmation_registry()
     pending = registry.get(confirmation_id)
     if pending is None:
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "error": "confirmation_not_found"},
+        )
+    # 对话归属二次校验：带归属的确认项只能被所属对话裁决（404 不泄露存在性）。
+    if pending.conversation_id and (body.conversation_id or "") != pending.conversation_id:
         return JSONResponse(
             status_code=404,
             content={"ok": False, "error": "confirmation_not_found"},

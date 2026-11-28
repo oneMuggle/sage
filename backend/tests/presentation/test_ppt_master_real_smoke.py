@@ -7,7 +7,10 @@
 from __future__ import annotations
 
 import os
+<<<<<<< HEAD
 import sys
+=======
+>>>>>>> origin/main
 import zipfile
 from pathlib import Path
 
@@ -39,10 +42,13 @@ _MINIMAL_SVG = (
     not (_SKILL_ROOT / "scripts" / "attribution_guard.py").is_file(),
     reason=f"ppt-master 技能目录不存在：{_SKILL_ROOT}",
 )
+<<<<<<< HEAD
 @pytest.mark.skipif(
     sys.version_info < (3, 9) and not os.environ.get("SAGE_PPT_MASTER_PYTHON"),
     reason="技能脚本要求 Python >= 3.9；请设置 SAGE_PPT_MASTER_PYTHON 指向兼容解释器",
 )
+=======
+>>>>>>> origin/main
 def test_render_one_svg_to_pptx(tmp_path: Path):
     adapter = PptMasterAdapter(skill_root=_SKILL_ROOT)
     assert adapter.check_environment()["skill_root"] == str(_SKILL_ROOT.resolve())

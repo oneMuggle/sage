@@ -14,7 +14,6 @@ import { toast } from 'sonner';
 import {
   fetchBrowserAudit,
   fetchBrowserControl,
-  fetchPendingConfirmations,
   resolveConfirmation,
   setBrowserControl,
   type BrowserAuditEntry,
@@ -31,6 +30,7 @@ import {
   setBrowserPanelAutoOpenEnabled,
 } from '../right-panel/rightPanelStore';
 
+import { loadPendingFor } from './browserConfirmations';
 import { rememberBrowserSession, useBrowserSessionStore } from './browserSessionStore';
 import {
   collectPersistedBrowserCalls,
@@ -338,7 +338,8 @@ export function BrowserPanel({
   }, [browserCalls.length]);
 
   // 控制状态 + 待确认项轮询（同一 2s 节奏、单个定时器）：失败静默
-  // （后端未就绪/会话已回收都不该刷 toast）。
+  // （后端未就绪/会话已回收都不该刷 toast）。待确认项按对话归属轮询：
+  // 本对话没有浏览器实例时，HTTP 出网确认项（session_id 为空）仍可见。
   useEffect(() => {
     const target = sessionId;
     let cancelled = false;
@@ -355,20 +356,19 @@ export function BrowserPanel({
           })
           .catch(() => undefined);
       }
-      if (!target) {
-        // 本对话没有可归属的浏览器：清空本地状态，绝不认领其他会话的实例/确认项。
-        setPending(null);
+      if (target) {
+        void fetchBrowserControl(target)
+          .then((state) => {
+            if (!cancelled && state?.state) setControlState(state.state);
+          })
+          .catch(() => undefined);
+      } else {
+        // 本对话没有可归属的浏览器实例：不认领其他会话的控制状态。
         setControlState('agent');
-        return;
       }
-      void fetchBrowserControl(target)
-        .then((state) => {
-          if (!cancelled && state?.state) setControlState(state.state);
-        })
-        .catch(() => undefined);
-      void fetchPendingConfirmations(target)
-        .then((items) => {
-          if (!cancelled) setPending(items[0] ?? null);
+      void loadPendingFor(conversationId, target)
+        .then((item) => {
+          if (!cancelled) setPending(item);
         })
         .catch(() => undefined);
     };
@@ -457,20 +457,25 @@ export function BrowserPanel({
   /** 提交确认裁决；成功后立即刷新控制状态与剩余待确认项。 */
   const handleResolve = useCallback(
     async (decision: ConfirmationDecision): Promise<void> => {
-      const target = pending?.session_id || sessionId;
-      if (!pending || !target) return;
+      if (!pending) return;
+      const target = pending.session_id || sessionId;
       setConfirmBusy(true);
       try {
-        const result = await resolveConfirmation(pending.id, decision);
+        // 带对话裁决：服务端二次校验收确认项归属，不匹配 → 404。
+        const result = conversationId
+          ? await resolveConfirmation(pending.id, decision, conversationId)
+          : await resolveConfirmation(pending.id, decision);
         if (result?.control_state) setControlState(result.control_state);
         setPending(null);
-        void fetchBrowserControl(target)
-          .then((state) => {
-            if (state?.state) setControlState(state.state);
-          })
-          .catch(() => undefined);
-        void fetchPendingConfirmations(target)
-          .then((items) => setPending(items[0] ?? null))
+        if (target) {
+          void fetchBrowserControl(target)
+            .then((state) => {
+              if (state?.state) setControlState(state.state);
+            })
+            .catch(() => undefined);
+        }
+        void loadPendingFor(conversationId, target)
+          .then((item) => setPending(item))
           .catch(() => undefined);
       } catch {
         toast.error(t('browser.panel.confirm.resolve_failed'));
@@ -478,7 +483,7 @@ export function BrowserPanel({
         setConfirmBusy(false);
       }
     },
-    [pending, sessionId, t],
+    [pending, sessionId, conversationId, t],
   );
 
   const handleAutoOpenToggle = (checked: boolean): void => {

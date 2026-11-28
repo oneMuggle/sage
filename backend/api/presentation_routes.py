@@ -103,9 +103,12 @@ def get_environment() -> EnvironmentResponse:
 
 @router.post("/render-svgs", response_model=RenderResponse)
 def render_svgs_endpoint(req: RenderSvgRequest) -> RenderResponse:
+<<<<<<< HEAD
     if not req.svg_slides:
         # pydantic v1 的 min_length 不作用于 list，这里显式拒绝以对齐 v2 的 422。
         raise HTTPException(status_code=422, detail="svg_slides 不能为空")
+=======
+>>>>>>> origin/main
     output_path = _resolve_output(req.workspace_path, req.filename)
     try:
         result = _service.render_from_svgs(req.svg_slides, output_path)

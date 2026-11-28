@@ -27,7 +27,11 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+<<<<<<< HEAD
 from typing import List, Optional, Sequence
+=======
+from typing import Optional, Sequence
+>>>>>>> origin/main
 
 __all__ = [
     "PptMasterAdapter",
@@ -39,8 +43,11 @@ __all__ = [
 
 _DEFAULT_TIMEOUT_S = 180.0
 _GUARD_MARKER = "attribution_guard.py"
+<<<<<<< HEAD
 # 技能脚本内部使用 PEP 604（`str | int`）等 3.9+ 语法，3.8 解释器会直接 TypeError。
 _MIN_PYTHON = (3, 9)
+=======
+>>>>>>> origin/main
 
 
 class PptMasterEnvError(RuntimeError):
@@ -79,7 +86,11 @@ def _resolve_skill_root(explicit: Optional[Path]) -> Path:
     环境变量/默认位置允许指向技能目录本身，或其上层仓库根（自动加
     skills/ppt-master）。
     """
+<<<<<<< HEAD
     candidates: List[Path] = []
+=======
+    candidates: list[Path] = []
+>>>>>>> origin/main
     if explicit is not None:
         candidates.append(Path(explicit))
 
@@ -142,6 +153,7 @@ class PptMasterAdapter:
                 "ppt-master 完整性校验失败（attribution_guard 非零退出）："
                 f"{result.stderr.strip() or result.stdout.strip()}"
             )
+<<<<<<< HEAD
         version = self._interpreter_version()
         if version < _MIN_PYTHON:
             raise PptMasterEnvError(
@@ -179,6 +191,13 @@ class PptMasterAdapter:
                 f"无法解析解释器版本输出：{text!r}"
             ) from exc
 
+=======
+        return {
+            "skill_root": str(self.skill_root),
+            "python": self.python_executable,
+        }
+
+>>>>>>> origin/main
     # ------------------------------------------------------------------ #
     # 质量门禁
     # ------------------------------------------------------------------ #
