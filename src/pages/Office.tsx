@@ -53,6 +53,7 @@ import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
 import { RulesSubtabs } from '../features/office/rules/RulesSubtabs';
 import { OfficeAiSidebarHost } from '../features/office/sidebar/OfficeAiSidebarHost';
 import type { QuickActionTab } from '../features/office/sidebar/QuickActions';
+import { PresentationDialog } from '../features/presentation';
 import { WorkspaceBindModal } from '../features/workspace';
 import type { OfficeCapabilities, OfficeDocType } from '../shared/api/types';
 import { fillTemplate } from '../shared/lib/fillTemplate';
@@ -187,6 +188,8 @@ export function Office() {
   const [isCompareOpen, setIsCompareOpen] = useState(false);
   // M6e: Word 模板 profile/填充 dialog（模板来自文档库或 office/templates）
   const [isWordTemplateOpen, setIsWordTemplateOpen] = useState(false);
+  // ppt-master 集成：SVG -> 可编辑 PPTX 对话框
+  const [isPresentationOpen, setIsPresentationOpen] = useState(false);
   const comparableDocuments = documents.filter((doc) => doc.archived_at == null);
   // 导入进行中：文档库工具栏的上传按钮据此禁用，避免重复打开文件选择器。
   const [importing, setImporting] = useState(false);
@@ -575,6 +578,26 @@ export function Office() {
         }}
       />
 
+      {/* ppt-master 确定性工程层：把对话/智能体产出的 SVG 转成原生可编辑 PPTX。 */}
+      <section
+        className="flex items-center justify-between gap-4 rounded-lg border border-border bg-bg-subtle px-4 py-3"
+        data-testid="presentation-entry"
+      >
+        <div>
+          <h3 className="text-sm font-medium text-text">SVG → 可编辑 PPT</h3>
+          <p className="text-xs text-muted mt-0.5">
+            导入一组 SVG 幻灯片，经质量门禁后转换为原生可编辑 PPTX。
+          </p>
+        </div>
+        <button
+          className="shrink-0 rounded bg-primary px-3 py-1.5 text-sm text-text-inverse hover:bg-primary-hover"
+          onClick={() => setIsPresentationOpen(true)}
+          data-testid="presentation-open"
+        >
+          打开
+        </button>
+      </section>
+
       {/* JournalPanel 从原来的顶层独立面板折叠到 <details> 内，
           与"生成新文档"共享同一个任务域但不再占用首屏空间。 */}
       <details className="rounded-lg border border-border bg-bg-subtle">
@@ -690,6 +713,12 @@ export function Office() {
         workspacePath={workspacePath}
         documents={comparableDocuments}
         onFilled={handleWordTemplateFilled}
+      />
+
+      <PresentationDialog
+        isOpen={isPresentationOpen}
+        onClose={() => setIsPresentationOpen(false)}
+        workspacePath={workspacePath ?? ''}
       />
 
       <WorkspaceBindModal
