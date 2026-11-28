@@ -89,7 +89,9 @@ export function PlanningTimeline({ sessionId, messageId }: PlanningTimelineProps
                   <span className="text-text-muted">{(stage.elapsedMs / 1000).toFixed(1)}s</span>
                 )}
               </div>
-              {stage.lines.length > 0 && (
+              {/* 2026-11-27: scout 阶段的过程行移交「事实侦察」区块的二级折叠
+                  （FactReconBlock），此处不再重复渲染，避免同一内容出现两处。 */}
+              {stage.stage !== 'scout' && stage.lines.length > 0 && (
                 <ul className="ml-3 mt-0.5 space-y-0.5 text-text-muted">
                   {stage.lines.slice(-3).map((line, index) => (
                     <li key={`${line.kind}-${index}`} className="truncate">

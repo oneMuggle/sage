@@ -16,6 +16,10 @@ Deep Research 的"先澄清、先侦察再规划"）：
 两步产出合并为 ``{"clarifications": [...], "scout_facts": "..."}`` 注入
 planner context，由 ``Planner._build_decomposition_prompt`` 具名渲染。
 
+lite scout 另附 ``scout_facts_detail``（结构化事实清单）—— 只给前端展示与
+落库用，调用方须从 planner context 里摘除，避免与 ``scout_facts`` 原文重复
+进 prompt。scout_deep 成功时**不产出**该键（调研报告走 ResearchSummaryCard）。
+
 降级纪律（硬约束）：preflight 是增强不是门槛 —— 总闸/旋钮关闭、无 LLM
 配置、歧义判定失败、gate 缺失、提问超时、侦察超时或异常 → 跳过对应步骤，
 ``run_plan_preflight`` 返回 None（等价于现状 ``context=None``），绝不阻塞
@@ -47,6 +51,7 @@ from backend.orchestration.plan_progress import (
     emit_planning_skipped,
     run_planning_stage,
 )
+from backend.orchestration.scout_facts import to_detail as _scout_facts_detail
 from backend.services.question_gate import QuestionRequest, get_question_gate
 from backend.tools.ask_user_tool import render_answer_result, validate_ask_user_args
 from backend.utils.py_compat import TIMEOUT_ERRORS
@@ -205,6 +210,9 @@ async def run_plan_preflight(
     2. 需求澄清（clarify）→ 消除歧义
     3. 事实侦察（scout）→ 根据复杂度选择 scout_lite / scout_deep
 
+    返回的 dict 里 ``scout_facts_detail`` 仅在 lite scout 产出事实时出现
+    （结构化清单，供前端展示/落库）；调用方注入 planner 前须摘除该键。
+
     Args:
         message: 用户原始目标。
         emit: 事件推送协程（producer 传 ``entry.queue.put``）——推
@@ -304,9 +312,14 @@ async def run_plan_preflight(
                         describe_result=lambda value: (
                             "已收集事实" if value else "未收集到事实"
                         ),
+                        detail_result=lambda facts: _scout_facts_detail(facts),
                     )
                     if facts:
                         result["scout_facts"] = facts
+                        # 结构化事实清单（仅 lite scout）—— 供前端展示与落库。
+                        # 与 scout_facts 原文分开存：scout_deep 成功时
+                        # scout_facts 装的是调研报告上下文，语义不同。
+                        result["scout_facts_detail"] = _scout_facts_detail(facts)
 
                 report = None
                 try:
@@ -388,9 +401,12 @@ async def run_plan_preflight(
                     describe_result=lambda value: (
                         "已收集事实" if value else "未收集到事实"
                     ),
+                    detail_result=lambda facts: _scout_facts_detail(facts),
                 )
                 if facts:
                     result["scout_facts"] = facts
+                    # 结构化事实清单（仅 lite scout）—— 供前端展示与落库。
+                    result["scout_facts_detail"] = _scout_facts_detail(facts)
 
         return result or None
     except Exception:  # noqa: BLE001 — preflight 永不阻塞编排
