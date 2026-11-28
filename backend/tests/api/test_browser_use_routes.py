@@ -183,7 +183,9 @@ def safety_env():
     reset_browser_control_for_tests()
 
 
-def _create_site_confirmation(session_id="s1", domain="example.com", fingerprint="fp-site"):
+def _create_site_confirmation(
+    session_id="s1", domain="example.com", fingerprint="fp-site", conversation=""
+):
     return browser_safety.get_confirmation_registry().create(
         session_id,
         "site_access",
@@ -192,10 +194,11 @@ def _create_site_confirmation(session_id="s1", domain="example.com", fingerprint
         description=f"访问站点 {domain}",
         options=list(browser_safety.SITE_ACCESS_OPTIONS),
         fingerprint=fingerprint,
+        conversation_id=conversation,
     )
 
 
-def _create_action_confirmation(session_id="s1", fingerprint="fp-action"):
+def _create_action_confirmation(session_id="s1", fingerprint="fp-action", conversation=""):
     return browser_safety.get_confirmation_registry().create(
         session_id,
         "sensitive_action",
@@ -204,6 +207,7 @@ def _create_action_confirmation(session_id="s1", fingerprint="fp-action"):
         description="提交订单",
         options=list(browser_safety.SENSITIVE_ACTION_OPTIONS),
         fingerprint=fingerprint,
+        conversation_id=conversation,
     )
 
 
@@ -353,6 +357,68 @@ async def test_confirmation_validation_errors(client, control_env, safety_env):
     )
     assert unknown.status_code == 404
     assert unknown.json() == {"ok": False, "error": "confirmation_not_found"}
+
+
+async def test_confirmations_list_filters_by_conversation(client, safety_env):
+    mine = _create_action_confirmation(conversation="c1")
+    other = _create_action_confirmation(fingerprint="fp-other", conversation="c2")
+    http = _create_site_confirmation(
+        session_id="", fingerprint="fp-http", conversation="c1"
+    )
+
+    by_conversation = await client.get(
+        f"{BASE_M4}/confirmations", params={"conversation_id": "c1"}
+    )
+    assert by_conversation.status_code == 200
+    items = by_conversation.json()["confirmations"]
+    assert [item["id"] for item in items] == [mine.id, http.id]
+    assert {item["conversation_id"] for item in items} == {"c1"}
+
+    # 旧语义：只按 session 过滤仍可用
+    by_session = await client.get(
+        f"{BASE_M4}/confirmations", params={"session_id": "s1"}
+    )
+    ids = {item["id"] for item in by_session.json()["confirmations"]}
+    assert ids == {mine.id, other.id}
+
+
+async def test_confirmation_resolve_requires_matching_conversation(
+    client, control_env, safety_env
+):
+    pending = _create_action_confirmation(conversation="c1")
+
+    missing = await client.post(
+        f"{BASE_M4}/confirmations/{pending.id}", json={"decision": "approve"}
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {"ok": False, "error": "confirmation_not_found"}
+    assert browser_safety.get_confirmation_registry().get(pending.id) is not None
+
+    mismatch = await client.post(
+        f"{BASE_M4}/confirmations/{pending.id}",
+        json={"decision": "approve", "conversation_id": "c2"},
+    )
+    assert mismatch.status_code == 404
+    assert browser_safety.get_confirmation_registry().get(pending.id) is not None
+
+    matched = await client.post(
+        f"{BASE_M4}/confirmations/{pending.id}",
+        json={"decision": "approve", "conversation_id": "c1"},
+    )
+    assert matched.status_code == 200
+    assert matched.json()["confirmation_id"] == pending.id
+
+
+async def test_confirmation_resolve_legacy_item_without_conversation(
+    client, control_env, safety_env
+):
+    pending = _create_action_confirmation()
+
+    resp = await client.post(
+        f"{BASE_M4}/confirmations/{pending.id}",
+        json={"decision": "approve", "conversation_id": "c1"},
+    )
+    assert resp.status_code == 200
 
 
 async def test_audit_lists_recent_filtered_by_session(client, safety_env):

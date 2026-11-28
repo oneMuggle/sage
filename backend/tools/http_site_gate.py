@@ -13,6 +13,7 @@ import logging
 from dataclasses import dataclass
 
 from backend.services import browser_safety
+from backend.tools.context import current_tool_context
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,12 @@ class SiteGateVerdict:
     reason: str
     confirmation_id: str = ""
     domain: str = ""
+
+
+def _current_conversation() -> str:
+    """当前工具调用所属的聊天会话 id；无上下文返回空串。"""
+    ctx = current_tool_context()
+    return (ctx.session_id or "") if ctx is not None else ""
 
 
 def gate_http_url(url: str, session_id: str = "") -> SiteGateVerdict:
@@ -61,6 +68,7 @@ def gate_http_url(url: str, session_id: str = "") -> SiteGateVerdict:
         description=f"访问站点 {domain}：{url}",
         options=list(browser_safety.SITE_ACCESS_OPTIONS),
         fingerprint=f"http:{domain}",
+        conversation_id=_current_conversation(),
     )
     logger.info("HTTP 出网待确认 domain=%s confirmation=%s", domain, pending.id)
     return SiteGateVerdict(
