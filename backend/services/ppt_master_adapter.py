@@ -27,7 +27,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence
 
 __all__ = [
     "PptMasterAdapter",
@@ -79,7 +79,7 @@ def _resolve_skill_root(explicit: Optional[Path]) -> Path:
     环境变量/默认位置允许指向技能目录本身，或其上层仓库根（自动加
     skills/ppt-master）。
     """
-    candidates: list[Path] = []
+    candidates: List[Path] = []
     if explicit is not None:
         candidates.append(Path(explicit))
 
