@@ -239,6 +239,7 @@ export const TOOL_CAPABILITY_PACKS: readonly ToolCapabilityPack[] = [
     tools: [
       'skill',
       'skill_save',
+      'skill_read_resource',
       'agent',
       'ask_user_question',
       'todo_write',
@@ -252,6 +253,13 @@ export const TOOL_CAPABILITY_PACKS: readonly ToolCapabilityPack[] = [
       'list_worklogs',
     ],
     requiresMode: 'full_access',
+  },
+  {
+    id: 'literature',
+    label: '文献站点',
+    description: '记录文献站点经验、枚举检索后端（literature-research 技能配套）',
+    tools: ['profile_record_note', 'profile_discover_backends'],
+    requiresMode: 'workspace_write',
   },
   {
     id: 'plugins',
