@@ -79,3 +79,24 @@ def test_resolution_order_matches_loader_discovery() -> None:
         expected_first = roots[0] / SHIPPED_LITERATURE
         if expected_first.is_dir() and (expected_first / "SKILL.md").is_file():
             assert base == expected_first.resolve()
+
+
+def test_auto_activation_manifest_lists_pipeline_reference() -> None:
+    from backend.skills.skill_md.auto_activation import render_resource_manifest
+    from backend.skills.skill_md.resources import build_resource_index
+
+    base = resolve_skill_dir(SHIPPED_LITERATURE)
+    assert base is not None
+    manifest = render_resource_manifest(base, build_resource_index(base))
+    joined = "\n".join(manifest)
+    assert "references/pipeline.md" in joined
+    assert "skill_read_resource" in joined
+
+
+def test_skill_md_declares_the_run_directory_contract() -> None:
+    """SKILL.md 必须写出「用 skill_read_resource 读 pipeline.md」的契约。"""
+    base = resolve_skill_dir(SHIPPED_LITERATURE)
+    assert base is not None
+    text = (base / "SKILL.md").read_text(encoding="utf-8")
+    assert "skill_read_resource" in text
+    assert "references/pipeline.md" in text
