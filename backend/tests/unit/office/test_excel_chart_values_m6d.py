@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 from backend.office.excel import read_xlsx
 
@@ -20,7 +21,7 @@ def _make_chart_book(
     path: Path,
     *,
     row_count: int = 3,
-    data_sheet: str | None = None,
+    data_sheet: Optional[str] = None,
     with_title: bool = True,
 ) -> Path:
     from openpyxl import Workbook

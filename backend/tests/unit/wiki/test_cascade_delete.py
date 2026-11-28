@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List
 
 import pytest
 
@@ -12,7 +13,7 @@ from backend.wiki.vectorstore import VectorStore
 pytestmark = pytest.mark.unit
 
 
-def _write_page(project_root: Path, title: str, sources: list[str]) -> Path:
+def _write_page(project_root: Path, title: str, sources: List[str]) -> Path:
     page = project_root / "wiki" / "notes" / f"{title}.md"
     page.parent.mkdir(parents=True, exist_ok=True)
     page.write_text(

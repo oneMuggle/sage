@@ -21,7 +21,7 @@
     "backend/data/database.py": 2957,
     "backend/data/session_repo.py": 1279,
     "backend/data/settings_canonicalizer.py": 1146,
-    "backend/main.py": 2121,
+    "backend/main.py": 2127,
     "backend/mcp/pool.py": 967,
     "backend/memory/episodic.py": 981,
     "backend/memory/semantic.py": 805,

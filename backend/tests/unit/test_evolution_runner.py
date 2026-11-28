@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 import pytest
 
 from backend.scheduler.evolution import EvolutionTaskCancelled
@@ -23,7 +25,7 @@ class _FakeTask:
     def __init__(
         self,
         result: object = None,
-        error: Exception | None = None,
+        error: Optional[Exception] = None,
         cancelled: bool = False,
     ) -> None:
         self.result = result
