@@ -50,6 +50,11 @@ from backend.tools.browser_tool import (
     _storage_domain_matches,
     validate_url,
 )
+from backend.tools.context import (
+    ToolExecutionContext,
+    reset_tool_context,
+    set_tool_context,
+)
 
 pytestmark = [pytest.mark.unit]
 
@@ -2089,6 +2094,32 @@ def test_navigate_unknown_site_requires_confirmation_and_pauses(stubbed, monkeyp
     assert pending[0].options == ["session", "always", "deny"]
 
 
+def _bind_tool_context(session_id: str):
+    return set_tool_context(
+        ToolExecutionContext(
+            session_id=session_id,
+            stream_id="test-stream",
+            binding_generation=0,
+            office_doc_scope=frozenset(),
+        )
+    )
+
+
+def test_site_confirmation_records_conversation_owner(stubbed, monkeypatch):
+    monkeypatch.setattr(browser_tool, "_safety_check_site", lambda sid, url: "confirm")
+    token = _bind_tool_context("c1")
+    try:
+        result = _tool(BrowserNavigateTool).execute(
+            url="https://unknown.example/path", browser_id="b1"
+        )
+    finally:
+        reset_tool_context(token)
+
+    assert result.error.startswith("needs_confirmation: ")
+    pending = browser_safety.get_confirmation_registry().list("b1")
+    assert [item.conversation_id for item in pending] == ["c1"]
+
+
 def test_navigate_blocked_site_returns_site_blocked(stubbed, monkeypatch):
     monkeypatch.setattr(browser_tool, "_safety_check_site", lambda sid, url: "block")
 
@@ -2358,6 +2389,21 @@ def test_press_enter_on_submit_button_requires_confirmation(stubbed, monkeypatch
     pending = browser_safety.get_confirmation_registry().list("b1")
     assert len(pending) == 1
     assert pending[0].code == "sensitive_submit"
+
+
+def test_sensitive_confirmation_records_conversation_owner(stubbed, monkeypatch):
+    monkeypatch.setattr(browser_tool, "_read_target_metadata", _submit_meta)
+    token = _bind_tool_context("c2")
+    try:
+        result = _tool(BrowserInteractTool).execute(
+            action="press", ref="e9", key="Return", browser_id="b1"
+        )
+    finally:
+        reset_tool_context(token)
+
+    assert result.error.startswith("needs_confirmation: ")
+    pending = browser_safety.get_confirmation_registry().list("b1")
+    assert [item.conversation_id for item in pending] == ["c2"]
 
 
 def test_press_enter_on_plain_input_is_ok(stubbed, monkeypatch):

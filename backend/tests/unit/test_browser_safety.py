@@ -336,7 +336,7 @@ def registry():
     return browser_safety.ConfirmationRegistry()
 
 
-def _create(registry, fingerprint="fp-1", session="s1", kind="sensitive_action"):
+def _create(registry, fingerprint="fp-1", session="s1", kind="sensitive_action", conversation=""):
     return registry.create(
         session,
         kind,
@@ -346,6 +346,7 @@ def _create(registry, fingerprint="fp-1", session="s1", kind="sensitive_action")
         options=["approve", "deny"],
         screenshot_path="/tmp/x.png",
         fingerprint=fingerprint,
+        conversation_id=conversation,
     )
 
 
@@ -359,6 +360,28 @@ def test_create_and_list(registry):
     public = first.to_public_dict()
     assert "fingerprint" not in public
     assert public["options"] == ["approve", "deny"]
+    assert public["conversation_id"] == ""
+
+
+def test_list_filters_by_conversation_and_takes_precedence(registry):
+    mine = _create(registry, "fp-1", session="s1", conversation="c1")
+    other = _create(registry, "fp-2", session="s1", conversation="c2")
+    http = _create(registry, "fp-3", session="", conversation="c1")
+    legacy = _create(registry, "fp-4", session="s1")
+
+    assert [item.id for item in registry.list(conversation_id="c1")] == [mine.id, http.id]
+    # 旧语义：只按 session 过滤时不过滤对话
+    assert {item.id for item in registry.list("s1")} == {mine.id, other.id, legacy.id}
+    # 对话优先：同会话下不同对话的项被排除（含 session 为空的 HTTP 确认）
+    assert [item.id for item in registry.list("s1", conversation_id="c1")] == [mine.id, http.id]
+    assert registry.list(conversation_id="missing") == []
+
+
+def test_public_dict_exposes_conversation_id(registry):
+    pending = _create(registry, "fp-1", conversation="c1")
+
+    assert pending.conversation_id == "c1"
+    assert pending.to_public_dict()["conversation_id"] == "c1"
 
 
 def test_approve_is_one_time(registry):
