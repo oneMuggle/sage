@@ -221,6 +221,27 @@ export interface MessageDisplayImageOcrText {
   text: string;
 }
 
+/**
+ * 单条侦察事实（2026-11-27）—— lite scout 产出，供「事实侦察」折叠块展示。
+ *
+ * 后端 `backend/orchestration/scout_facts.py` 的保守解析产物：
+ * 正文与来源拆开，拆不出就整行进 `text`（绝不丢内容）。
+ */
+export interface ScoutFact {
+  /** 事实正文（原文，去掉 bullet 前缀；来源标注已拆出到 source） */
+  text: string;
+  /** 来源标注（无则空串） */
+  source: string;
+}
+
+/** 事实清单整体（对应 client_meta.scout_facts） */
+export interface ScoutFactsMeta {
+  facts: ScoutFact[];
+  fact_count: number;
+  /** 事实条数超过展示上限时为 true */
+  truncated?: boolean;
+}
+
 export interface MessageDisplayMeta {
   /** 随消息上传的文档附件（名称/大小/类型，不含 dataUrl） */
   attachments?: MessageDisplayAttachment[];
@@ -234,6 +255,11 @@ export interface MessageDisplayMeta {
   office_refs?: MessageDisplayOfficeRef[];
   /** 知识库引用（当前仅展示） */
   knowledge_refs?: { id: string; title: string }[];
+  /**
+   * 2026-11-27: lite scout 的结构化事实清单（仅展示，不参与 LLM 上下文）。
+   * 落库于首条 assistant 行的 client_meta，刷新会话后回读。
+   */
+  scout_facts?: ScoutFactsMeta;
   /**
    * P0 (2026-11-04): 后端 attachments_processed 事件回写的每附件处理状态。
    * 仅内存态（流式事件更新），用于气泡上渲染"已读取/已跳过/失败"。

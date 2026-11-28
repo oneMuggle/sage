@@ -6,6 +6,7 @@ import pytest
 
 from backend.orchestration.plan_progress import (
     KIND_HEARTBEAT,
+    MAX_PROGRESS_DETAIL_BYTES,
     PLAN_STAGE_SCOUT,
     STATUS_DONE,
     STATUS_FAILED,
@@ -259,3 +260,127 @@ def test_stream_progress_emitter_throttles_and_flushes():
     assert len(time_events) == 1
     assert time_events[0]["plan_progress"]["text"] == "abcdef"
     assert time_events[0]["plan_progress"]["kind"] == "reasoning"
+
+
+def test_run_planning_stage_attaches_detail_from_detail_result():
+    """2026-11-27: done 事件携带结构化 detail（事实清单等）。"""
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    async def runner():
+        return "- 事实一在这里"
+
+    result = asyncio.run(
+        run_planning_stage(
+            emit,
+            stage="scout",
+            runner=runner,
+            describe_result=lambda value: "已收集事实",
+            detail_result=lambda value: {"facts": [{"text": value, "source": ""}]},
+        )
+    )
+
+    assert result == "- 事实一在这里"
+    payload = events[-1]["plan_progress"]
+    assert payload["status"] == STATUS_DONE
+    assert payload["detail"] == {"facts": [{"text": "- 事实一在这里", "source": ""}]}
+
+
+def test_run_planning_stage_without_detail_result_keeps_empty_detail():
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    async def runner():
+        return "medium"
+
+    asyncio.run(run_planning_stage(emit, stage="scout", runner=runner))
+
+    assert events[-1]["plan_progress"]["detail"] == {}
+
+
+def test_run_planning_stage_survives_detail_result_failure():
+    """detail 构造失败不得影响阶段结果与 done 事件。"""
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    async def runner():
+        return "ok"
+
+    def _boom(_value):
+        raise RuntimeError("detail exploded")
+
+    result = asyncio.run(
+        run_planning_stage(
+            emit, stage="scout", runner=runner, detail_result=_boom
+        )
+    )
+
+    assert result == "ok"
+    assert events[-1]["plan_progress"]["status"] == STATUS_DONE
+    assert events[-1]["plan_progress"]["detail"] == {}
+
+
+def test_emit_plan_progress_drops_oversized_detail():
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    asyncio.run(
+        emit_plan_progress(
+            emit,
+            stage="scout",
+            status=STATUS_DONE,
+            text="ok",
+            # 超过 MAX_PROGRESS_DETAIL_BYTES 的载荷必须整块丢弃（正文保留）
+            detail={"blob": "x" * (MAX_PROGRESS_DETAIL_BYTES + 1024)},
+        )
+    )
+
+    assert events[0]["plan_progress"]["detail"] == {}
+    assert events[0]["plan_progress"]["text"] == "ok"
+
+
+def test_emit_plan_progress_keeps_detail_within_byte_cap():
+    """与 SCOUT_CLIENT_META_MAX_BYTES 同预算：落库能存下的，实时也必须下发。"""
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    asyncio.run(
+        emit_plan_progress(
+            emit,
+            stage="scout",
+            status=STATUS_DONE,
+            text="ok",
+            detail={"blob": "x" * 20000},
+        )
+    )
+
+    assert events[0]["plan_progress"]["detail"] == {"blob": "x" * 20000}
+
+
+def test_emit_plan_progress_drops_unserializable_detail():
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    asyncio.run(
+        emit_plan_progress(
+            emit,
+            stage="scout",
+            status=STATUS_DONE,
+            text="ok",
+            detail={"bad": object()},
+        )
+    )
+
+    assert events[0]["plan_progress"]["detail"] == {}
