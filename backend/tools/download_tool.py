@@ -453,6 +453,12 @@ class HttpDownloadTool(BaseTool):
         if url_error:
             return ToolResult(success=False, error=url_error)
 
+        from .http_site_gate import gate_error_message, gate_http_url
+
+        gate = gate_http_url(url, session_id="")
+        if not gate.allowed:
+            return ToolResult(success=False, error=gate_error_message(gate))
+
         # 自动推断凭据域（对齐 web_fetch 行为）：
         # browser_login 导出 cookie 后，http_download 访问同域自动带态。
         # 多账号：account_id 给定 → 解析为 vault 维度（默认账号 → None）。

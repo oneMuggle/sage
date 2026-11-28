@@ -700,6 +700,12 @@ class WebFetchTool(BaseTool):
         if not url.startswith(("http://", "https://")):
             return ToolResult(success=False, error="无效的 URL，必须以 http:// 或 https:// 开头")
 
+        from .http_site_gate import gate_error_message, gate_http_url
+
+        gate = gate_http_url(url, session_id="")
+        if not gate.allowed:
+            return ToolResult(success=False, error=gate_error_message(gate))
+
         # 自动推断凭据域（browser_login 登录后 web_fetch 自动带态）：
         # 用户/LLM 未显式传 credential_domain 时，从 URL hostname 在凭据档案中
         # 查找最匹配的 domain。这样 browser_login 导出的 cookie 无需再手动
