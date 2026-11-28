@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -41,7 +41,7 @@ _service = PresentationService()
 class RenderSvgRequest(BaseModel):
     workspace_path: str = Field(..., min_length=1)
     filename: str = Field(..., min_length=1)
-    svg_slides: list[str] = Field(..., min_length=1)
+    svg_slides: List[str] = Field(..., min_length=1)
 
 
 class RenderProjectRequest(BaseModel):
