@@ -29,6 +29,7 @@ import { ContextMenu } from '../../shared/ui/ContextMenu/ContextMenu';
 
 import { BlockedCard } from './BlockedCard';
 import { CompactBanner } from './CompactBanner';
+import { FactReconBlock } from './FactReconBlock';
 import { MediaPdfPreview } from './MediaPdfPreview';
 import { MessageActionBar } from './MessageActionBar';
 import { MessageClientMeta } from './MessageClientMeta';
@@ -375,6 +376,17 @@ function MessageComponent({
             位于思考面板之下、重试横幅之上。仅在当前流式输出的气泡里渲染。 */}
         {isAssistant && (
           <PlanningTimeline sessionId={message.session_id ?? null} messageId={message.id} />
+        )}
+
+        {/* 2026-11-27: 事实侦察可折叠区块 —— 让用户核对侦察到的事实是否正确完整。
+            实时数据来自规划进度的 scout 阶段（仅当前流式气泡），
+            落库数据来自 client_meta.scout_facts（刷新会话后仍在）。 */}
+        {isAssistant && (
+          <FactReconBlock
+            sessionId={message.session_id ?? null}
+            messageId={message.id}
+            persistedFacts={message.client_meta?.scout_facts}
+          />
         )}
 
         {/* 2026-10-20: LLM 重试横幅 —— 置于思考面板之下、工具调用之上。
