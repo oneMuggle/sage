@@ -8,9 +8,9 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional, Protocol
-from urllib.parse import urlsplit, urlunsplit
 
 from .guidance import render_search_guidance
+from .interstitial import rewrite_host_candidates
 from .models import SiteProfile, render_search_url
 
 
@@ -145,22 +145,11 @@ def validate_pdf(path: Path, expected_title: str, magic: str = "%PDF-") -> List[
 
 
 def _candidate_download_urls(url: str, hosts: List[str]) -> List[str]:
-    """按回退主机生成候选 URL（回退主机在前，原域最后兜底）。"""
-    parts = urlsplit(url)
-    candidates: List[str] = []
-    for raw_host in hosts:
-        host = str(raw_host or "").strip()
-        if not host:
-            continue
-        candidate = urlunsplit(
-            (parts.scheme or "https", host, parts.path, parts.query, "")
-        )
-        if candidate not in candidates:
-            candidates.append(candidate)
-    original = urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, ""))
-    if original and original not in candidates:
-        candidates.append(original)
-    return candidates
+    """生成候选下载地址（主机回退优先，原域最后）。
+
+    委托 ``interstitial.rewrite_host_candidates``，避免两处逻辑漂移。
+    """
+    return rewrite_host_candidates(url, hosts)
 
 
 def _find_interstitial_tab(
