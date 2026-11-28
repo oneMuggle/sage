@@ -318,6 +318,10 @@ def _install_runtime(ctx: ToolInstallContext) -> None:
 def _install_skill(ctx: ToolInstallContext) -> None:
     # M2 part B: in-loop 技能调用（EXECUTE，M1 审批闸口按模式矩阵拦截）
     ctx.registry.register(SkillTool(policy=ctx.policy))
+    # skill_read_resource：读取技能内白名单资源（READ，渐进披露）
+    from .skill_resource_tool import SkillReadResourceTool
+
+    ctx.registry.register(SkillReadResourceTool(policy=ctx.policy))
 
 
 def _install_ask_user(ctx: ToolInstallContext) -> None:
