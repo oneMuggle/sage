@@ -32,6 +32,7 @@ from urllib.parse import urlsplit
 
 from backend.data import browser_action_repo
 from backend.domain.risk import RiskClass
+from backend.domain.tool_names import BROWSER_TOOLS
 from backend.services import browser_safety
 from backend.services.browser_control import (
     BrowserControlState,
@@ -4250,16 +4251,7 @@ __all__ = [
     "validate_url",
 ]
 
-#: 与 domain/tool_names.py 的 BROWSER_TOOLS 保持一致（一致性由测试锁定）
-BROWSER_TOOL_NAMES = (
-    "browser_launch",
-    "browser_navigate",
-    "browser_snapshot",
-    "browser_interact",
-    "browser_screenshot",
-    "browser_cookies",
-    "browser_downloads",
-    "browser_close",
-    "browser_login",
-    "browser_tabs",
-)
+#: 与 domain/tool_names.py 的 BROWSER_TOOLS 保持一致 —— 直接引用而非手抄，
+#: 手抄元组曾在 2026-11 漂移（漏 browser_list_accounts / browser_switch_account）
+#: 且无测试比对（spec §8.3 / B3）。
+BROWSER_TOOL_NAMES = BROWSER_TOOLS
