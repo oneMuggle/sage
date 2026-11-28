@@ -204,6 +204,9 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     # skill_read_resource 只读技能内白名单资源（references/scripts/assets/
     # templates），与渲染路径同口径 —— 无副作用，按 READ 对待。
     "skill_read_resource": ToolCapability.READ,
+    # --- 站点知识沉淀（spec §7.1）---
+    # profile_record_note 只写用户目录下的 notes sidecar，本地副作用。
+    "profile_record_note": ToolCapability.WRITE,
     # --- 多模态 ---
     "text_to_speech": ToolCapability.WRITE,
     "generate_image": ToolCapability.WRITE,

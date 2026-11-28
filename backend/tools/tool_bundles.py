@@ -324,6 +324,13 @@ def _install_skill(ctx: ToolInstallContext) -> None:
     ctx.registry.register(SkillReadResourceTool(policy=ctx.policy))
 
 
+def _install_profile(ctx: ToolInstallContext) -> None:
+    """站点知识沉淀工具（WRITE_LOCAL，只写用户目录下的 sidecar）。"""
+    from .profile_note_tool import ProfileRecordNoteTool
+
+    ctx.registry.register(ProfileRecordNoteTool(policy=ctx.policy))
+
+
 def _install_ask_user(ctx: ToolInstallContext) -> None:
     # M2 part B: AskUserQuestion（READ，run_loop 分发前特判 + 提问闸口）
     ctx.registry.register(AskUserQuestionTool(policy=ctx.policy))
@@ -537,6 +544,7 @@ BUNDLES: Tuple[ToolBundle, ...] = (
     ToolBundle("worklog", _install_worklog),
     ToolBundle("design", _install_design),
     ToolBundle("self_status", _install_self_status),
+    ToolBundle("profile", _install_profile),
 )
 
 
