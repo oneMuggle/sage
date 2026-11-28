@@ -1,6 +1,6 @@
 # 技术专题文档总览
 
-> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-184；本索引以目录中的实际文件为准。
+> Sage 各技术专题的深入文档。本目录补充 [`../README.md`](../README.md) 中核心章节（01-14），聚焦质量门禁、可观测性、架构约束等横切关注点。当前专题编号为 15-185；本索引以目录中的实际文件为准。
 
 
 ## 章节目录
@@ -125,6 +125,7 @@
 | 146 | [渲染层 BackendNotReadyError 自愈](./146-backend-ready-renderer-recovery.md) | 方案 A 队列之上的渲染层兜底：`backendReadySignal` 单例订阅 `backend:ready` 事件 + `useBackendReadyTick` 驱动 Chat/Sidebar/SessionWorkspaceProvider 启动期失败自动重放；`desktopInvoke` 剥离 IPC 包装前缀；`ProjectsOverview` 错误横幅 + 重试按钮 |
 | 183 | [事实侦察区块](./183-fact-recon-block.md) | lite scout 事实结构化解析（12 条上限）+ plan_progress.detail 实时下发 + client_meta 落库回读 + FactReconBlock 折叠区块（全文不截断 / 来源 chip / 侦察过程二级折叠） |
 | 184 | [文献站点知识沉淀与 HTTP 快路径](./184-literature-site-knowledge.md) | profile `notes[]`/`backends[]` + `references/` 接线 + 下载 HTTP 快路径与合规闸门 |
+| 185 | [PPT Master 集成](./185-ppt-master-integration.md) | 原位调用 ppt-master 技能（不拷贝，守卫相对技能根校验）+ 质量门禁阻塞即停（200 + success=false）+ SVG → DrawingML 原生可编辑 PPTX + Office 页对话框与任务中心接入 + win7 的 Python 3.8 → ≥3.9 解释器守卫与空列表 422 |
 ---
 
 ## 核心章节（基础架构）
@@ -153,7 +154,7 @@
 | 关注层     | 文档                                                        |
 | ---------- | ----------------------------------------------------------- |
 | 基础架构   | 本目录 01-14                                                |
-| 横切关注点 | 本目录 15-184                                               |
+| 横切关注点 | 本目录 15-185                                               |
 
 ---
 
