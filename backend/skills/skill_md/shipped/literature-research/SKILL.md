@@ -32,6 +32,11 @@ triggers: []
                      # verification_report.{md,json} / rubric_review.{md,json}
 ```
 
+meta.json / papers.jsonl / evidence.jsonl / claims.jsonl / outline.json /
+draft.md / verification.json 的字段定义见 `{baseDir}/references/pipeline.md`，
+需要时用 `skill_read_resource` 读取
+（`skill="literature-research", path="references/pipeline.md"`）。
+
 ## 工作流（按顺序，不要跳步）
 
 ### 0. 选择站点与确认合规
