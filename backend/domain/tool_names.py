@@ -199,6 +199,10 @@ BROWSER_TOOLS = (
 # 启动期白名单校验防止 profile 漂移。
 SKILL_TOOLS = ("skill", "skill_read_resource", "skill_save")
 
+#: 站点知识沉淀（2026-11 文献站点知识闭环）：把失败沉淀成 profile notes。
+#: WRITE_LOCAL —— 只写 ``~/.sage/literature_sites/<site_id>.notes.yaml`` sidecar。
+PROFILE_TOOLS = ("profile_record_note",)
+
 # 多模态工具（2026-09-12 multimodal capabilities）：TTS 文本转语音 /
 # ASR 语音识别 / 图像生成。全部 EXTERNAL（调用外部 API），requires_tool_context=True。
 # 2026-10-31 本地 OCR：ocr_image 为 READ（本地推理，不调用外部 API）。
@@ -308,6 +312,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(SYMBOL_TOOLS)
         | set(BROWSER_TOOLS)
         | set(SKILL_TOOLS)
+        | set(PROFILE_TOOLS)
         | set(MULTIMODAL_TOOLS)
         | set(PARSE_TOOLS)
         | set(ORCH_TOOLS)
@@ -584,6 +589,7 @@ __all__ = [
     "ORCH_TOOLS",
     "PATCH_TOOLS",
     "PLUGIN_TOOL_PREFIX",
+    "PROFILE_TOOLS",
     "RUNTIME_EXEC_TOOLS",
     "RUNTIME_PROBE_TOOLS",
     "RUNTIME_TOOLS",
