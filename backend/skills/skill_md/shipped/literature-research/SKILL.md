@@ -259,12 +259,12 @@ python -m backend.literature.cli export --run runs/<id> [--style ieee]
 ## 附录：站点 profile 示例
 
 `docs/templates/literature-sites/` 提供可复制的示例 profile（如浏览器登录+检索+PDF
-下载的 `xueshu789.yaml`）。这些模板**不参与运行时自动加载**，仅供理解 profile 字段
+下载的 `<site>.yaml`）。这些模板**不参与运行时自动加载**，仅供理解 profile 字段
 形态和快速创建新站点：
 
 ```bash
 mkdir -p ~/.sage/literature_sites
-cp docs/templates/literature-sites/xueshu789.yaml ~/.sage/literature_sites/
+cp docs/templates/literature-sites/<site>.yaml ~/.sage/literature_sites/
 ```
 
 字段完整清单见 `backend/literature/README.md` 与 `backend/literature/models.py`。
