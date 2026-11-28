@@ -12,18 +12,23 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol, Sequence
+from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
 
-from .models import PaperRecord
+from .models import PaperRecord, SiteProfile
 from .pipeline_models import Claim, ClaimVerdict
 from .run_store import LiteratureRun, list_papers, write_json
 
 _USER_AGENT = "SageLiterature/1.0 (local research assistant)"
 _TIMEOUT_S = 8.0
+_UNPAYWALL_MIN_INTERVAL_S = 1.0
+
+ACCESS_STATUSES: Tuple[str, ...] = ("subscription", "oa", "closed", "unknown")
+_ACCESS_PRIORITY = {"subscription": 3, "oa": 2, "closed": 1, "unknown": 0}
 
 
 class MetadataLookup(Protocol):
@@ -151,6 +156,113 @@ class SemanticScholarLookup:
 
 def default_lookups() -> List[MetadataLookup]:
     return [CrossrefLookup(), OpenAlexLookup(), SemanticScholarLookup()]
+
+
+def merge_access_status(*statuses: str) -> str:
+    """按优先级合并可得性：subscription > oa > closed > unknown。"""
+    if not statuses:
+        return "unknown"
+    return max(statuses, key=lambda status: _ACCESS_PRIORITY.get(status, 0))
+
+
+class UnpaywallLookup:
+    """Unpaywall OA 可得性查询（spec §7.3）；无 email 时不可用。
+
+    与元数据轴分开装配——混入 ``default_lookups()`` 会污染核验报告。
+    """
+
+    name = "unpaywall"
+
+    def __init__(
+        self,
+        contact_email: str,
+        min_interval_s: float = _UNPAYWALL_MIN_INTERVAL_S,
+    ) -> None:
+        self.contact_email = (contact_email or "").strip()
+        self.min_interval_s = min_interval_s
+        self._last_call_at = 0.0
+
+    @property
+    def available(self) -> bool:
+        return bool(self.contact_email)
+
+    def lookup(self, paper: PaperRecord) -> Optional[Dict[str, Any]]:
+        if not self.available:
+            return None
+        doi = _doi_of(paper)
+        if not doi:
+            return None
+        now = time.monotonic()
+        if now - self._last_call_at < self.min_interval_s:
+            return None
+        self._last_call_at = now
+        url = (
+            "https://api.unpaywall.org/v2/"
+            + urllib.parse.quote(doi, safe="")
+            + "?email="
+            + urllib.parse.quote(self.contact_email, safe="")
+        )
+        data = _get_json(url)
+        if not data:
+            return None
+        is_oa = bool(data.get("is_oa"))
+        best = data.get("best_oa_location") or {}
+        return {
+            "source": self.name,
+            "is_oa": is_oa,
+            "oa_status": (data.get("oa_status") or "").strip() or None,
+            "best_oa_url": best.get("url_for_pdf") or best.get("url"),
+            "access_status": "oa" if is_oa else "closed",
+        }
+
+
+def build_oa_lookups(profile: Optional[SiteProfile]) -> List[UnpaywallLookup]:
+    """按站点合规配置装配 OA 轴；缺 email 时返回空列表（不阻断主链路）。"""
+    if profile is None:
+        return []
+    email = (profile.compliance.contact_email or "").strip()
+    if not email:
+        return []
+    return [UnpaywallLookup(contact_email=email)]
+
+
+def verify_run_access(
+    run: LiteratureRun,
+    lookups: Optional[Sequence[UnpaywallLookup]] = None,
+    profile: Optional[SiteProfile] = None,
+) -> Dict[str, Any]:
+    """对运行目录全部文献跑 OA 可得性判定，写 ``access_verification.json``。"""
+    if lookups is None:
+        lookups = build_oa_lookups(profile)
+    items: List[Dict[str, Any]] = []
+    for paper in list_papers(run):
+        status = "unknown"
+        best_oa_url = None
+        source = None
+        for lookup in lookups:
+            candidate = lookup.lookup(paper)
+            if candidate is None:
+                continue
+            status = merge_access_status(status, candidate.get("access_status") or "unknown")
+            best_oa_url = candidate.get("best_oa_url") or best_oa_url
+            source = candidate.get("source")
+        items.append(
+            {
+                "paper_key": paper.paper_key,
+                "access_status": status,
+                "best_oa_url": best_oa_url,
+                "source": source,
+            }
+        )
+    report = {
+        "items": items,
+        "oa": sum(1 for item in items if item["access_status"] == "oa"),
+        "subscription": sum(1 for item in items if item["access_status"] == "subscription"),
+        "closed": sum(1 for item in items if item["access_status"] == "closed"),
+        "unknown": sum(1 for item in items if item["access_status"] == "unknown"),
+    }
+    write_json(run.run_dir / "access_verification.json", report)
+    return report
 
 
 def _normalize(text: str) -> str:

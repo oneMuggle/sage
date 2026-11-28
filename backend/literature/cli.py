@@ -49,7 +49,12 @@ from .run_store import (
     save_outline,
 )
 from .support import apply_claim_support, summarize_claim_support
-from .verify import apply_evidence_support, default_lookups, verify_run_metadata
+from .verify import (
+    apply_evidence_support,
+    default_lookups,
+    verify_run_access,
+    verify_run_metadata,
+)
 
 
 def _print(data: Any) -> None:
@@ -155,6 +160,14 @@ def _build_parser() -> argparse.ArgumentParser:
     record = sub.add_parser("draft-profile")
     record.add_argument("--observation", required=True)
     record.add_argument("--out", required=True)
+
+    verify_access = sub.add_parser(
+        "verify-access", help="Unpaywall OA 可得性轴（无 email 时全部 unknown）"
+    )
+    verify_access.add_argument("--run", required=True)
+    verify_access.add_argument(
+        "--site", default="", help="站点 id；读取 compliance.contact_email 装配 OA 轴"
+    )
 
     discover = sub.add_parser(
         "discover-backends", help="枚举站点可用文献库并写回 backends sidecar"
@@ -295,6 +308,12 @@ def _dispatch(args: argparse.Namespace) -> int:  # noqa: PLR0911 — 每个子�
             }
         )
         return 0 if not verdicts.get("unresolved") and not verdicts.get("unsupported") else 1
+
+    if args.command == "verify-access":
+        profile = get_default_store().get(args.site) if args.site else None
+        report = verify_run_access(run, profile=profile)
+        _print({"ok": True, **report})
+        return 0
 
     if args.command == "verify-metadata":
         report = verify_run_metadata(run, default_lookups(), args.min_consensus)
