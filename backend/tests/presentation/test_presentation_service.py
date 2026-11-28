@@ -28,13 +28,21 @@ class FakeAdapter:
         quality: QualityOutcome | None = None,
         convert_error: Exception | None = None,
         quality_error: Exception | None = None,
+        apply_error: Exception | None = None,
     ) -> None:
         self._quality = quality or _passed_quality()
         self._convert_error = convert_error
         self._quality_error = quality_error
+        self._apply_error = apply_error
         self.quality_calls: list[Path] = []
         self.convert_calls: list[tuple[Path, Path]] = []
+        self.apply_calls: list[tuple[Path, list[Path]]] = []
         self.seen_svgs: list[str] = []
+
+    def apply_templates(self, project_dir: Path, roots) -> None:
+        if self._apply_error is not None:
+            raise self._apply_error
+        self.apply_calls.append((Path(project_dir), [Path(r) for r in roots]))
 
     def quality_check(self, project_dir: Path) -> QualityOutcome:
         if self._quality_error is not None:
@@ -135,6 +143,90 @@ def test_render_project_success(tmp_path: Path):
     result = PresentationService(FakeAdapter()).render_project(project, out)
     assert result.success is True
     assert out.is_file()
+
+
+# --------------------------------------------------------------------------- #
+# 模板安装
+# --------------------------------------------------------------------------- #
+def _layout_root(tmp_path: Path) -> Path:
+    root = tmp_path / "library" / "layouts" / "brief"
+    root.mkdir(parents=True)
+    return root
+
+
+def test_templates_installed_before_quality_gate(tmp_path: Path):
+    adapter = FakeAdapter()
+    root = _layout_root(tmp_path)
+    result = PresentationService(adapter).render_from_svgs(
+        ["<svg><rect data-pptx-layout='cover'/></svg>"],
+        tmp_path / "deck.pptx",
+        template_roots=[root],
+    )
+
+    assert result.success is True
+    assert adapter.apply_calls[0][1] == [root]
+    # 安装发生在质量门禁之前，且作用于同一个临时项目目录
+    assert adapter.apply_calls[0][0] == adapter.quality_calls[0]
+    assert result.templates_applied == ["brief"]
+
+
+def test_template_install_failure_aborts_before_gate(tmp_path: Path):
+    adapter = FakeAdapter(apply_error=PptMasterRunError("apply boom"))
+    root = _layout_root(tmp_path)
+    result = PresentationService(adapter).render_from_svgs(
+        ["<svg/>"], tmp_path / "deck.pptx", template_roots=[root]
+    )
+
+    assert result.success is False
+    assert result.message == "apply boom"
+    assert adapter.quality_calls == []
+    assert adapter.convert_calls == []
+
+
+def test_structural_template_without_marker_emits_hint(tmp_path: Path):
+    adapter = FakeAdapter()
+    root = _layout_root(tmp_path)
+    result = PresentationService(adapter).render_from_svgs(
+        ["<svg><rect/></svg>"], tmp_path / "deck.pptx", template_roots=[root]
+    )
+
+    assert result.success is True
+    codes = [w.get("code") for w in result.warnings if isinstance(w, dict)]
+    assert "TEMPLATE_STRUCTURE_HINT" in codes
+
+
+def test_structural_template_with_marker_has_no_hint(tmp_path: Path):
+    adapter = FakeAdapter()
+    root = _layout_root(tmp_path)
+    result = PresentationService(adapter).render_from_svgs(
+        ["<svg><rect data-pptx-layout='cover'/></svg>"],
+        tmp_path / "deck.pptx",
+        template_roots=[root],
+    )
+
+    codes = [w.get("code") for w in result.warnings if isinstance(w, dict)]
+    assert "TEMPLATE_STRUCTURE_HINT" not in codes
+
+
+def test_brand_template_has_no_structural_hint(tmp_path: Path):
+    adapter = FakeAdapter()
+    root = tmp_path / "library" / "brands" / "acme"
+    root.mkdir(parents=True)
+    result = PresentationService(adapter).render_from_svgs(
+        ["<svg/>"], tmp_path / "deck.pptx", template_roots=[root]
+    )
+
+    codes = [w.get("code") for w in result.warnings if isinstance(w, dict)]
+    assert "TEMPLATE_STRUCTURE_HINT" not in codes
+
+
+def test_no_template_roots_skips_install(tmp_path: Path):
+    adapter = FakeAdapter()
+    result = PresentationService(adapter).render_from_svgs(["<svg/>"], tmp_path / "deck.pptx")
+
+    assert result.success is True
+    assert adapter.apply_calls == []
+    assert result.templates_applied == []
 
 
 # --------------------------------------------------------------------------- #

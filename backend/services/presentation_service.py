@@ -20,7 +20,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence
 
 from backend.services.ppt_master_adapter import (
     ConversionOutcome,
@@ -55,6 +55,7 @@ class RenderResult:
     warnings: list = field(default_factory=list)
     summary: dict = field(default_factory=dict)
     message: str = ""
+    templates_applied: list = field(default_factory=list)
 
 
 class PresentationService:
@@ -76,8 +77,12 @@ class PresentationService:
         self,
         svg_slides: Sequence[str],
         output_path: Path,
+        template_roots: Sequence[Path] = (),
     ) -> RenderResult:
-        """把一组 SVG 字符串（按顺序，每项一页）渲染成一份 PPTX。"""
+        """把一组 SVG 字符串（按顺序，每项一页）渲染成一份 PPTX。
+
+        ``template_roots`` 非空时，先安装这些模板库 workspace 再走质量门禁。
+        """
         _validate_svgs(svg_slides)
         output_path = _safe_output_path(output_path)
 
@@ -89,17 +94,30 @@ class PresentationService:
             for idx, svg in enumerate(svg_slides, start=1):
                 (svg_dir / f"{idx:02d}.svg").write_text(svg, encoding="utf-8")
 
-            return self._render_project_core(project_dir, output_path)
+            return self._render_project_core(
+                project_dir,
+                output_path,
+                template_roots=template_roots,
+                svg_slides=svg_slides,
+            )
         finally:
             shutil.rmtree(work_root, ignore_errors=True)
 
-    def render_project(self, project_dir: Path, output_path: Path) -> RenderResult:
-        """转换一份已有的 ppt-master 项目目录（含 svg_output/*.svg）。"""
+    def render_project(
+        self,
+        project_dir: Path,
+        output_path: Path,
+        template_roots: Sequence[Path] = (),
+    ) -> RenderResult:
+        """转换一份已有的 ppt-master 项目目录（含 svg_output/*.svg）。
+
+        仅在显式传入 ``template_roots`` 时安装模板，避免默认改写用户项目。
+        """
         project_dir = Path(project_dir)
         if not (project_dir / "svg_output").is_dir():
             raise PresentationInputError(f"项目目录缺少 svg_output/：{project_dir}")
         output_path = _safe_output_path(output_path)
-        return self._render_project_core(project_dir, output_path)
+        return self._render_project_core(project_dir, output_path, template_roots=template_roots)
 
     def check_environment(self) -> dict:
         """透传适配器的环境/完整性检查（含 guard）。"""
@@ -108,22 +126,42 @@ class PresentationService:
     # ------------------------------------------------------------------ #
     # 内部
     # ------------------------------------------------------------------ #
-    def _render_project_core(self, project_dir: Path, output_path: Path) -> RenderResult:
+    def _render_project_core(
+        self,
+        project_dir: Path,
+        output_path: Path,
+        template_roots: Sequence[Path] = (),
+        svg_slides: Optional[Sequence[str]] = None,
+    ) -> RenderResult:
+        applied: List[str] = []
+        if template_roots:
+            try:
+                self.adapter.apply_templates(project_dir, template_roots)
+            except (PptMasterEnvError, PptMasterRunError) as exc:
+                return RenderResult(success=False, message=str(exc))
+            applied = [Path(root).name for root in template_roots]
+
         try:
             quality: QualityOutcome = self.adapter.quality_check(project_dir)
         except (PptMasterEnvError, PptMasterRunError) as exc:
-            return RenderResult(success=False, message=str(exc))
+            return RenderResult(success=False, message=str(exc), templates_applied=applied)
+
+        warnings = list(quality.warnings)
+        hint = _structured_hint(svg_slides, template_roots)
+        if hint:
+            warnings.append({"code": "TEMPLATE_STRUCTURE_HINT", "message": hint})
 
         if not quality.passed:
             return RenderResult(
                 success=False,
                 quality_passed=False,
                 blocking_errors=quality.blocking_errors,
-                warnings=quality.warnings,
+                warnings=warnings,
                 summary=quality.summary,
                 message=(
                     f"质量门禁未通过：{len(quality.blocking_errors)} 个阻塞问题，" "已中止转换"
                 ),
+                templates_applied=applied,
             )
 
         try:
@@ -133,9 +171,10 @@ class PresentationService:
                 success=False,
                 quality_passed=True,
                 blocking_errors=quality.blocking_errors,
-                warnings=quality.warnings,
+                warnings=warnings,
                 summary=quality.summary,
                 message=str(exc),
+                templates_applied=applied,
             )
 
         return RenderResult(
@@ -143,10 +182,34 @@ class PresentationService:
             output_path=conversion.output_path,
             quality_passed=True,
             blocking_errors=quality.blocking_errors,
-            warnings=quality.warnings,
+            warnings=warnings,
             summary=quality.summary,
             message="生成成功",
+            templates_applied=applied,
         )
+
+
+_STRUCTURAL_TEMPLATE_DIRS = frozenset({"layouts", "decks"})
+_STRUCTURE_MARKER = "data-pptx-layout"
+
+
+def _structured_hint(
+    svg_slides: Optional[Sequence[str]], template_roots: Sequence[Path]
+) -> Optional[str]:
+    """选了版式/整套模板但 SVG 无结构化元数据时，返回一条非阻断提示。"""
+    if not svg_slides or not template_roots:
+        return None
+    has_structural = any(
+        Path(root).parent.name in _STRUCTURAL_TEMPLATE_DIRS for root in template_roots
+    )
+    if not has_structural:
+        return None
+    if any(_STRUCTURE_MARKER in svg for svg in svg_slides):
+        return None
+    return (
+        "所选版式/整套模板依赖页面的结构化元数据（data-pptx-layout 等），"
+        "当前 SVG 未检测到，将按扁平方式导出；品牌/风格模板不改变扁平导出的视觉。"
+    )
 
 
 def _validate_svgs(svg_slides: Sequence[str]) -> None:

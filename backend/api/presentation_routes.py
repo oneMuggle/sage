@@ -3,6 +3,8 @@
 端点：
 
     GET  /presentation/environment     环境与技能完整性自检（guard）
+    GET  /presentation/templates       模板库列表（可按 kind 过滤）
+    POST /presentation/templates/refresh  重扫模板库并重写索引
     POST /presentation/render-svgs     一组 SVG 字符串 -> PPTX
     POST /presentation/render-project  已有 ppt-master 项目目录 -> PPTX
 
@@ -32,22 +34,29 @@ from backend.services.presentation_service import (
     PresentationService,
     RenderResult,
 )
+from backend.services.presentation_template_registry import (
+    PresentationTemplateRegistry,
+    TemplateEntry,
+)
 
 router = APIRouter(prefix="/presentation", tags=["presentation"])
 
 _service = PresentationService()
+_registry = PresentationTemplateRegistry()
 
 
 class RenderSvgRequest(BaseModel):
     workspace_path: str = Field(..., min_length=1)
     filename: str = Field(..., min_length=1)
     svg_slides: List[str] = Field(..., min_length=1)
+    template_ids: List[str] = Field(default_factory=list)
 
 
 class RenderProjectRequest(BaseModel):
     workspace_path: str = Field(..., min_length=1)
     filename: str = Field(..., min_length=1)
     project_path: str = Field(..., min_length=1)
+    template_ids: List[str] = Field(default_factory=list)
 
 
 class RenderResponse(BaseModel):
@@ -58,12 +67,37 @@ class RenderResponse(BaseModel):
     warnings: list = Field(default_factory=list)
     summary: dict = Field(default_factory=dict)
     message: str = ""
+    templates_applied: List[str] = Field(default_factory=list)
 
 
 class EnvironmentResponse(BaseModel):
     ready: bool
     skill_root: Optional[str] = None
     python: Optional[str] = None
+    error: Optional[str] = None
+
+
+class TemplateItem(BaseModel):
+    kind: str
+    template_id: str
+    name: str
+    summary: str = ""
+    primary_color: Optional[str] = None
+    canvas_format: Optional[str] = None
+    page_count: Optional[int] = None
+    page_types: List[str] = Field(default_factory=list)
+    root_path: str
+
+
+class TemplateListResponse(BaseModel):
+    available: bool
+    error: Optional[str] = None
+    templates: List[TemplateItem] = Field(default_factory=list)
+
+
+class TemplateRefreshResponse(BaseModel):
+    available: bool
+    count: int = 0
     error: Optional[str] = None
 
 
@@ -85,7 +119,33 @@ def _to_response(result: RenderResult) -> RenderResponse:
         warnings=result.warnings,
         summary=result.summary,
         message=result.message,
+        templates_applied=list(result.templates_applied),
     )
+
+
+def _to_template_item(entry: TemplateEntry) -> TemplateItem:
+    return TemplateItem(
+        kind=entry.kind,
+        template_id=entry.template_id,
+        name=entry.name,
+        summary=entry.summary,
+        primary_color=entry.primary_color,
+        canvas_format=entry.canvas_format,
+        page_count=entry.page_count,
+        page_types=list(entry.page_types),
+        root_path=entry.root_path,
+    )
+
+
+def _resolve_template_roots(template_ids: List[str]) -> List[Path]:
+    """把 ``kind:id`` 选择解析成模板安装根；非法选择一律 400。
+
+    只接受库内条目标识，客户端无法借路径参数安装任意目录。
+    """
+    try:
+        return _registry.resolve_roots(template_ids)
+    except PresentationInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/environment", response_model=EnvironmentResponse)
@@ -101,11 +161,40 @@ def get_environment() -> EnvironmentResponse:
     )
 
 
+@router.get("/templates", response_model=TemplateListResponse)
+def list_templates_endpoint(kind: Optional[str] = None) -> TemplateListResponse:
+    """模板库列表；首次访问惰性扫描一次。技能目录缺失时 200 + available=false。"""
+    try:
+        _registry.ensure_fresh()
+        entries = _registry.list_templates(kind)
+    except PptMasterEnvError as exc:
+        return TemplateListResponse(available=False, error=str(exc))
+    except PresentationInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return TemplateListResponse(
+        available=True,
+        templates=[_to_template_item(entry) for entry in entries],
+    )
+
+
+@router.post("/templates/refresh", response_model=TemplateRefreshResponse)
+def refresh_templates_endpoint() -> TemplateRefreshResponse:
+    """手动重扫模板库（技能目录更新后由前端触发）。"""
+    try:
+        count = _registry.refresh()
+    except PptMasterEnvError as exc:
+        return TemplateRefreshResponse(available=False, error=str(exc))
+    return TemplateRefreshResponse(available=True, count=count)
+
+
 @router.post("/render-svgs", response_model=RenderResponse)
 def render_svgs_endpoint(req: RenderSvgRequest) -> RenderResponse:
     output_path = _resolve_output(req.workspace_path, req.filename)
+    template_roots = _resolve_template_roots(req.template_ids)
     try:
-        result = _service.render_from_svgs(req.svg_slides, output_path)
+        result = _service.render_from_svgs(
+            req.svg_slides, output_path, template_roots=template_roots
+        )
     except PresentationInputError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _to_response(result)
@@ -119,8 +208,9 @@ def render_project_endpoint(req: RenderProjectRequest) -> RenderResponse:
     except OfficePathError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     output_path = _resolve_output(req.workspace_path, req.filename)
+    template_roots = _resolve_template_roots(req.template_ids)
     try:
-        result = _service.render_project(project_dir, output_path)
+        result = _service.render_project(project_dir, output_path, template_roots=template_roots)
     except PresentationInputError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _to_response(result)

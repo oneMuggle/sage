@@ -46,6 +46,7 @@ def _make_skill(
     report: dict | None = _PASS_REPORT,
     converter_ok: bool = True,
     converter_delay: float = 0.0,
+    apply_ok: bool = True,
 ) -> Path:
     root = tmp_path / "skill"
     scripts = root / "scripts"
@@ -82,6 +83,18 @@ def _make_skill(
     else:
         converter += "sys.exit(2)\n"
     (scripts / "svg_to_pptx.py").write_text(converter, encoding="utf-8")
+
+    apply_script = (
+        "import json, sys\n"
+        "from pathlib import Path\n"
+        "proj = Path(sys.argv[1])\n"
+        "proj.mkdir(parents=True, exist_ok=True)\n"
+        "(proj / 'template_install_args.json').write_text("
+        "json.dumps({'argv': sys.argv[1:]}), encoding='utf-8')\n"
+    )
+    if not apply_ok:
+        apply_script += "sys.exit(3)\n"
+    (scripts / "apply_template.py").write_text(apply_script, encoding="utf-8")
     return root
 
 
@@ -179,6 +192,46 @@ def test_convert_failure(tmp_path: Path):
     with pytest.raises(PptMasterRunError, match="转换失败"):
         adapter.convert_to_pptx(tmp_path / "proj", out)
     assert not out.exists()
+
+
+# --------------------------------------------------------------------------- #
+# 模板安装
+# --------------------------------------------------------------------------- #
+def test_apply_templates_passes_roots_and_skip_validation(tmp_path: Path):
+    import json
+
+    adapter = _adapter(_make_skill(tmp_path))
+    project = tmp_path / "proj"
+    root_a = tmp_path / "lib" / "brands" / "acme"
+    root_b = tmp_path / "lib" / "layouts" / "brief"
+    adapter.apply_templates(project, [root_a, root_b])
+
+    receipt = json.loads((project / "template_install_args.json").read_text(encoding="utf-8"))
+    argv = receipt["argv"]
+    assert argv[0] == str(project)
+    assert argv[argv.index("--root") + 1] == str(root_a)
+    assert argv[argv.index("--root", argv.index("--root") + 1) + 1] == str(root_b)
+    assert "--skip-validation" in argv
+
+
+def test_apply_templates_empty_roots_is_noop(tmp_path: Path):
+    root = _make_skill(tmp_path)
+    (root / "scripts" / "apply_template.py").unlink()
+    # 无模板时不应触碰脚本（即便技能里没有 apply_template.py）
+    _adapter(root).apply_templates(tmp_path / "proj", [])
+
+
+def test_apply_templates_missing_script(tmp_path: Path):
+    root = _make_skill(tmp_path)
+    (root / "scripts" / "apply_template.py").unlink()
+    with pytest.raises(PptMasterEnvError, match="模板安装脚本"):
+        _adapter(root).apply_templates(tmp_path / "proj", [tmp_path / "lib" / "brands" / "x"])
+
+
+def test_apply_templates_failure(tmp_path: Path):
+    adapter = _adapter(_make_skill(tmp_path, apply_ok=False))
+    with pytest.raises(PptMasterRunError, match="模板安装失败"):
+        adapter.apply_templates(tmp_path / "proj", [tmp_path / "lib" / "brands" / "x"])
 
 
 # --------------------------------------------------------------------------- #

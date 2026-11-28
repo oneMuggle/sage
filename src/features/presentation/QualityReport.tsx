@@ -17,6 +17,7 @@ export interface QualityReportProps {
   summary: Record<string, unknown>;
   message: string;
   outputPath?: string | null;
+  templatesApplied?: string[];
 }
 
 const MAX_VISIBLE_ISSUES = 50;
@@ -78,6 +79,7 @@ export function QualityReport({
   summary,
   message,
   outputPath,
+  templatesApplied,
 }: QualityReportProps) {
   const total = readNumber(summary, 'total');
   const passed = readNumber(summary, 'passed');
@@ -120,6 +122,12 @@ export function QualityReport({
 
       {qualityPassed ? (
         <IssueList issues={warnings} tone="warning" testId="presentation-quality-warnings" />
+      ) : null}
+
+      {templatesApplied && templatesApplied.length > 0 ? (
+        <p className="text-xs text-text-secondary" data-testid="presentation-quality-templates">
+          已应用模板：{templatesApplied.join('、')}
+        </p>
       ) : null}
 
       {success && outputPath ? (
