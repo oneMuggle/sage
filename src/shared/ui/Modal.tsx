@@ -94,11 +94,7 @@ export function formatModalDialogSummary(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function formatModalDialogJson(
-  isOpen: boolean,
-  hasTitle = true,
-  hasFooter = false,
-): string {
+export function formatModalDialogJson(isOpen: boolean, hasTitle = true, hasFooter = false): string {
   return JSON.stringify({
     isOpen: Boolean(isOpen),
     hasTitle: Boolean(hasTitle),
@@ -113,4 +109,3 @@ export function auditModalGovernance(): string {
     audited: true,
   });
 }
-
